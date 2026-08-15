@@ -1,0 +1,5 @@
+bin/tool.exe
+
+share/data.bin
+END
+ignored after END

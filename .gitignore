@@ -1,0 +1,28 @@
+# build artifacts
+/target
+
+# agent related
+.code-review-graph/
+!.claude/settings.json
+llms-full.txt
+
+# temporary docs
+PREPLAN.md
+LANGUAGE.md
+PHASE-0.md
+PLAN.md
+
+# poc
+proof-of-concept/
+
+# Assembled installers, written by examples/assemble.sh and cleaned up by it.
+examples/**/*-setup.exe
+
+# Opaque payload fixtures, written by examples/fixtures.py. Nothing reads their
+# bytes, so they are generated rather than vendored -- which also keeps NSIS's
+# own artwork out of this repo and sidesteps a global `*.exe` ignore.
+examples/*/assets/*.ico
+examples/*/assets/*.exe
+
+# lua-language-server scratch (--logpath, --check_out_path)
+verification/**/.out*

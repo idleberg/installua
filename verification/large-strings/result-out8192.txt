@@ -1,0 +1,10 @@
+NSIS_MAX_STRLEN at build = 8192
+A. pure NSIS StrLen             = 1500
+B. System reads var, lstrlenW   = 1500
+C. System copy-out, lstrlenW    = 1500
+D. System writes var, StrLen    = 1500
+E. System stack round trip      = 1500
+F. nsExec rc                    = 0
+G. nsExec output StrLen         = 1502
+H. stack survives a plugin      = 1500
+done

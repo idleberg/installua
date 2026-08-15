@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.version": "Lua 5.4",
+  "runtime.builtin": {
+    "coroutine": "disable",
+    "io": "disable",
+    "os": "disable",
+    "package": "disable",
+    "debug": "disable"
+  },
+  "workspace.library": [
+    "./meta"
+  ],
+  "workspace.checkThirdParty": false,
+  "diagnostics.disable": [
+    "lowercase-global"
+  ],
+  "diagnostics.neededFileStatus": {
+    "inject-field": "Any",
+    "undefined-field": "Any"
+  },
+  "diagnostics.severity": {
+    "inject-field": "Warning",
+    "undefined-field": "Warning"
+  }
+}

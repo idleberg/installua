@@ -1,0 +1,15 @@
+# Prototype of what `installua init` writes. Phase 0 finding T1: stylua's
+# default `call_parentheses = "Always"` rewrites `attributes { … }` into
+# `attributes({ … })`, which destroys the block syntax §15.10 is built on.
+#
+# "Input" is the only setting that leaves both surface idioms alone:
+#   * `attributes { … }`  — a single-table call, must keep its parens off
+#   * `import "WinVer"`   — a single-string call, must keep its parens off
+#   * `detailPrint("x")`  — an ordinary call, must keep its parens on
+# "None" also preserves the first two but strips the third, turning every
+# one-string instruction into `detailPrint "x"`. "NoSingleTable" adds parens
+# back to `import "WinVer"` and `raw [[ … ]]`, so it is wrong outright.
+call_parentheses = "Input"
+
+column_width = 100
+indent_type = "Tabs"

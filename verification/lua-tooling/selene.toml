@@ -1,0 +1,6 @@
+std = "installua"
+
+# §14: warnings are failures. `deprecated` is how the generated std names a
+# replacement for every §5 rejection, so it must not be advisory.
+[lints]
+deprecated = "deny"
