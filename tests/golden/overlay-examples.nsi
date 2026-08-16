@@ -219,18 +219,55 @@ Section "RMDir"
   RMDir $INSTDIR
 SectionEnd
 
+Section "SearchPath"
+  SearchPath $0 "notepad.exe"
+  DetailPrint $0
+SectionEnd
+
+Section "SetAutoClose"
+  SetAutoClose "true"
+SectionEnd
+
+Section "SetDetailsView"
+  SetDetailsView "show"
+SectionEnd
+
+Section "SetDetailsPrint"
+  SetDetailsPrint "listonly"
+SectionEnd
+
+Section "SetErrors"
+  SetErrors
+SectionEnd
+
+Section "SetErrorLevel"
+  SetErrorLevel 2
+SectionEnd
+
 Section "GetErrorLevel"
   GetErrorLevel $0
   DetailPrint "level $0"
+SectionEnd
+
+Section "SetFileAttributes"
+  SetFileAttributes "$INSTDIR\readme.txt" "READONLY"
 SectionEnd
 
 Section "SetOutPath"
   SetOutPath $INSTDIR
 SectionEnd
 
+Section "SetRebootFlag"
+  SetRebootFlag "true"
+SectionEnd
+
 Section "GetRegView"
   GetRegView $0
   DetailPrint $0
+SectionEnd
+
+Section "SetRegView"
+  SetRegView 64
 SectionEnd
 
 Section "IfAltRegView"
@@ -242,6 +279,10 @@ SectionEnd
 Section "GetShellVarContext"
   GetShellVarContext $0
   DetailPrint $0
+SectionEnd
+
+Section "SetShellVarContext"
+  SetShellVarContext "all"
 SectionEnd
 
 Section "IfShellVarContextAll"
@@ -259,12 +300,32 @@ Section "StrLen"
   DetailPrint "len $0"
 SectionEnd
 
+Section "UnRegDLL"
+  UnRegDLL "$INSTDIR\shell.dll"
+SectionEnd
+
+Section "WriteINIStr"
+  WriteINIStr "$INSTDIR\app.ini" "Settings" "Path" $INSTDIR
+SectionEnd
+
+Section "WriteRegBin"
+  WriteRegBin HKLM "Software\Example" "Blob" "12848412AB"
+SectionEnd
+
 Section "WriteRegDWORD"
   WriteRegDWORD HKLM "Software\Example" "Build" 42
 SectionEnd
 
 Section "WriteRegStr"
   WriteRegStr HKLM "Software\Example" "Path" $INSTDIR
+SectionEnd
+
+Section "WriteRegExpandStr"
+  WriteRegExpandStr HKLM "Software\Example" "Data" "%APPDATA%/Example"
+SectionEnd
+
+Section "WriteRegNone"
+  WriteRegNone HKLM "Software\Example" "Marker"
 SectionEnd
 
 Section "WriteUninstaller"

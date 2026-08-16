@@ -154,16 +154,44 @@ installer {
 	section("RMDir", function()
 		rmDir(INSTDIR)
 	end),
+	section("SearchPath", function()
+		local found = searchPath("notepad.exe")
+		detailPrint(found)
+	end),
+	section("SetAutoClose", function()
+		setAutoClose("true")
+	end),
+	section("SetDetailsView", function()
+		setDetailsView("show")
+	end),
+	section("SetDetailsPrint", function()
+		setDetailsPrint("listonly")
+	end),
+	section("SetErrors", function()
+		setErrors()
+	end),
+	section("SetErrorLevel", function()
+		setErrorLevel(2)
+	end),
 	section("GetErrorLevel", function()
 		local level = getErrorLevel()
 		detailPrint("level " .. level)
 	end),
+	section("SetFileAttributes", function()
+		setFileAttributes(INSTDIR .. "/readme.txt", "READONLY")
+	end),
 	section("SetOutPath", function()
 		setOutPath(INSTDIR)
+	end),
+	section("SetRebootFlag", function()
+		setRebootFlag("true")
 	end),
 	section("GetRegView", function()
 		local view = getRegView()
 		detailPrint(view)
+	end),
+	section("SetRegView", function()
+		setRegView("64")
 	end),
 	section("IfAltRegView", function()
 		if altRegView() then detailPrint("the other view") end
@@ -171,6 +199,9 @@ installer {
 	section("GetShellVarContext", function()
 		local context = getShellVarContext()
 		detailPrint(context)
+	end),
+	section("SetShellVarContext", function()
+		setShellVarContext("all")
 	end),
 	section("IfShellVarContextAll", function()
 		if shellVarContextAll() then detailPrint("all users") end
@@ -182,11 +213,26 @@ installer {
 		local n = string.len("abc")
 		detailPrint("len " .. n)
 	end),
+	section("UnRegDLL", function()
+		unRegDll(INSTDIR .. "/shell.dll")
+	end),
+	section("WriteINIStr", function()
+		writeIniStr(INSTDIR .. "/app.ini", "Settings", "Path", INSTDIR)
+	end),
+	section("WriteRegBin", function()
+		writeRegBin(HKLM, "Software/Example", "Blob", "12848412AB")
+	end),
 	section("WriteRegDWORD", function()
 		writeReg(HKLM, "Software/Example", "Build", 42)
 	end),
 	section("WriteRegStr", function()
 		writeReg(HKLM, "Software/Example", "Path", INSTDIR)
+	end),
+	section("WriteRegExpandStr", function()
+		writeRegExpandStr(HKLM, "Software/Example", "Data", "%APPDATA%/Example")
+	end),
+	section("WriteRegNone", function()
+		writeRegNone(HKLM, "Software/Example", "Marker")
 	end),
 	section("WriteUninstaller", function()
 		writeUninstaller(INSTDIR .. "/uninstall.exe")

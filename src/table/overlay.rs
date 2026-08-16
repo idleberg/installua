@@ -254,7 +254,8 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "SetDatablockOptimize",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "compile time and positional: it changes the `file` calls after it rather than \
+         executing, so a call inside an `if` would be a lie",
     ),
     // The INI family spells `INI` as `Ini` — `deleteIniStr`, not
     // `deleteINIStr` — because every other name here is camel case over words
@@ -825,9 +826,15 @@ pub const ROWS: &[Row] = &[
         "SectionGroupEnd",
         "addresses a section by index: a real compile-time to install-time name binding (§13)",
     ),
-    todo(
+    // The input is a bare file name rather than a path — `SearchPath` is what
+    // walks `%PATH%` — so §5's `/`-to-`\` rule has nothing to convert and
+    // `Kind::Value` is the honest annotation. The *result* is a full path, and
+    // it is a string like every other output.
+    exposed(
         "SearchPath",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "searchPath",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
+        "local found = searchPath(\"notepad.exe\")\ndetailPrint(found)",
     ),
     todo(
         "SectionSetFlags",
@@ -881,9 +888,14 @@ pub const ROWS: &[Row] = &[
         "SendMessage",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    todo(
+    // The third row filed under "addresses a window by handle" that takes no
+    // handle, after `HideWindow` and `LockWindow`. A group reason is a guess
+    // about every member; the syntax line un-guesses it.
+    exposed(
         "SetAutoClose",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "setAutoClose",
+        &[ann(Ty::Str, Kind::Enum)],
+        "setAutoClose(\"true\")",
     ),
     todo(
         "SetCtlColors",
@@ -899,33 +911,44 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "SetCompress",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "compile time and positional: it changes the `file` calls after it rather than \
+         executing, so a call inside an `if` would be a lie",
     ),
     attribute("SetCompressor", "compressor"),
     todo(
         "SetCompressorDictSize",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "compile time and positional: it changes the `file` calls after it rather than \
+         executing, so a call inside an `if` would be a lie",
     ),
     todo(
         "SetCompressionLevel",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "compile time and positional: it changes the `file` calls after it rather than \
+         executing, so a call inside an `if` would be a lie",
     ),
     attribute("SetDateSave", "dateSave"),
-    todo(
+    exposed(
         "SetDetailsView",
-        "an installer-wide flag or mode: one overlay row each",
+        "setDetailsView",
+        &[ann(Ty::Str, Kind::Enum)],
+        "setDetailsView(\"show\")",
     ),
-    todo(
+    exposed(
         "SetDetailsPrint",
-        "an installer-wide flag or mode: one overlay row each",
+        "setDetailsPrint",
+        &[ann(Ty::Str, Kind::Enum)],
+        "setDetailsPrint(\"listonly\")",
     ),
-    todo(
-        "SetErrors",
-        "an installer-wide flag or mode: one overlay row each",
-    ),
-    todo(
+    // The twin of `clearErrors`, and it has been sitting one row away from it
+    // in the census the whole time.
+    exposed("SetErrors", "setErrors", &[], "setErrors()"),
+    // `Ty::int()` to match `getErrorLevel`: NSIS does not restrict the sign,
+    // and a row that narrowed the setter below its getter would reject
+    // `setErrorLevel(getErrorLevel())`.
+    exposed(
         "SetErrorLevel",
-        "an installer-wide flag or mode: one overlay row each",
+        "setErrorLevel",
+        &[ann(Ty::int(), Kind::Value)],
+        "setErrorLevel(2)",
     ),
     exposed(
         "GetErrorLevel",
@@ -933,9 +956,14 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::int(), Kind::Value)],
         "local level = getErrorLevel()\ndetailPrint(\"level \" .. level)",
     ),
-    todo(
+    // The second `Kind::Flags` position in the table, after `messageBox`'s. The
+    // members are joined with `|` rather than repeated, so one argument holds
+    // however many the author names.
+    exposed(
         "SetFileAttributes",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "setFileAttributes",
+        &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Flags)],
+        "setFileAttributes(INSTDIR .. \"/readme.txt\", \"READONLY\")",
     ),
     todo(
         "SetFont",
@@ -949,15 +977,18 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "SetOverwrite",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "compile time and positional: it changes the `file` calls after it rather than \
+         executing, so a call inside an `if` would be a lie",
     ),
     rejected(
         "SetPluginUnload",
         "NSIS retired it: plug-ins handle unloading themselves",
     ),
-    todo(
+    exposed(
         "SetRebootFlag",
-        "an installer-wide flag or mode: one overlay row each",
+        "setRebootFlag",
+        &[ann(Ty::Str, Kind::Enum)],
+        "setRebootFlag(\"true\")",
     ),
     exposed(
         "GetRegView",
@@ -965,9 +996,14 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Value)],
         "local view = getRegView()\ndetailPrint(view)",
     ),
-    todo(
+    // `"32"` and `"64"` are enum members, not numbers: the argument names a
+    // view rather than counting anything, and `getRegView` already returns the
+    // string.
+    exposed(
         "SetRegView",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "setRegView",
+        &[ann(Ty::Str, Kind::Enum)],
+        "setRegView(\"64\")",
     ),
     predicate(
         "IfAltRegView",
@@ -981,9 +1017,11 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Value)],
         "local context = getShellVarContext()\ndetailPrint(context)",
     ),
-    todo(
+    exposed(
         "SetShellVarContext",
-        "an installer-wide flag or mode: one overlay row each",
+        "setShellVarContext",
+        &[ann(Ty::Str, Kind::Enum)],
+        "setShellVarContext(\"all\")",
     ),
     predicate(
         "IfShellVarContextAll",
@@ -991,9 +1029,17 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
         "if shellVarContextAll() then detailPrint(\"all users\") end",
     ),
+    // Written as a row and reverted. `makensis -WX` takes `SetSilent silent`
+    // inside a section without a word, and NSIS then ignores it at run time:
+    // the instruction is only meaningful from `.onInit`. Neither tier catches
+    // that, because nothing is wrong with the *output* — the call is simply
+    // dead. A row needs a mandatory example, `tests/overlay.rs` puts every
+    // example in a section by design, and an example that does nothing is
+    // worse than no row.
     todo(
         "SetSilent",
-        "an installer-wide flag or mode: one overlay row each",
+        "only meaningful from `.onInit`, and an example lives in a section: the row \
+         needs a place to say where a call is legal",
     ),
     todo(
         "ShowInstDetails",
@@ -1075,25 +1121,46 @@ pub const ROWS: &[Row] = &[
         "UninstallSubCaption",
         "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
     ),
-    todo(
+    exposed(
         "UnRegDLL",
-        "the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)",
+        "unRegDll",
+        &[ann(Ty::Str, Kind::Path)],
+        "unRegDll(INSTDIR .. \"/shell.dll\")",
     ),
     todo(
         "WindowIcon",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
     ),
-    todo(
+    exposed(
         "WriteINIStr",
-        "the INI family: one overlay row each, no compiler change (§15.23)",
+        "writeIniStr",
+        &[
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "writeIniStr(INSTDIR .. \"/app.ini\", \"Settings\", \"Path\", INSTDIR)",
     ),
-    todo(
+    // `writeRegBin` rather than a third dispatch of `writeReg`: the argument is
+    // a hex *string* and so is `WriteRegStr`'s, so nothing in the call could
+    // tell the two apart. `writeReg` dispatches on the type of the value it was
+    // handed, and here the type does not differ.
+    exposed(
         "WriteRegBin",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "writeRegBin",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "writeRegBin(HKLM, \"Software/Example\", \"Blob\", \"12848412AB\")",
     ),
     todo(
         "WriteRegMultiStr",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "its `/REGEDIT5` is required rather than optional, and nothing emits an \
+         option that no argument supplies",
     ),
     exposed(
         "WriteRegDWORD",
@@ -1117,13 +1184,30 @@ pub const ROWS: &[Row] = &[
         ],
         "writeReg(HKLM, \"Software/Example\", \"Path\", INSTDIR)",
     ),
-    todo(
+    // Same argument types as `WriteRegStr` and a different meaning — the target
+    // expands `%VAR%` at read time — so this is a name, not a dispatch, for the
+    // reason `writeRegBin` is.
+    exposed(
         "WriteRegExpandStr",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "writeRegExpandStr",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "writeRegExpandStr(HKLM, \"Software/Example\", \"Data\", \"%APPDATA%/Example\")",
     ),
-    todo(
+    exposed(
         "WriteRegNone",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "writeRegNone",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "writeRegNone(HKLM, \"Software/Example\", \"Marker\")",
     ),
     exposed(
         "WriteUninstaller",

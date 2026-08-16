@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: the preparatory tasks are done and the grind is running. 25 → 55 exposed,
-167 → 137 todo, through `R`.**
+**Status: the preparatory tasks are done and the grind is done. 25 → 70 exposed,
+167 → 122 todo, `A` through `Z`.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -20,7 +20,7 @@ in `-CMDHELP` order either way.
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 83 tests
+cargo test          # 84 tests
 ```
 
 ---
@@ -158,6 +158,57 @@ whose outputs are not leading. `FileRead` is its one exception, and it is one be
 nothing generic emits it — `for line in lines(f)` is a hand-written lowering that
 places the register itself. A *second* exception is a reason to fix the emitter.
 
+## Batch 4 — S through Z
+
+Fifteen rows, and the `Set*` family is most of them:
+
+| NSIS | Installua |
+| --- | --- |
+| `SearchPath` | `searchPath(name)` |
+| `SetAutoClose`, `SetDetailsView`, `SetDetailsPrint` | `setAutoClose(e)`, `setDetailsView(e)`, `setDetailsPrint(e)` |
+| `SetErrors`, `SetErrorLevel` | `setErrors()`, `setErrorLevel(n)` |
+| `SetFileAttributes`, `SetRebootFlag`, `SetRegView`, `SetShellVarContext` | `setFileAttributes(p, flags)`, `setRebootFlag(e)`, `setRegView(e)`, `setShellVarContext(e)` |
+| `UnRegDLL`, `WriteINIStr`, `WriteRegBin`, `WriteRegExpandStr`, `WriteRegNone` | `unRegDll(p)`, `writeIniStr(…)`, `writeRegBin(…)`, `writeRegExpandStr(…)`, `writeRegNone(…)` |
+
+Six of these close a pair whose other half batch 2 or an earlier phase already wrote:
+`setErrors`/`clearErrors`, `setErrorLevel`/`getErrorLevel`, `setRegView`/`getRegView`,
+`setShellVarContext`/`getShellVarContext`, `unRegDll`/`regDll`, `writeIniStr`/`readIniStr`.
+The setters were spread across four different group reasons; the getters were one row away
+in the census the whole time.
+
+`writeRegBin` and `writeRegExpandStr` are names rather than further dispatches of
+`writeReg`, for the reason `readRegDword` is: `writeReg` picks its instruction from the
+*type* of the value, and all three of these take a string. Nothing in the call could tell
+them apart.
+
+**`SetAutoClose` was the third row filed under "addresses a window by handle" that takes
+no handle**, after `HideWindow` and `LockWindow`. Three batches, three mis-filings, same
+cause: the group reasons were written from the command names.
+
+**Five compile-time settings had the wrong reason.** `SetCompress`,
+`SetCompressionLevel`, `SetCompressorDictSize`, `SetDatablockOptimize` and `SetOverwrite`
+were *"file surface beyond `file`/`delete`/`fileOpen`: one overlay row each"*, which
+promised data entry. They are compile-time and **positional** — they change the `file`
+calls that follow rather than executing — so a call inside an `if` would be a lie, and
+that is a design question rather than a row.
+
+`WriteRegMultiStr`'s `/REGEDIT5` is required rather than optional, and no argument
+supplies it; the row waits on the emitter learning to write an option nothing passes.
+
+### The tier both tiers miss
+
+`SetSilent` was written as a row and reverted. `makensis -WX` assembles `SetSilent silent`
+inside a section without a word, and NSIS then ignores it at run time: the instruction is
+only meaningful from `.onInit`. Tier 2 sees output that did not change unexpectedly; tier
+3 sees output that is valid NSIS. Both are right, and the call is still dead.
+
+This is a third failure mode, after "wrong output" and "invalid output": **legal
+everywhere, meaningful in one place**. `tests/overlay.rs` puts every example in a section
+by design — the section body is the smallest region containing the behaviour — so the row
+cannot carry an honest example until something can say where a call is legal. `SetSilent`
+is back in the backlog with that as its reason, and it is the first entry in the backlog
+that names a missing *check* rather than a missing design.
+
 ## What the join replaced
 
 `builtins.rs` held a parameter table the lowerer read, written before the `-CMDHELP` join
@@ -225,8 +276,13 @@ tier 3 catches and tier 2 cannot.
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
-- **The `todo` reasons are grouped**, fifteen sentences over 167 rows — carried over,
-  and the grind will retire them a group at a time.
+- **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
+  left in the 122 is section-index binding (§13), the `hwnd` surface, the classic UI,
+  pages, script-wide settings and a handful of one-offs. Every one of those is a design
+  question rather than data entry, which is what the grind was for.
+- **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
+  `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
+  pass a call that is simply dead.
 - **`arity` is a range, and nothing yet says which optional position a caller means.**
   Trailing optionals work because they are positional. `ExecShell` is the row that needs
   more: a *leading* optional, where the count of arguments no longer says which position
