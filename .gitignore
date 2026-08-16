@@ -10,8 +10,9 @@ llms-full.txt
 PREPLAN.md
 LANGUAGE.md
 
-# poc
-proof-of-concept/
+# poc -- committed and tagged `poc` (PLAN §6): a reference to diff against,
+# never a foundation to inherit.
+proof-of-concept/target/
 
 # Assembled installers, written by examples/assemble.sh and cleaned up by it.
 examples/**/*-setup.exe
