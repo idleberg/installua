@@ -2064,6 +2064,27 @@ impl BodyLowerer<'_, '_> {
     }
 
     fn undefined(&mut self, name: &Name) {
+        // An NSIS instruction with a Lua spelling is not an unknown name: the
+        // compiler knows exactly what it is, and the generic error would tell
+        // an NSIS user that it had never heard of the instruction they use most
+        // (§5). Checked first, because `strCmp` is also within one case-fold of
+        // nothing else.
+        if let Some(retired) = crate::retired::lookup(&name.text) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::NsisRetired,
+                    name.span,
+                    format!("`{}` is not a function here", name.text),
+                )
+                .note(format!("write {}", retired.instead))
+                .note(format!(
+                    "NSIS spells it `{}`; this compiler emits it for you",
+                    retired.nsis
+                )),
+            );
+            return;
+        }
+
         let mut diagnostic = Diagnostic::error(
             Code::UndefinedName,
             name.span,

@@ -43,6 +43,9 @@ pub mod lower;
 pub mod map;
 pub mod regs;
 pub mod resolve;
+pub mod retired;
+pub mod stubs;
+pub mod table;
 pub mod types;
 
 use std::path::PathBuf;

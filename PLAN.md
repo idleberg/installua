@@ -48,7 +48,8 @@ No Rust. This phase produces the artifacts every later phase is measured against
 3. **Assemble all five hand-written `.nsi`** under `makensis -WX`. They are the oracle; if
    the expectation does not assemble, the expectation is wrong.
 4. **Two migration tables** (see §5) — the Lua-facing one §11 asks for, and the
-   NSIS-facing one nothing currently owns.
+   NSIS-facing one. *(Revised after Phase 4: the instruction half of the NSIS-facing table
+   is now owned by Phase 5's retired-instruction diagnostic, not by a documentation page.)*
 
 **Falls out of this phase, and is why it comes first:**
 
@@ -154,8 +155,40 @@ per `Origin` kind.
 - **`installua stubs`** → the `---@meta` file, **plus the project meta file** that
   `include` requires (§15.28).
 - **`installua coverage`**, **`installua init`**, the generated selene std.
+- **The retired-instruction table** (see §5) — the NSIS-facing migration table as a
+  diagnostic rather than a documentation page.
 
-**Exit:** census green, `coverage` output is itself a golden file.
+**Exit:** census green, `coverage` output is itself a golden file; every retired-instruction
+row has a test asserting its diagnostic.
+
+#### The retired-instruction table
+
+Some NSIS instructions are deliberately not ported because Lua already has the better
+spelling: `StrCmp`, `IntOp`, `StrCpy`, `StrLen`, `IntCmp` and their kin. Today they resolve
+to nothing and get the generic unknown-name error, which tells an NSIS user that the
+compiler has never heard of the single instruction they use most.
+
+Extend the mechanism that already exists. `src/builtins.rs` has `nearest()`, which turns
+`detailprint` into "did you mean `detailPrint`?". Add a curated table feeding the same path,
+but producing a rejection that names the *replacement construct* — already §2's rule for
+every rejection:
+
+```
+error[nsis-retired]: `StrCmp` is not a function here
+  note: write `a == b`, which is case-sensitive (§15.9)
+  note: for the case-insensitive comparison `StrCmp` does, write
+        `string.lower(a) == string.lower(b)`
+```
+
+**Keyed on the Installua spelling, matched case-insensitively.** The rows are `strCmp`,
+`intOp`, `strCpy` — the camelCase shape the Lua equivalent *would* have had, not NSIS's
+`StrCmp`. That is the same convention `nearest()` already uses for the names that do exist,
+so one casing rule covers both tables, and the case-insensitive match still catches the NSIS
+capitalisation the user actually typed. The diagnostic quotes the user's own spelling.
+
+Zero new language surface, no census entry, no deprecation lifecycle, and it does not
+autocomplete — the table feeds diagnostics only, never the stubs or the selene std. One
+static table, one diagnostic code, one registry test.
 
 ### Phase 6 — Coverage grind
 
@@ -295,7 +328,11 @@ as a value rejected for non-`bool` · truthiness only for `bool` · no floats, `
 rejected · `//` and `%` corrected to Lua's meaning · no closures as values · no
 metatables, `pairs`, `require`-as-runtime-load.
 
-**"NSIS-shaped, not NSIS"** — nothing currently owns this, and it is the larger audience:
+**"NSIS-shaped, not NSIS"** — the larger audience. Phase 5's retired-instruction table owns
+the half of this that is about *instructions*; the rows below that name a habit rather than
+an instruction stay documentation, because no name lookup can fire on them. Making the
+instruction half a compiler diagnostic instead of a page is the version that reaches someone
+at the moment they need it, with the semantic trap named where it would have bitten.
 
 | NSIS habit | Installua |
 | --- | --- |

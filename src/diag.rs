@@ -184,6 +184,10 @@ pub enum Code {
     DuplicateBlock,
     /// A required attribute that no block supplied.
     MissingAttribute,
+    /// An NSIS instruction that has a Lua spelling instead: `StrCmp` is `==`,
+    /// `IntOp` is `+`, `StrCpy` is assignment. Not an unknown name — the
+    /// compiler knows exactly what it is, and says what to write (§5).
+    NsisRetired,
 }
 
 impl Code {
@@ -225,6 +229,7 @@ impl Code {
         Code::BadFieldValue,
         Code::DuplicateBlock,
         Code::MissingAttribute,
+        Code::NsisRetired,
     ];
 
     pub fn slug(self) -> &'static str {
@@ -265,6 +270,7 @@ impl Code {
             Code::BadFieldValue => "bad-field-value",
             Code::DuplicateBlock => "duplicate-block",
             Code::MissingAttribute => "missing-attribute",
+            Code::NsisRetired => "nsis-retired",
         }
     }
 }

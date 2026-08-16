@@ -130,6 +130,13 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\nattributes { name = \"b\" }",
     ),
     (Code::MissingAttribute, r#"attributes { name = "Spine" }"#),
+    (
+        Code::NsisRetired,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         strCpy(target, \"C:/App\")\n\
+         end), }",
+    ),
 ];
 
 /// Twenty-one values **live at once** — the last line reads all of them, so no
