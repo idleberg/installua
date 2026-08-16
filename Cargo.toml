@@ -1,0 +1,19 @@
+[package]
+name = "installua"
+version = "0.1.0"
+edition = "2024"
+description = "A Lua-shaped language that compiles to NSIS."
+# The proof of concept is its own package, kept for reference (PLAN §6). It is
+# not a workspace member and must not be packaged with this crate.
+exclude = ["proof-of-concept", "examples", "verification", "docs"]
+
+[lib]
+name = "installua"
+path = "src/lib.rs"
+
+[[bin]]
+name = "installua"
+path = "src/main.rs"
+
+[dependencies]
+full_moon = { version = "2.2.0", default-features = false, features = ["lua54"] }
