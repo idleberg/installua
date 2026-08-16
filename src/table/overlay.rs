@@ -531,9 +531,15 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::nonneg(), Kind::Value), ann(Ty::Str, Kind::Enum)],
         "if getWinVer(\"MAJOR\") >= 10 then detailPrint(\"modern\") end",
     ),
-    todo(
+    exposed(
         "ReadMemory",
-        "runs a program or reads the environment: one overlay row each",
+        "readMemory",
+        &[
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::int(), Kind::Value),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local bytes = readMemory(0, 4)\ndetailPrint(bytes)",
     ),
     // Not the `hwnd` group its old reason put it in: `HideWindow` takes no
     // handle at all and hides the installer's own window. `LockWindow` is the
@@ -726,13 +732,31 @@ pub const ROWS: &[Row] = &[
         "nothing: arguments and returns are the calling convention (§15.11)",
     ),
     exposed("Quit", "os.exit", &[], "os.exit()"),
-    todo(
+    exposed(
         "ReadINIStr",
-        "the INI family: one overlay row each, no compiler change (§15.23)",
+        "readIniStr",
+        &[
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "local port = readIniStr(INSTDIR .. \"/app.ini\", \"Settings\", \"Port\")\ndetailPrint(port)",
     ),
-    todo(
+    // `readRegDword` rather than a second dispatch of `readReg`: `writeReg`
+    // can pick `WriteRegStr` or `WriteRegDWORD` from the type of the value it
+    // was handed, and a *read* has no such argument. The name is the only
+    // place the width can be said.
+    exposed(
         "ReadRegDWORD",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "readRegDword",
+        &[
+            ann(Ty::int(), Kind::Value),
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "local build = readRegDword(HKLM, \"Software/Example\", \"Build\")\ndetailPrint(\"build \" .. build)",
     ),
     exposed(
         "ReadRegStr",
@@ -745,21 +769,28 @@ pub const ROWS: &[Row] = &[
         ],
         "local path = readRegStr(HKLM, \"Software/Example\", \"Path\")\ndetailPrint(path)",
     ),
-    todo(
+    exposed(
         "ReadEnvStr",
-        "runs a program or reads the environment: one overlay row each",
+        "readEnvStr",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
+        "local temp = readEnvStr(\"TEMP\")\ndetailPrint(temp)",
     ),
-    todo(
-        "Reboot",
-        "an installer-wide flag or mode: one overlay row each",
-    ),
-    todo(
+    exposed("Reboot", "reboot", &[], "reboot()"),
+    // Grouped with `InitPluginsDir` under §11 and it does not belong there:
+    // `RegDLL` calls `DllRegisterServer` on a file already on the target and
+    // needs nothing from the plugin directory. `UnRegDLL` is the same row with
+    // the other entry point, and the alphabet reaches it later.
+    exposed(
         "RegDLL",
-        "the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)",
+        "regDll",
+        &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Value)],
+        "regDll(INSTDIR .. \"/shell.dll\")",
     ),
-    todo(
+    exposed(
         "Rename",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "rename",
+        &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Path)],
+        "rename(INSTDIR .. \"/old.txt\", INSTDIR .. \"/new.txt\")",
     ),
     language("Return", "`return`"),
     exposed(
@@ -1013,11 +1044,11 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "Target",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "CPU",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     attribute("Unicode", "unicode"),
     rejected(
@@ -1102,19 +1133,19 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "PEAddResource",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "PERemoveResource",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "PEDllCharacteristics",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "PESubsysVer",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "XPStyle",
@@ -1123,35 +1154,35 @@ pub const ROWS: &[Row] = &[
     attribute("RequestExecutionLevel", "requestExecutionLevel"),
     todo(
         "ManifestAppendCustomString",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "ManifestDPIAware",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "ManifestDPIAwareness",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "ManifestLongPathAware",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "ManifestSupportedOS",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "ManifestMaxVersionTested",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "ManifestDisableWindowFiltering",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     todo(
         "ManifestGdiScaling",
-        "writes the PE header or the manifest: one overlay row each",
+        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
     directive("!packhdr"),
     directive("!finalize"),

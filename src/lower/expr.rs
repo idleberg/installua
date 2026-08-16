@@ -580,17 +580,31 @@ impl BodyLowerer<'_, '_> {
             // that is what the repetition means.
             let param = params.get(index).or_else(|| params.last())?;
             let value = self.value(argument)?;
-            if param.ty != Ty::Unknown && value.ty != param.ty && value.ty != Ty::Unknown {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::TypeMismatch,
-                        argument.span(),
-                        format!("`{name}` wants a {}, and this is a {}", param.ty, value.ty),
-                    )
-                    .note(
-                        "types come from the instruction table, never from an annotation (§15.14)",
-                    ),
-                );
+            // Assignable, not equal. The lattice already says which types
+            // subsume which — `a.join(b) == b` is exactly "a fits where b is
+            // wanted" — and equality got this wrong in one direction that
+            // matters: a literal `0` is `nonneg`, so every `Ty::int()` position
+            // rejected every integer literal (§15.14).
+            if param.ty != Ty::Unknown
+                && value.ty != Ty::Unknown
+                && value.ty.join(param.ty) != param.ty
+            {
+                let mut diagnostic = Diagnostic::error(
+                    Code::TypeMismatch,
+                    argument.span(),
+                    format!("`{name}` wants a {}, and this is a {}", param.ty, value.ty),
+                )
+                .note("types come from the instruction table, never from an annotation (§15.14)");
+                // `int` is what a user calls both signs (§15.14), so the
+                // message above reads "wants a int, and this is a int" when the
+                // sign is the whole disagreement. Say what it will not say.
+                if param.ty.is_int() && value.ty.is_int() {
+                    diagnostic = diagnostic.note(
+                        "this position cannot be negative, and the value is not known to be \
+                         non-negative",
+                    );
+                }
+                self.diags.push(diagnostic);
                 return None;
             }
             // Pathness is decided at the parameter, so the expression lowerer

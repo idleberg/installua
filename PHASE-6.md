@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: the preparatory tasks are done and the grind is running. 25 → 48 exposed,
-167 → 144 todo, through `L`.**
+**Status: the preparatory tasks are done and the grind is running. 25 → 55 exposed,
+167 → 137 todo, through `R`.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -101,6 +101,52 @@ simply cannot assemble a script containing either. A row would have shipped a ca
 that works on a machine with a custom build and fails everywhere else, and no amount
 of golden-diffing would have said so. They are back in the backlog with that sentence
 as their reason, which is a better reason than the group summary they had.
+
+## Batch 3 — M through R
+
+Seven rows, and the letters M through Q contributed none of them:
+
+| NSIS | Installua |
+| --- | --- |
+| `ReadEnvStr`, `ReadINIStr`, `ReadRegDWORD` | `readEnvStr(n)`, `readIniStr(ini, s, e)`, `readRegDword(root, sub, e)` |
+| `ReadMemory` | `readMemory(address, size)` |
+| `Reboot`, `Rename`, `RegDLL` | `reboot()`, `rename(a, b)`, `regDll(path [, entry])` |
+
+`readRegDword` is a name rather than a second dispatch of `readReg`, and the asymmetry
+with `writeReg` is the reason: `writeReg` picks `WriteRegStr` or `WriteRegDWORD` from
+the type of the value it was handed, and a read has no such argument. The name is the
+only place the width can be said.
+
+`RegDLL` was filed under §11 with `InitPluginsDir` and does not belong there — it calls
+`DllRegisterServer` on a file already on the target and wants nothing from the plugin
+directory. Third mis-filed row in three batches; the group reasons were written before
+anybody read the syntax lines.
+
+**Twelve `Manifest*` and `PE*` rows had a reason that promised the wrong thing.** They
+were *"writes the PE header or the manifest: one overlay row each"*, which reads as data
+entry. They are script-wide settings, so a row is the smaller half — the other half is a
+home in `attributes {}`, and `manifest` is in `V1_ATTRIBUTES` and unimplemented. Their
+reason now says that.
+
+### The type check was an equation, and should have been a bound
+
+`readMemory`'s address is `Ty::int()`. Every integer literal is `nonneg`. The parameter
+check compared for **equality**, so `readMemory(0, 4)` was rejected with:
+
+```
+error[type-mismatch]: `readMemory` wants a int, and this is a int
+```
+
+A message a user cannot act on, for a program that is correct — and it was reachable
+from any `Ty::int()` position, which is to say every one the table had not yet written.
+Nothing caught it earlier because the existing int-typed rows are all `nonneg`, which
+looks like a choice and was an accident.
+
+The lattice already had the answer: `a.join(b) == b` is what "`a` fits where `b` is
+wanted" means. The check now asks that, and the other direction still fails — a `nonneg`
+position is the one that elides a fixup, so an `int` does not belong in it, and that
+case gets a second note, because `int` is what the user's spelling calls both signs.
+[`a_narrower_type_fits_a_wider_parameter`](tests/diagnostics.rs) pins both directions.
 
 ### An invariant batch 1 needed
 

@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           48
+  exposed           55
   attribute         14
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             144
+  todo             137
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -49,7 +49,6 @@ todo:
   FileWriteWord           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileSeek                file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   GetDlgItem              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  ReadMemory              runs a program or reads the environment: one overlay row each
   InstallDirRegKey        registry surface beyond `readReg`/`writeReg`: one overlay row each
   InstallColors           the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   InstProgressFlags       the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -67,12 +66,6 @@ todo:
   PageCallbacks           a page construct; custom pages need a design (nsDialogs) that does not exist yet
   PageEx                  a page construct; custom pages need a design (nsDialogs) that does not exist yet
   PageExEnd               a page construct; custom pages need a design (nsDialogs) that does not exist yet
-  ReadINIStr              the INI family: one overlay row each, no compiler change (§15.23)
-  ReadRegDWORD            registry surface beyond `readReg`/`writeReg`: one overlay row each
-  ReadEnvStr              runs a program or reads the environment: one overlay row each
-  Reboot                  an installer-wide flag or mode: one overlay row each
-  RegDLL                  the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)
-  Rename                  file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   SectionInstType         addresses a section by index: a real compile-time to install-time name binding (§13)
   SectionIn               addresses a section by index: a real compile-time to install-time name binding (§13)
   SectionGroup            addresses a section by index: a real compile-time to install-time name binding (§13)
@@ -115,8 +108,8 @@ todo:
   SilentInstall           an installer-wide flag or mode: one overlay row each
   SilentUnInstall         an installer-wide flag or mode: one overlay row each
   SubCaption              a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
-  Target                  writes the PE header or the manifest: one overlay row each
-  CPU                     writes the PE header or the manifest: one overlay row each
+  Target                  a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  CPU                     a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
   UninstallCaption        a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallIcon           the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   UninstPage              a page construct; custom pages need a design (nsDialogs) that does not exist yet
@@ -129,19 +122,19 @@ todo:
   WriteRegMultiStr        registry surface beyond `readReg`/`writeReg`: one overlay row each
   WriteRegExpandStr       registry surface beyond `readReg`/`writeReg`: one overlay row each
   WriteRegNone            registry surface beyond `readReg`/`writeReg`: one overlay row each
-  PEAddResource           writes the PE header or the manifest: one overlay row each
-  PERemoveResource        writes the PE header or the manifest: one overlay row each
-  PEDllCharacteristics    writes the PE header or the manifest: one overlay row each
-  PESubsysVer             writes the PE header or the manifest: one overlay row each
+  PEAddResource           a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  PERemoveResource        a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  PEDllCharacteristics    a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  PESubsysVer             a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
   XPStyle                 the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  ManifestAppendCustomStringwrites the PE header or the manifest: one overlay row each
-  ManifestDPIAware        writes the PE header or the manifest: one overlay row each
-  ManifestDPIAwareness    writes the PE header or the manifest: one overlay row each
-  ManifestLongPathAware   writes the PE header or the manifest: one overlay row each
-  ManifestSupportedOS     writes the PE header or the manifest: one overlay row each
-  ManifestMaxVersionTestedwrites the PE header or the manifest: one overlay row each
-  ManifestDisableWindowFilteringwrites the PE header or the manifest: one overlay row each
-  ManifestGdiScaling      writes the PE header or the manifest: one overlay row each
+  ManifestAppendCustomStringa script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestDPIAware        a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestDPIAwareness    a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestLongPathAware   a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestSupportedOS     a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestMaxVersionTesteda script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestDisableWindowFilteringa script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestGdiScaling      a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
   MiscButtonText          a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   DetailsButtonText       a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallButtonText     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first

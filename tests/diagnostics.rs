@@ -182,6 +182,46 @@ fn compile(source: &str) -> Diagnostics {
     diags
 }
 
+/// A parameter's type is a *bound*, not an equation.
+///
+/// `readMemory`'s address is `Ty::int()` and every integer literal is `nonneg`,
+/// so an equality check rejected `readMemory(0, 4)` with *"wants a int, and
+/// this is a int"* — a message that cannot be acted on, for a program that is
+/// correct. The lattice already knew better: `a.join(b) == b` is what "a fits
+/// where b is wanted" means (§15.14).
+///
+/// The other direction still fails, and must: a `nonneg` position is the one
+/// that elides a fixup, so a value merely known to be an `int` does not belong
+/// in it.
+#[test]
+fn a_narrower_type_fits_a_wider_parameter() {
+    let widening = compile(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local bytes = readMemory(0, 4)\n\
+         detailPrint(bytes)\n\
+         end), }",
+    );
+    assert!(
+        !widening.contains(Code::TypeMismatch),
+        "a `nonneg` literal belongs in an `int` position:\n{}",
+        widening.render("<test>")
+    );
+
+    let narrowing = compile(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local index = 1 - 2\n\
+         local key = enumRegKey(HKLM, \"Software/Example\", index)\n\
+         detailPrint(key)\n\
+         end), }",
+    );
+    assert!(
+        narrowing.contains(Code::TypeMismatch),
+        "an `int` does not belong in a `nonneg` position"
+    );
+}
+
 #[test]
 fn every_code_has_a_case() {
     let missing: Vec<&str> = Code::ALL

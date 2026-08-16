@@ -129,6 +129,11 @@ Section "GetWinVer"
 __GENERATED_endif_0:
 SectionEnd
 
+Section "ReadMemory"
+  ReadMemory $0 0 4
+  DetailPrint $0
+SectionEnd
+
 Section "HideWindow"
   HideWindow
 SectionEnd
@@ -178,9 +183,36 @@ Section "Quit"
   Quit
 SectionEnd
 
+Section "ReadINIStr"
+  ReadINIStr $0 "$INSTDIR\app.ini" "Settings" "Port"
+  DetailPrint $0
+SectionEnd
+
+Section "ReadRegDWORD"
+  ReadRegDWORD $0 HKLM "Software\Example" "Build"
+  DetailPrint "build $0"
+SectionEnd
+
 Section "ReadRegStr"
   ReadRegStr $0 HKLM "Software\Example" "Path"
   DetailPrint $0
+SectionEnd
+
+Section "ReadEnvStr"
+  ReadEnvStr $0 "TEMP"
+  DetailPrint $0
+SectionEnd
+
+Section "Reboot"
+  Reboot
+SectionEnd
+
+Section "RegDLL"
+  RegDLL "$INSTDIR\shell.dll"
+SectionEnd
+
+Section "Rename"
+  Rename "$INSTDIR\old.txt" "$INSTDIR\new.txt"
 SectionEnd
 
 Section "RMDir"

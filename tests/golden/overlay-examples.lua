@@ -94,6 +94,10 @@ installer {
 	section("GetWinVer", function()
 		if getWinVer("MAJOR") >= 10 then detailPrint("modern") end
 	end),
+	section("ReadMemory", function()
+		local bytes = readMemory(0, 4)
+		detailPrint(bytes)
+	end),
 	section("HideWindow", function()
 		hideWindow()
 	end),
@@ -122,9 +126,30 @@ installer {
 	section("Quit", function()
 		os.exit()
 	end),
+	section("ReadINIStr", function()
+		local port = readIniStr(INSTDIR .. "/app.ini", "Settings", "Port")
+		detailPrint(port)
+	end),
+	section("ReadRegDWORD", function()
+		local build = readRegDword(HKLM, "Software/Example", "Build")
+		detailPrint("build " .. build)
+	end),
 	section("ReadRegStr", function()
 		local path = readRegStr(HKLM, "Software/Example", "Path")
 		detailPrint(path)
+	end),
+	section("ReadEnvStr", function()
+		local temp = readEnvStr("TEMP")
+		detailPrint(temp)
+	end),
+	section("Reboot", function()
+		reboot()
+	end),
+	section("RegDLL", function()
+		regDll(INSTDIR .. "/shell.dll")
+	end),
+	section("Rename", function()
+		rename(INSTDIR .. "/old.txt", INSTDIR .. "/new.txt")
 	end),
 	section("RMDir", function()
 		rmDir(INSTDIR)
