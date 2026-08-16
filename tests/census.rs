@@ -14,7 +14,7 @@
 use std::collections::BTreeSet;
 use std::process::Command;
 
-use installua::table::{self, Class, Note, overlay};
+use installua::table::{self, Class, Dir, Note, overlay};
 
 const SNAPSHOT: &str = include_str!("../tables/cmdhelp-3.12.txt");
 
@@ -244,6 +244,37 @@ fn the_surface_is_not_the_nsis_argument_list() {
     let shortcut = installua::builtins::lookup("createShortcut").expect("createShortcut");
     assert_eq!(*shortcut.arity().start(), 2);
     assert!(*shortcut.arity().end() > 2, "{:?}", shortcut.arity());
+}
+
+#[test]
+fn an_exposed_rows_outputs_come_first() {
+    // The emitter builds `[dest] ++ inputs`, so an output anywhere but the
+    // front emits its register in the wrong position — `ExecWait $0 "cmd"` for
+    // `ExecWait command_line [$(user_var: return value)]`. The failure is
+    // silent: the script assembles and does the wrong thing. Until the emitter
+    // places outputs by position, this is the invariant that keeps the grind
+    // from writing that row by accident.
+    // `FileRead handle $(user_var: output) [maxlen]` is the one exception, and
+    // it is one because nothing generic emits it: `for line in lines(f)` is a
+    // hand-written lowering that places the register itself. A second exception
+    // is a reason to fix the emitter rather than to extend this list.
+    for entry in table::table() {
+        if entry.class != Class::Exposed || entry.nsis == "FileRead" {
+            continue;
+        }
+        let outputs = entry.params.iter().filter(|param| param.dir() == Dir::Out);
+        assert_eq!(
+            outputs.count(),
+            entry
+                .params
+                .iter()
+                .take_while(|param| param.dir() == Dir::Out)
+                .count(),
+            "{}: the emitter writes destinations first, so every output must be \
+             a leading parameter",
+            entry.nsis
+        );
+    }
 }
 
 #[test]

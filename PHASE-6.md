@@ -1,6 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: two preparatory tasks done, the grind not started.**
+**Status: the preparatory tasks are done and the grind is running. 25 → 32 exposed,
+167 → 160 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -19,10 +20,57 @@ in `-CMDHELP` order either way.
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 82 tests
+cargo test          # 83 tests
 ```
 
 ---
+
+## Batch 1 — A through E
+
+Seven rows, and the alphabet is the only thing they have in common:
+
+| NSIS | Installua |
+| --- | --- |
+| `CopyFiles` | `copyFiles(source, destination [, sizeKb])` |
+| `DeleteINISec` / `DeleteINIStr` | `deleteIniSection`, `deleteIniStr` |
+| `DeleteRegValue` | `deleteRegValue(root, subkey, entry)` |
+| `EnumRegKey` / `EnumRegValue` | `enumRegKey`, `enumRegValue` — both return a string |
+| `ExpandEnvStrings` | `expandEnvStrings(s)` |
+
+`INI` is spelled `Ini`, because every other name here is camel case over words and
+an acronym is a word; `Sec` became `Section`, because `-CMDHELP` abbreviates and the
+surface does not. Those two choices are made once and the rest of the family —
+`ReadINIStr`, `WriteINIStr`, `FlushINI` — inherits them when the alphabet reaches it.
+
+**The grind adds `Exposed` rows only.** Six of the alphabetically-earlier `todo`
+commands are settings rather than instructions — `AllowSkipFiles`, `DirVar`,
+`FileBufSize` — and an `Attribute` row is only half the work: the other half widens
+`V1_ATTRIBUTES`, which Phase 0 froze. Widening a frozen surface is a decision, not
+data entry, so those stay in the backlog with the rest.
+
+### Four rows the batch could not write, and what they taught
+
+The backlog reasons for these were group summaries. They are now specific, which is
+the point of a reason line:
+
+- **`Exec` and `ExecWait`** take *one* argument that is part path and part switches.
+  `Kind::Path` turns the `/S` in `setup.exe /S` into `\S`; `Kind::Value` ships the
+  forward slashes of `INSTDIR .. "/app.exe"` to a program that will not find it. §5
+  gives the surface one rule and a half-path position cannot obey it.
+- **`ExecShell` and `ExecShellWait`** are `[flags] verb file [parameters [showmode]]`:
+  the optional position is **first**, so `execShell("open", f)` would bind `"open"` to
+  `flags`. This is the gap "Still open" predicted — *"it will be a row before it is a
+  design"* — arriving as a row, four commands earlier than expected.
+
+### An invariant the batch needed
+
+`ExecWait command_line [$(user_var: return value)]` has its output **last**, and the
+emitter builds `[dest] ++ inputs`. Writing that row would have emitted
+`ExecWait $0 "cmd"`: a script that assembles, and does the wrong thing.
+[`an_exposed_rows_outputs_come_first`](tests/census.rs) now refuses an `Exposed` row
+whose outputs are not leading. `FileRead` is its one exception, and it is one because
+nothing generic emits it — `for line in lines(f)` is a hand-written lowering that
+places the register itself. A *second* exception is a reason to fix the emitter.
 
 ## What the join replaced
 
@@ -94,9 +142,13 @@ tier 3 catches and tier 2 cannot.
 - **The `todo` reasons are grouped**, fifteen sentences over 167 rows — carried over,
   and the grind will retire them a group at a time.
 - **`arity` is a range, and nothing yet says which optional position a caller means.**
-  Trailing optionals work because they are positional; a command with a *gap* — supply the
-  fifth option but not the third — needs NSIS's `""` placeholder and no row needs it yet.
-  It will be a row before it is a design.
+  Trailing optionals work because they are positional. `ExecShell` is the row that needs
+  more: a *leading* optional, where the count of arguments no longer says which position
+  each one is. Four commands are waiting on it.
+- **The emitter writes destinations first**, which is true of every exposed row and not
+  of NSIS — `ExecWait` and `GetTempFileName` put theirs last. A test refuses such a row
+  today; placing outputs by position is the fix, and it is the same change as the plural
+  case below.
 - **Multiple outputs are still one output.** `Instruction::returns` takes the first
   `Dir::Out` parameter, which is every exposed row today. `GetDLLVersion` writes two, and
   §15.23 says the count *is* the Lua arity, so the plural case is a lowering change rather

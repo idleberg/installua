@@ -12,20 +12,44 @@ installer {
 	section("ClearErrors", function()
 		clearErrors()
 	end),
+	section("CopyFiles", function()
+		copyFiles(INSTDIR .. "/data", INSTDIR .. "/backup")
+	end),
 	section("CreateDirectory", function()
 		createDirectory(INSTDIR .. "/logs")
 	end),
 	section("CreateShortcut", function()
 		createShortcut(DESKTOP .. "/App.lnk", INSTDIR .. "/app.exe")
 	end),
+	section("DeleteINISec", function()
+		deleteIniSection(INSTDIR .. "/app.ini", "Settings")
+	end),
+	section("DeleteINIStr", function()
+		deleteIniStr(INSTDIR .. "/app.ini", "Settings", "Path")
+	end),
 	section("DeleteRegKey", function()
 		deleteRegKey(HKLM, "Software/Example")
+	end),
+	section("DeleteRegValue", function()
+		deleteRegValue(HKLM, "Software/Example", "Path")
 	end),
 	section("Delete", function()
 		delete(INSTDIR .. "/old.txt")
 	end),
 	section("DetailPrint", function()
 		detailPrint("installing")
+	end),
+	section("EnumRegKey", function()
+		local key = enumRegKey(HKLM, "Software/Example", 0)
+		detailPrint(key)
+	end),
+	section("EnumRegValue", function()
+		local entry = enumRegValue(HKLM, "Software/Example", 0)
+		detailPrint(entry)
+	end),
+	section("ExpandEnvStrings", function()
+		local temp = expandEnvStrings("%TEMP%")
+		detailPrint(temp)
 	end),
 	section("File", function()
 		file("assets/icon.ico")

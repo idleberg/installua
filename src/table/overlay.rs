@@ -215,9 +215,15 @@ pub const ROWS: &[Row] = &[
         "GetFileTimeLocal",
         "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
     ),
-    todo(
+    exposed(
         "CopyFiles",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "copyFiles",
+        &[
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "copyFiles(INSTDIR .. \"/data\", INSTDIR .. \"/backup\")",
     ),
     attribute("CRCCheck", "crcCheck"),
     exposed(
@@ -250,13 +256,26 @@ pub const ROWS: &[Row] = &[
         "SetDatablockOptimize",
         "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
     ),
-    todo(
+    // The INI family spells `INI` as `Ini` — `deleteIniStr`, not
+    // `deleteINIStr` — because every other name here is camel case over words
+    // and an acronym is a word. `Sec` becomes `Section` for the same reason
+    // `DetailPrint` did not become `detPrint`: `-CMDHELP` abbreviates, the
+    // surface does not.
+    exposed(
         "DeleteINISec",
-        "the INI family: one overlay row each, no compiler change (§15.23)",
+        "deleteIniSection",
+        &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Value)],
+        "deleteIniSection(INSTDIR .. \"/app.ini\", \"Settings\")",
     ),
-    todo(
+    exposed(
         "DeleteINIStr",
-        "the INI family: one overlay row each, no compiler change (§15.23)",
+        "deleteIniStr",
+        &[
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "deleteIniStr(INSTDIR .. \"/app.ini\", \"Settings\", \"Path\")",
     ),
     exposed(
         "DeleteRegKey",
@@ -264,9 +283,15 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Handle, Kind::Value), ann(Ty::Str, Kind::Path)],
         "deleteRegKey(HKLM, \"Software/Example\")",
     ),
-    todo(
+    exposed(
         "DeleteRegValue",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "deleteRegValue",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::Str, Kind::Value),
+        ],
+        "deleteRegValue(HKLM, \"Software/Example\", \"Path\")",
     ),
     exposed(
         "Delete",
@@ -309,37 +334,63 @@ pub const ROWS: &[Row] = &[
         "EnableWindow",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    todo(
+    exposed(
         "EnumRegKey",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "enumRegKey",
+        &[
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local key = enumRegKey(HKLM, \"Software/Example\", 0)\ndetailPrint(key)",
     ),
-    todo(
+    exposed(
         "EnumRegValue",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "enumRegValue",
+        &[
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local entry = enumRegValue(HKLM, \"Software/Example\", 0)\ndetailPrint(entry)",
     ),
     lowering(
         "Exch",
         "nothing: arguments and returns are the calling convention (§15.11)",
     ),
+    // A command line is neither a path nor a value: `Kind::Path` turns the `/S`
+    // in `setup.exe /S` into `\S`, and `Kind::Value` ships the forward slashes
+    // of `INSTDIR .. "/app.exe"` to a program that will not find it. §5 gives
+    // the surface one rule — write `/`, get `\` — and a position that is *part*
+    // path has no way to obey it, so these wait for a spelling that separates
+    // the program from its arguments.
     todo(
         "Exec",
-        "runs a program or reads the environment: one overlay row each",
+        "one argument that is part path and part switches; §5's `/`-to-`\\` rule cannot apply to half a string",
     ),
     todo(
         "ExecWait",
-        "runs a program or reads the environment: one overlay row each",
+        "one argument that is part path and part switches; §5's `/`-to-`\\` rule cannot apply to half a string",
     ),
+    // `ExecShell [flags] verb file [parameters [showmode]]`: the optional
+    // position is *first*, so `execShell("open", f)` would bind `"open"` to
+    // `flags`. Trailing optionals work because they are positional and a
+    // leading one is not — the same gap PHASE-6 records, met by a real row.
     todo(
         "ExecShell",
-        "runs a program or reads the environment: one overlay row each",
+        "a *leading* optional parameter: positional arguments cannot say which optional they mean",
     ),
     todo(
         "ExecShellWait",
-        "runs a program or reads the environment: one overlay row each",
+        "a *leading* optional parameter: positional arguments cannot say which optional they mean",
     ),
-    todo(
+    exposed(
         "ExpandEnvStrings",
-        "runs a program or reads the environment: one overlay row each",
+        "expandEnvStrings",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
+        "local temp = expandEnvStrings(\"%TEMP%\")\ndetailPrint(temp)",
     ),
     todo(
         "FindWindow",

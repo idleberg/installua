@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           25
+  exposed           32
   attribute         14
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             167
+  todo             160
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -22,12 +22,8 @@ todo:
   GetDLLVersionLocal      file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   GetFileTime             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   GetFileTimeLocal        file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  CopyFiles               file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   CreateFont              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   SetDatablockOptimize    file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  DeleteINISec            the INI family: one overlay row each, no compiler change (§15.23)
-  DeleteINIStr            the INI family: one overlay row each, no compiler change (§15.23)
-  DeleteRegValue          registry surface beyond `readReg`/`writeReg`: one overlay row each
   DirText                 a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   DirVar                  an installer-wide flag or mode: one overlay row each
   DirVerify               an installer-wide flag or mode: one overlay row each
@@ -35,13 +31,10 @@ todo:
   AllowRootDirInstall     an installer-wide flag or mode: one overlay row each
   CheckBitmap             the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   EnableWindow            addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  EnumRegKey              registry surface beyond `readReg`/`writeReg`: one overlay row each
-  EnumRegValue            registry surface beyond `readReg`/`writeReg`: one overlay row each
-  Exec                    runs a program or reads the environment: one overlay row each
-  ExecWait                runs a program or reads the environment: one overlay row each
-  ExecShell               runs a program or reads the environment: one overlay row each
-  ExecShellWait           runs a program or reads the environment: one overlay row each
-  ExpandEnvStrings        runs a program or reads the environment: one overlay row each
+  Exec                    one argument that is part path and part switches; §5's `/`-to-`\` rule cannot apply to half a string
+  ExecWait                one argument that is part path and part switches; §5's `/`-to-`\` rule cannot apply to half a string
+  ExecShell               a *leading* optional parameter: positional arguments cannot say which optional they mean
+  ExecShellWait           a *leading* optional parameter: positional arguments cannot say which optional they mean
   FindWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   FindClose               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)

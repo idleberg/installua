@@ -13,6 +13,10 @@ Section "ClearErrors"
   ClearErrors
 SectionEnd
 
+Section "CopyFiles"
+  CopyFiles "$INSTDIR\data" "$INSTDIR\backup"
+SectionEnd
+
 Section "CreateDirectory"
   CreateDirectory "$INSTDIR\logs"
 SectionEnd
@@ -21,8 +25,20 @@ Section "CreateShortcut"
   CreateShortcut "$DESKTOP\App.lnk" "$INSTDIR\app.exe"
 SectionEnd
 
+Section "DeleteINISec"
+  DeleteINISec "$INSTDIR\app.ini" "Settings"
+SectionEnd
+
+Section "DeleteINIStr"
+  DeleteINIStr "$INSTDIR\app.ini" "Settings" "Path"
+SectionEnd
+
 Section "DeleteRegKey"
   DeleteRegKey HKLM "Software\Example"
+SectionEnd
+
+Section "DeleteRegValue"
+  DeleteRegValue HKLM "Software\Example" "Path"
 SectionEnd
 
 Section "Delete"
@@ -31,6 +47,21 @@ SectionEnd
 
 Section "DetailPrint"
   DetailPrint "installing"
+SectionEnd
+
+Section "EnumRegKey"
+  EnumRegKey $0 HKLM "Software\Example" 0
+  DetailPrint $0
+SectionEnd
+
+Section "EnumRegValue"
+  EnumRegValue $0 HKLM "Software\Example" 0
+  DetailPrint $0
+SectionEnd
+
+Section "ExpandEnvStrings"
+  ExpandEnvStrings $0 "%TEMP%"
+  DetailPrint $0
 SectionEnd
 
 Section "File"
