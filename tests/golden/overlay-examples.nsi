@@ -49,6 +49,11 @@ Section "DetailPrint"
   DetailPrint "installing"
 SectionEnd
 
+Section "GetInstDirError"
+  GetInstDirError $0
+  DetailPrint "instdir $0"
+SectionEnd
+
 Section "EnumRegKey"
   EnumRegKey $0 HKLM "Software\Example" 0
   DetailPrint $0
@@ -66,6 +71,10 @@ SectionEnd
 
 Section "File"
   File "assets\icon.ico"
+SectionEnd
+
+Section "FlushINI"
+  FlushINI "$INSTDIR\app.ini"
 SectionEnd
 
 Section "FileClose"
@@ -98,6 +107,38 @@ Section "FileWrite"
   FileClose $0
 SectionEnd
 
+Section "GetFullPathName"
+  GetFullPathName $0 "$INSTDIR\app.exe"
+  DetailPrint $0
+SectionEnd
+
+Section "GetTempFileName"
+  GetTempFileName $0
+  DetailPrint $0
+SectionEnd
+
+Section "GetKnownFolderPath"
+  GetKnownFolderPath $0 "{374DE290-123F-4565-9164-39C4925E467B}"
+  DetailPrint $0
+SectionEnd
+
+Section "GetWinVer"
+  GetWinVer $0 "MAJOR"
+  IntCmpU $0 10 0 __GENERATED_endif_0 0
+  DetailPrint "modern"
+__GENERATED_endif_0:
+SectionEnd
+
+Section "HideWindow"
+  HideWindow
+SectionEnd
+
+Section "IfAbort"
+  IfAbort 0 __GENERATED_endif_0
+  DetailPrint "cancelled"
+__GENERATED_endif_0:
+SectionEnd
+
 Section "IfErrors"
   ClearErrors
   IfErrors 0 __GENERATED_endif_0
@@ -111,9 +152,21 @@ Section "IfFileExists"
 __GENERATED_endif_0:
 SectionEnd
 
+Section "IfRebootFlag"
+  IfRebootFlag 0 __GENERATED_endif_0
+  DetailPrint "a restart is needed"
+__GENERATED_endif_0:
+SectionEnd
+
 Section "IfSilent"
   IfSilent 0 __GENERATED_endif_0
   DetailPrint "quiet"
+__GENERATED_endif_0:
+SectionEnd
+
+Section "IfRtlLanguage"
+  IfRtlLanguage 0 __GENERATED_endif_0
+  DetailPrint "right to left"
 __GENERATED_endif_0:
 SectionEnd
 
@@ -134,8 +187,35 @@ Section "RMDir"
   RMDir $INSTDIR
 SectionEnd
 
+Section "GetErrorLevel"
+  GetErrorLevel $0
+  DetailPrint "level $0"
+SectionEnd
+
 Section "SetOutPath"
   SetOutPath $INSTDIR
+SectionEnd
+
+Section "GetRegView"
+  GetRegView $0
+  DetailPrint $0
+SectionEnd
+
+Section "IfAltRegView"
+  IfAltRegView 0 __GENERATED_endif_0
+  DetailPrint "the other view"
+__GENERATED_endif_0:
+SectionEnd
+
+Section "GetShellVarContext"
+  GetShellVarContext $0
+  DetailPrint $0
+SectionEnd
+
+Section "IfShellVarContextAll"
+  IfShellVarContextAll 0 __GENERATED_endif_0
+  DetailPrint "all users"
+__GENERATED_endif_0:
 SectionEnd
 
 Section "Sleep"
@@ -157,6 +237,10 @@ SectionEnd
 
 Section "WriteUninstaller"
   WriteUninstaller "$INSTDIR\uninstall.exe"
+SectionEnd
+
+Section "LockWindow"
+  LockWindow "on"
 SectionEnd
 
 Section "un.Uninstall"

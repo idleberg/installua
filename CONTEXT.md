@@ -39,7 +39,7 @@ liveness at each call site to decide what the caller saves.
 **Emitted, never written**:
 The recurring shape where an NSIS prefix or marker is supplied by context rather than typed
 by the author — `$` sigils, `un.`, `Manifest`, the `.` on `.onInit`, `Uninstall`/`UN`,
-`_generated_` labels, `StrFunc` init lines. Eight instances; it is the shape of the
+`__GENERATED_` labels, `StrFunc` init lines. Eight instances; it is the shape of the
 language rather than a coincidence.
 
 **Adapter**:

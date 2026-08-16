@@ -4,8 +4,10 @@
 `LANGUAGE.md` is the surface reference. **This file is the build order**, and nothing here
 re-argues a decision — where a phase depends on a ruling it cites the section and moves on.
 
-Provisional name. §15.19 made generated labels carry `_generated_` rather than a product
-name precisely so a rename churns no golden file, so this costs nothing to defer.
+Provisional name. §15.19 made generated labels carry a neutral prefix rather than a product
+name precisely so a rename churns no golden file, so this costs nothing to defer. Phase 3
+settled the spelling as `__GENERATED_`; the `_generated_` in the hand-written `expected.nsi`
+oracles is Phase 0's guess, kept as written (PHASE-3.md).
 
 ---
 

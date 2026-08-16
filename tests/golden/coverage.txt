@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           32
+  exposed           48
   attribute         14
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             160
+  todo             144
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -27,7 +27,6 @@ todo:
   DirText                 a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   DirVar                  an installer-wide flag or mode: one overlay row each
   DirVerify               an installer-wide flag or mode: one overlay row each
-  GetInstDirError         an installer-wide flag or mode: one overlay row each
   AllowRootDirInstall     an installer-wide flag or mode: one overlay row each
   CheckBitmap             the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   EnableWindow            addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
@@ -40,7 +39,6 @@ todo:
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindNext                runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FileBufSize             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FlushINI                the INI family: one overlay row each, no compiler change (§15.23)
   ReserveFile             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileErrorText           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileReadByte            file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
@@ -51,15 +49,7 @@ todo:
   FileWriteWord           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileSeek                file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   GetDlgItem              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  GetFullPathName         file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  GetTempFileName         file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  GetKnownFolderPath      file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  GetWinVer               runs a program or reads the environment: one overlay row each
   ReadMemory              runs a program or reads the environment: one overlay row each
-  HideWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  IfAbort                 an installer-wide flag or mode: one overlay row each
-  IfRebootFlag            an installer-wide flag or mode: one overlay row each
-  IfRtlLanguage           an installer-wide flag or mode: one overlay row each
   InstallDirRegKey        registry surface beyond `readReg`/`writeReg`: one overlay row each
   InstallColors           the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   InstProgressFlags       the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -71,8 +61,8 @@ todo:
   LicenseText             a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   LicenseBkColor          a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   LoadLanguageFile        §15.26's locale tables are designed and unimplemented
-  LogSet                  an installer-wide flag or mode: one overlay row each
-  LogText                 an installer-wide flag or mode: one overlay row each
+  LogSet                  the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
+  LogText                 the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
   Page                    a page construct; custom pages need a design (nsDialogs) that does not exist yet
   PageCallbacks           a page construct; custom pages need a design (nsDialogs) that does not exist yet
   PageEx                  a page construct; custom pages need a design (nsDialogs) that does not exist yet
@@ -112,17 +102,12 @@ todo:
   SetDetailsPrint         an installer-wide flag or mode: one overlay row each
   SetErrors               an installer-wide flag or mode: one overlay row each
   SetErrorLevel           an installer-wide flag or mode: one overlay row each
-  GetErrorLevel           an installer-wide flag or mode: one overlay row each
   SetFileAttributes       file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   SetFont                 the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   SetOverwrite            file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   SetRebootFlag           an installer-wide flag or mode: one overlay row each
-  GetRegView              registry surface beyond `readReg`/`writeReg`: one overlay row each
   SetRegView              registry surface beyond `readReg`/`writeReg`: one overlay row each
-  IfAltRegView            registry surface beyond `readReg`/`writeReg`: one overlay row each
-  GetShellVarContext      an installer-wide flag or mode: one overlay row each
   SetShellVarContext      an installer-wide flag or mode: one overlay row each
-  IfShellVarContextAll    an installer-wide flag or mode: one overlay row each
   SetSilent               an installer-wide flag or mode: one overlay row each
   ShowInstDetails         an installer-wide flag or mode: one overlay row each
   ShowUninstDetails       an installer-wide flag or mode: one overlay row each
@@ -168,4 +153,3 @@ todo:
   GetCurrentAddress       takes the address of a function or label; `Call`-by-address has no Lua shape (§3)
   InitPluginsDir          the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)
   AllowSkipFiles          file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  LockWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first

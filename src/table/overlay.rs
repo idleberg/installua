@@ -318,9 +318,11 @@ pub const ROWS: &[Row] = &[
         "DirVerify",
         "an installer-wide flag or mode: one overlay row each",
     ),
-    todo(
+    exposed(
         "GetInstDirError",
-        "an installer-wide flag or mode: one overlay row each",
+        "getInstDirError",
+        &[ann(Ty::nonneg(), Kind::Value)],
+        "local why = getInstDirError()\ndetailPrint(\"instdir \" .. why)",
     ),
     todo(
         "AllowRootDirInstall",
@@ -418,9 +420,11 @@ pub const ROWS: &[Row] = &[
         "FileBufSize",
         "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
     ),
-    todo(
+    exposed(
         "FlushINI",
-        "the INI family: one overlay row each, no compiler change (§15.23)",
+        "flushIni",
+        &[ann(Ty::Str, Kind::Path)],
+        "flushIni(INSTDIR .. \"/app.ini\")",
     ),
     todo(
         "ReserveFile",
@@ -496,34 +500,55 @@ pub const ROWS: &[Row] = &[
         "GetDlgItem",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    todo(
+    exposed(
         "GetFullPathName",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "getFullPathName",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Path)],
+        "local full = getFullPathName(INSTDIR .. \"/app.exe\")\ndetailPrint(full)",
     ),
-    todo(
+    exposed(
         "GetTempFileName",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "getTempFileName",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Path)],
+        "local scratch = getTempFileName()\ndetailPrint(scratch)",
     ),
-    todo(
+    // The argument is a `KNOWNFOLDERID` GUID, not a name: NSIS ships no
+    // constants for them, so the string is what the user has and the row does
+    // not pretend otherwise (§13). A `knownFolder` table of the common ones is
+    // a header, not an instruction.
+    exposed(
         "GetKnownFolderPath",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "getKnownFolderPath",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
+        "local downloads = getKnownFolderPath(\"{374DE290-123F-4565-9164-39C4925E467B}\")\ndetailPrint(downloads)",
     ),
-    todo(
+    // The field is an enum and the result is a *number*, which is the whole
+    // reason anybody asks: `getWinVer("MAJOR") >= 10` is a comparison and
+    // `Ty::Str` would have made it a string one (§15.14).
+    exposed(
         "GetWinVer",
-        "runs a program or reads the environment: one overlay row each",
+        "getWinVer",
+        &[ann(Ty::nonneg(), Kind::Value), ann(Ty::Str, Kind::Enum)],
+        "if getWinVer(\"MAJOR\") >= 10 then detailPrint(\"modern\") end",
     ),
     todo(
         "ReadMemory",
         "runs a program or reads the environment: one overlay row each",
     ),
-    todo(
-        "HideWindow",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
-    ),
+    // Not the `hwnd` group its old reason put it in: `HideWindow` takes no
+    // handle at all and hides the installer's own window. `LockWindow` is the
+    // same mistake, and both are rows rather than a design.
+    exposed("HideWindow", "hideWindow", &[], "hideWindow()"),
     attribute("Icon", "icon"),
-    todo(
+    // A predicate's name drops the `If` and keeps the rest — `IfSilent` is
+    // `silent` — except where that collides: `IfAbort` would be `abort`, which
+    // is already `Abort`, so it is `aborted`. The past tense is also what it
+    // means: the question is whether an abort has *happened*.
+    predicate(
         "IfAbort",
-        "an installer-wide flag or mode: one overlay row each",
+        "aborted",
+        &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
+        "if aborted() then detailPrint(\"cancelled\") end",
     ),
     // `IfErrors` **clears** the flag it reads — verified under wine (§15.20) —
     // so the call is the side effect and eliminating it when its result is
@@ -545,9 +570,11 @@ pub const ROWS: &[Row] = &[
         ],
         "if fileExists(INSTDIR .. \"/app.exe\") then detailPrint(\"present\") end",
     ),
-    todo(
+    predicate(
         "IfRebootFlag",
-        "an installer-wide flag or mode: one overlay row each",
+        "rebootFlag",
+        &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
+        "if rebootFlag() then detailPrint(\"a restart is needed\") end",
     ),
     predicate(
         "IfSilent",
@@ -555,9 +582,11 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
         "if silent() then detailPrint(\"quiet\") end",
     ),
-    todo(
+    predicate(
         "IfRtlLanguage",
-        "an installer-wide flag or mode: one overlay row each",
+        "rtlLanguage",
+        &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
+        "if rtlLanguage() then detailPrint(\"right to left\") end",
     ),
     todo(
         "InstallDirRegKey",
@@ -641,13 +670,17 @@ pub const ROWS: &[Row] = &[
         "LoadLanguageFile",
         "§15.26's locale tables are designed and unimplemented",
     ),
+    // Tier 3, immediately: *"Error: LogSet specified, NSIS_CONFIG_LOG not
+    // defined."* — not a warning, and not a runtime surprise either. The stock
+    // `makensis` cannot assemble a script containing this, so a row exposing it
+    // would ship a call that fails on most machines and works on the author's.
     todo(
         "LogSet",
-        "an installer-wide flag or mode: one overlay row each",
+        "the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`",
     ),
     todo(
         "LogText",
-        "an installer-wide flag or mode: one overlay row each",
+        "the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`",
     ),
     exposed(
         "MessageBox",
@@ -863,9 +896,11 @@ pub const ROWS: &[Row] = &[
         "SetErrorLevel",
         "an installer-wide flag or mode: one overlay row each",
     ),
-    todo(
+    exposed(
         "GetErrorLevel",
-        "an installer-wide flag or mode: one overlay row each",
+        "getErrorLevel",
+        &[ann(Ty::int(), Kind::Value)],
+        "local level = getErrorLevel()\ndetailPrint(\"level \" .. level)",
     ),
     todo(
         "SetFileAttributes",
@@ -893,29 +928,37 @@ pub const ROWS: &[Row] = &[
         "SetRebootFlag",
         "an installer-wide flag or mode: one overlay row each",
     ),
-    todo(
+    exposed(
         "GetRegView",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "getRegView",
+        &[ann(Ty::Str, Kind::Value)],
+        "local view = getRegView()\ndetailPrint(view)",
     ),
     todo(
         "SetRegView",
         "registry surface beyond `readReg`/`writeReg`: one overlay row each",
     ),
-    todo(
+    predicate(
         "IfAltRegView",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "altRegView",
+        &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
+        "if altRegView() then detailPrint(\"the other view\") end",
     ),
-    todo(
+    exposed(
         "GetShellVarContext",
-        "an installer-wide flag or mode: one overlay row each",
+        "getShellVarContext",
+        &[ann(Ty::Str, Kind::Value)],
+        "local context = getShellVarContext()\ndetailPrint(context)",
     ),
     todo(
         "SetShellVarContext",
         "an installer-wide flag or mode: one overlay row each",
     ),
-    todo(
+    predicate(
         "IfShellVarContextAll",
-        "an installer-wide flag or mode: one overlay row each",
+        "shellVarContextAll",
+        &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
+        "if shellVarContextAll() then detailPrint(\"all users\") end",
     ),
     todo(
         "SetSilent",
@@ -1195,8 +1238,10 @@ pub const ROWS: &[Row] = &[
     attribute("VIAddVersionKey", "versionInfo.keys"),
     attribute("VIProductVersion", "versionInfo.product"),
     attribute("VIFileVersion", "versionInfo.file"),
-    todo(
+    exposed(
         "LockWindow",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "lockWindow",
+        &[ann(Ty::Str, Kind::Enum)],
+        "lockWindow(\"on\")",
     ),
 ];

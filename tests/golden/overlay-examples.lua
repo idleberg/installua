@@ -39,6 +39,10 @@ installer {
 	section("DetailPrint", function()
 		detailPrint("installing")
 	end),
+	section("GetInstDirError", function()
+		local why = getInstDirError()
+		detailPrint("instdir " .. why)
+	end),
 	section("EnumRegKey", function()
 		local key = enumRegKey(HKLM, "Software/Example", 0)
 		detailPrint(key)
@@ -53,6 +57,9 @@ installer {
 	end),
 	section("File", function()
 		file("assets/icon.ico")
+	end),
+	section("FlushINI", function()
+		flushIni(INSTDIR .. "/app.ini")
 	end),
 	section("FileClose", function()
 		local f = fileOpen(INSTDIR .. "/log.txt", "w")
@@ -72,6 +79,27 @@ installer {
 		f:write("done")
 		f:close()
 	end),
+	section("GetFullPathName", function()
+		local full = getFullPathName(INSTDIR .. "/app.exe")
+		detailPrint(full)
+	end),
+	section("GetTempFileName", function()
+		local scratch = getTempFileName()
+		detailPrint(scratch)
+	end),
+	section("GetKnownFolderPath", function()
+		local downloads = getKnownFolderPath("{374DE290-123F-4565-9164-39C4925E467B}")
+		detailPrint(downloads)
+	end),
+	section("GetWinVer", function()
+		if getWinVer("MAJOR") >= 10 then detailPrint("modern") end
+	end),
+	section("HideWindow", function()
+		hideWindow()
+	end),
+	section("IfAbort", function()
+		if aborted() then detailPrint("cancelled") end
+	end),
 	section("IfErrors", function()
 		clearErrors()
 		if errors() then detailPrint("failed") end
@@ -79,8 +107,14 @@ installer {
 	section("IfFileExists", function()
 		if fileExists(INSTDIR .. "/app.exe") then detailPrint("present") end
 	end),
+	section("IfRebootFlag", function()
+		if rebootFlag() then detailPrint("a restart is needed") end
+	end),
 	section("IfSilent", function()
 		if silent() then detailPrint("quiet") end
+	end),
+	section("IfRtlLanguage", function()
+		if rtlLanguage() then detailPrint("right to left") end
 	end),
 	section("MessageBox", function()
 		messageBox("finished")
@@ -95,8 +129,26 @@ installer {
 	section("RMDir", function()
 		rmDir(INSTDIR)
 	end),
+	section("GetErrorLevel", function()
+		local level = getErrorLevel()
+		detailPrint("level " .. level)
+	end),
 	section("SetOutPath", function()
 		setOutPath(INSTDIR)
+	end),
+	section("GetRegView", function()
+		local view = getRegView()
+		detailPrint(view)
+	end),
+	section("IfAltRegView", function()
+		if altRegView() then detailPrint("the other view") end
+	end),
+	section("GetShellVarContext", function()
+		local context = getShellVarContext()
+		detailPrint(context)
+	end),
+	section("IfShellVarContextAll", function()
+		if shellVarContextAll() then detailPrint("all users") end
 	end),
 	section("Sleep", function()
 		sleep(500)
@@ -113,6 +165,9 @@ installer {
 	end),
 	section("WriteUninstaller", function()
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
+	end),
+	section("LockWindow", function()
+		lockWindow("on")
 	end),
 }
 

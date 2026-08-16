@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: the preparatory tasks are done and the grind is running. 25 → 32 exposed,
-167 → 160 todo.**
+**Status: the preparatory tasks are done and the grind is running. 25 → 48 exposed,
+167 → 144 todo, through `L`.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -62,7 +62,47 @@ the point of a reason line:
   `flags`. This is the gap "Still open" predicted — *"it will be a row before it is a
   design"* — arriving as a row, four commands earlier than expected.
 
-### An invariant the batch needed
+## Batch 2 — F through L
+
+Sixteen rows, and eleven of them take no arguments at all:
+
+| NSIS | Installua |
+| --- | --- |
+| `FlushINI` | `flushIni(path)` |
+| `GetErrorLevel`, `GetInstDirError`, `GetRegView`, `GetShellVarContext` | `getErrorLevel()` and friends — one output, no input |
+| `GetFullPathName`, `GetKnownFolderPath`, `GetTempFileName` | `getFullPathName(p)`, `getKnownFolderPath(guid)`, `getTempFileName([dir])` |
+| `GetWinVer` | `getWinVer("MAJOR")`, typed `nonneg` so `>= 10` is an integer comparison |
+| `HideWindow`, `LockWindow` | `hideWindow()`, `lockWindow("on")` |
+| `IfAbort`, `IfAltRegView`, `IfRebootFlag`, `IfRtlLanguage`, `IfShellVarContextAll` | five predicates |
+
+**Predicates cost one line each now.** `IfSilent` was the only one when §15.20 was
+written and the machinery it needed is all in the join, so five more are five
+`predicate(…)` rows: `if rebootFlag() then …` fuses into the branch and `local flag =
+rebootFlag()` materialises, from the same bit. The naming rule is drop the `If` and
+keep the rest, with one exception — `IfAbort` would be `abort`, which is `Abort`, so
+it is `aborted`.
+
+**Two rows were in the wrong bucket, not blocked.** `HideWindow` and `LockWindow` sat
+under *"addresses a window by handle; the `hwnd` surface wants nsDialogs designed
+first"*, and neither takes a handle: they act on the installer's own window. A group
+reason is a guess about every member of the group, and reading the syntax line is
+what un-guesses it. Worth remembering for the remaining groups.
+
+### `LogSet` and `LogText`: tier 3, again
+
+Both were written as rows, and tier 3 rejected them before the golden was regenerated:
+
+```
+Error: LogSet specified, NSIS_CONFIG_LOG not defined.
+```
+
+An **error**, not a warning, so `-WX` is not what refuses it — the stock `makensis`
+simply cannot assemble a script containing either. A row would have shipped a call
+that works on a machine with a custom build and fails everywhere else, and no amount
+of golden-diffing would have said so. They are back in the backlog with that sentence
+as their reason, which is a better reason than the group summary they had.
+
+### An invariant batch 1 needed
 
 `ExecWait command_line [$(user_var: return value)]` has its output **last**, and the
 emitter builds `[dest] ++ inputs`. Writing that row would have emitted
