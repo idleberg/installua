@@ -63,6 +63,30 @@ pub struct Const {
     pub span: Span,
 }
 
+/// What `local x = import "FileFunc"` and `local y = plugin "nsExec"` bind.
+///
+/// Neither is a value: there is nothing at run time for `fileFunc` to be, and
+/// `fileFunc.getSize(…)` is one macro expansion rather than a field access
+/// followed by a call. Binding it to a name is what makes the namespace
+/// *visible* — three namespaces exist and NSIS enforces the boundary between
+/// them (§13), so the name a user chooses is how they tell which is which.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Namespace {
+    /// A `!include`d header: its macros are `${Name}`.
+    Header(String),
+    /// A plugin: its methods are `Plugin::Method`, and it clobbers everything
+    /// (§15.11).
+    Plugin(String),
+}
+
+impl Namespace {
+    pub fn name(&self) -> &str {
+        match self {
+            Namespace::Header(name) | Namespace::Plugin(name) => name,
+        }
+    }
+}
+
 /// A `func("name", function(…) … end)` declaration.
 #[derive(Clone, Debug)]
 pub struct Func<'a> {
@@ -84,6 +108,12 @@ pub struct Global {
 #[derive(Debug, Default)]
 pub struct Resolved<'a> {
     pub consts: BTreeMap<String, Const>,
+    /// Top-level `<const>` names in **source order**, because each becomes a
+    /// `!define` and the preprocessor is strictly sequential (§12). The map is
+    /// alphabetical and the output is not.
+    pub const_order: Vec<String>,
+    /// Header and plugin namespaces, by the local name they were bound to.
+    pub namespaces: BTreeMap<String, Namespace>,
     pub functions: BTreeMap<String, Func<'a>>,
     /// In first-seen order, because `Var` declarations are emitted in it and
     /// §14 diffs goldens.
@@ -173,6 +203,17 @@ fn consts(program: &Program, resolved: &mut Resolved<'_>, diags: &mut Diagnostic
             continue;
         };
 
+        // `local fileFunc = import "FileFunc"` is not a value binding at all —
+        // it names a namespace, which is why it is the one non-`<const>`
+        // `local` the top level accepts (§15.27).
+        if !is_const
+            && let ([name], [value]) = (names.as_slice(), values.as_slice())
+            && let Some(namespace) = namespace(value, diags)
+        {
+            resolved.namespaces.insert(name.text.clone(), namespace);
+            continue;
+        }
+
         if !is_const {
             diags.push(
                 Diagnostic::error(
@@ -194,7 +235,10 @@ fn consts(program: &Program, resolved: &mut Resolved<'_>, diags: &mut Diagnostic
 
         for (index, name) in names.iter().enumerate() {
             match values.get(index) {
-                Some(value) => pending.push((name, value)),
+                Some(value) => {
+                    resolved.const_order.push(name.text.clone());
+                    pending.push((name, value));
+                }
                 None => diags.push(
                     Diagnostic::error(
                         Code::BadFieldValue,
@@ -245,6 +289,41 @@ fn consts(program: &Program, resolved: &mut Resolved<'_>, diags: &mut Diagnostic
             ),
         );
     }
+}
+
+/// `import "FileFunc"` / `plugin "nsExec"`, as the namespace it names.
+///
+/// `None` when the call is neither, which leaves the ordinary "a `local` at the
+/// top level has nowhere to live" rejection to fire.
+fn namespace(value: &Expr, diags: &mut Diagnostics) -> Option<Namespace> {
+    let Expr::Call { callee, args, span } = value else {
+        return None;
+    };
+    let Expr::Name(callee) = callee.as_ref() else {
+        return None;
+    };
+    let build: fn(String) -> Namespace = match callee.text.as_str() {
+        "import" => Namespace::Header,
+        "plugin" => Namespace::Plugin,
+        _ => return None,
+    };
+
+    let [Expr::Str(name)] = args.as_slice() else {
+        diags.push(
+            Diagnostic::error(
+                Code::BadFieldValue,
+                *span,
+                format!("`{}` takes one name", callee.text),
+            )
+            .note(format!(
+                "write `local x = {} \"Name\"`, with a literal — a header is read at build \
+                 time, so there is nothing for a computed name to be (§15.27)",
+                callee.text
+            )),
+        );
+        return None;
+    };
+    Some(build(name.value.clone()))
 }
 
 /// Pass 1c: globals. A bare assignment declares one (§15.24), and it can happen

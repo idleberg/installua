@@ -12,7 +12,9 @@
 //!   3. `!include`s
 //!   4. header init lines (`${Using:StrFunc}`)
 //!   5. attributes, in overlay order
-//!   6. MUI defines, page macros, `MUI_LANGUAGE`
+//!   6. MUI defines, then pages, then uninstaller pages, then `MUI_LANGUAGE` —
+//!      four lists rather than one, because MUI2 reads a `!define` at the point
+//!      the next page macro is inserted (§15.7) and puts the language last
 //!   7. `Var`s
 //!   8. functions
 //!   9. sections, in source order — a sequence, never reordered
@@ -33,7 +35,20 @@ pub struct Module {
     pub includes: Vec<String>,
     pub inits: Vec<Instruction>,
     pub attributes: Vec<Instruction>,
-    pub mui: Vec<Instruction>,
+    /// `!define MUI_ICON` and friends. Separate from [`Module::defines`]
+    /// because these are the compiler's, not the user's, and MUI2 reads them
+    /// **when the page macro is inserted** — so they precede the pages and a
+    /// page-scoped one would have to sit between two of them (§15.7).
+    pub mui_defines: Vec<Define>,
+    /// `!insertmacro MUI_PAGE_*`, in the order the user listed them: page order
+    /// is user-visible, so unlike attributes these are never reordered.
+    pub pages: Vec<Instruction>,
+    /// `!insertmacro MUI_UNPAGE_*`. A separate list because MUI2 requires every
+    /// installer page before every uninstaller page, whatever order the two
+    /// blocks were written in (§15.3).
+    pub unpages: Vec<Instruction>,
+    /// `!insertmacro MUI_LANGUAGE`, which has to come after every page.
+    pub languages: Vec<Instruction>,
     /// Globals, declared by assignment (§15.24), collected during lowering and
     /// emitted before the first body that touches them (§12).
     pub vars: Vec<String>,
@@ -167,6 +182,29 @@ impl Step {
     }
 }
 
+/// What a call site *is*, which decides both what it expands to and what it
+/// clobbers.
+#[derive(Clone, Debug)]
+pub enum CallKind {
+    /// `Call name`: the stack ABI, and a clobber set the fixpoint computed.
+    Function,
+    /// A plugin, `System::Call` or `raw` — §15.11's three opaque callees.
+    ///
+    /// Opaque means two things at once. It takes its arguments **inline**
+    /// rather than on the stack, so the lines are already written by the time
+    /// this exists; and it clobbers **every** register, because nothing here
+    /// has read the plugin's DLL, `.r0` inside a `System::Call` signature
+    /// writes a register no AST records, and a `raw` block is text (§13).
+    Opaque {
+        lines: Vec<Instruction>,
+        /// Whether the lines are a `raw` block. A plugin call is still the
+        /// compiler's line — it built the argument — and a `raw` block is the
+        /// user's text, which §15.22 reports differently because only one of
+        /// the two was ever checked.
+        raw: bool,
+    },
+}
+
 /// A call site, in the order the stack sees it.
 ///
 /// The convention is program 4's, and it is written here rather than discovered
@@ -180,8 +218,10 @@ impl Step {
 ///      number, and restored in reverse.
 #[derive(Clone, Debug)]
 pub struct CallSite {
-    /// The NSIS `Function` name.
+    /// The NSIS `Function` name. Empty for an opaque callee, which has no
+    /// node in the call graph to be.
     pub callee: String,
+    pub kind: CallKind,
     /// Argument values, in source order.
     pub args: Vec<Arg>,
     /// Where the returned values land, in source order. A dropped return still
@@ -201,6 +241,19 @@ pub struct CallSite {
 pub struct Instruction {
     pub name: String,
     pub args: Vec<Arg>,
+    /// Whether the inputs are still live while the outputs are written.
+    ///
+    /// False for an NSIS instruction, whose destination is a whole write the
+    /// allocator may put on top of a dying operand. True for a **macro**, which
+    /// expands to a sequence nobody here has read: `${GetSize} $0 "" $0 $1 $2`
+    /// happens to work and `${Foo} $0 $0` for the next macro may not, and the
+    /// difference is invisible at this level. So a macro's inputs interfere
+    /// with its outputs and the two never share a register (§15.27).
+    pub atomic: bool,
+    /// The statement this line came from, for §15.22's map. `None` for a line
+    /// the compiler emitted on its own behalf, which is exactly the set whose
+    /// failure is a compiler bug rather than a user's mistake.
+    pub span: Option<Span>,
 }
 
 impl Instruction {
@@ -208,7 +261,21 @@ impl Instruction {
         Instruction {
             name: name.into(),
             args,
+            atomic: false,
+            span: None,
         }
+    }
+
+    /// The same instruction, attributed to the statement that produced it.
+    pub fn at(mut self, span: Span) -> Self {
+        self.span = Some(span);
+        self
+    }
+
+    /// The same instruction, with its inputs held live across its outputs.
+    pub fn atomic(mut self) -> Self {
+        self.atomic = true;
+        self
     }
 
     /// The values this instruction reads.
@@ -265,6 +332,13 @@ pub enum Piece {
     /// is the one the register allocator rewrites and liveness counts as a use
     /// — a `$INSTDIR` spliced into a template is neither.
     Slot(Slot),
+    /// A top-level `<const>`, which is a `!define` (§7-1). It carries its folded
+    /// value as well as its name because the two are needed in different
+    /// positions: `${APP}` is what a reader wants to see, and a **path** cannot
+    /// contain one — `/` is normalised to `\` in text and there is no way to
+    /// normalise inside a macro expansion — so [`Arg::into_path`] substitutes
+    /// the value back at the parameter boundary.
+    Const { name: String, value: String },
 }
 
 /// Whether the emitter quotes and escapes an argument — the data-versus-syntax
@@ -334,12 +408,36 @@ impl Arg {
         Arg::Data { pieces, path: true }
     }
 
+    /// A `<const>` reference: `${APP}`, with the folded value alongside.
+    pub fn constant(name: impl Into<String>, value: impl Into<String>) -> Self {
+        Arg::data(vec![Piece::Const {
+            name: name.into(),
+            value: value.into(),
+        }])
+    }
+
     /// The same argument in a path position. Called at the parameter boundary,
     /// so the overlay decides pathness and the expression lowerer does not have
     /// to know where its result is going.
+    ///
+    /// A `${APP}` becomes its value here **when the value contains a `/`**, and
+    /// that is not a peephole: `/` is normalised to `\` in text pieces, and a
+    /// macro expansion is opaque to that, so a define holding a separator would
+    /// otherwise ship the one NSIS does not accept (§5). A value with no `/` in
+    /// it normalises to itself, so the reference survives and the output keeps
+    /// saying `${APP}`.
     pub fn into_path(self) -> Self {
         match self {
-            Arg::Data { pieces, .. } => Arg::Data { pieces, path: true },
+            Arg::Data { pieces, .. } => Arg::Data {
+                pieces: pieces
+                    .into_iter()
+                    .map(|piece| match piece {
+                        Piece::Const { value, .. } if value.contains('/') => Piece::Text(value),
+                        other => other,
+                    })
+                    .collect(),
+                path: true,
+            },
             raw => raw,
         }
     }
@@ -373,14 +471,17 @@ impl Arg {
         }
     }
 
-    /// The whole argument as literal text, when nothing in it is a register.
-    /// Constant folding asks this; nothing else should.
+    /// The whole argument as literal text, when nothing in it is a register. A
+    /// `<const>` contributes its folded value, because that is what the
+    /// preprocessor will substitute — which is how `IntOp $0 $1 / ${BLOCK}`
+    /// gets to be an unquoted integer argument like any other.
     pub fn as_text(&self) -> Option<String> {
         match self {
             Arg::Data { pieces, .. } => pieces
                 .iter()
                 .map(|piece| match piece {
                     Piece::Text(text) => Some(text.as_str()),
+                    Piece::Const { value, .. } => Some(value.as_str()),
                     Piece::Var(_) | Piece::Slot(_) => None,
                 })
                 .collect::<Option<Vec<_>>>()

@@ -49,7 +49,20 @@ impl BodyLowerer<'_, '_> {
     /// all, because a literal is *data* and an NSIS variable spliced into it is
     /// the one `$` that survives unescaped (§15.1).
     pub(super) fn simple(&mut self, expr: &Expr) -> Option<Typed> {
-        if let Some(folded) = self.constant(expr) {
+        // A name and a concatenation are looked at structurally *before*
+        // folding, because a top-level `<const>` is a `!define` and the output
+        // should say `${APP}` rather than the fourth copy of its value (§7-1).
+        // Everything else — a literal, arithmetic over constants — folds, since
+        // there is no name left to preserve.
+        if !matches!(
+            expr,
+            Expr::Name(_)
+                | Expr::Binary {
+                    op: BinOp::Concat,
+                    ..
+                }
+        ) && let Some(folded) = self.constant(expr)
+        {
             return Some(Typed {
                 ty: folded.ty(),
                 arg: ir::Arg::str(folded.text()),
@@ -69,8 +82,14 @@ impl BodyLowerer<'_, '_> {
                 None => {
                     if let Some(constant) = builtins::constant_named(&name.text) {
                         return Some(Typed {
-                            arg: ir::Arg::var(format!("${}", constant.nsis)),
+                            arg: constant.arg(),
                             ty: constant.ty,
+                        });
+                    }
+                    if let Some(constant) = self.resolved.consts.get(&name.text) {
+                        return Some(Typed {
+                            ty: constant.value.ty(),
+                            arg: ir::Arg::constant(&name.text, constant.value.text()),
                         });
                     }
                     if self.resolved.global(&name.text) {
@@ -476,11 +495,40 @@ impl BodyLowerer<'_, '_> {
     pub(super) fn call(&mut self, call: &Expr, dest: Option<&Slot>) -> Option<Ty> {
         let (name, args, span) = match call {
             Expr::Call { callee, args, span } => (callee_path(callee)?, args, *span),
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+                span,
+            } => return self.method(receiver, method, args, dest, *span),
             other => {
                 self.todo(other.span(), "this call");
                 return None;
             }
         };
+
+        // Hand-written lowerings first (§15.21's "kind 2"): a command whose
+        // shape is not one row of the table, because the instruction it becomes
+        // depends on a type, or because it is a branch wearing an expression's
+        // syntax.
+        match name.as_str() {
+            "writeReg" => return self.write_reg(args, dest, span),
+            "messageBox" => return self.message_box(args, dest, span),
+            "raw" => return self.raw(args, dest, span),
+            "string.sub" | "string.find" | "string.lower" | "string.upper" | "string.format" => {
+                return self.string_adapter(&name, args, dest, span);
+            }
+            _ => {}
+        }
+
+        if let Some((base, method)) = name.split_once('.')
+            && self.resolved.namespaces.contains_key(base)
+        {
+            let dests: Vec<Slot> = dest.cloned().into_iter().collect();
+            let (base, method) = (base.to_string(), method.to_string());
+            let types = self.namespaced(&base, &method, args, &dests, span)?;
+            return types.first().copied();
+        }
 
         if self.resolved.functions.contains_key(&name) {
             let dests: Vec<Slot> = dest.cloned().into_iter().collect();
@@ -609,6 +657,812 @@ impl BodyLowerer<'_, '_> {
         }
     }
 
+    /// `f:close()` — a method on a handle.
+    ///
+    /// The receiver is a syntactic prefix here and an ordinary argument in
+    /// NSIS, which is the whole reason [`Expr::MethodCall`] is a variant rather
+    /// than a `Field` and a `Call`: `f:write(s)` is `FileWrite $f "s"`, with
+    /// the receiver first.
+    fn method(
+        &mut self,
+        receiver: &Expr,
+        method: &Name,
+        args: &[Expr],
+        dest: Option<&Slot>,
+        span: Span,
+    ) -> Option<Ty> {
+        let handle = self.value(receiver)?;
+        if handle.ty != Ty::Handle && handle.ty != Ty::Unknown {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    receiver.span(),
+                    format!("a {} has no methods", handle.ty),
+                )
+                .note("methods exist on a handle, which comes from `fileOpen`"),
+            );
+            return None;
+        }
+        if dest.is_some() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    span,
+                    format!("`{}` produces no value", method.text),
+                )
+                .note("it acts on the file rather than answering a question"),
+            );
+            return None;
+        }
+
+        let (nsis, arity) = match method.text.as_str() {
+            "close" => ("FileClose", 0),
+            "write" => ("FileWrite", 1),
+            other => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UndefinedName,
+                        method.span,
+                        format!("a handle has no `{other}`"),
+                    )
+                    .note("the methods are `close` and `write`"),
+                );
+                return None;
+            }
+        };
+        if args.len() != arity {
+            return self.wrong_arity(&method.text, arity, args.len(), span);
+        }
+
+        let mut lowered = vec![handle.arg];
+        for argument in args {
+            lowered.push(self.value(argument)?.arg);
+        }
+        self.emit(ir::Instruction::new(nsis, lowered));
+        None
+    }
+
+    // -- namespaces --------------------------------------------------------
+
+    /// `fileFunc.getSize(dir, "")` — a call into a namespace a `local` bound
+    /// (§15.27).
+    ///
+    /// The header half is a macro expansion, and its calling convention is not
+    /// this compiler's choice: `!insertmacro` cannot return anything, so a
+    /// macro takes its inputs first and writes its outputs into **trailing
+    /// register arguments**. That is the whole difference from an instruction,
+    /// whose one output comes first.
+    pub(super) fn namespaced(
+        &mut self,
+        base: &str,
+        method: &str,
+        args: &[Expr],
+        dests: &[Slot],
+        span: Span,
+    ) -> Option<Vec<Ty>> {
+        let namespace = self.resolved.namespaces.get(base)?.clone();
+        let header = match &namespace {
+            crate::resolve::Namespace::Header(header) => header.clone(),
+            crate::resolve::Namespace::Plugin(plugin) => {
+                let plugin = plugin.clone();
+                return self.plugin_call(&plugin, method, args, dests, span);
+            }
+        };
+
+        let Some(entry) = crate::headers::lookup(&header, method) else {
+            let mut diagnostic = Diagnostic::error(
+                Code::UndefinedName,
+                span,
+                format!("`{header}` declares no `{method}`"),
+            );
+            diagnostic = if crate::headers::known(&header) {
+                diagnostic.note(format!(
+                    "it declares {}",
+                    crate::headers::methods(&header)
+                        .iter()
+                        .map(|name| format!("`{name}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+            } else {
+                diagnostic.note(format!(
+                    "nothing is declared for `{header}` — a macro's parameter list says nothing \
+                     about directions or counts, so the declaration is written rather than \
+                     discovered (§15.27)"
+                ))
+            };
+            self.diags.push(diagnostic);
+            return None;
+        };
+
+        if args.len() != entry.params.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{base}.{method}` takes {} argument(s), and {} were given",
+                        entry.params.len(),
+                        args.len()
+                    ),
+                )
+                .note(format!("it becomes `${{{}}}` (§15.27)", entry.nsis)),
+            );
+            return None;
+        }
+
+        let mut lowered = Vec::with_capacity(entry.params.len() + entry.outputs.len());
+        for (argument, param) in args.iter().zip(entry.params) {
+            let value = self.value(argument)?;
+            if param.ty != Ty::Unknown && value.ty != param.ty && value.ty != Ty::Unknown {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        argument.span(),
+                        format!(
+                            "`{base}.{method}` wants a {}, and this is a {}",
+                            param.ty, value.ty
+                        ),
+                    )
+                    .note("types come from the declaration, never from an annotation (§15.14)"),
+                );
+                return None;
+            }
+            lowered.push(if param.path {
+                value.arg.into_path()
+            } else {
+                value.arg
+            });
+        }
+
+        if dests.len() > entry.outputs.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{base}.{method}` writes {} value(s), and {} are being bound",
+                        entry.outputs.len(),
+                        dests.len()
+                    ),
+                )
+                .note("there is no `nil` to pad with (§3)"),
+            );
+            return None;
+        }
+
+        // Every output gets a register whether or not anybody wanted one: the
+        // macro writes all of them, so a slot that is not bound is still
+        // written and still has to be a definition liveness can see.
+        for index in 0..entry.outputs.len() {
+            let slot = match dests.get(index) {
+                Some(slot) => slot.clone(),
+                None => self.body.vreg(span),
+            };
+            lowered.push(ir::Arg::dest(slot));
+        }
+
+        self.emit(ir::Instruction::new(format!("${{{}}}", entry.nsis), lowered).atomic());
+        Some(entry.outputs.to_vec())
+    }
+
+    /// `raw [[ … ]]` — the third opaque callee, and the escape hatch.
+    ///
+    /// The text is emitted verbatim, one line per line, with the leading
+    /// whitespace dropped so the block sits where the emitter's indentation
+    /// puts everything else. Nothing is hoisted, nothing is checked and no
+    /// local survives it: it clobbers every register, which is what makes the
+    /// hatch safe to have rather than a hole (§13, §15.11).
+    fn raw(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
+        if dest.is_some() {
+            self.diags.push(
+                Diagnostic::error(Code::TypeMismatch, span, "`raw` produces no value").note(
+                    "it is text handed to `makensis`, so there is nothing here that knows what it \
+                     left in a register — write to a global instead (§13)",
+                ),
+            );
+            return None;
+        }
+        let [Expr::Str(text)] = args else {
+            self.diags.push(
+                Diagnostic::error(Code::WrongArity, span, "`raw` takes one literal block").note(
+                    "write `raw [[ … ]]`; a computed string would be text this compiler assembled \
+                     and did not read",
+                ),
+            );
+            return None;
+        };
+
+        let lines: Vec<ir::Instruction> = text
+            .value
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(|line| ir::Instruction::new(line, Vec::new()))
+            .collect();
+        if lines.is_empty() {
+            return None;
+        }
+
+        let site = self.body.opaque_site(lines, true, span);
+        let current = self.current;
+        self.body.push_step(current, ir::Step::Saves(site));
+        self.body.push_step(current, ir::Step::Call(site));
+        None
+    }
+
+    /// `nsExec.execToStack(cmd)` — the first of §15.11's three opaque callees.
+    ///
+    /// A plugin takes its arguments **inline** and leaves its outputs on the
+    /// stack, so the shape is one line plus a `Pop` each. What makes it a *call
+    /// site* rather than an instruction is the other half: nothing here has
+    /// read the DLL, so it clobbers every register, and anything live across it
+    /// has to be saved exactly as it would be around a `func`.
+    fn plugin_call(
+        &mut self,
+        plugin: &str,
+        method: &str,
+        args: &[Expr],
+        dests: &[Slot],
+        span: Span,
+    ) -> Option<Vec<Ty>> {
+        let Some(entry) = crate::headers::plugin(plugin, method) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UndefinedName,
+                    span,
+                    format!("`{plugin}` declares no `{method}`"),
+                )
+                .note(match crate::headers::plugin_methods(plugin).as_slice() {
+                    [] => format!(
+                        "nothing is declared for `{plugin}` — a DLL cannot be asked how many \
+                         values it pushes, so the count is written down rather than discovered \
+                         (§11)"
+                    ),
+                    methods => format!(
+                        "it declares {}",
+                        methods
+                            .iter()
+                            .map(|name| format!("`{name}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                }),
+            );
+            return None;
+        };
+
+        if args.len() != entry.params.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{plugin}.{method}` takes {} argument(s), and {} were given",
+                        entry.params.len(),
+                        args.len()
+                    ),
+                )
+                .note(format!("it becomes `{}`", entry.nsis)),
+            );
+            return None;
+        }
+
+        // `System::Call`'s output count is in its signature: every `.s` pushes
+        // one value. That is as far as the signature is read — narrowing the
+        // clobber set from the rest of it is a later optimisation (PLAN §3).
+        let outputs: Vec<Ty> = if entry.nsis == "System::Call" {
+            let signature = self.constant(&args[0]).map(|value| value.text());
+            let Some(signature) = signature else {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        span,
+                        "`System.call` needs a build-time signature",
+                    )
+                    .note(
+                        "the number of values it leaves on the stack is the number of `.s` in the \
+                         signature, and a runtime string cannot be counted (§15.11)",
+                    ),
+                );
+                return None;
+            };
+            vec![Ty::Str; signature.matches(".s").count()]
+        } else {
+            entry.outputs.to_vec()
+        };
+
+        if dests.len() > outputs.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{plugin}.{method}` pushes {} value(s), and {} are being bound",
+                        outputs.len(),
+                        dests.len()
+                    ),
+                )
+                .note("the count comes from the declaration, since nothing can ask the DLL (§11)"),
+            );
+            return None;
+        }
+
+        // The site is reserved and the saves marked *before* the arguments are
+        // lowered, for the same reason a `func` call does it: a save has to
+        // precede instructions this lowerer has not emitted yet (§15.11).
+        let site = self.body.opaque_site(Vec::new(), false, span);
+        let current = self.current;
+        self.body.push_step(current, ir::Step::Saves(site));
+
+        let mut lowered = Vec::with_capacity(args.len());
+        for (argument, param) in args.iter().zip(entry.params) {
+            let value = self.value(argument)?;
+            lowered.push(if param.path {
+                value.arg.into_path()
+            } else {
+                value.arg
+            });
+        }
+
+        let results = (0..outputs.len())
+            .map(|index| match dests.get(index) {
+                Some(slot) => slot.clone(),
+                // A dropped output still comes off the stack: the plugin pushed
+                // it either way, and leaving it there unbalances everything
+                // after it with no diagnostic from NSIS (§3).
+                None => self.body.vreg(span),
+            })
+            .collect();
+
+        self.body.calls[site].kind = ir::CallKind::Opaque {
+            lines: vec![ir::Instruction::new(entry.nsis, lowered).at(span)],
+            raw: false,
+        };
+        self.body.calls[site].results = results;
+        let current = self.current;
+        self.body.push_step(current, ir::Step::Call(site));
+        Some(outputs)
+    }
+
+    // -- hand-written lowerings -------------------------------------------
+
+    /// `writeReg(root, key, name, value)`.
+    ///
+    /// One surface name, two instructions: NSIS spells the value's type in the
+    /// instruction rather than in the argument, and a `WriteRegStr` holding
+    /// digits is not the same registry entry as a `WriteRegDWORD` holding the
+    /// same digits — nothing downstream can recover the difference, which is
+    /// why the lattice picks it here (§15.14).
+    fn write_reg(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
+        if dest.is_some() {
+            self.diags.push(
+                Diagnostic::error(Code::TypeMismatch, span, "`writeReg` produces no value")
+                    .note("read it back with `readRegStr` if that is what is meant"),
+            );
+            return None;
+        }
+        let [root, key, name, value] = args else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`writeReg` takes 4 argument(s), and {} were given",
+                        args.len()
+                    ),
+                )
+                .note("write `writeReg(HKLM, key, name, value)`"),
+            );
+            return None;
+        };
+
+        let root = self.value(root)?;
+        let key = self.value(key)?;
+        let name = self.value(name)?;
+        let value = self.value(value)?;
+
+        let nsis = if value.ty.is_int() {
+            "WriteRegDWORD"
+        } else {
+            "WriteRegStr"
+        };
+        self.emit(ir::Instruction::new(
+            nsis,
+            vec![root.arg, key.arg.into_path(), name.arg, value.arg],
+        ));
+        None
+    }
+
+    /// The `string.*` adapters (§15.21's "kind 2").
+    ///
+    /// These are hand-written lowerings rather than table rows, and the reason
+    /// is arithmetic: Lua indexes from 1 and NSIS from 0, so every index
+    /// crosses a boundary that no declaration can describe. `string.sub(v, 1,
+    /// n)` is `StrCpy dest src <n> 0` — a length and an offset where Lua wrote
+    /// two positions.
+    fn string_adapter(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        dest: Option<&Slot>,
+        span: Span,
+    ) -> Option<Ty> {
+        // An adapter always writes somewhere: `string.upper(x)` as a statement
+        // computes a value nobody reads, which is legal and useless, and the
+        // register costs nothing once liveness has run.
+        let owned;
+        let dest = match dest {
+            Some(dest) => dest,
+            None => {
+                owned = self.claim_temp(span);
+                &owned
+            }
+        };
+
+        match name {
+            "string.lower" | "string.upper" => {
+                let [subject] = args else {
+                    return self.wrong_arity(name, 1, args.len(), span);
+                };
+                let subject = self.value(subject)?;
+                // `${StrCase}` is `StrFunc`, and `StrFunc` refuses to work
+                // unless the function was declared with `${Using:StrFunc}`
+                // first — a missing line aborts the build rather than warning
+                // (§15.21).
+                self.requires.str_func("StrCase");
+                let mode = if name == "string.lower" { "L" } else { "U" };
+                self.emit(
+                    ir::Instruction::new(
+                        "${StrCase}",
+                        vec![ir::Arg::dest(dest.clone()), subject.arg, ir::Arg::str(mode)],
+                    )
+                    .atomic(),
+                );
+                Some(Ty::Str)
+            }
+
+            "string.find" => {
+                let [subject, needle] = args else {
+                    return self.wrong_arity(name, 2, args.len(), span);
+                };
+                let subject = self.value(subject)?;
+                let needle = self.value(needle)?;
+                self.requires.str_func("StrLoc");
+                // `${StrLoc}` counts from 0 and Lua counts from 1, so the `+ 1`
+                // is the conversion rather than an optimisation nobody did.
+                // `""` when the needle is absent, where Lua answers `nil` —
+                // there is no `nil`, and the difference is one row of the
+                // migration table.
+                self.emit(
+                    ir::Instruction::new(
+                        "${StrLoc}",
+                        vec![
+                            ir::Arg::dest(dest.clone()),
+                            subject.arg,
+                            needle.arg,
+                            ir::Arg::str(">"),
+                        ],
+                    )
+                    .atomic(),
+                );
+                self.emit(ir::Instruction::new(
+                    "IntOp",
+                    vec![
+                        ir::Arg::dest(dest.clone()),
+                        ir::Arg::slot(dest.clone()),
+                        ir::Arg::raw("+"),
+                        ir::Arg::int(1),
+                    ],
+                ));
+                Some(Ty::nonneg())
+            }
+
+            "string.format" => {
+                let [format, value] = args else {
+                    return self.wrong_arity(name, 2, args.len(), span);
+                };
+                let format = self.value(format)?;
+                let value = self.value(value)?;
+                self.require_int(&value, span)?;
+                // `IntFmt` is the whole of `string.format` that NSIS has: one
+                // integer, one specifier. `%s` and several arguments are
+                // `Class::Todo` rather than a lowering nobody can write.
+                self.emit(ir::Instruction::new(
+                    "IntFmt",
+                    vec![ir::Arg::dest(dest.clone()), format.arg, value.arg],
+                ));
+                Some(Ty::Str)
+            }
+
+            "string.sub" => self.string_sub(args, dest, span),
+
+            _ => unreachable!("dispatched on the same list"),
+        }
+    }
+
+    /// `string.sub(s, i)` and `string.sub(s, i, j)`.
+    ///
+    /// `StrCpy dest src <maxlen> <start>` takes a **length and an offset**
+    /// where Lua takes two 1-based positions, so `start = i - 1` and `maxlen =
+    /// j - i + 1`. Both fold when the indices are constants, which is the case
+    /// every program in the five actually writes.
+    fn string_sub(&mut self, args: &[Expr], dest: &Slot, span: Span) -> Option<Ty> {
+        let (subject, from, to) = match args {
+            [subject, from] => (subject, from, None),
+            [subject, from, to] => (subject, from, Some(to)),
+            _ => return self.wrong_arity("string.sub", 3, args.len(), span),
+        };
+
+        for index in [Some(from), to] {
+            let Some(index) = index else { continue };
+            if let Some(ConstValue::Int(value)) = self.constant(index)
+                && value < 0
+            {
+                self.todo(index.span(), "a negative `string.sub` index");
+                return None;
+            }
+        }
+
+        let subject = self.value(subject)?;
+        let from_value = self.value(from)?;
+        self.require_int(&from_value, span)?;
+
+        // `i - 1`, folded when `i` is a constant, which is the common case and
+        // the one that keeps the output a single line.
+        let start = match self.constant(from) {
+            Some(ConstValue::Int(value)) => ir::Arg::int(value - 1),
+            _ => {
+                let slot = self.claim_temp(span);
+                self.emit(ir::Instruction::new(
+                    "IntOp",
+                    vec![
+                        ir::Arg::dest(slot.clone()),
+                        from_value.arg.clone(),
+                        ir::Arg::raw("-"),
+                        ir::Arg::int(1),
+                    ],
+                ));
+                ir::Arg::slot(slot)
+            }
+        };
+
+        // An absent `j` is "to the end", which `StrCpy` spells as an empty
+        // length rather than as a number.
+        let length = match to {
+            None => ir::Arg::str(""),
+            Some(to) => {
+                let to_value = self.value(to)?;
+                self.require_int(&to_value, span)?;
+                match (self.constant(from), self.constant(to)) {
+                    (Some(ConstValue::Int(from)), Some(ConstValue::Int(to))) => {
+                        ir::Arg::int(to - from + 1)
+                    }
+                    // `maxlen` is `j - (i - 1)`, and `i = 1` — the overwhelming
+                    // case, since Lua strings start there — makes the
+                    // subtraction `- 0`. Emitting it would be a line whose only
+                    // effect is to be read by somebody wondering what it does
+                    // (§9-6).
+                    (Some(ConstValue::Int(1)), _) => to_value.arg,
+                    _ => {
+                        let slot = self.claim_temp(span);
+                        self.emit(ir::Instruction::new(
+                            "IntOp",
+                            vec![
+                                ir::Arg::dest(slot.clone()),
+                                to_value.arg,
+                                ir::Arg::raw("-"),
+                                start.clone(),
+                            ],
+                        ));
+                        ir::Arg::slot(slot)
+                    }
+                }
+            }
+        };
+
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(dest.clone()), subject.arg, length, start],
+        ));
+        Some(Ty::Str)
+    }
+
+    fn wrong_arity(&mut self, name: &str, wanted: usize, got: usize, span: Span) -> Option<Ty> {
+        self.diags.push(
+            Diagnostic::error(
+                Code::WrongArity,
+                span,
+                format!("`{name}` takes {wanted} argument(s), and {got} were given"),
+            )
+            .note("the adapter is hand-written, so the count is what NSIS can express (§15.21)"),
+        );
+        None
+    }
+
+    /// `messageBox` (§15.18): an expression whose value is a branch.
+    ///
+    /// The answer is an ordinary string — `"YES"`, `"NO"` — and the jump table
+    /// is recovered from the comparison. A one-button dialog has no table at
+    /// all, which is why the short form costs exactly one line.
+    fn message_box(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
+        let (text, buttons, icon) = self.message_box_fields(args, span)?;
+        let Some(set) = BUTTONS.iter().find(|set| set.installua == buttons) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    span,
+                    format!("`{buttons}` is not a button set"),
+                )
+                .note(format!(
+                    "the sets are {}",
+                    BUTTONS
+                        .iter()
+                        .map(|set| format!("`{}`", set.installua))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
+            );
+            return None;
+        };
+
+        let mut flags = format!("MB_{}", set.installua);
+        if let Some(icon) = icon {
+            let known = ["EXCLAMATION", "INFORMATION", "QUESTION", "STOP"];
+            if !known.contains(&icon.as_str()) {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        span,
+                        format!("`{icon}` is not an icon"),
+                    )
+                    .note(format!(
+                        "the icons are {}",
+                        known
+                            .iter()
+                            .map(|name| format!("`{name}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                );
+                return None;
+            }
+            flags.push_str(&format!("|MB_ICON{icon}"));
+        }
+
+        // One button, or an answer nobody reads: one line, no table, and the
+        // fusion machinery is never entered.
+        if set.answers.len() == 1 || dest.is_none() {
+            self.emit(ir::Instruction::new(
+                "MessageBox",
+                vec![ir::Arg::raw(flags), text],
+            ));
+            if let Some(dest) = dest {
+                self.diags.push(
+                    Diagnostic::warning(
+                        Code::ConstantAnswer,
+                        span,
+                        format!("this dialog can only answer `{}`", set.answers[0]),
+                    )
+                    .note(
+                        "a one-button dialog has one outcome, so the comparison below it is \
+                           already decided (§15.18)",
+                    ),
+                );
+                self.emit(ir::Instruction::new(
+                    "StrCpy",
+                    vec![ir::Arg::dest(dest.clone()), ir::Arg::str(set.answers[0])],
+                ));
+            }
+            return Some(Ty::Str);
+        }
+
+        if set.answers.len() > 2 {
+            self.todo(span, &format!("the `{}` button set", set.installua));
+            return None;
+        }
+        let dest = dest?;
+
+        let n = self.body.construct();
+        let first = self.fresh(format!("mb_{n}_{}", set.answers[0].to_lowercase()));
+        let second = self.fresh(format!("mb_{n}_{}", set.answers[1].to_lowercase()));
+        let end = self.fresh(format!("mb_{n}_end"));
+
+        let current = self.current;
+        self.body.terminate(
+            current,
+            Terminator::Branch {
+                test: Test::Predicate {
+                    name: "MessageBox".to_string(),
+                    args: vec![ir::Arg::raw(flags), text],
+                    keywords: set
+                        .answers
+                        .iter()
+                        .map(|answer| format!("ID{answer}"))
+                        .collect(),
+                },
+                then_block: first,
+                else_block: second,
+            },
+        );
+
+        self.current = first;
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(dest.clone()), ir::Arg::str(set.answers[0])],
+        ));
+        self.terminate(Terminator::Jump(end), second);
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(dest.clone()), ir::Arg::str(set.answers[1])],
+        ));
+        self.terminate(Terminator::Jump(end), end);
+
+        Some(Ty::Str)
+    }
+
+    /// `messageBox("done")` and `messageBox { text = …, buttons = … }` — the
+    /// positional-or-table pair §15.23 establishes, with `text` as the first
+    /// positional parameter and `buttons` defaulting to `OK`.
+    fn message_box_fields(
+        &mut self,
+        args: &[Expr],
+        span: Span,
+    ) -> Option<(ir::Arg, String, Option<String>)> {
+        let [argument] = args else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`messageBox` takes 1 argument, and {} were given",
+                        args.len()
+                    ),
+                )
+                .note("write `messageBox(\"text\")` or `messageBox { text = …, buttons = … }`"),
+            );
+            return None;
+        };
+
+        let Expr::Table { fields, .. } = argument else {
+            let text = self.value(argument)?;
+            return Some((text.arg, "OK".to_string(), None));
+        };
+
+        let (mut text, mut buttons, mut icon) = (None, "OK".to_string(), None);
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                self.todo(span, "a positional entry in `messageBox`");
+                continue;
+            };
+            match name.text.as_str() {
+                "text" => text = Some(self.value(value)?),
+                "buttons" => buttons = self.constant(value)?.text(),
+                "icon" => icon = Some(self.constant(value)?.text()),
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not a `messageBox` field"),
+                        )
+                        .note("the fields are `text`, `buttons` and `icon`"),
+                    );
+                    return None;
+                }
+            }
+        }
+
+        let Some(text) = text else {
+            self.diags.push(
+                Diagnostic::error(Code::BadFieldValue, span, "`messageBox` needs a `text`")
+                    .note("it is the message, and there is no default for it"),
+            );
+            return None;
+        };
+        Some((text.arg, buttons, icon))
+    }
+
     /// `local a, b = f(x)`. Several names, one call.
     pub(super) fn call_multi(&mut self, call: &Expr, dests: &[Slot]) -> Option<Vec<Ty>> {
         let Expr::Call { callee, args, span } = call else {
@@ -616,9 +1470,13 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
         let name = callee_path(callee)?;
+        if let Some((base, method)) = name.split_once('.')
+            && self.resolved.namespaces.contains_key(base)
+        {
+            let (base, method) = (base.to_string(), method.to_string());
+            return self.namespaced(&base, &method, args, dests, *span);
+        }
         if !self.resolved.functions.contains_key(&name) {
-            // A builtin with several outputs is a header macro — `${GetSize}`
-            // writes three — and those arrive with the overlay (§15.23).
             self.todo(*span, "binding several values from this call");
             return None;
         }
@@ -786,6 +1644,7 @@ impl BodyLowerer<'_, '_> {
                                 test: Test::Predicate {
                                     name: builtin.nsis.to_string(),
                                     args: lowered,
+                                    keywords: Vec::new(),
                                 },
                                 then_block: then_b,
                                 else_block: else_b,
@@ -855,6 +1714,15 @@ impl BodyLowerer<'_, '_> {
         else_b: BlockId,
         span: Span,
     ) {
+        // `string.lower(a) == "beta"` is a bare `StrCmp` — no `${StrCase}`, no
+        // temporary, no `StrFunc` dependency — because case-insensitivity is
+        // what the *instruction* already does. Case conversion for its value
+        // still costs a macro; only the comparison collapses (§15.9).
+        let folded = case_folded(lhs);
+        let folded_rhs = case_folded(rhs);
+        let case_sensitive = folded.is_none() && folded_rhs.is_none();
+        let (lhs, rhs) = (folded.unwrap_or(lhs), folded_rhs.unwrap_or(rhs));
+
         let (Some(lhs), Some(rhs)) = (self.value(lhs), self.value(rhs)) else {
             return;
         };
@@ -902,7 +1770,7 @@ impl BodyLowerer<'_, '_> {
                     // `==` is `StrCmpS`. Case-sensitive being the default is the
                     // reversal from NSIS habit that will bite hardest, and
                     // `string.lower(a) == string.lower(b)` is the escape (§15.9).
-                    case_sensitive: true,
+                    case_sensitive,
                     negate: cmp == CmpOp::Ne,
                 }
             }
@@ -934,6 +1802,58 @@ impl BodyLowerer<'_, '_> {
         );
     }
 }
+
+/// The subject of a `string.lower`/`string.upper` call, when that is what this
+/// expression is. `Some` means the comparison it sits in can drop the case
+/// conversion entirely and compare case-insensitively instead (§15.9).
+fn case_folded(expr: &Expr) -> Option<&Expr> {
+    let Expr::Call { callee, args, .. } = expr else {
+        return None;
+    };
+    let name = callee_path(callee)?;
+    if name != "string.lower" && name != "string.upper" {
+        return None;
+    }
+    match args.as_slice() {
+        [subject] => Some(subject),
+        _ => None,
+    }
+}
+
+/// A `messageBox` button set, and the answers it can give. The answer names
+/// are the NSIS return keywords without their `ID` — `IDYES` is the jump-table
+/// token and `"YES"` is the value the user compares against (§15.18).
+struct ButtonSet {
+    installua: &'static str,
+    answers: &'static [&'static str],
+}
+
+const BUTTONS: &[ButtonSet] = &[
+    ButtonSet {
+        installua: "OK",
+        answers: &["OK"],
+    },
+    ButtonSet {
+        installua: "OKCANCEL",
+        answers: &["OK", "CANCEL"],
+    },
+    ButtonSet {
+        installua: "YESNO",
+        answers: &["YES", "NO"],
+    },
+    ButtonSet {
+        installua: "RETRYCANCEL",
+        answers: &["RETRY", "CANCEL"],
+    },
+    ButtonSet {
+        installua: "ABORTRETRYIGNORE",
+        answers: &["ABORT", "RETRY", "IGNORE"],
+    },
+    ButtonSet {
+        installua: "YESNOCANCEL",
+        answers: &["YES", "NO", "CANCEL"],
+    },
+];
 
 /// The dotted name a callee spells: `detailPrint`, `string.len`. Three
 /// namespaces exist and NSIS enforces the boundary between them (§13), so the

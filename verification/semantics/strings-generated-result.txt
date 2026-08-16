@@ -1,0 +1,8 @@
+major=2
+find=2
+sub=bcd
+upper=BETA
+lower=beta
+fmt=0042
+div=-8
+mod=8

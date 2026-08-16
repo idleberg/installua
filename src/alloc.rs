@@ -61,6 +61,15 @@ pub fn allocate(body: &mut Body, diags: &mut Diagnostics) -> Allocation {
                 across[*site] = live.difference(&defs).copied().collect();
             }
 
+            // A macro's inputs are still live while its outputs are written,
+            // so they interfere: `${GetSize} $0 "" $0 …` would otherwise be
+            // legal register allocation over an expansion nobody has read.
+            if let ir::Step::Instruction(instruction) = step
+                && instruction.atomic
+            {
+                live.extend(uses.iter().copied());
+            }
+
             for def in &defs {
                 for other in live.iter().chain(defs.iter()) {
                     if other != def {
@@ -88,6 +97,11 @@ pub fn allocate(body: &mut Body, diags: &mut Diagnostics) -> Allocation {
     for site in &mut body.calls {
         for arg in &mut site.args {
             arg.recolour(&recolour);
+        }
+        if let ir::CallKind::Opaque { lines, .. } = &mut site.kind {
+            for line in lines {
+                line.recolour(&recolour);
+            }
         }
         for result in &mut site.results {
             if let Slot::Virtual(index) = *result {
@@ -117,8 +131,16 @@ pub fn insert_saves(
     clobbers: &BTreeMap<String, BTreeSet<u8>>,
 ) {
     for (index, site) in body.calls.iter_mut().enumerate() {
-        let Some(clobbered) = clobbers.get(&site.callee) else {
-            continue;
+        // §15.11's three opaque callees clobber everything, so the
+        // intersection collapses to whatever is live: `plugin`, `System::Call`
+        // and `raw` are exactly the callees nothing here has read.
+        let everything: BTreeSet<u8> = (0..COUNT).collect();
+        let clobbered = match &site.kind {
+            ir::CallKind::Opaque { .. } => &everything,
+            ir::CallKind::Function => match clobbers.get(&site.callee) {
+                Some(set) => set,
+                None => continue,
+            },
         };
         site.saves = live_across[index]
             .intersection(clobbered)
@@ -192,6 +214,11 @@ fn step_slots(body: &Body, step: &ir::Step) -> (BTreeSet<usize>, BTreeSet<usize>
             let mut uses = Vec::new();
             for arg in &site.args {
                 arg.uses(&mut uses);
+            }
+            if let ir::CallKind::Opaque { lines, .. } = &site.kind {
+                for line in lines {
+                    uses.extend(line.uses());
+                }
             }
             (uses, site.results.clone())
         }

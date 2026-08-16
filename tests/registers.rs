@@ -53,7 +53,7 @@ fn function<'m>(module: &'m ir::Module, name: &str) -> &'m Body {
 /// instruction set.
 fn writes(body: &Body) -> Vec<String> {
     let mut out = Vec::new();
-    for item in layout::lay_out(body) {
+    for (item, _) in layout::lay_out(body) {
         if let ir::Item::Instruction(instruction) = item {
             for slot in instruction.defs() {
                 out.push(slot.nsis());
@@ -67,7 +67,7 @@ fn writes(body: &Body) -> Vec<String> {
 fn shape(body: &Body) -> Vec<String> {
     layout::lay_out(body)
         .into_iter()
-        .map(|item| match item {
+        .map(|(item, _)| match item {
             ir::Item::Instruction(instruction) => instruction.name,
             ir::Item::Label(label) => format!("{label}:"),
         })

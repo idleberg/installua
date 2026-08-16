@@ -40,17 +40,91 @@ const V1_ATTRIBUTES: &[&str] = &[
     "unicode",
     "compressor",
     "requestExecutionLevel",
-    "installDir",
-    "icon",
-    "license",
-    "pages",
     "caption",
-    "text",
     "manifest",
     "versionInfo",
     "crcCheck",
     "dateSave",
 ];
+
+/// The frozen v1 `installer {}` / `uninstaller {}` field surface.
+const V1_INSTALLER_FIELDS: &[&str] = &["installDir", "icon", "license", "pages", "text", "caption"];
+
+/// Which of the two halves a declaration belongs to (§15.3).
+///
+/// NSIS spells the difference as a `un.` prefix on function and section names
+/// and a `MUI_UNPAGE_` prefix on page macros; Installua spells it as which
+/// block the code was written in, and this type is the whole of the
+/// translation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Half {
+    Installer,
+    Uninstaller,
+}
+
+impl Half {
+    fn prefix(self) -> &'static str {
+        match self {
+            Half::Installer => "",
+            Half::Uninstaller => "un.",
+        }
+    }
+
+    fn page_prefix(self) -> &'static str {
+        match self {
+            Half::Installer => "MUI_PAGE_",
+            Half::Uninstaller => "MUI_UNPAGE_",
+        }
+    }
+}
+
+impl std::fmt::Display for Half {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Half::Installer => f.write_str("installer"),
+            Half::Uninstaller => f.write_str("uninstaller"),
+        }
+    }
+}
+
+/// One MUI2 page. The `MUI_*` surface is roughly seventy settings and this is
+/// the subset the five programs reach (PLAN §0); the rest is overlay data.
+struct Page {
+    installua: &'static str,
+    nsis: &'static str,
+    /// Which halves MUI2 defines a macro for. `Confirm` exists only as
+    /// `MUI_UNPAGE_CONFIRM`, and there is no `MUI_PAGE_CONFIRM` to fall back
+    /// on — so this is a fact about MUI2 rather than a policy of ours.
+    halves: [bool; 2],
+}
+
+const fn page(installua: &'static str, nsis: &'static str) -> Page {
+    Page {
+        installua,
+        nsis,
+        halves: [true, true],
+    }
+}
+
+const V1_PAGES: &[Page] = &[
+    page("Welcome", "WELCOME"),
+    page("License", "LICENSE"),
+    page("Components", "COMPONENTS"),
+    page("Directory", "DIRECTORY"),
+    page("InstFiles", "INSTFILES"),
+    page("Finish", "FINISH"),
+    Page {
+        installua: "Confirm",
+        nsis: "CONFIRM",
+        halves: [false, true],
+    },
+];
+
+impl Page {
+    fn has(&self, half: Half) -> bool {
+        self.halves[half as usize]
+    }
+}
 
 /// The frozen v1 block surface, for the same reason.
 const V1_BLOCKS: &[&str] = &[
@@ -73,7 +147,12 @@ const V1_BLOCKS: &[&str] = &[
 /// every point where guessing would matter (§15.14).
 const MAX_ROUNDS: usize = 8;
 
-pub fn lower(program: &Program, resolved: &Resolved<'_>, diags: &mut Diagnostics) -> ir::Module {
+pub fn lower(
+    program: &Program,
+    resolved: &Resolved<'_>,
+    options: &crate::Options,
+    diags: &mut Diagnostics,
+) -> ir::Module {
     // 1. Types, to a fixpoint. Rounds before the last are lowered against a
     //    scratch collector: their diagnostics are about a type table that was
     //    still incomplete, so reporting them would be reporting the compiler's
@@ -81,14 +160,14 @@ pub fn lower(program: &Program, resolved: &Resolved<'_>, diags: &mut Diagnostics
     let mut inferred = Inferred::seed(resolved);
     for _ in 0..MAX_ROUNDS {
         let mut scratch = Diagnostics::new();
-        let round = lower_once(program, resolved, &mut scratch, &inferred).1;
+        let round = lower_once(program, resolved, options, &mut scratch, &inferred).1;
         if round == inferred {
             break;
         }
         inferred = round;
     }
 
-    let (mut module, _) = lower_once(program, resolved, diags, &inferred);
+    let (mut module, _) = lower_once(program, resolved, options, diags, &inferred);
 
     // 2. Registers. Every body is allocated before any call site is filled in,
     //    because a clobber set is a fact about *physical* registers and there
@@ -122,12 +201,14 @@ pub fn lower(program: &Program, resolved: &Resolved<'_>, diags: &mut Diagnostics
 fn lower_once(
     program: &Program,
     resolved: &Resolved<'_>,
+    options: &crate::Options,
     diags: &mut Diagnostics,
     known: &Inferred,
 ) -> (ir::Module, Inferred) {
     let mut lowerer = Lowerer {
         diags,
         resolved,
+        options,
         module: ir::Module::new(),
         globals: known
             .globals
@@ -138,6 +219,11 @@ fn lower_once(
         learned: Inferred::seed(resolved),
         attributes_span: None,
         installer_span: None,
+        uninstaller_span: None,
+        mui: false,
+        global_inits: Vec::new(),
+        on_init: false,
+        requires: Requirements::default(),
     };
     lowerer.program(program);
     lowerer.finish()
@@ -152,6 +238,7 @@ type GlobalTypes = BTreeMap<String, (Ty, Vec<Span>)>;
 struct Lowerer<'a, 'p> {
     diags: &'a mut Diagnostics,
     resolved: &'a Resolved<'p>,
+    options: &'a crate::Options,
     module: ir::Module,
     globals: GlobalTypes,
     /// The previous round's type table: read, never written.
@@ -160,12 +247,98 @@ struct Lowerer<'a, 'p> {
     learned: Inferred,
     attributes_span: Option<Span>,
     installer_span: Option<Span>,
+    uninstaller_span: Option<Span>,
+    /// Whether anything asked for MUI2. Pages are the only thing that does in
+    /// v1, and `!include "MUI2.nsh"` plus `MUI_LANGUAGE` follow from it.
+    mui: bool,
+    /// Top-level assignments, waiting for the `.onInit` they belong in.
+    global_inits: Vec<Stmt>,
+    /// Whether an `.onInit` was written, so that one is not invented twice.
+    on_init: bool,
+    /// What the program needs included and initialised. Collected during
+    /// lowering and emitted at the top, which is the only order that works
+    /// (§15.21).
+    requires: Requirements,
+}
+
+/// The collect-then-emit pass §15.21 asks for.
+///
+/// Both halves are sets: `import "FileFunc"` twice is one `!include`, and two
+/// calls to `string.upper` are one `${Using:StrFunc} StrCase`. The second is
+/// load-bearing rather than tidy — a missing `${Using:StrFunc}` line aborts the
+/// build, and a duplicate one is a redefinition warning, so neither "always
+/// emit" nor "never emit" is available.
+#[derive(Debug, Default)]
+pub struct Requirements {
+    /// Headers to `!include`, by name and without the extension.
+    pub headers: BTreeSet<String>,
+    /// `StrFunc` functions to declare, by macro name: `StrCase`, `StrLoc`.
+    pub str_func: BTreeSet<String>,
+}
+
+impl Requirements {
+    /// Records that a `StrFunc` macro is used, and the header that carries it.
+    pub fn str_func(&mut self, name: &str) {
+        self.headers.insert("StrFunc".to_string());
+        self.str_func.insert(name.to_string());
+    }
 }
 
 impl Lowerer<'_, '_> {
     fn program(&mut self, program: &Program) {
+        // A top-level `<const>` is a `!define` (§7-1): build-time, folded in
+        // every expression, and `${NAME}` in the output. Emitted in source
+        // order because the preprocessor is textual and strictly sequential —
+        // the one part of an NSIS script where order is semantics (§12).
+        self.module.defines = self
+            .resolved
+            .const_order
+            .iter()
+            .filter_map(|name| {
+                let value = self.resolved.consts.get(name)?;
+                Some(ir::Define {
+                    name: name.clone(),
+                    value: ir::Arg::str(value.value.text()),
+                })
+            })
+            .collect();
+
+        // `import "FileFunc"` is an `!include`, deduplicated against every
+        // other import and against the ones an adapter pulls in on its own
+        // (§15.21). A `plugin` needs no line at all: NSIS finds it by name.
+        for namespace in self.resolved.namespaces.values() {
+            if let crate::resolve::Namespace::Header(header) = namespace {
+                self.requires.headers.insert(header.clone());
+            }
+        }
+
+        // A bare assignment at the top level declares a global *and* gives it
+        // a value (§15.24), and a `Var` has no initialiser — so the assignments
+        // become the first lines of `.onInit`, which is the one body NSIS
+        // guarantees runs before anything else. Collected here and lowered when
+        // the callback is, since the block they belong to may be written above
+        // them and §15.6 makes that legal.
+        self.global_inits = program
+            .block
+            .iter()
+            .filter(|stmt| matches!(stmt, Stmt::Assign { .. }))
+            .cloned()
+            .collect();
+
         for stmt in &program.block {
             self.top_level(stmt);
+        }
+
+        // Nothing declared an `.onInit`, and there are globals to initialise:
+        // the callback exists to hold them.
+        if !self.global_inits.is_empty() && !self.on_init {
+            let inits = std::mem::take(&mut self.global_inits);
+            let span = inits.first().map(Stmt::span).unwrap_or_default();
+            let body = self.body(&inits, &[], span, None);
+            self.module.functions.push(ir::Function {
+                name: ".onInit".to_string(),
+                body,
+            });
         }
         // Globals in first-seen order, emitted before the first body that
         // touches them (§12) — which the field order in `ir::Module` already
@@ -179,6 +352,33 @@ impl Lowerer<'_, '_> {
     }
 
     fn finish(mut self) -> (ir::Module, Inferred) {
+        // `!include`s, deduplicated and ordered: `MUI2.nsh` first because it is
+        // the one header whose macros the others must not shadow, then the rest
+        // alphabetically. Alphabetical rather than first-imported so that
+        // moving an `import` line does not rewrite a golden (§14) — headers are
+        // independent, unlike `!define`s, so there is nothing to preserve.
+        if self.mui {
+            self.module.includes.push("MUI2.nsh".to_string());
+            self.module.languages.push(ir::Instruction::new(
+                "!insertmacro",
+                vec![ir::Arg::raw("MUI_LANGUAGE"), ir::Arg::str("English")],
+            ));
+        }
+        self.module.includes.extend(
+            self.requires
+                .headers
+                .iter()
+                .map(|header| format!("{header}.nsh")),
+        );
+        // `${Using:StrFunc} StrCase` — one line per function actually reached,
+        // after the `!include` and before anything that calls it (§15.21).
+        self.module.inits.extend(
+            self.requires
+                .str_func
+                .iter()
+                .map(|name| ir::Instruction::new("${Using:StrFunc}", vec![ir::Arg::raw(name)])),
+        );
+
         self.learned.globals = self
             .globals
             .iter()
@@ -192,6 +392,12 @@ impl Lowerer<'_, '_> {
         // and `resolve` has already dealt with it. Anything else `local` was
         // rejected there too.
         if matches!(stmt, Stmt::Local { .. }) {
+            return;
+        }
+
+        // Already dealt with: a top-level assignment initialises a global, and
+        // its statements are lowered into `.onInit` rather than here.
+        if matches!(stmt, Stmt::Assign { .. }) {
             return;
         }
 
@@ -221,7 +427,16 @@ impl Lowerer<'_, '_> {
                 if self.duplicate(&mut Field::Installer, span) {
                     return;
                 }
-                self.installer(fields);
+                self.installer(fields, Half::Installer);
+            }
+            "uninstaller" => {
+                let Some(fields) = self.block_fields(call) else {
+                    return;
+                };
+                if self.duplicate(&mut Field::Uninstaller, span) {
+                    return;
+                }
+                self.installer(fields, Half::Uninstaller);
             }
             "func" => self.function(name, call),
             other if V1_BLOCKS.contains(&other) => {
@@ -259,6 +474,7 @@ impl Lowerer<'_, '_> {
         let (slot, name) = match which {
             Field::Attributes => (&mut self.attributes_span, "attributes"),
             Field::Installer => (&mut self.installer_span, "installer"),
+            Field::Uninstaller => (&mut self.uninstaller_span, "uninstaller"),
         };
         if let Some(previous) = *slot {
             let previous = previous.start_line;
@@ -287,28 +503,45 @@ impl Lowerer<'_, '_> {
             };
 
             match name.text.as_str() {
-                "name" => {
-                    if let Some(text) = self.constant_string(value, "name") {
-                        self.module
-                            .attributes
-                            .push(ir::Instruction::new("Name", vec![ir::Arg::str(text)]));
+                "name" => self.string_attribute("Name", "name", value, false),
+                "outFile" => self.string_attribute("OutFile", "outFile", value, true),
+                "installDir" => self.string_attribute("InstallDir", "installDir", value, true),
+                "caption" => self.string_attribute("Caption", "caption", value, false),
+                "icon" => self.string_attribute("Icon", "icon", value, true),
+                "license" => self.string_attribute("LicenseData", "license", value, true),
+                "compressor" => {
+                    // `SetCompressor` is a *preprocessor-adjacent* attribute:
+                    // it takes a bare keyword, not a string, and NSIS accepts
+                    // any word here and ignores the ones it does not know.
+                    if let Some(text) = self.constant_string(value, "compressor") {
+                        self.enumerated(
+                            "compressor",
+                            &text,
+                            &["zlib", "bzip2", "lzma"],
+                            value.span(),
+                            |text| ir::Instruction::new("SetCompressor", vec![ir::Arg::raw(text)]),
+                        );
                     }
                 }
-                "outFile" => {
-                    if let Some(text) = self.constant_string(value, "outFile") {
-                        self.module
-                            .attributes
-                            .push(ir::Instruction::new("OutFile", vec![ir::Arg::path(text)]));
+                "requestExecutionLevel" => {
+                    if let Some(text) = self.constant_string(value, "requestExecutionLevel") {
+                        self.enumerated(
+                            "requestExecutionLevel",
+                            &text,
+                            &["none", "user", "highest", "admin"],
+                            value.span(),
+                            |text| {
+                                ir::Instruction::new(
+                                    "RequestExecutionLevel",
+                                    vec![ir::Arg::raw(text)],
+                                )
+                            },
+                        );
                     }
                 }
-                "installDir" => {
-                    if let Some(text) = self.constant_string(value, "installDir") {
-                        self.module.attributes.push(ir::Instruction::new(
-                            "InstallDir",
-                            vec![ir::Arg::path(text)],
-                        ));
-                    }
-                }
+                "crcCheck" => self.flag_attribute("CRCCheck", "crcCheck", value, "on", "off"),
+                "dateSave" => self.flag_attribute("SetDateSave", "dateSave", value, "on", "off"),
+                "versionInfo" => self.version_info(value),
                 "unicode" => match self.constant(value) {
                     Some(ConstValue::Bool(value)) => self.module.unicode = value,
                     _ => self.bad_value(
@@ -319,6 +552,22 @@ impl Lowerer<'_, '_> {
                          local `makensis` was built, which is why it is always emitted (§15.16)",
                     ),
                 },
+                // A name that belongs to the other block is a five-second fix
+                // rather than a five-second wait, so it says which block rather
+                // than which version (§9-4).
+                other if V1_INSTALLER_FIELDS.contains(&other) => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not an attribute"),
+                        )
+                        .note(
+                            "it belongs in `installer {}` — and in `uninstaller {}`, which is \
+                             the same field for the other half (§15.3)",
+                        ),
+                    );
+                }
                 other if V1_ATTRIBUTES.contains(&other) => {
                     self.todo(name.span, &format!("the `{other}` attribute"));
                 }
@@ -336,24 +585,381 @@ impl Lowerer<'_, '_> {
         }
     }
 
-    // -- bodies -----------------------------------------------------------
+    /// `Name "${APP}"` and its seven siblings: one attribute, one argument.
+    fn string_attribute(&mut self, nsis: &str, field: &str, value: &Expr, path: bool) {
+        let Some(arg) = self.constant_arg(value, field) else {
+            return;
+        };
+        let arg = if path { arg.into_path() } else { arg };
+        self.module
+            .attributes
+            .push(ir::Instruction::new(nsis, vec![arg]));
+    }
 
-    fn installer(&mut self, fields: &[TableField]) {
+    /// An attribute whose value is one of a closed set of bare keywords.
+    ///
+    /// NSIS accepts an unknown keyword here and *ignores* it — `SetCompressor
+    /// lmza` is not an error — so the closed set is checked here or not at all
+    /// (§13).
+    fn enumerated(
+        &mut self,
+        field: &str,
+        text: &str,
+        allowed: &[&str],
+        span: Span,
+        build: impl Fn(&str) -> ir::Instruction,
+    ) {
+        if !allowed.contains(&text) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    span,
+                    format!("`{text}` is not a `{field}`"),
+                )
+                .note(format!("the values are {}", list(allowed)))
+                .note("NSIS ignores a keyword it does not know here rather than objecting (§13)"),
+            );
+            return;
+        }
+        self.module.attributes.push(build(text));
+    }
+
+    /// A `bool` attribute that NSIS spells as a word.
+    fn flag_attribute(&mut self, nsis: &str, field: &str, value: &Expr, on: &str, off: &str) {
+        match self.constant(value) {
+            Some(ConstValue::Bool(flag)) => {
+                let word = if flag { on } else { off };
+                self.module
+                    .attributes
+                    .push(ir::Instruction::new(nsis, vec![ir::Arg::raw(word)]));
+            }
+            _ => self.bad_value(
+                value.span(),
+                field,
+                "a `bool`",
+                &format!("it becomes `{nsis} {on}` or `{nsis} {off}`"),
+            ),
+        }
+    }
+
+    /// `versionInfo = { product = "1.4.2.0", keys = { … } }`.
+    ///
+    /// The keys are emitted in **sorted** order rather than source order. A Lua
+    /// table has no order to preserve — `{ a = 1, b = 2 }` and `{ b = 2, a = 1 }`
+    /// are the same table — so anything else would make the golden depend on
+    /// something the language says is not there (§14).
+    fn version_info(&mut self, value: &Expr) {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                "versionInfo",
+                "a table",
+                "write `versionInfo = { product = \"1.0.0.0\", keys = { … } }`",
+            );
+            return;
+        };
+
+        // `VIAddVersionKey` before `VIProductVersion` is a `makensis` error, so
+        // the two are ordered here rather than left to the order the fields
+        // happen to be written in — a table has no order (§12).
+        let mut fields: Vec<&TableField> = fields.iter().collect();
+        fields.sort_by_key(|field| match field {
+            TableField::Named { name, .. } if name.text == "product" => 0,
+            _ => 1,
+        });
+
         for field in fields {
-            match field {
-                TableField::Positional { value } => {
-                    if let Some(section) = self.section(value) {
-                        self.module.sections.push(ir::SectionItem::Section(section));
+            let TableField::Named { name, value } = field else {
+                self.todo(value.span(), "a positional entry in `versionInfo`");
+                continue;
+            };
+            match name.text.as_str() {
+                "product" => {
+                    // `VIProductVersion` takes four unquoted numbers, and
+                    // `makensis` rejects anything else — which is why this is a
+                    // checked shape rather than a string passed through.
+                    let Some(text) = self.constant_string(value, "product") else {
+                        continue;
+                    };
+                    let quads = text.split('.').count() == 4
+                        && text.split('.').all(|part| {
+                            !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit())
+                        });
+                    if !quads {
+                        self.bad_value(
+                            value.span(),
+                            "product",
+                            "four dotted numbers",
+                            "`VIProductVersion` wants `x.y.z.w` and `makensis` rejects any other \
+                             shape",
+                        );
+                        continue;
+                    }
+                    self.module.attributes.push(ir::Instruction::new(
+                        "VIProductVersion",
+                        vec![ir::Arg::raw(text)],
+                    ));
+                }
+                "keys" => {
+                    let Expr::Table { fields, .. } = value else {
+                        self.bad_value(
+                            value.span(),
+                            "keys",
+                            "a table",
+                            "write `keys = { ProductName = \"…\" }`",
+                        );
+                        continue;
+                    };
+                    let mut keys: Vec<(String, ir::Arg)> = Vec::new();
+                    for field in fields {
+                        let TableField::Named { name, value } = field else {
+                            self.todo(value.span(), "a positional entry in `keys`");
+                            continue;
+                        };
+                        if let Some(arg) = self.constant_arg(value, &name.text) {
+                            keys.push((name.text.clone(), arg));
+                        }
+                    }
+                    keys.sort_by(|a, b| a.0.cmp(&b.0));
+                    for (key, arg) in keys {
+                        self.module.attributes.push(ir::Instruction::new(
+                            "VIAddVersionKey",
+                            vec![ir::Arg::raw(key), arg],
+                        ));
                     }
                 }
-                TableField::Named { name, .. } => {
-                    self.todo(name.span, &format!("the `{}` field", name.text));
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not a `versionInfo` field"),
+                        )
+                        .note("the fields are `product` and `keys`"),
+                    );
                 }
             }
         }
     }
 
-    fn section(&mut self, value: &Expr) -> Option<ir::Section> {
+    // -- bodies -----------------------------------------------------------
+
+    /// `installer { … }` and `uninstaller { … }`, which are the same block with
+    /// two spellings — the whole of §15.3's duality is [`Half`] threaded
+    /// through this one function. `un.` has no surface spelling at all.
+    ///
+    /// Three passes rather than one, because a field's meaning can depend on
+    /// another field written below it: `license` is an argument to the
+    /// `License` page, and a table has no order for the user to get right (§12).
+    fn installer(&mut self, fields: &[TableField], half: Half) {
+        let mut license = None;
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                continue;
+            };
+            match name.text.as_str() {
+                "installDir" if half == Half::Installer => {
+                    self.string_attribute("InstallDir", "installDir", value, true);
+                }
+                "icon" => {
+                    let define = match half {
+                        Half::Installer => "MUI_ICON",
+                        Half::Uninstaller => "MUI_UNICON",
+                    };
+                    if let Some(arg) = self.constant_arg(value, "icon") {
+                        self.module.mui_defines.push(ir::Define {
+                            name: define.to_string(),
+                            value: arg.into_path(),
+                        });
+                    }
+                }
+                "license" => license = self.constant_arg(value, "license").map(ir::Arg::into_path),
+                "pages" => {}
+                other if V1_INSTALLER_FIELDS.contains(&other) => {
+                    self.todo(name.span, &format!("the `{other}` field"));
+                }
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not an `{half}` field"),
+                        )
+                        .note(format!("the fields are {}", list(V1_INSTALLER_FIELDS))),
+                    );
+                }
+            }
+        }
+
+        for field in fields {
+            if let TableField::Named { name, value } = field
+                && name.text == "pages"
+            {
+                self.pages(value, half, license.as_ref());
+            }
+        }
+
+        for field in fields {
+            let TableField::Positional { value } = field else {
+                continue;
+            };
+            self.body_entry(value, half);
+        }
+    }
+
+    /// `pages = { "Welcome", "License", … }`, in the order written: page order
+    /// is what the user sees, so it is the one list in the output that is never
+    /// sorted.
+    fn pages(&mut self, value: &Expr, half: Half, license: Option<&ir::Arg>) {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                "pages",
+                "a list",
+                "write `pages = { \"Welcome\", \"Directory\", \"InstFiles\" }`",
+            );
+            return;
+        };
+
+        for field in fields {
+            let TableField::Positional { value } = field else {
+                self.todo(value.span(), "a named entry in `pages`");
+                continue;
+            };
+            let Some(name) = self.constant_string(value, "pages") else {
+                continue;
+            };
+            let Some(page) = V1_PAGES.iter().find(|page| page.installua == name) else {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        value.span(),
+                        format!("`{name}` is not a page"),
+                    )
+                    .note(format!(
+                        "the pages are {}",
+                        list(
+                            &V1_PAGES
+                                .iter()
+                                .map(|page| page.installua)
+                                .collect::<Vec<_>>()
+                        )
+                    )),
+                );
+                continue;
+            };
+            if !page.has(half) {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        value.span(),
+                        format!("there is no {half} `{name}` page"),
+                    )
+                    .note(format!(
+                        "MUI2 defines no `{}{}`",
+                        half.page_prefix(),
+                        page.nsis
+                    )),
+                );
+                continue;
+            }
+
+            let mut args = Vec::new();
+            if page.installua == "License" {
+                match license {
+                    Some(arg) => args.push(arg.clone()),
+                    None => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::MissingAttribute,
+                                value.span(),
+                                "a `License` page needs a `license`",
+                            )
+                            .note("write `license = \"LICENSE.txt\"` beside `pages`")
+                            .note("`MUI_PAGE_LICENSE` takes the file as its argument"),
+                        );
+                        continue;
+                    }
+                }
+            }
+
+            let macro_name = format!("{}{}", half.page_prefix(), page.nsis);
+            let mut all = vec![ir::Arg::raw(macro_name)];
+            all.extend(args);
+            let instruction = ir::Instruction::new("!insertmacro", all);
+            match half {
+                Half::Installer => self.module.pages.push(instruction),
+                Half::Uninstaller => self.module.unpages.push(instruction),
+            }
+            self.mui = true;
+        }
+    }
+
+    /// A positional entry in `installer {}`: a `section` or a callback.
+    fn body_entry(&mut self, value: &Expr, half: Half) {
+        let Some(name) = value.callee_name() else {
+            self.todo(value.span(), "this entry");
+            return;
+        };
+        match name {
+            "section" => {
+                if let Some(section) = self.section(value, half) {
+                    self.module.sections.push(ir::SectionItem::Section(section));
+                }
+            }
+            "onInit" => self.callback(value, half, "onInit"),
+            other => self.todo(value.span(), &format!("`{other}` here")),
+        }
+    }
+
+    /// `onInit(function() … end)`. The leading `.` is emitted, never written
+    /// (§15.7), and so is the `un.` on the uninstaller's.
+    fn callback(&mut self, value: &Expr, half: Half, which: &str) {
+        let Expr::Call { args, .. } = value else {
+            return;
+        };
+        let [
+            Expr::Function {
+                params,
+                block,
+                span,
+            },
+        ] = args.as_slice()
+        else {
+            self.todo(value.span(), &format!("this `{which}` form"));
+            return;
+        };
+        if !params.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    *span,
+                    format!("`{which}` takes no arguments"),
+                )
+                .note("NSIS calls it, and `Call` has no argument list (§3)"),
+            );
+            return;
+        }
+
+        let name = match half {
+            Half::Installer => format!(".{which}"),
+            Half::Uninstaller => format!("un.{which}"),
+        };
+        // The global initialisers go in front of whatever the user wrote, so a
+        // `.onInit` that reads a global sees its value (§15.24).
+        let block = if half == Half::Installer && which == "onInit" {
+            self.on_init = true;
+            let mut all = std::mem::take(&mut self.global_inits);
+            all.extend(block.iter().cloned());
+            all
+        } else {
+            block.clone()
+        };
+        let body = self.body(&block, &[], *span, None);
+        self.module.functions.push(ir::Function { name, body });
+    }
+
+    fn section(&mut self, value: &Expr, half: Half) -> Option<ir::Section> {
         let Expr::Call { callee, args, .. } = value else {
             self.todo(value.span(), "this entry");
             return None;
@@ -367,17 +973,59 @@ impl Lowerer<'_, '_> {
             return None;
         }
 
-        // `section(name, body)`. The three-argument form carries
-        // `{ optional = true }`, which is Phase 5's overlay work.
-        let [name, Expr::Function { block, span, .. }] = args.as_slice() else {
-            self.todo(value.span(), "this `section` form");
-            return None;
+        // `section(name, body)` and `section(name, { optional = true }, body)`.
+        let (name, options, body) = match args.as_slice() {
+            [name, body @ Expr::Function { .. }] => (name, None, body),
+            [
+                name,
+                Expr::Table { fields, .. },
+                body @ Expr::Function { .. },
+            ] => (name, Some(fields), body),
+            _ => {
+                self.todo(value.span(), "this `section` form");
+                return None;
+            }
         };
+        let Expr::Function { block, span, .. } = body else {
+            unreachable!("matched above")
+        };
+
         let name = self.constant_string(name, "section")?;
+        let mut optional = false;
+        for field in options.into_iter().flatten() {
+            let TableField::Named { name, value } = field else {
+                self.todo(value.span(), "a positional entry in a `section`'s options");
+                continue;
+            };
+            match name.text.as_str() {
+                "optional" => match self.constant(value) {
+                    Some(ConstValue::Bool(flag)) => optional = flag,
+                    _ => self.bad_value(
+                        value.span(),
+                        "optional",
+                        "a `bool`",
+                        "it becomes `Section /o`, which starts unselected in the components tree",
+                    ),
+                },
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not a `section` option"),
+                        )
+                        .note("the options are `optional`"),
+                    );
+                }
+            }
+        }
 
         Some(ir::Section {
-            name,
-            optional: false,
+            // `un.` is how NSIS marks a section as the uninstaller's, and it is
+            // emitted rather than written — the whole of §15.3 at the surface
+            // is that this prefix has no spelling.
+            name: format!("{}{name}", half.prefix()),
+            optional,
             body: self.body(block, &[], *span, None),
         })
     }
@@ -420,13 +1068,16 @@ impl Lowerer<'_, '_> {
         let mut lowerer = BodyLowerer {
             diags: self.diags,
             resolved: self.resolved,
+            options: self.options,
             known: self.known,
             learned: &mut self.learned,
             globals: &mut self.globals,
+            requires: &mut self.requires,
             body: Body::new(span),
             scopes: vec![Vec::new()],
             loops: Vec::new(),
             returns: Vec::new(),
+            span,
             current: Body::ENTRY,
         };
         lowerer.parameters(params, &signature);
@@ -523,6 +1174,39 @@ impl Lowerer<'_, '_> {
         }
     }
 
+    /// An attribute's value, as the argument it becomes.
+    ///
+    /// Everything an attribute can hold is build-time, but "build-time" is not
+    /// the same as "a string this compiler knows": `$PROGRAMFILES64` is
+    /// expanded by the installer at run time and `${APP}` by the preprocessor,
+    /// and both are constants a user writes as an ordinary name (§15.1). So
+    /// this walks the same three shapes [`BodyLowerer::simple`] does, and folds
+    /// only what is left.
+    fn constant_arg(&mut self, expr: &Expr, what: &str) -> Option<ir::Arg> {
+        match expr {
+            Expr::Name(name) => {
+                if let Some(constant) = crate::builtins::constant_named(&name.text) {
+                    return Some(constant.arg());
+                }
+                if let Some(value) = self.resolved.consts.get(&name.text) {
+                    return Some(ir::Arg::constant(&name.text, value.value.text()));
+                }
+                self.constant_string(expr, what).map(ir::Arg::str)
+            }
+            Expr::Binary {
+                op: BinOp::Concat,
+                lhs,
+                rhs,
+                ..
+            } => {
+                let lhs = self.constant_arg(lhs, what)?;
+                let rhs = self.constant_arg(rhs, what)?;
+                Some(lhs.concat(rhs))
+            }
+            other => self.constant_string(other, what).map(ir::Arg::str),
+        }
+    }
+
     fn bad_value(&mut self, span: Span, what: &str, wanted: &str, note: &str) {
         self.diags.push(
             Diagnostic::error(
@@ -542,6 +1226,7 @@ impl Lowerer<'_, '_> {
 enum Field {
     Attributes,
     Installer,
+    Uninstaller,
 }
 
 // -- the body lowerer ------------------------------------------------------
@@ -564,14 +1249,21 @@ struct LoopTargets {
 struct BodyLowerer<'a, 'p> {
     diags: &'a mut Diagnostics,
     resolved: &'a Resolved<'p>,
+    options: &'a crate::Options,
     known: &'a Inferred,
     learned: &'a mut Inferred,
     globals: &'a mut GlobalTypes,
+    /// Headers and `StrFunc` declarations, shared with every other body: the
+    /// collect half of §15.21's collect-then-emit.
+    requires: &'a mut Requirements,
     body: Body,
     scopes: Vec<Vec<(String, Binding)>>,
     loops: Vec<LoopTargets>,
     /// What each `return` in this body leaves on the stack.
     returns: Vec<(Vec<Ty>, Span)>,
+    /// The statement being lowered, stamped onto every instruction it produces
+    /// (§15.22).
+    span: Span,
     current: BlockId,
 }
 
@@ -658,9 +1350,15 @@ impl BodyLowerer<'_, '_> {
         self.scopes.pop();
     }
 
+    /// One instruction, attributed to the statement being lowered.
+    ///
+    /// The attribution is a field rather than a lookup because §15.22's map has
+    /// to survive layout, and by then the statement is long gone: the emitter
+    /// sees a flat list and the CFG that produced it does not exist any more.
     fn emit(&mut self, instruction: ir::Instruction) {
         let current = self.current;
-        self.body.push(current, instruction);
+        let span = self.span;
+        self.body.push(current, instruction.at(span));
     }
 
     /// Ends the current block with `terminator` and continues in a fresh one.
@@ -673,6 +1371,7 @@ impl BodyLowerer<'_, '_> {
     }
 
     fn stmt(&mut self, stmt: &Stmt) {
+        self.span = stmt.span();
         match stmt {
             Stmt::Local {
                 names,
@@ -723,7 +1422,12 @@ impl BodyLowerer<'_, '_> {
 
             Stmt::Return { values, span } => self.return_stmt(values, *span),
 
-            Stmt::GenericFor { span, .. } => self.todo(*span, "`for … in`"),
+            Stmt::GenericFor {
+                names,
+                iterator,
+                block,
+                span,
+            } => self.generic_for(names, iterator, block, *span),
         }
     }
 
@@ -840,14 +1544,37 @@ impl BodyLowerer<'_, '_> {
                     );
                     continue;
                 }
-                None if self.resolved.global(&name.text) => (
-                    Slot::Global(name.text.clone()),
-                    self.globals.get(&name.text).map(|(ty, _)| *ty),
-                ),
-                None => {
-                    self.undefined(name);
-                    continue;
-                }
+                // `$INSTDIR` is a variable, not a constant: `.onInit` reading a
+                // prior install location and assigning it is the shape §13
+                // calls canonical, and it is the only reason a "constant" here
+                // has a `writable` column at all.
+                None => match crate::builtins::constant_named(&name.text) {
+                    Some(constant) if constant.writable => {
+                        (Slot::Global(constant.nsis.to_string()), Some(constant.ty))
+                    }
+                    Some(_) => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::TypeConflict,
+                                name.span,
+                                format!("`{}` cannot be assigned to", name.text),
+                            )
+                            .note(
+                                "it describes the machine the installer is running on, and NSIS \
+                                 accepts the assignment silently rather than objecting (§13)",
+                            ),
+                        );
+                        continue;
+                    }
+                    None if self.resolved.global(&name.text) => (
+                        Slot::Global(name.text.clone()),
+                        self.globals.get(&name.text).map(|(ty, _)| *ty),
+                    ),
+                    None => {
+                        self.undefined(name);
+                        continue;
+                    }
+                },
             };
 
             let Some(ty) = self.value_into(value, &slot) else {
@@ -1120,6 +1847,198 @@ impl BodyLowerer<'_, '_> {
         let _ = span;
     }
 
+    /// `for x in <iterator>`, where the iterator set is closed (§7).
+    ///
+    /// The two members run on **different machines**, and a reader has to be
+    /// able to tell which from the source alone: `glob` walks the build machine
+    /// and unrolls, so there is no loop in the output at all, and `lines` walks
+    /// a file the installer has in front of it, so there is.
+    fn generic_for(&mut self, names: &[Name], iterator: &Expr, block: &Block, span: Span) {
+        let Expr::Call { callee, args, .. } = iterator else {
+            self.todo(iterator.span(), "this iterator");
+            return;
+        };
+        let Some(kind) = callee.as_ref().name() else {
+            self.todo(iterator.span(), "this iterator");
+            return;
+        };
+        let [name] = names else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{kind}` yields one value, and {} names are bound",
+                        names.len()
+                    ),
+                )
+                .note("there are no pairs to unpack: `for k, v` has nothing to iterate over (§7)"),
+            );
+            return;
+        };
+
+        match kind {
+            "glob" => self.glob_for(name, args, block, span),
+            "lines" => self.lines_for(name, args, block, span),
+            other => self.todo(span, &format!("`for … in {other}`")),
+        }
+    }
+
+    /// `for path in glob("assets/*.txt")` — build-machine iteration.
+    ///
+    /// The glob runs where `makensis` runs, so the loop is **unrolled** and the
+    /// body is lowered once per match with the name bound to a `<const>`.
+    /// Matches are sorted, because a directory listing has no order and a
+    /// golden file needs one (§14).
+    fn glob_for(&mut self, name: &Name, args: &[Expr], block: &Block, span: Span) {
+        let [pattern] = args else {
+            self.diags.push(
+                Diagnostic::error(Code::WrongArity, span, "`glob` takes one pattern").note(
+                    "it runs on the build machine, so the pattern has to be known there (§7)",
+                ),
+            );
+            return;
+        };
+        let Some(ConstValue::Str(pattern)) = self.constant(pattern) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    pattern.span(),
+                    "`glob` needs a build-time pattern",
+                )
+                .note(
+                    "it is expanded while the installer is being built, so there is no register \
+                       for a runtime value to arrive in (§7)",
+                ),
+            );
+            return;
+        };
+
+        let Some(base) = self.options.base.clone() else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    span,
+                    "`glob` needs a directory to be relative to",
+                )
+                .note(
+                    "this source was compiled from a string rather than a file, so there is \
+                     nothing for `assets/*.txt` to mean (§9-2)",
+                ),
+            );
+            return;
+        };
+
+        let mut matches = match glob(&base, &pattern) {
+            Ok(matches) => matches,
+            Err(error) => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        span,
+                        format!("`glob` cannot read `{}`: {error}", base.display()),
+                    )
+                    .note("the pattern is resolved against the source file's directory"),
+                );
+                return;
+            }
+        };
+        matches.sort();
+
+        for path in matches {
+            self.scopes.push(vec![(
+                name.text.clone(),
+                Binding::Const(ConstValue::Str(path)),
+            )]);
+            self.block(block);
+            self.scopes.pop();
+        }
+    }
+
+    /// `for line in lines(handle)` — install-time iteration over a file.
+    ///
+    /// `FileRead` sets the error flag at end of file and leaves the terminator
+    /// on the line, so the loop is a `ClearErrors`/`FileRead`/`IfErrors` triple
+    /// plus a `${TrimNewLines}`. The trim is what makes this *Lua's* `lines`
+    /// rather than NSIS's `FileRead`, and it is the one line here that costs a
+    /// header (§15.27).
+    fn lines_for(&mut self, name: &Name, args: &[Expr], block: &Block, span: Span) {
+        let [handle] = args else {
+            self.diags.push(
+                Diagnostic::error(Code::WrongArity, span, "`lines` takes one file handle")
+                    .note("write `for line in lines(f)`, with `f` from `fileOpen`"),
+            );
+            return;
+        };
+        let Some(handle) = self.value(handle) else {
+            return;
+        };
+        if handle.ty != Ty::Handle && handle.ty != Ty::Unknown {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    span,
+                    format!("`lines` wants a handle, and this is a {}", handle.ty),
+                )
+                .note("a handle comes from `fileOpen` and from nowhere else"),
+            );
+            return;
+        }
+        self.requires.headers.insert("TextFunc".to_string());
+
+        let slot = self.claim_local(name.span);
+        let n = self.body.construct();
+        let top = self.fresh(format!("for_{n}_top"));
+        let inside = self.fresh(format!("for_{n}_body"));
+        let end = self.fresh(format!("for_{n}_end"));
+
+        self.terminate(Terminator::Jump(top), top);
+        // `FileRead` reports end of file through the error flag, so the flag has
+        // to be clear before it — an error left over from anything earlier in
+        // the body would end the loop before it started.
+        self.emit(ir::Instruction::new("ClearErrors", Vec::new()));
+        self.emit(ir::Instruction::new(
+            "FileRead",
+            vec![handle.arg.clone(), ir::Arg::dest(slot.clone())],
+        ));
+        self.terminate(
+            Terminator::Branch {
+                test: cfg::Test::Predicate {
+                    name: "IfErrors".to_string(),
+                    args: Vec::new(),
+                    keywords: Vec::new(),
+                },
+                then_block: end,
+                else_block: inside,
+            },
+            inside,
+        );
+        // Lua's `lines` yields the line without its terminator; `FileRead`
+        // includes it. One macro, and the difference between the two languages.
+        self.emit(
+            ir::Instruction::new(
+                "${TrimNewLines}",
+                vec![ir::Arg::slot(slot.clone()), ir::Arg::dest(slot.clone())],
+            )
+            .atomic(),
+        );
+
+        self.scopes.push(vec![(
+            name.text.clone(),
+            Binding::Local { slot, ty: Ty::Str },
+        )]);
+        self.loops.push(LoopTargets {
+            break_to: end,
+            continue_to: top,
+        });
+        self.block(block);
+        self.loops.pop();
+        self.scopes.pop();
+
+        self.terminate(Terminator::Jump(top), end);
+        self.current = end;
+    }
+
     fn fresh(&mut self, hint: impl std::fmt::Display) -> BlockId {
         let span = self.body.block(self.current).span;
         self.body
@@ -1165,6 +2084,66 @@ impl BodyLowerer<'_, '_> {
     fn todo(&mut self, span: Span, what: &str) {
         todo_at(self.diags, span, what);
     }
+}
+
+/// The build-machine half of `for … in glob(…)`.
+///
+/// Deliberately not a dependency: the pattern language is one directory and one
+/// filename with `*` and `?` in it, which is what §7 exposes and what the five
+/// programs use. Anything larger is a shell's job, and `BUILD.system` is where
+/// a shell belongs (§15.8).
+///
+/// Paths come back **as the source would have written them**, with `/` and
+/// relative to the source's directory, so the emitter's path handling applies
+/// to a globbed file exactly as it does to a written one.
+fn glob(base: &std::path::Path, pattern: &str) -> std::io::Result<Vec<String>> {
+    let (directory, name) = match pattern.rsplit_once('/') {
+        Some((directory, name)) => (directory, name),
+        None => ("", pattern),
+    };
+
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(base.join(directory))? {
+        let entry = entry?;
+        let file = entry.file_name().to_string_lossy().into_owned();
+        if !matches_pattern(&file, name) || entry.path().is_dir() {
+            continue;
+        }
+        out.push(if directory.is_empty() {
+            file
+        } else {
+            format!("{directory}/{file}")
+        });
+    }
+    Ok(out)
+}
+
+/// `*` matches any run, `?` matches one character, everything else is literal.
+fn matches_pattern(name: &str, pattern: &str) -> bool {
+    let (name, pattern): (Vec<char>, Vec<char>) =
+        (name.chars().collect(), pattern.chars().collect());
+    // The textbook two-pointer walk with one backtrack point, which is linear
+    // and needs no allocation — a recursive matcher on a pathological pattern
+    // is exponential, and a glob is user input.
+    let (mut n, mut p) = (0usize, 0usize);
+    let (mut star, mut resume) = (None, 0usize);
+    while n < name.len() {
+        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == name[n]) {
+            n += 1;
+            p += 1;
+        } else if p < pattern.len() && pattern[p] == '*' {
+            star = Some(p);
+            resume = n;
+            p += 1;
+        } else if let Some(previous) = star {
+            p = previous + 1;
+            resume += 1;
+            n = resume;
+        } else {
+            return false;
+        }
+    }
+    pattern[p..].iter().all(|c| *c == '*')
 }
 
 fn todo_at(diags: &mut Diagnostics, span: Span, what: &str) {

@@ -111,7 +111,18 @@ const CASES: &[(Code, &str)] = &[
          detailPrint(\"left \" .. left)\n\
          end), }",
     ),
-    (Code::NotYetImplemented, "uninstaller {}"),
+    (
+        Code::ConstantAnswer,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local answer = messageBox(\"done\")\n\
+         if answer == \"OK\" then detailPrint(\"always\") end\n\
+         end), }",
+    ),
+    (
+        Code::NotYetImplemented,
+        "attributes { outFile = \"a.exe\" }\nlanguages {}",
+    ),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
     (Code::BadFieldValue, r#"attributes { unicode = "yes" }"#),
     (

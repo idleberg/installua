@@ -165,6 +165,10 @@ pub enum Code {
     /// placeholder, this is the real limit: values whose live ranges do not
     /// overlap already share a register (§9-3).
     RegisterExhaustion,
+    /// A value bound from a dialog that has one button. A **warning**: the
+    /// program is well-formed, and the comparison underneath it is simply
+    /// already decided (§15.18).
+    ConstantAnswer,
     /// Unbounded recursion. A **warning**, because it is legal and sometimes
     /// intended — and one worth having, since §3 measured the failure as a
     /// silent process death at roughly 1300 frames (§15.11).
@@ -215,6 +219,7 @@ impl Code {
         Code::ContinueOutsideLoop,
         Code::RegisterExhaustion,
         Code::DeepRecursion,
+        Code::ConstantAnswer,
         Code::NotYetImplemented,
         Code::UnknownField,
         Code::BadFieldValue,
@@ -254,6 +259,7 @@ impl Code {
             Code::ContinueOutsideLoop => "continue-outside-loop",
             Code::RegisterExhaustion => "register-exhaustion",
             Code::DeepRecursion => "deep-recursion",
+            Code::ConstantAnswer => "constant-answer",
             Code::NotYetImplemented => "not-yet-implemented",
             Code::UnknownField => "unknown-field",
             Code::BadFieldValue => "bad-field-value",

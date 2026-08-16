@@ -40,7 +40,7 @@ fn program(statements: &str) -> String {
 fn shape(body: &Body) -> Vec<String> {
     layout::lay_out(body)
         .into_iter()
-        .map(|item| match item {
+        .map(|(item, _)| match item {
             ir::Item::Instruction(instruction) => instruction.name,
             ir::Item::Label(label) => format!("{label}:"),
         })

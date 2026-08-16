@@ -1,5 +1,7 @@
 Unicode true
 
+!define VERBOSE 0
+
 Name "Control Flow"
 OutFile "control-flow-setup.exe"
 

@@ -187,6 +187,14 @@ impl Expr {
         }
     }
 
+    /// This expression as a bare name, when that is what it is.
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Expr::Name(name) => Some(&name.text),
+            _ => None,
+        }
+    }
+
     /// The name of a call's callee, when the callee is a bare name. Used by the
     /// handful of *syntactic* whitelist rules that are about a spelling rather
     /// than a shape (`raw`, `require`, the iterators).

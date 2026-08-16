@@ -45,6 +45,12 @@ const fn path() -> Param {
     }
 }
 
+/// A registry root (`HKLM`) or a file handle: an opaque value the language can
+/// pass along and cannot compute with (§15.14).
+const fn handle() -> Param {
+    data(Ty::Handle)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Builtin {
     pub installua: &'static str,
@@ -106,6 +112,41 @@ pub const BUILTINS: &[Builtin] = &[
         returns: Some(Ty::nonneg()),
         pure: true,
     },
+    // -- files and the install tree
+    instruction("file", "File", &[path()]),
+    instruction("delete", "Delete", &[path()]),
+    instruction("rmDir", "RMDir", &[path()]),
+    instruction("createShortcut", "CreateShortcut", &[path(), path()]),
+    instruction("writeUninstaller", "WriteUninstaller", &[path()]),
+    // `Abort` in a section stops the install; in a page callback it stops the
+    // page. One instruction, and which it is depends on where it stands (§13).
+    instruction("abort", "Abort", &[data(Ty::Str)]),
+    // `os.exit()` is `Quit`: Lua's spelling for the same idea, and the one
+    // place a standard-library name maps onto an instruction rather than onto a
+    // header macro.
+    instruction("os.exit", "Quit", &[]),
+    Builtin {
+        installua: "fileOpen",
+        nsis: "FileOpen",
+        kind: Kind::Instruction,
+        // The mode is a bare `r`/`w`/`a`, and NSIS accepts it quoted, so it
+        // needs no spelling of its own here.
+        params: &[path(), data(Ty::Str)],
+        returns: Some(Ty::Handle),
+        pure: true,
+    },
+    // -- the registry
+    instruction("deleteRegKey", "DeleteRegKey", &[handle(), path()]),
+    Builtin {
+        installua: "readRegStr",
+        nsis: "ReadRegStr",
+        kind: Kind::Instruction,
+        params: &[handle(), path(), data(Ty::Str)],
+        // A missing value reads as `""` and sets the error flag, so the type is
+        // a string in every case and `errors()` is how the difference is seen.
+        returns: Some(Ty::Str),
+        pure: true,
+    },
     predicate("fileExists", "IfFileExists", &[path()]),
     predicate("silent", "IfSilent", &[]),
     Builtin {
@@ -130,6 +171,16 @@ pub struct Constant {
     pub installua: &'static str,
     pub nsis: &'static str,
     pub ty: Ty,
+    /// Whether the name carries a `$`. `$INSTDIR` is a variable the installer
+    /// expands at run time; `HKLM` is a bare keyword that only `Reg*` accepts,
+    /// and writing `$HKLM` instead produces warning 6000 and a silently wrong
+    /// installer (§15.1).
+    pub sigil: bool,
+    /// Whether assigning to it is legal. `$INSTDIR` is a variable the user is
+    /// *expected* to write — `.onInit` reading a prior install location and
+    /// setting it is the canonical shape — while `$EXEDIR` is a fact about the
+    /// machine and assigning to it is a mistake NSIS accepts silently (§13).
+    pub writable: bool,
 }
 
 const fn constant(name: &'static str, ty: Ty) -> Constant {
@@ -139,12 +190,44 @@ const fn constant(name: &'static str, ty: Ty) -> Constant {
         // point: the name a user already knows is the name they write.
         nsis: name,
         ty,
+        sigil: true,
+        writable: false,
+    }
+}
+
+/// A constant the user may assign to.
+const fn writable(name: &'static str, ty: Ty) -> Constant {
+    Constant {
+        writable: true,
+        ..constant(name, ty)
+    }
+}
+
+/// A registry root: a keyword, not a variable.
+const fn root(name: &'static str) -> Constant {
+    Constant {
+        installua: name,
+        nsis: name,
+        ty: Ty::Handle,
+        sigil: false,
+        writable: false,
+    }
+}
+
+impl Constant {
+    /// The argument this constant becomes.
+    pub fn arg(&self) -> crate::ir::Arg {
+        if self.sigil {
+            crate::ir::Arg::var(format!("${}", self.nsis))
+        } else {
+            crate::ir::Arg::raw(self.nsis)
+        }
     }
 }
 
 pub const CONSTANTS: &[Constant] = &[
-    constant("INSTDIR", Ty::Str),
-    constant("OUTDIR", Ty::Str),
+    writable("INSTDIR", Ty::Str),
+    writable("OUTDIR", Ty::Str),
     constant("PROGRAMFILES", Ty::Str),
     constant("PROGRAMFILES64", Ty::Str),
     constant("COMMONFILES", Ty::Str),
@@ -161,6 +244,12 @@ pub const CONSTANTS: &[Constant] = &[
     constant("EXEFILE", Ty::Str),
     constant("PLUGINSDIR", Ty::Str),
     constant("LANGUAGE", Ty::nonneg()),
+    root("HKLM"),
+    root("HKCU"),
+    root("HKCR"),
+    root("HKU"),
+    root("HKCC"),
+    root("SHCTX"),
 ];
 
 pub fn constant_named(name: &str) -> Option<&'static Constant> {

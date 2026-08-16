@@ -91,6 +91,22 @@ impl Body {
     pub fn call_site(&mut self, callee: impl Into<String>, span: Span) -> usize {
         self.calls.push(ir::CallSite {
             callee: callee.into(),
+            kind: ir::CallKind::Function,
+            args: Vec::new(),
+            results: Vec::new(),
+            saves: Vec::new(),
+            span,
+        });
+        self.calls.len() - 1
+    }
+
+    /// Reserves an **opaque** call site: a plugin, `System::Call` or `raw`.
+    /// The lines are already known — an opaque callee takes its arguments
+    /// inline — so all this reserves is the place the saves and the pops go.
+    pub fn opaque_site(&mut self, lines: Vec<ir::Instruction>, raw: bool, span: Span) -> usize {
+        self.calls.push(ir::CallSite {
+            callee: String::new(),
+            kind: ir::CallKind::Opaque { lines, raw },
             args: Vec::new(),
             results: Vec::new(),
             saves: Vec::new(),
@@ -254,7 +270,16 @@ pub enum Test {
     /// right-hand side. §15.20 dissolves the second condition shape these used
     /// to need: `fileExists(p)` is an ordinary `bool`-valued call, and fusing it
     /// spends no register.
-    Predicate { name: String, args: Vec<ir::Arg> },
+    Predicate {
+        name: String,
+        args: Vec<ir::Arg>,
+        /// The token that introduces each arm, when the instruction wants one.
+        /// Empty for `IfFileExists f <then> <else>`, where the arms are
+        /// positional; `["IDYES", "IDNO"]` for `MessageBox`, whose arms are
+        /// keyed and **omitted** rather than spelled `0` when they fall through
+        /// (§15.18).
+        keywords: Vec<String>,
+    },
 }
 
 impl Test {

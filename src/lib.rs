@@ -28,6 +28,7 @@
 //! deliberately, since an installer is one program with one output.
 
 pub mod alloc;
+pub mod assemble;
 pub mod ast;
 pub mod builtins;
 pub mod callgraph;
@@ -35,15 +36,31 @@ pub mod cfg;
 pub mod diag;
 pub mod emit;
 pub mod frontend;
+pub mod headers;
 pub mod ir;
 pub mod layout;
 pub mod lower;
+pub mod map;
 pub mod regs;
 pub mod resolve;
 pub mod types;
 
+use std::path::PathBuf;
+
 use crate::ast::Program;
 use crate::diag::Diagnostics;
+
+/// What the compiler needs from the world outside the source text.
+///
+/// There is exactly one entry — the directory relative paths resolve against —
+/// and it is an `Option` because §9-2 requires that everything here work
+/// against an in-memory string with no file system involved. A source that
+/// never reaches the build machine (no `glob`) compiles either way; one that
+/// does gets an honest diagnostic rather than a guess at the current directory.
+#[derive(Clone, Debug, Default)]
+pub struct Options {
+    pub base: Option<PathBuf>,
+}
 
 /// Parses and checks `source` without lowering it — what `installua check`
 /// runs, and what an editor would call on every keystroke.
@@ -62,6 +79,16 @@ pub fn check(source: &str, diags: &mut Diagnostics) -> Option<Program> {
 /// fused condition allocates no temporaries — and reading it out of emitted
 /// text would be inferring a property from the absence of a line.
 pub fn compile(source: &str, diags: &mut Diagnostics) -> Option<ir::Module> {
+    compile_with(source, &Options::default(), diags)
+}
+
+/// The same, against a directory: what `installua build <file>` calls, with the
+/// input's own directory as the base.
+pub fn compile_with(
+    source: &str,
+    options: &Options,
+    diags: &mut Diagnostics,
+) -> Option<ir::Module> {
     let program = check(source, diags)?;
     if diags.has_errors() {
         return None;
@@ -72,7 +99,7 @@ pub fn compile(source: &str, diags: &mut Diagnostics) -> Option<ir::Module> {
         return None;
     }
 
-    let module = lower::lower(&program, &resolved, diags);
+    let module = lower::lower(&program, &resolved, options, diags);
     lower::check_required(&module, diags);
     if diags.has_errors() {
         return None;
@@ -82,5 +109,19 @@ pub fn compile(source: &str, diags: &mut Diagnostics) -> Option<ir::Module> {
 
 /// Compiles `source` to `.nsi` text. `None` when any error was raised.
 pub fn build(source: &str, diags: &mut Diagnostics) -> Option<String> {
-    compile(source, diags).map(|module| emit::emit(&module))
+    build_with(source, &Options::default(), diags)
+}
+
+pub fn build_with(source: &str, options: &Options, diags: &mut Diagnostics) -> Option<String> {
+    build_mapped(source, options, diags).map(|(text, _)| text)
+}
+
+/// The `.nsi` and its line map (§15.22). What `installua build` calls, because
+/// it has to translate whatever `makensis` says about the result.
+pub fn build_mapped(
+    source: &str,
+    options: &Options,
+    diags: &mut Diagnostics,
+) -> Option<(String, map::LineMap)> {
+    compile_with(source, options, diags).map(|module| emit::emit_mapped(&module))
 }

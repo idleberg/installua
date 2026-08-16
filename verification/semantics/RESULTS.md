@@ -132,3 +132,48 @@ cd "$(mktemp -d)" && makensis -WX <path>/returns-generated.nsi && wine returns.e
 ```
 
 Compare against `returns-generated-result.txt`.
+
+## Phase 4 — the string adapters and the sign fixups
+
+`strings.lua` → `strings-generated.nsi` → wine. One hand-edited line, `SilentInstall
+silent`, because no attribute exposes it yet; everything else is the compiler's output
+unmodified.
+
+```
+major=2
+find=2
+sub=bcd
+upper=BETA
+lower=beta
+fmt=0042
+div=-8
+mod=8
+```
+
+Every line has a plausible wrong answer that `makensis` accepts without a word, which is
+why this is tier 4 and not tier 3.
+
+**`find=2` and `major=2` are the two off-by-ones, and they are separate facts.**
+`${StrLoc}` answers `1` for the `.` in `2.1.0`, counting from zero; Lua's `string.find`
+counts from one, so the adapter adds one and `find=2` is the *Lua* answer. `major=2` then
+goes the other way: `string.sub(v, 1, dot - 1)` becomes `StrCpy $0 $0 <length> <offset>`,
+where a length and an offset are not the two positions Lua wrote. Getting one of the two
+right and the other wrong yields `"2."` or `""`, and both assemble.
+
+**`div=-8` and `mod=8` are §15.4, and they are the numbers NSIS gets wrong.** `-504 // 64`
+truncates to `-7` and `-504 % 64` to `-56` under `IntOp`; Lua floors and takes the sign of
+the divisor, giving `-8` and `8`. The compiler emits the fixup here — and does not emit it
+for `string.len(s) // 1024` in program 4 — because `string.len` is non-negative by
+construction and the subtraction on line 44 is where the lattice loses that (§15.14).
+
+**`fmt=0042` is `IntFmt`**, which is the whole of `string.format` that NSIS has: one
+integer and one specifier. `%s` and several arguments are `Class::Todo`.
+
+### Reproducing
+
+```
+cd "$(mktemp -d)" && makensis -WX <path>/strings-generated.nsi \
+  && cp <path>/strings.exe . && wine strings.exe && cat strings-result.txt
+```
+
+Compare against `strings-generated-result.txt`.

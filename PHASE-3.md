@@ -189,6 +189,11 @@ emitted without the allocator knowing about them.
    and `raw` clobber everything. None of the three can be lowered in this version, so
    rather than shipping an unreachable `Clobber::All` branch the rule is recorded here and
    lands with the callee that needs it. `builtins.rs` is where it will go, as a column.
+
+   **Landed in Phase 4**, and not as a column: all three became a *call site*
+   (`ir::CallKind::Opaque`) rather than an instruction, because the saves around one are
+   still `live ∩ clobbered` and still have to be decided after colouring. The clobber half
+   is four lines in `alloc::insert_saves`.
 7. **`tests/control_flow.rs` became `tests/goldens.rs`.** One harness, a table of programs,
    and each row carries the diagnostics it is expected to raise — exactly, in both
    directions. That is how the depth-cliff warning on `returns` is tested rather than
