@@ -21,6 +21,7 @@
 
 use crate::diag::Span;
 use crate::ir;
+use crate::regs::Slot;
 use crate::types::{Sign, Ty, Width};
 
 /// Every generated label carries this prefix (§15.19). It defends against
@@ -29,7 +30,12 @@ use crate::types::{Sign, Ty, Width};
 /// against user code, which cannot name a label at all. It is deliberately not
 /// the product name: a rename would otherwise rewrite every golden file for no
 /// semantic change.
-pub const LABEL_PREFIX: &str = "_luagen_";
+///
+/// Uppercase and double-underscored so that a label is unmistakably not a
+/// user's line in a diff, and sorts away from everything a header is likely to
+/// emit. A leading `.` would make it global in NSIS, which is why the leading
+/// character is an underscore and [`crate::layout`] asserts it stays one.
+pub const LABEL_PREFIX: &str = "__GENERATED_";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlockId(pub usize);
@@ -39,11 +45,17 @@ pub struct BlockId(pub usize);
 #[derive(Clone, Debug)]
 pub struct Body {
     pub blocks: Vec<BasicBlock>,
-    /// High-water mark of expression temporaries (§12's two-ended placeholder
-    /// file). Phase 2's exit criterion is a statement about this number:
-    /// condition fusion never moves it, because a fused condition materialises
-    /// nothing.
+    /// Expression temporaries the lowerer had to materialise. Phase 2's exit
+    /// criterion is a statement about this number: condition fusion never moves
+    /// it, because a fused condition materialises nothing.
     pub temps: usize,
+    /// Where each virtual slot was created, indexed by slot number. The
+    /// allocator needs a span to point at when twenty registers are not enough,
+    /// and this is the only place that knows one.
+    pub vregs: Vec<Span>,
+    /// Call sites, in creation order. [`ir::Step::Saves`] and
+    /// [`ir::Step::Call`] index into this.
+    pub calls: Vec<ir::CallSite>,
     /// The per-body construct counter (§15.25). It resets here rather than
     /// running monotonically over the program so that inserting an `if` early
     /// renumbers labels in that body only, which is what keeps §14's whole-file
@@ -58,8 +70,33 @@ impl Body {
         Body {
             blocks: vec![BasicBlock::new(format!("{LABEL_PREFIX}entry"), span)],
             temps: 0,
+            vregs: Vec::new(),
+            calls: Vec::new(),
             next_construct: 0,
         }
+    }
+
+    /// A fresh virtual slot. There is no supply to run out of here: exhaustion
+    /// is a fact about *simultaneously live* values, which nothing knows until
+    /// the body is complete, so the allocator raises it and lowering does not
+    /// (§9-3).
+    pub fn vreg(&mut self, span: Span) -> Slot {
+        self.vregs.push(span);
+        Slot::Virtual((self.vregs.len() - 1) as u32)
+    }
+
+    /// Reserves a call site, returning its index. The site is created *before*
+    /// its arguments are lowered, because the saves are pushed before the
+    /// argument evaluation and the marker has to go in first.
+    pub fn call_site(&mut self, callee: impl Into<String>, span: Span) -> usize {
+        self.calls.push(ir::CallSite {
+            callee: callee.into(),
+            args: Vec::new(),
+            results: Vec::new(),
+            saves: Vec::new(),
+            span,
+        });
+        self.calls.len() - 1
     }
 
     /// A fresh construct number. One per `if`, `while` or `for`, so a
@@ -78,6 +115,28 @@ impl Body {
         BlockId(self.blocks.len() - 1)
     }
 
+    /// Whether control can reach `id` from the entry. The layout pass answers
+    /// the same question by simply not laying a block out; this exists because
+    /// the arity check has to distinguish "falls off the end" from "the block
+    /// after an unconditional `return`", and those differ only in reachability.
+    pub fn reachable(&self, id: BlockId) -> bool {
+        let mut seen = vec![false; self.blocks.len()];
+        let mut stack = vec![Body::ENTRY];
+        seen[Body::ENTRY.0] = true;
+        while let Some(block) = stack.pop() {
+            if block == id {
+                return true;
+            }
+            for successor in self.blocks[block.0].terminator.successors() {
+                if !seen[successor.0] {
+                    seen[successor.0] = true;
+                    stack.push(successor);
+                }
+            }
+        }
+        false
+    }
+
     pub fn block(&self, id: BlockId) -> &BasicBlock {
         &self.blocks[id.0]
     }
@@ -87,7 +146,13 @@ impl Body {
     }
 
     pub fn push(&mut self, id: BlockId, instruction: ir::Instruction) {
-        self.blocks[id.0].instructions.push(instruction);
+        self.blocks[id.0]
+            .steps
+            .push(ir::Step::Instruction(instruction));
+    }
+
+    pub fn push_step(&mut self, id: BlockId, step: ir::Step) {
+        self.blocks[id.0].steps.push(step);
     }
 
     /// Points `id` at its successors. A `Branch` whose arms are the same block
@@ -109,7 +174,7 @@ impl Body {
 #[derive(Clone, Debug)]
 pub struct BasicBlock {
     pub label: String,
-    pub instructions: Vec<ir::Instruction>,
+    pub steps: Vec<ir::Step>,
     pub terminator: Terminator,
     /// Where the block came from, for the diagnostics a later pass raises about
     /// it and for §15.22's line map.
@@ -120,7 +185,7 @@ impl BasicBlock {
     fn new(label: String, span: Span) -> BasicBlock {
         BasicBlock {
             label,
-            instructions: Vec::new(),
+            steps: Vec::new(),
             // A block that nobody terminates is a lowering bug, and saying so is
             // cheaper than defaulting to a fallthrough that silently works.
             terminator: Terminator::Unreachable,
@@ -142,6 +207,12 @@ pub enum Terminator {
 }
 
 impl Terminator {
+    pub fn recolour(&mut self, colour: &dyn Fn(u32) -> u8) {
+        if let Terminator::Branch { test, .. } = self {
+            test.recolour(colour);
+        }
+    }
+
     pub fn successors(&self) -> Vec<BlockId> {
         match self {
             Terminator::Jump(target) => vec![*target],
@@ -191,6 +262,38 @@ impl Test {
     /// `bool` is the text `1` or `0`, so the test is an ordinary string compare
     /// — chosen over `IntCmp` because it has two arms rather than three and a
     /// bool has two values.
+    /// Everything the test reads. A terminator defines nothing — NSIS has no
+    /// compare that writes — so uses are the whole story.
+    pub fn uses(&self) -> Vec<Slot> {
+        let mut out = Vec::new();
+        match self {
+            Test::Str { lhs, rhs, .. } | Test::Int { lhs, rhs, .. } => {
+                lhs.uses(&mut out);
+                rhs.uses(&mut out);
+            }
+            Test::Predicate { args, .. } => {
+                for arg in args {
+                    arg.uses(&mut out);
+                }
+            }
+        }
+        out
+    }
+
+    pub fn recolour(&mut self, colour: &dyn Fn(u32) -> u8) {
+        match self {
+            Test::Str { lhs, rhs, .. } | Test::Int { lhs, rhs, .. } => {
+                lhs.recolour(colour);
+                rhs.recolour(colour);
+            }
+            Test::Predicate { args, .. } => {
+                for arg in args {
+                    arg.recolour(colour);
+                }
+            }
+        }
+    }
+
     pub fn boolean(value: ir::Arg) -> Test {
         Test::Str {
             lhs: value,

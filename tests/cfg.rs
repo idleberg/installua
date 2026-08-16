@@ -88,10 +88,10 @@ end",
     assert_eq!(tests.len(), 3, "one compare-and-jump per operand");
     for block in tests {
         assert!(
-            block.instructions.is_empty(),
+            block.steps.is_empty(),
             "`{}` computes something before branching: {:?}",
             block.label,
-            block.instructions
+            block.steps
         );
     }
 }
@@ -145,12 +145,12 @@ detailPrint(\"after\")",
             "IfFileExists",
             "StrCpy",
             "Goto",
-            "_luagen_false_0:",
+            "__GENERATED_false_0:",
             "StrCpy",
-            "_luagen_bool_0:",
+            "__GENERATED_bool_0:",
             "StrCmpS",
             "DetailPrint",
-            "_luagen_endif_1:",
+            "__GENERATED_endif_1:",
             "DetailPrint",
         ]
     );
@@ -187,7 +187,7 @@ installer {
 
     assert_eq!(
         labels,
-        vec![vec!["_luagen_endif_0:"], vec!["_luagen_endif_0:"]]
+        vec![vec!["__GENERATED_endif_0:"], vec!["__GENERATED_endif_0:"]]
     );
 }
 
@@ -277,7 +277,7 @@ local half = n // 2",
             // The adjustment falls through rather than being jumped to, so it
             // needs no label of its own.
             "IntOp", // quotient - 1
-            "_luagen_div_0_done:",
+            "__GENERATED_div_0_done:",
             "StrCpy",
         ]
     );
@@ -296,7 +296,7 @@ if a == \"ONE\" then detailPrint(\"same\") end",
 
     assert_eq!(
         shape(&body),
-        vec!["StrCpy", "StrCmpS", "DetailPrint", "_luagen_endif_0:"]
+        vec!["StrCpy", "StrCmpS", "DetailPrint", "__GENERATED_endif_0:"]
     );
 }
 
@@ -312,7 +312,7 @@ fn a_predicate_in_a_condition_spends_no_register() {
     assert_eq!(body.temps, 0);
     assert_eq!(
         shape(&body),
-        vec!["IfFileExists", "DetailPrint", "_luagen_endif_0:"]
+        vec!["IfFileExists", "DetailPrint", "__GENERATED_endif_0:"]
     );
 }
 

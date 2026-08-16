@@ -16,16 +16,21 @@
 //! collapsing them is how a `todo` count stops predicting anything.
 
 mod expr;
+mod sig;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use crate::alloc;
 use crate::ast::*;
+use crate::callgraph;
 use crate::cfg::{self, BlockId, Body, Terminator};
 use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 use crate::ir;
-use crate::regs::{Registers, Slot};
+use crate::regs::Slot;
 use crate::resolve::{ConstValue, Resolved};
 use crate::types::Ty;
+
+pub use sig::{Inferred, Signature};
 
 /// The frozen v1 attribute surface (Phase 0). A name in here is scheduled; a
 /// name outside it is a typo.
@@ -59,12 +64,78 @@ const V1_BLOCKS: &[&str] = &[
     "include",
 ];
 
+/// How many rounds the signature fixpoint gets. Three is enough for the deepest
+/// chain in the five programs — a caller learns a parameter, the callee learns
+/// its return, the caller reads it — and the cap exists because a lattice with
+/// `Unknown` at the top is not strictly monotone: a disagreement can flip a slot
+/// back. A program that has not settled by then compiles against the last round,
+/// which is sound: an unsettled type is `Unknown`, and `Unknown` is refused at
+/// every point where guessing would matter (§15.14).
+const MAX_ROUNDS: usize = 8;
+
 pub fn lower(program: &Program, resolved: &Resolved<'_>, diags: &mut Diagnostics) -> ir::Module {
+    // 1. Types, to a fixpoint. Rounds before the last are lowered against a
+    //    scratch collector: their diagnostics are about a type table that was
+    //    still incomplete, so reporting them would be reporting the compiler's
+    //    intermediate state to the user (§9-4).
+    let mut inferred = Inferred::seed(resolved);
+    for _ in 0..MAX_ROUNDS {
+        let mut scratch = Diagnostics::new();
+        let round = lower_once(program, resolved, &mut scratch, &inferred).1;
+        if round == inferred {
+            break;
+        }
+        inferred = round;
+    }
+
+    let (mut module, _) = lower_once(program, resolved, diags, &inferred);
+
+    // 2. Registers. Every body is allocated before any call site is filled in,
+    //    because a clobber set is a fact about *physical* registers and there
+    //    are none until colouring has run (§9-3).
+    let mut across = Vec::new();
+    let mut direct: BTreeMap<String, BTreeSet<u8>> = BTreeMap::new();
+    let functions = module.functions.len();
+    for (index, (name, body)) in module.bodies_mut().into_iter().enumerate() {
+        let allocation = alloc::allocate(body, diags);
+        across.push(allocation.live_across);
+        // `bodies_mut` yields the functions first, and only a function can be
+        // called: a section is a root.
+        if index < functions {
+            direct.insert(name, allocation.clobbers);
+        }
+    }
+
+    // 3. The call graph, built once and read twice here (§15.11).
+    let graph = callgraph::build(&module);
+    let clobbers = graph.clobbers(&direct);
+    graph.lint_recursion(diags);
+
+    // 4. `live ∩ clobbered`, at last.
+    for (index, (_, body)) in module.bodies_mut().into_iter().enumerate() {
+        alloc::insert_saves(body, &across[index], &clobbers);
+    }
+
+    module
+}
+
+fn lower_once(
+    program: &Program,
+    resolved: &Resolved<'_>,
+    diags: &mut Diagnostics,
+    known: &Inferred,
+) -> (ir::Module, Inferred) {
     let mut lowerer = Lowerer {
         diags,
         resolved,
         module: ir::Module::new(),
-        globals: BTreeMap::new(),
+        globals: known
+            .globals
+            .iter()
+            .map(|(name, ty)| (name.clone(), (*ty, Vec::new())))
+            .collect(),
+        known,
+        learned: Inferred::seed(resolved),
         attributes_span: None,
         installer_span: None,
     };
@@ -83,6 +154,10 @@ struct Lowerer<'a, 'p> {
     resolved: &'a Resolved<'p>,
     module: ir::Module,
     globals: GlobalTypes,
+    /// The previous round's type table: read, never written.
+    known: &'a Inferred,
+    /// This round's: written, never read.
+    learned: Inferred,
     attributes_span: Option<Span>,
     installer_span: Option<Span>,
 }
@@ -103,8 +178,13 @@ impl Lowerer<'_, '_> {
             .collect();
     }
 
-    fn finish(self) -> ir::Module {
-        self.module
+    fn finish(mut self) -> (ir::Module, Inferred) {
+        self.learned.globals = self
+            .globals
+            .iter()
+            .map(|(name, (ty, _))| (name.clone(), *ty))
+            .collect();
+        (self.module, self.learned)
     }
 
     fn top_level(&mut self, stmt: &Stmt) {
@@ -298,7 +378,7 @@ impl Lowerer<'_, '_> {
         Some(ir::Section {
             name,
             optional: false,
-            body: self.body(block, &[], *span),
+            body: self.body(block, &[], *span, None),
         })
     }
 
@@ -321,7 +401,7 @@ impl Lowerer<'_, '_> {
         };
         let _ = keyword;
 
-        let body = self.body(block, params, *span);
+        let body = self.body(block, params, *span, Some(&name.value));
         self.module.functions.push(ir::Function {
             name: name.value.clone(),
             body,
@@ -331,20 +411,86 @@ impl Lowerer<'_, '_> {
     /// One body, one CFG, one register file. Everything about a body is local
     /// to it — the label counter resets (§15.25) and NSIS `Goto` cannot cross
     /// the boundary anyway (§8).
-    fn body(&mut self, block: &Block, params: &[Name], span: Span) -> Body {
+    fn body(&mut self, block: &Block, params: &[Name], span: Span, owner: Option<&str>) -> Body {
+        let signature = owner
+            .and_then(|name| self.known.signature(name))
+            .cloned()
+            .unwrap_or_default();
+
         let mut lowerer = BodyLowerer {
             diags: self.diags,
             resolved: self.resolved,
+            known: self.known,
+            learned: &mut self.learned,
             globals: &mut self.globals,
             body: Body::new(span),
-            regs: Registers::new(),
             scopes: vec![Vec::new()],
             loops: Vec::new(),
+            returns: Vec::new(),
             current: Body::ENTRY,
         };
-        lowerer.parameters(params);
+        lowerer.parameters(params, &signature);
         lowerer.block(block);
-        lowerer.finish()
+        let (body, returns) = lowerer.finish();
+        self.returns(owner, &returns);
+        body
+    }
+
+    /// Every `return` in one body has to agree on how many values it leaves,
+    /// because `Call` has no arity: the callee pushes and the caller pops, and a
+    /// disagreement is a stack that unbalances at runtime with NSIS reporting
+    /// nothing at all (§3).
+    fn returns(&mut self, owner: Option<&str>, returns: &[(Vec<Ty>, Span)]) {
+        let Some((first, first_span)) = returns.first() else {
+            return;
+        };
+        for (types, span) in returns {
+            if types.len() != first.len() {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::ReturnArity,
+                        *span,
+                        format!(
+                            "this returns {} value(s), and another path returns {}",
+                            types.len(),
+                            first.len()
+                        ),
+                    )
+                    .note(format!(
+                        "the other one is at line {}",
+                        first_span.start_line
+                    ))
+                    .note(
+                        "`Call` has no arity — the callee pushes and the caller pops — so the \
+                         two would unbalance the stack with no diagnostic from NSIS (§3)",
+                    )
+                    .note(
+                        "a path that falls off the end of the body returns nothing, which counts",
+                    ),
+                );
+                return;
+            }
+        }
+
+        match owner {
+            Some(name) => {
+                for (types, _) in returns {
+                    self.learned.learn_return(name, types);
+                }
+            }
+            None if !first.is_empty() => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::ReturnArity,
+                        *first_span,
+                        "a `section` cannot return a value",
+                    )
+                    .note("nothing calls a section, so there is nobody to pop what it pushed")
+                    .note("a bare `return` to leave early is fine"),
+                );
+            }
+            None => {}
+        }
     }
 
     // -- constants --------------------------------------------------------
@@ -418,36 +564,55 @@ struct LoopTargets {
 struct BodyLowerer<'a, 'p> {
     diags: &'a mut Diagnostics,
     resolved: &'a Resolved<'p>,
+    known: &'a Inferred,
+    learned: &'a mut Inferred,
     globals: &'a mut GlobalTypes,
     body: Body,
-    regs: Registers,
     scopes: Vec<Vec<(String, Binding)>>,
     loops: Vec<LoopTargets>,
+    /// What each `return` in this body leaves on the stack.
+    returns: Vec<(Vec<Ty>, Span)>,
     current: BlockId,
 }
 
 impl BodyLowerer<'_, '_> {
-    fn finish(mut self) -> Body {
+    fn finish(mut self) -> (Body, Vec<(Vec<Ty>, Span)>) {
         // Whatever block execution ends in returns; the layout pass drops the
         // instruction when it is the last line anyway.
         if matches!(
             self.body.block(self.current).terminator,
             Terminator::Unreachable
         ) {
+            // Falling off the end returns nothing, and that counts against the
+            // arity check — but only when it can happen. The block after an
+            // unconditional `return` is not a second return path, and reporting
+            // it as one would reject the ordinary shape where every path
+            // returns explicitly.
+            if self.body.reachable(self.current) {
+                let span = self.body.block(self.current).span;
+                self.returns.push((Vec::new(), span));
+            }
             self.body.terminate(self.current, Terminator::Return);
         }
-        self.body.temps = self.regs.high_water();
-        self.body
+        (self.body, self.returns)
     }
 
-    fn parameters(&mut self, params: &[Name]) {
-        for param in params {
-            // A parameter arrives in a register like any other local. The stack
-            // ABI that puts it there is Phase 3's (§15.11).
-            let Some(slot) = self.claim_local(param.span) else {
-                continue;
-            };
-            self.bind(&param.text, Binding::Local { slot, ty: Ty::Str });
+    /// The callee's half of the calling convention: arguments come off the
+    /// stack in source order, because the caller pushed them in reverse.
+    fn parameters(&mut self, params: &[Name], signature: &Signature) {
+        for (index, param) in params.iter().enumerate() {
+            let slot = self.body.vreg(param.span);
+            self.emit(ir::Instruction::new(
+                "Pop",
+                vec![ir::Arg::dest(slot.clone())],
+            ));
+            self.bind(
+                &param.text,
+                Binding::Local {
+                    slot,
+                    ty: signature.param(index),
+                },
+            );
         }
     }
 
@@ -468,45 +633,19 @@ impl BodyLowerer<'_, '_> {
             .map(|(_, binding)| binding)
     }
 
-    fn claim_local(&mut self, span: Span) -> Option<Slot> {
-        match self.regs.local() {
-            Some(slot) => Some(slot),
-            None => {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::RegisterExhaustion,
-                        span,
-                        "this body needs more registers than the allocator can hand out",
-                    )
-                    .note(
-                        "twenty is not the real limit — the allocator is: it hands locals out \
-                         from `$0` upward and never reclaims one (§12)",
-                    )
-                    .note("split the body into `func`s, or reuse a local"),
-                );
-                None
-            }
-        }
+    /// A slot for a named value. There is nothing to fail here any more:
+    /// twenty registers is a fact about how many values are live at once, and
+    /// [`crate::alloc`] is the only pass that can know that (§9-3).
+    fn claim_local(&mut self, span: Span) -> Slot {
+        self.body.vreg(span)
     }
 
-    fn claim_temp(&mut self, span: Span) -> Option<Slot> {
-        match self.regs.temp() {
-            Some(slot) => Some(slot),
-            None => {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::RegisterExhaustion,
-                        span,
-                        "this expression needs more temporaries than the allocator can hand out",
-                    )
-                    .note(
-                        "temporaries come from `$R9` downward and locals from `$0` upward, so \
-                         the two ends met (§12)",
-                    ),
-                );
-                None
-            }
-        }
+    /// A slot for an intermediate value. Counted, because Phase 2's exit
+    /// criterion is a claim about this number: a fused condition materialises
+    /// nothing, so it never moves.
+    fn claim_temp(&mut self, span: Span) -> Slot {
+        self.body.temps += 1;
+        self.body.vreg(span)
     }
 
     // -- blocks and statements --------------------------------------------
@@ -515,7 +654,6 @@ impl BodyLowerer<'_, '_> {
         self.scopes.push(Vec::new());
         for stmt in block {
             self.stmt(stmt);
-            self.regs.end_statement();
         }
         self.scopes.pop();
     }
@@ -583,23 +721,60 @@ impl BodyLowerer<'_, '_> {
                 ),
             },
 
-            Stmt::Return { values, span } => {
-                if !values.is_empty() {
-                    self.todo(*span, "returning a value");
-                    return;
-                }
-                let next = self.fresh("after_return");
-                self.terminate(Terminator::Return, next);
-            }
+            Stmt::Return { values, span } => self.return_stmt(values, *span),
 
             Stmt::GenericFor { span, .. } => self.todo(*span, "`for … in`"),
         }
     }
 
+    /// `return`, which is the only place a value leaves a body.
+    ///
+    /// Values are pushed in **reverse source order**, so the caller's first
+    /// `Pop` is the first return value — the mirror of the parameter rule, and
+    /// the reason neither side needs an `Exch` (§11, program 4).
+    fn return_stmt(&mut self, values: &[Expr], span: Span) {
+        let mut lowered = Vec::with_capacity(values.len());
+        for value in values {
+            let Some(typed) = self.value(value) else {
+                return;
+            };
+            lowered.push(typed);
+        }
+
+        self.returns
+            .push((lowered.iter().map(|typed| typed.ty).collect(), span));
+
+        for typed in lowered.into_iter().rev() {
+            self.emit(ir::Instruction::new("Push", vec![typed.arg]));
+        }
+
+        let next = self.fresh("after_return");
+        self.terminate(Terminator::Return, next);
+    }
+
     fn local(&mut self, names: &[Name], is_const: bool, values: &[Expr], span: Span) {
+        // `local a, b = f()`: one call, several names. Plural outputs are
+        // invisible at the call site (§11), so the *declaration's* arity is what
+        // decides, and it comes from the signature table rather than from here.
+        if names.len() > 1
+            && values.len() == 1
+            && !is_const
+            && matches!(&values[0], Expr::Call { .. })
+        {
+            let slots: Vec<Slot> = names
+                .iter()
+                .map(|name| self.claim_local(name.span))
+                .collect();
+            let Some(types) = self.call_multi(&values[0], &slots) else {
+                return;
+            };
+            for ((name, slot), ty) in names.iter().zip(slots).zip(types) {
+                self.bind(&name.text, Binding::Local { slot, ty });
+            }
+            return;
+        }
+
         if names.len() != values.len() {
-            // `local a, b = f()` needs the multiple-return ABI, which is
-            // Phase 3's (§15.11).
             self.todo(
                 span,
                 "a `local` with a different number of names and values",
@@ -626,12 +801,10 @@ impl BodyLowerer<'_, '_> {
                 continue;
             }
 
-            // The register is claimed *before* the initialiser is walked, so
+            // The slot is claimed *before* the initialiser is walked, so
             // `local sum = 1 + 1` is one `IntOp` into the local rather than an
             // `IntOp` into a temporary and a `StrCpy` after it (§12).
-            let Some(slot) = self.claim_local(name.span) else {
-                continue;
-            };
+            let slot = self.claim_local(name.span);
             let Some(ty) = self.value_into(value, &slot) else {
                 continue;
             };
@@ -707,7 +880,7 @@ impl BodyLowerer<'_, '_> {
                     entry.0 = ty;
                     entry.1.push(target.span());
                 }
-                (Slot::Reg(_), Some(previous)) if previous != ty => {
+                (_, Some(previous)) if previous != ty => {
                     self.diags.push(
                         Diagnostic::error(
                             Code::TypeConflict,
@@ -844,9 +1017,7 @@ impl BodyLowerer<'_, '_> {
             },
         };
 
-        let Some(slot) = self.claim_local(name.span) else {
-            return;
-        };
+        let slot = self.claim_local(name.span);
         let Some(start_ty) = self.value_into(start, &slot) else {
             return;
         };
@@ -869,13 +1040,11 @@ impl BodyLowerer<'_, '_> {
         let (limit, limit_ty) = match self.constant(end_expr) {
             Some(ConstValue::Int(value)) => (ir::Arg::int(value), ConstValue::Int(value).ty()),
             _ => {
-                let Some(bound) = self.claim_local(end_expr.span()) else {
-                    return;
-                };
+                let bound = self.claim_local(end_expr.span());
                 let Some(ty) = self.value_into(end_expr, &bound) else {
                     return;
                 };
-                (ir::Arg::var(bound.nsis()), ty)
+                (ir::Arg::slot(bound), ty)
             }
         };
         if !limit_ty.is_int() {
@@ -906,7 +1075,7 @@ impl BodyLowerer<'_, '_> {
             },
         )]);
 
-        let counter = ir::Arg::var(slot.nsis());
+        let counter = ir::Arg::slot(slot.clone());
         let op = if step_value > 0 {
             cfg::CmpOp::Le
         } else {
@@ -938,7 +1107,7 @@ impl BodyLowerer<'_, '_> {
         self.emit(ir::Instruction::new(
             "IntOp",
             vec![
-                ir::Arg::raw(slot.nsis()),
+                ir::Arg::dest(slot),
                 counter,
                 ir::Arg::raw("+"),
                 ir::Arg::int(step_value),

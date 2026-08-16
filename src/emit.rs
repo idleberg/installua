@@ -148,13 +148,21 @@ fn line(instruction: &ir::Instruction) -> String {
 fn argument(arg: &ir::Arg) -> String {
     match arg {
         ir::Arg::Raw(value) => value.clone(),
+        // A destination is syntax: a register name and nothing else.
+        ir::Arg::Dest(slot) => slot.nsis(),
         // Two shapes need no quotes at all, and leaving them off is the
         // difference between output a human reads and output they flinch at
         // (§9-6). Both are provably safe: NSIS parses `$0` and `"$0"`
         // identically, and an integer has nothing in it to quote.
-        ir::Arg::Data { pieces, .. } if matches!(pieces.as_slice(), [ir::Piece::Var(_)]) => {
+        ir::Arg::Data { pieces, .. }
+            if matches!(
+                pieces.as_slice(),
+                [ir::Piece::Var(_)] | [ir::Piece::Slot(_)]
+            ) =>
+        {
             match &pieces[0] {
                 ir::Piece::Var(var) => var.clone(),
+                ir::Piece::Slot(slot) => slot.nsis(),
                 ir::Piece::Text(_) => unreachable!(),
             }
         }
@@ -177,6 +185,7 @@ fn argument(arg: &ir::Arg) -> String {
                         escape_into(&mut out, &text);
                     }
                     ir::Piece::Var(var) => out.push_str(var),
+                    ir::Piece::Slot(slot) => out.push_str(&slot.nsis()),
                 }
             }
             out.push('"');

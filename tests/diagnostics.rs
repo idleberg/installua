@@ -90,7 +90,27 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\n\
          installer { section(\"Core\", function() continue() end), }",
     ),
+    (
+        Code::ReturnArity,
+        "attributes { outFile = \"a.exe\" }\n\
+         func(\"maybe\", function()\n\
+         if fileExists(\"x\") then return 1 end\n\
+         end)\n\
+         installer { section(\"Core\", function() maybe() end), }",
+    ),
     (Code::RegisterExhaustion, EXHAUSTED),
+    (
+        Code::DeepRecursion,
+        "attributes { outFile = \"a.exe\" }\n\
+         func(\"countdown\", function(n)\n\
+         if n <= 0 then return 0 end\n\
+         return countdown(n - 1)\n\
+         end)\n\
+         installer { section(\"Core\", function()\n\
+         local left = countdown(4)\n\
+         detailPrint(\"left \" .. left)\n\
+         end), }",
+    ),
     (Code::NotYetImplemented, "uninstaller {}"),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
     (Code::BadFieldValue, r#"attributes { unicode = "yes" }"#),
@@ -101,8 +121,12 @@ const CASES: &[(Code, &str)] = &[
     (Code::MissingAttribute, r#"attributes { name = "Spine" }"#),
 ];
 
-/// Twenty-one locals in one body. Twenty is not the language's limit, it is the
-/// placeholder allocator's, and the diagnostic has to say so (§12).
+/// Twenty-one values **live at once** — the last line reads all of them, so no
+/// two of their live ranges are disjoint and no two can share a register.
+///
+/// Twenty-one *declarations* would no longer do it, which is the point: since
+/// Phase 3 this diagnostic reports a fact about the program rather than a fact
+/// about the allocator (§9-3).
 const EXHAUSTED: &str = concat!(
     "attributes { outFile = \"a.exe\" }\n",
     "installer { section(\"Core\", function()\n",
@@ -111,6 +135,8 @@ const EXHAUSTED: &str = concat!(
     "local a11 = 1 local a12 = 1 local a13 = 1 local a14 = 1 local a15 = 1\n",
     "local a16 = 1 local a17 = 1 local a18 = 1 local a19 = 1 local a20 = 1\n",
     "local a21 = 1\n",
+    "detailPrint(a1 .. a2 .. a3 .. a4 .. a5 .. a6 .. a7 .. a8 .. a9 .. a10\n",
+    "  .. a11 .. a12 .. a13 .. a14 .. a15 .. a16 .. a17 .. a18 .. a19 .. a20 .. a21)\n",
     "end), }",
 );
 

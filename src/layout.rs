@@ -47,16 +47,50 @@ pub fn lay_out(body: &Body) -> Vec<ir::Item> {
         if referenced.contains(id) {
             out.push(ir::Item::Label(block.label.clone()));
         }
-        out.extend(
-            block
-                .instructions
-                .iter()
-                .cloned()
-                .map(ir::Item::Instruction),
-        );
+        for step in &block.steps {
+            expand(body, step, &mut out);
+        }
         out.extend(items);
     }
     out
+}
+
+/// A step, as the lines it becomes.
+///
+/// The whole calling convention is these fourteen lines, and it is here rather
+/// than in the lowerer for the same reason labels are: one place decides, and
+/// everywhere else points at it. Program 4 pins every choice in it (§11).
+fn expand(body: &Body, step: &ir::Step, out: &mut Vec<ir::Item>) {
+    match step {
+        ir::Step::Instruction(instruction) => out.push(ir::Item::Instruction(instruction.clone())),
+
+        // Saves go on **before** the arguments, so the callee's results sit on
+        // top when it returns and the restores fall out underneath them — no
+        // `Exch` anywhere in the convention.
+        ir::Step::Saves(site) => {
+            for save in &body.calls[*site].saves {
+                out.push(instruction("Push", vec![ir::Arg::slot(save.clone())]));
+            }
+        }
+
+        ir::Step::Call(site) => {
+            let site = &body.calls[*site];
+            // Reverse source order, so the callee's first `Pop` is its first
+            // parameter.
+            for arg in site.args.iter().rev() {
+                out.push(instruction("Push", vec![arg.clone()]));
+            }
+            out.push(instruction("Call", vec![ir::Arg::raw(site.callee.clone())]));
+            // The callee pushed its returns in reverse too, so these come off in
+            // source order.
+            for result in &site.results {
+                out.push(instruction("Pop", vec![ir::Arg::dest(result.clone())]));
+            }
+            for save in site.saves.iter().rev() {
+                out.push(instruction("Pop", vec![ir::Arg::dest(save.clone())]));
+            }
+        }
+    }
 }
 
 /// Reverse postorder from the entry.
@@ -70,7 +104,7 @@ pub fn lay_out(body: &Body) -> Vec<ir::Item> {
 ///
 /// Successors are walked in reverse — the else-arm first — precisely so that
 /// reversing puts the *then*-arm first. That is what makes
-/// `IfFileExists "…" 0 _luagen_endif_0` the shape: the arm a reader expects to
+/// `IfFileExists "…" 0 __GENERATED_endif_0` the shape: the arm a reader expects to
 /// run next is the one that costs no jump.
 ///
 /// Blocks never reached are simply not in the result, which is how dead code
@@ -189,10 +223,10 @@ fn terminator(
 
         Terminator::Unreachable => {
             debug_assert!(
-                block.instructions.is_empty(),
-                "a reachable block was never terminated: {} carries {} instruction(s)",
+                block.steps.is_empty(),
+                "a reachable block was never terminated: {} carries {} step(s)",
                 block.label,
-                block.instructions.len()
+                block.steps.len()
             );
             (Vec::new(), Vec::new())
         }

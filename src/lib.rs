@@ -10,16 +10,27 @@
 //! The pipeline (§9-1):
 //!
 //! ```text
-//! source ──frontend──▶ AST ──resolve──▶ symbols ──lower──▶ CFG ──layout──▶ IR ──emit──▶ .nsi
+//! source ─frontend─▶ AST ─resolve─▶ symbols ─lower─▶ CFG ─alloc─▶ registers ─layout─▶ IR ─emit─▶ .nsi
 //! ```
 //!
 //! `resolve` runs to completion before any body is lowered, which is what makes
 //! the language order-free (§15.6) — and it can be, because Installua compiles
 //! rather than executing Lua at build time, so there is no evaluation order for
 //! a declaration to have to precede.
+//!
+//! Two of those arrows are **whole-program** rather than per-body, and both are
+//! fixpoints. `lower` runs repeatedly against a signature table until types stop
+//! changing, because a parameter's type comes from the call sites and a return
+//! type comes from the body (§15.14). `alloc` then colours every body before
+//! [`callgraph`] propagates clobber sets over the SCC condensation, because
+//! caller-saves are `live ∩ clobbered` and neither half exists earlier (§15.11).
+//! The cost is that Installua has no separately-compilable unit — a door closed
+//! deliberately, since an installer is one program with one output.
 
+pub mod alloc;
 pub mod ast;
 pub mod builtins;
+pub mod callgraph;
 pub mod cfg;
 pub mod diag;
 pub mod emit;

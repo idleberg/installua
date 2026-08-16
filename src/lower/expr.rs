@@ -59,7 +59,7 @@ impl BodyLowerer<'_, '_> {
         match expr {
             Expr::Name(name) => match self.lookup(&name.text) {
                 Some(Binding::Local { slot, ty }) => Some(Typed {
-                    arg: ir::Arg::var(slot.nsis()),
+                    arg: ir::Arg::slot(slot.clone()),
                     ty: *ty,
                 }),
                 Some(Binding::Const(value)) => Some(Typed {
@@ -80,7 +80,7 @@ impl BodyLowerer<'_, '_> {
                             .map(|(ty, _)| *ty)
                             .unwrap_or(Ty::Unknown);
                         return Some(Typed {
-                            arg: ir::Arg::var(Slot::Global(name.text.clone()).nsis()),
+                            arg: ir::Arg::slot(Slot::Global(name.text.clone())),
                             ty,
                         });
                     }
@@ -131,10 +131,10 @@ impl BodyLowerer<'_, '_> {
             });
         }
 
-        let slot = self.claim_temp(expr.span())?;
+        let slot = self.claim_temp(expr.span());
         let ty = self.value_into(expr, &slot)?;
         Some(Typed {
-            arg: ir::Arg::var(slot.nsis()),
+            arg: ir::Arg::slot(slot),
             ty,
         })
     }
@@ -149,7 +149,7 @@ impl BodyLowerer<'_, '_> {
         if let Some(simple) = self.simple(expr) {
             self.emit(ir::Instruction::new(
                 "StrCpy",
-                vec![ir::Arg::raw(dest.nsis()), simple.arg],
+                vec![ir::Arg::dest(dest.clone()), simple.arg],
             ));
             return Some(simple.ty);
         }
@@ -162,7 +162,7 @@ impl BodyLowerer<'_, '_> {
                     let value = self.value(expr)?;
                     self.emit(ir::Instruction::new(
                         "StrCpy",
-                        vec![ir::Arg::raw(dest.nsis()), value.arg],
+                        vec![ir::Arg::dest(dest.clone()), value.arg],
                     ));
                     Some(value.ty)
                 }
@@ -181,7 +181,7 @@ impl BodyLowerer<'_, '_> {
                     self.emit(ir::Instruction::new(
                         "IntOp",
                         vec![
-                            ir::Arg::raw(dest.nsis()),
+                            ir::Arg::dest(dest.clone()),
                             ir::Arg::int(0),
                             ir::Arg::raw("-"),
                             operand.arg,
@@ -196,7 +196,7 @@ impl BodyLowerer<'_, '_> {
                     // opcode it accepts.
                     self.emit(ir::Instruction::new(
                         "IntOp",
-                        vec![ir::Arg::raw(dest.nsis()), operand.arg, ir::Arg::raw("~")],
+                        vec![ir::Arg::dest(dest.clone()), operand.arg, ir::Arg::raw("~")],
                     ));
                     Some(Ty::int())
                 }
@@ -276,13 +276,13 @@ impl BodyLowerer<'_, '_> {
         self.current = yes;
         self.emit(ir::Instruction::new(
             "StrCpy",
-            vec![ir::Arg::raw(dest.nsis()), ir::Arg::str(cfg::TRUE)],
+            vec![ir::Arg::dest(dest.clone()), ir::Arg::str(cfg::TRUE)],
         ));
         self.terminate(Terminator::Jump(end), no);
 
         self.emit(ir::Instruction::new(
             "StrCpy",
-            vec![ir::Arg::raw(dest.nsis()), ir::Arg::str(cfg::FALSE)],
+            vec![ir::Arg::dest(dest.clone()), ir::Arg::str(cfg::FALSE)],
         ));
         self.terminate(Terminator::Jump(end), end);
 
@@ -328,7 +328,7 @@ impl BodyLowerer<'_, '_> {
             self.emit(ir::Instruction::new(
                 "IntOp",
                 vec![
-                    ir::Arg::raw(dest.nsis()),
+                    ir::Arg::dest(dest.clone()),
                     lhs.arg,
                     ir::Arg::raw(opcode),
                     rhs.arg,
@@ -357,15 +357,18 @@ impl BodyLowerer<'_, '_> {
         dest: &Slot,
         span: Span,
     ) -> Option<Ty> {
-        let result = self.claim_temp(span)?;
-        let scratch = self.claim_temp(span)?;
-        let (result_arg, scratch_arg) = (ir::Arg::var(result.nsis()), ir::Arg::var(scratch.nsis()));
+        let result = self.claim_temp(span);
+        let scratch = self.claim_temp(span);
+        let (result_arg, scratch_arg) = (
+            ir::Arg::slot(result.clone()),
+            ir::Arg::slot(scratch.clone()),
+        );
 
         let opcode = if op == BinOp::FloorDiv { "/" } else { "%" };
         self.emit(ir::Instruction::new(
             "IntOp",
             vec![
-                ir::Arg::raw(result.nsis()),
+                ir::Arg::dest(result.clone()),
                 lhs.clone(),
                 ir::Arg::raw(opcode),
                 rhs.clone(),
@@ -376,7 +379,7 @@ impl BodyLowerer<'_, '_> {
         self.emit(ir::Instruction::new(
             "IntOp",
             vec![
-                ir::Arg::raw(scratch.nsis()),
+                ir::Arg::dest(scratch.clone()),
                 lhs,
                 ir::Arg::raw("%"),
                 rhs.clone(),
@@ -408,7 +411,7 @@ impl BodyLowerer<'_, '_> {
         self.emit(ir::Instruction::new(
             "IntOp",
             vec![
-                ir::Arg::raw(scratch.nsis()),
+                ir::Arg::dest(scratch.clone()),
                 scratch_arg.clone(),
                 ir::Arg::raw("^"),
                 rhs.clone(),
@@ -438,7 +441,7 @@ impl BodyLowerer<'_, '_> {
         self.emit(ir::Instruction::new(
             "IntOp",
             vec![
-                ir::Arg::raw(result.nsis()),
+                ir::Arg::dest(result.clone()),
                 result_arg.clone(),
                 ir::Arg::raw(operator),
                 operand,
@@ -448,7 +451,7 @@ impl BodyLowerer<'_, '_> {
 
         self.emit(ir::Instruction::new(
             "StrCpy",
-            vec![ir::Arg::raw(dest.nsis()), result_arg],
+            vec![ir::Arg::dest(dest.clone()), result_arg],
         ));
         Some(Ty::int())
     }
@@ -479,22 +482,13 @@ impl BodyLowerer<'_, '_> {
             }
         };
 
-        if let Some(function) = self.resolved.functions.get(&name) {
-            if !function.params.is_empty() || !args.is_empty() {
-                // Arguments travel on the stack, and who saves what across the
-                // call is §15.11's clobber analysis — Phase 3.
-                self.todo(span, "a `func` with parameters");
-                return None;
-            }
-            if dest.is_some() {
-                self.todo(span, "a `func` that returns a value");
-                return None;
-            }
-            self.emit(ir::Instruction::new(
-                "Call",
-                vec![ir::Arg::raw(function.name.clone())],
-            ));
-            return None;
+        if self.resolved.functions.contains_key(&name) {
+            let dests: Vec<Slot> = dest.cloned().into_iter().collect();
+            // Lua adjusts a call in single-value position to one value, so a
+            // `func` returning two used as `local x = f()` keeps the first and
+            // drops the second — which still has to come off the stack.
+            let types = self.call_function(&name, args, &dests, span)?;
+            return types.first().copied();
         }
 
         let Some(builtin) = builtins::lookup(&name) else {
@@ -581,7 +575,7 @@ impl BodyLowerer<'_, '_> {
 
             Kind::Instruction => match (builtin.returns, dest) {
                 (Some(ty), Some(dest)) => {
-                    let mut all = vec![ir::Arg::raw(dest.nsis())];
+                    let mut all = vec![ir::Arg::dest(dest.clone())];
                     all.extend(lowered);
                     self.emit(ir::Instruction::new(builtin.nsis, all));
                     Some(ty)
@@ -590,8 +584,8 @@ impl BodyLowerer<'_, '_> {
                     // The instruction has an output register whether or not
                     // anybody wanted one, so it gets a temporary rather than a
                     // guess at which register is spare.
-                    let slot = self.claim_temp(span)?;
-                    let mut all = vec![ir::Arg::raw(slot.nsis())];
+                    let slot = self.claim_temp(span);
+                    let mut all = vec![ir::Arg::dest(slot)];
                     all.extend(lowered);
                     self.emit(ir::Instruction::new(builtin.nsis, all));
                     Some(ty)
@@ -613,6 +607,106 @@ impl BodyLowerer<'_, '_> {
                 }
             },
         }
+    }
+
+    /// `local a, b = f(x)`. Several names, one call.
+    pub(super) fn call_multi(&mut self, call: &Expr, dests: &[Slot]) -> Option<Vec<Ty>> {
+        let Expr::Call { callee, args, span } = call else {
+            self.todo(call.span(), "this call");
+            return None;
+        };
+        let name = callee_path(callee)?;
+        if !self.resolved.functions.contains_key(&name) {
+            // A builtin with several outputs is a header macro — `${GetSize}`
+            // writes three — and those arrive with the overlay (§15.23).
+            self.todo(*span, "binding several values from this call");
+            return None;
+        }
+        self.call_function(&name, args, dests, *span)
+    }
+
+    /// A call to a `func`, which is the only thing in the language with a
+    /// calling convention (§15.11, §11 program 4).
+    ///
+    /// The three steps here are all the lowerer knows: reserve the site, mark
+    /// where the saves go, then evaluate arguments *after* that mark. What the
+    /// saves are is not knowable until registers exist, and that is
+    /// [`crate::alloc`]'s job.
+    fn call_function(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        dests: &[Slot],
+        span: Span,
+    ) -> Option<Vec<Ty>> {
+        let params = self.resolved.functions.get(name).map(|f| f.params.len())?;
+        if args.len() != params {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{name}` takes {params} argument(s), and {} were given",
+                        args.len()
+                    ),
+                )
+                .note("arguments travel on the stack, so a miscount is a stack that unbalances"),
+            );
+            return None;
+        }
+
+        let site = self.body.call_site(name, span);
+        let current = self.current;
+        self.body.push_step(current, ir::Step::Saves(site));
+
+        let mut lowered = Vec::with_capacity(args.len());
+        for (index, argument) in args.iter().enumerate() {
+            let value = self.value(argument)?;
+            // What a parameter's type is comes from here — there are no
+            // annotations, so the call sites are the only evidence (§15.14).
+            self.learned.learn_param(name, index, value.ty);
+            lowered.push(value.arg);
+        }
+
+        let signature = self.known.signature(name).cloned().unwrap_or_default();
+        // In the first round nothing has been observed returning anything, so
+        // the binding's own count stands in. A real disagreement is reported
+        // once the table has settled.
+        let arity = signature.arity().unwrap_or(dests.len());
+        if dests.len() > arity {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{name}` returns {arity} value(s), and {} are being bound",
+                        dests.len()
+                    ),
+                )
+                .note("there is no `nil` to pad with (§3)"),
+            );
+            return None;
+        }
+
+        let mut results = Vec::with_capacity(arity);
+        let mut types = Vec::with_capacity(arity);
+        for index in 0..arity {
+            results.push(match dests.get(index) {
+                Some(slot) => slot.clone(),
+                // A dropped return still needs a slot: the callee pushed it
+                // either way, so it has to come off (§11, program 4).
+                None => self.body.vreg(span),
+            });
+            types.push(signature.result(index));
+        }
+
+        self.body.calls[site].args = lowered;
+        self.body.calls[site].results = results;
+        // Argument lowering can have opened new blocks — a `bool` argument
+        // materialises into two — so the call goes wherever lowering is *now*.
+        let current = self.current;
+        self.body.push_step(current, ir::Step::Call(site));
+        Some(types)
     }
 
     // -- condition fusion -------------------------------------------------

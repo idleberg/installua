@@ -21,6 +21,8 @@
 //! because a widening is a smaller change than a reordering.
 
 use crate::cfg;
+use crate::diag::Span;
+use crate::regs::Slot;
 
 /// A whole `.nsi` file.
 #[derive(Clone, Debug, Default)]
@@ -68,6 +70,29 @@ impl Module {
         }
         all.into_iter()
     }
+
+    /// The same, for the passes that rewrite a body in place: register
+    /// allocation and caller-save insertion (§9-3, §15.11).
+    pub fn bodies_mut(&mut self) -> Vec<(String, &mut cfg::Body)> {
+        let mut all: Vec<(String, &mut cfg::Body)> = self
+            .functions
+            .iter_mut()
+            .map(|f| (f.name.clone(), &mut f.body))
+            .collect();
+        for item in &mut self.sections {
+            match item {
+                SectionItem::Section(section) => {
+                    all.push((section.name.clone(), &mut section.body))
+                }
+                SectionItem::Group(group) => {
+                    for section in &mut group.sections {
+                        all.push((section.name.clone(), &mut section.body));
+                    }
+                }
+            }
+        }
+        all
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -114,6 +139,61 @@ pub enum Item {
     Label(String),
 }
 
+/// One entry in a basic block.
+///
+/// A call is not an instruction, because the instructions it becomes are not
+/// all known when it is lowered: the caller-saves around it are `live ∩
+/// clobbered`, and neither half exists until registers have been coloured and
+/// the interprocedural fixpoint has run (§15.11). So lowering records the two
+/// *places* — where the saves go and where the call goes — and
+/// [`crate::alloc`] fills in the registers between them.
+///
+/// The two are separate steps rather than one because the saves sit **before**
+/// the argument evaluation, not merely before the argument pushes: that is what
+/// keeps the callee's results on top of the stack when it returns, so the
+/// restores fall out underneath them without a single `Exch`.
+#[derive(Clone, Debug)]
+pub enum Step {
+    Instruction(Instruction),
+    /// Push the caller-saves for call site `n`.
+    Saves(usize),
+    /// Push the arguments, `Call`, pop the results, pop the saves.
+    Call(usize),
+}
+
+impl Step {
+    pub fn instruction(name: impl Into<String>, args: Vec<Arg>) -> Step {
+        Step::Instruction(Instruction::new(name, args))
+    }
+}
+
+/// A call site, in the order the stack sees it.
+///
+/// The convention is program 4's, and it is written here rather than discovered
+/// from whichever code path was implemented first:
+///
+///   1. arguments are pushed in **reverse source order**, so the callee's first
+///      `Pop` is its first parameter;
+///   2. returns are pushed in **reverse source order**, so the caller's first
+///      `Pop` is the first return value;
+///   3. caller-saves are pushed **before** the arguments, ascending register
+///      number, and restored in reverse.
+#[derive(Clone, Debug)]
+pub struct CallSite {
+    /// The NSIS `Function` name.
+    pub callee: String,
+    /// Argument values, in source order.
+    pub args: Vec<Arg>,
+    /// Where the returned values land, in source order. A dropped return still
+    /// gets one: the callee pushed it either way, so it has to come off.
+    pub results: Vec<Slot>,
+    /// `live ∩ clobbered`, ascending. Empty until [`crate::alloc`] fills it,
+    /// and empty afterwards too whenever the intersection really is empty —
+    /// which is the common case, and the whole argument for caller-saves.
+    pub saves: Vec<Slot>,
+    pub span: Span,
+}
+
 /// `name` is a `String` and not `&'static str` because macro invocations
 /// (`${WinVerGetMajor}`) and plugin calls (`System::Call`) are composed rather
 /// than looked up whole.
@@ -130,6 +210,40 @@ impl Instruction {
             args,
         }
     }
+
+    /// The values this instruction reads.
+    pub fn uses(&self) -> Vec<Slot> {
+        let mut out = Vec::new();
+        for arg in &self.args {
+            arg.uses(&mut out);
+        }
+        out
+    }
+
+    /// The values it writes. A destination is an [`Arg::Dest`] wherever it
+    /// appears in the argument list, so an instruction whose output is not
+    /// first — and §13 found several — needs no special case here.
+    pub fn defs(&self) -> Vec<Slot> {
+        self.args
+            .iter()
+            .filter_map(|arg| match arg {
+                Arg::Dest(slot) => Some(slot.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn recolour(&mut self, colour: &dyn Fn(u32) -> u8) {
+        for arg in &mut self.args {
+            arg.recolour(colour);
+        }
+    }
+}
+
+fn recolour_slot(slot: &mut Slot, colour: &dyn Fn(u32) -> u8) {
+    if let Slot::Virtual(index) = *slot {
+        *slot = Slot::Reg(colour(index));
+    }
 }
 
 /// One span of an argument's text.
@@ -144,9 +258,13 @@ impl Instruction {
 pub enum Piece {
     /// Literal text. Escaped on the way out.
     Text(String),
-    /// An NSIS variable or define, already in NSIS spelling: `$0`, `$INSTDIR`,
+    /// An NSIS variable or define the *compiler* does not own: `$INSTDIR`,
     /// `${VERSION}`. Spliced in bare.
     Var(String),
+    /// A read of an allocated value. Distinct from [`Piece::Var`] because this
+    /// is the one the register allocator rewrites and liveness counts as a use
+    /// — a `$INSTDIR` spliced into a template is neither.
+    Slot(Slot),
 }
 
 /// Whether the emitter quotes and escapes an argument — the data-versus-syntax
@@ -164,6 +282,10 @@ pub enum Arg {
     },
     /// Syntax. Emitted exactly as written, unquoted.
     Raw(String),
+    /// A destination register: syntax, and — the reason it is a variant rather
+    /// than a `Raw` holding `"$0"` — a **definition**, which is half of what
+    /// liveness reads (§9-3).
+    Dest(Slot),
 }
 
 impl Arg {
@@ -182,9 +304,19 @@ impl Arg {
         Arg::str(value.to_string())
     }
 
-    /// A register or constant read: `$0`, `$INSTDIR`.
+    /// A constant read the compiler does not own: `$INSTDIR`, `${VERSION}`.
     pub fn var(nsis: impl Into<String>) -> Self {
         Arg::data(vec![Piece::Var(nsis.into())])
+    }
+
+    /// A read of an allocated value.
+    pub fn slot(slot: Slot) -> Self {
+        Arg::data(vec![Piece::Slot(slot)])
+    }
+
+    /// A write to an allocated value.
+    pub fn dest(slot: Slot) -> Self {
+        Arg::Dest(slot)
     }
 
     pub fn raw(value: impl Into<String>) -> Self {
@@ -212,6 +344,35 @@ impl Arg {
         }
     }
 
+    /// Every value this argument *reads*. A [`Arg::Dest`] reads nothing: NSIS
+    /// destinations are whole writes, so `StrCpy $0 "x"` kills `$0` rather than
+    /// updating it, and treating it otherwise would keep dead values alive
+    /// across half the program.
+    pub fn uses(&self, out: &mut Vec<Slot>) {
+        if let Arg::Data { pieces, .. } = self {
+            for piece in pieces {
+                if let Piece::Slot(slot) = piece {
+                    out.push(slot.clone());
+                }
+            }
+        }
+    }
+
+    /// Applies the allocator's colouring, in place.
+    pub fn recolour(&mut self, colour: &dyn Fn(u32) -> u8) {
+        match self {
+            Arg::Dest(slot) => recolour_slot(slot, colour),
+            Arg::Data { pieces, .. } => {
+                for piece in pieces {
+                    if let Piece::Slot(slot) = piece {
+                        recolour_slot(slot, colour);
+                    }
+                }
+            }
+            Arg::Raw(_) => {}
+        }
+    }
+
     /// The whole argument as literal text, when nothing in it is a register.
     /// Constant folding asks this; nothing else should.
     pub fn as_text(&self) -> Option<String> {
@@ -220,11 +381,11 @@ impl Arg {
                 .iter()
                 .map(|piece| match piece {
                     Piece::Text(text) => Some(text.as_str()),
-                    Piece::Var(_) => None,
+                    Piece::Var(_) | Piece::Slot(_) => None,
                 })
                 .collect::<Option<Vec<_>>>()
                 .map(|parts| parts.concat()),
-            Arg::Raw(_) => None,
+            Arg::Raw(_) | Arg::Dest(_) => None,
         }
     }
 
@@ -234,10 +395,12 @@ impl Arg {
         let (mut pieces, path) = match self {
             Arg::Data { pieces, path } => (pieces, path),
             Arg::Raw(text) => (vec![Piece::Text(text)], false),
+            Arg::Dest(slot) => (vec![Piece::Slot(slot)], false),
         };
         let (rhs, rhs_path) = match other {
             Arg::Data { pieces, path } => (pieces, path),
             Arg::Raw(text) => (vec![Piece::Text(text)], false),
+            Arg::Dest(slot) => (vec![Piece::Slot(slot)], false),
         };
         for piece in rhs {
             match (pieces.last_mut(), piece) {

@@ -146,8 +146,14 @@ pub enum Code {
     /// is NSIS-shaped rather than arbitrary, and it reports the disagreement
     /// rather than privileging whichever line came first (§15.24).
     TypeConflict,
-    /// A call with the wrong number of arguments.
+    /// A call with the wrong number of arguments, or a binding that wants more
+    /// values than the callee returns.
     WrongArity,
+    /// A `func` returning a different number of values on two paths. `Call` has
+    /// no arity at all — the callee pushes and the caller pops — so a
+    /// disagreement is a stack that unbalances at runtime with no diagnostic
+    /// from NSIS (§3).
+    ReturnArity,
 
     // -- lowering
     /// `break` outside a loop.
@@ -155,9 +161,14 @@ pub enum Code {
     /// `continue()` outside a loop. It is a call that jumps (§8), so unlike
     /// `break` it parses anywhere.
     ContinueOutsideLoop,
-    /// The placeholder register file ran out. Twenty is not the real limit —
-    /// the allocator is (§12).
+    /// More values live at once than NSIS has registers. Unlike Phase 2's
+    /// placeholder, this is the real limit: values whose live ranges do not
+    /// overlap already share a register (§9-3).
     RegisterExhaustion,
+    /// Unbounded recursion. A **warning**, because it is legal and sometimes
+    /// intended — and one worth having, since §3 measured the failure as a
+    /// silent process death at roughly 1300 frames (§15.11).
+    DeepRecursion,
     /// Well-formed, whitelisted, and outside what this version emits. This is
     /// the honest edge of the vertical slice (PLAN §0), not a parse failure.
     NotYetImplemented,
@@ -199,9 +210,11 @@ impl Code {
         Code::TypeMismatch,
         Code::TypeConflict,
         Code::WrongArity,
+        Code::ReturnArity,
         Code::BreakOutsideLoop,
         Code::ContinueOutsideLoop,
         Code::RegisterExhaustion,
+        Code::DeepRecursion,
         Code::NotYetImplemented,
         Code::UnknownField,
         Code::BadFieldValue,
@@ -236,9 +249,11 @@ impl Code {
             Code::TypeMismatch => "type-mismatch",
             Code::TypeConflict => "type-conflict",
             Code::WrongArity => "wrong-arity",
+            Code::ReturnArity => "return-arity",
             Code::BreakOutsideLoop => "break-outside-loop",
             Code::ContinueOutsideLoop => "continue-outside-loop",
             Code::RegisterExhaustion => "register-exhaustion",
+            Code::DeepRecursion => "deep-recursion",
             Code::NotYetImplemented => "not-yet-implemented",
             Code::UnknownField => "unknown-field",
             Code::BadFieldValue => "bad-field-value",

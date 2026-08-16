@@ -47,7 +47,7 @@ exactly that, and the output had `Return` in the middle with two orphaned arms t
 Reverse postorder places a block after the blocks that reach it, which puts a join after
 both arms and a loop's exit after its body. Successors are then walked *in reverse* — the
 else-arm first — precisely so that reversing puts the then-arm first, which is what makes
-`IfFileExists "…" 0 _luagen_endif_0` the shape rather than its mirror.
+`IfFileExists "…" 0 __GENERATED_endif_0` the shape rather than its mirror.
 
 ### A `bool` is `1` and `0`, and it is a `StrCmp`
 
@@ -106,7 +106,9 @@ speculative declaration. Recorded here so the choice is visible rather than infe
    the spelling"*, so that is what shipped. It is one constant —
    [`cfg::LABEL_PREFIX`](src/cfg.rs) — and changing it rewrites two golden files, which is
    exactly the churn §15.19 argued against for the *product* name and accepted for this one.
-   **Worth a ruling.**
+   **Ruled during Phase 3: `__GENERATED_`** — neither spelling, uppercase and
+   double-underscored so a generated label is unmistakably not a user's line in a diff. The
+   two golden files were regenerated and the constant is unchanged in kind.
 2. **`Ty::Unknown` has no producer yet, so it has no dedicated diagnostic.** §15.14 wants
    unknown-at-a-comparison to be a hard error naming both operands, and it is — but as
    `type-mismatch`, whose message names both types. A separate code would fail the registry
