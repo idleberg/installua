@@ -221,6 +221,9 @@ pub struct Instruction {
     /// repeated-filespec branch. The error names both spellings (§15.23).
     pub conflicts: &'static [&'static [&'static str]],
     pub note: Note,
+    /// A `bool`-valued call rather than a statement (§15.20). See
+    /// [`overlay::Row::predicate`].
+    pub predicate: bool,
 }
 
 impl Instruction {
@@ -232,6 +235,38 @@ impl Instruction {
 
     pub fn inputs(&self) -> impl Iterator<Item = &Param> {
         self.params.iter().filter(|param| param.dir() == Dir::In)
+    }
+
+    /// The positions a *user* writes: the inputs, minus the ones the compiler
+    /// fills. A `Kind::Label` is an argument to NSIS and not to Installua, so
+    /// `fileExists(p)` takes one argument where `IfFileExists` takes three
+    /// (§15.20).
+    pub fn surface(&self) -> impl Iterator<Item = &Param> {
+        self.inputs().filter(|param| param.kind != Kind::Label)
+    }
+
+    /// What the call evaluates to: the first output's type, because that is
+    /// what an output *is* (§15.23). A predicate's branch supplies its own
+    /// `bool` and it has no output register to read.
+    pub fn returns(&self) -> Option<Ty> {
+        if self.predicate {
+            return Some(Ty::Bool);
+        }
+        self.outputs().next().map(|param| param.ty)
+    }
+
+    /// The smallest legal argument count: the bracketed positions in
+    /// `-CMDHELP` are genuinely optional and NSIS defaults them.
+    pub fn arity(&self) -> std::ops::RangeInclusive<usize> {
+        let surface: Vec<&Param> = self.surface().collect();
+        let required = surface.iter().filter(|param| param.required()).count();
+        // A repeated trailing position — `File a b c` — has no upper bound, and
+        // `usize::MAX` is the honest spelling of that rather than a guess.
+        let most = match surface.last() {
+            Some(param) if param.shape.rep == Rep::Many => usize::MAX,
+            _ => surface.len(),
+        };
+        required..=most
     }
 }
 
@@ -355,6 +390,7 @@ fn join() -> Vec<Instruction> {
                 options: skeleton.options,
                 conflicts: row.map(|row| row.conflicts).unwrap_or(&[]),
                 note: skeleton.note,
+                predicate: row.is_some_and(|row| row.predicate),
             }
         })
         .collect()

@@ -127,3 +127,7 @@ SectionEnd
 Section "WriteUninstaller"
   WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
+
+Section "un.Uninstall"
+  RMDir $INSTDIR
+SectionEnd

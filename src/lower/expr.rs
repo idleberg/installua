@@ -22,12 +22,13 @@
 //! `messageBox` (§15.18).
 
 use crate::ast::*;
-use crate::builtins::{self, Kind};
+use crate::builtins;
 use crate::cfg::{self, BlockId, CmpOp, Terminator, Test};
 use crate::diag::{Code, Diagnostic, Span};
 use crate::ir;
 use crate::regs::Slot;
 use crate::resolve::ConstValue;
+use crate::table;
 use crate::types::{Sign, Ty};
 
 use super::{Binding, BodyLowerer};
@@ -550,15 +551,20 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
 
-        if args.len() != builtin.params.len() {
+        // The user-facing positions: the inputs, minus the ones the compiler
+        // fills. `fileExists(p)` takes one argument where `IfFileExists` takes
+        // three, and that difference is §15.20's whole point.
+        let params: Vec<&table::Param> = builtin.surface().collect();
+        let name = builtin.installua.unwrap_or(builtin.nsis);
+        let arity = builtin.arity();
+        if !arity.contains(&args.len()) {
             self.diags.push(
                 Diagnostic::error(
                     Code::WrongArity,
                     span,
                     format!(
-                        "`{}` takes {} argument(s), and {} were given",
-                        builtin.installua,
-                        builtin.params.len(),
+                        "`{name}` takes {}, and {} were given",
+                        arguments(&arity),
                         args.len()
                     ),
                 )
@@ -568,17 +574,18 @@ impl BodyLowerer<'_, '_> {
         }
 
         let mut lowered = Vec::with_capacity(args.len());
-        for (argument, param) in args.iter().zip(builtin.params) {
+        for (index, argument) in args.iter().enumerate() {
+            // A repeated trailing position — `File a b c` — annotates every
+            // argument past the last one with the last one's own type, because
+            // that is what the repetition means.
+            let param = params.get(index).or_else(|| params.last())?;
             let value = self.value(argument)?;
             if param.ty != Ty::Unknown && value.ty != param.ty && value.ty != Ty::Unknown {
                 self.diags.push(
                     Diagnostic::error(
                         Code::TypeMismatch,
                         argument.span(),
-                        format!(
-                            "`{}` wants a {}, and this is a {}",
-                            builtin.installua, param.ty, value.ty
-                        ),
+                        format!("`{name}` wants a {}, and this is a {}", param.ty, value.ty),
                     )
                     .note(
                         "types come from the instruction table, never from an annotation (§15.14)",
@@ -588,29 +595,25 @@ impl BodyLowerer<'_, '_> {
             }
             // Pathness is decided at the parameter, so the expression lowerer
             // never has to know where its result is going (§15.23).
-            lowered.push(if param.path {
+            lowered.push(if param.kind == table::Kind::Path {
                 value.arg.into_path()
             } else {
                 value.arg
             });
         }
 
-        match builtin.kind {
-            Kind::Predicate => match dest {
+        match builtin.predicate {
+            true => match dest {
                 Some(dest) => self.materialise(call, dest, span),
                 None => {
                     self.diags.push(
                         Diagnostic::error(
                             Code::NotYetImplemented,
                             span,
-                            format!(
-                                "`{}` answers a question that nothing reads",
-                                builtin.installua
-                            ),
+                            format!("`{name}` answers a question that nothing reads"),
                         )
                         .note(format!(
-                            "write `local answer = {}(…)`, or use it directly in an `if`",
-                            builtin.installua
+                            "write `local answer = {name}(…)`, or use it directly in an `if`"
                         ))
                         .note(
                             "it is never optimised away — `IfErrors` clears the flag it reads, \
@@ -621,7 +624,7 @@ impl BodyLowerer<'_, '_> {
                 }
             },
 
-            Kind::Instruction => match (builtin.returns, dest) {
+            false => match (builtin.returns(), dest) {
                 (Some(ty), Some(dest)) => {
                     let mut all = vec![ir::Arg::dest(dest.clone())];
                     all.extend(lowered);
@@ -643,7 +646,7 @@ impl BodyLowerer<'_, '_> {
                         Diagnostic::error(
                             Code::TypeMismatch,
                             span,
-                            format!("`{}` produces no value", builtin.installua),
+                            format!("`{name}` produces no value"),
                         )
                         .note(format!("`{}` writes to no register (§15.23)", builtin.nsis)),
                     );
@@ -1623,15 +1626,16 @@ impl BodyLowerer<'_, '_> {
             Expr::Call { callee, args, span } => {
                 let predicate = callee_path(callee)
                     .and_then(|name| builtins::lookup(&name))
-                    .filter(|builtin| builtin.kind == Kind::Predicate);
+                    .filter(|builtin| builtin.predicate);
                 match predicate {
-                    Some(builtin) if args.len() == builtin.params.len() => {
+                    Some(builtin) if builtin.arity().contains(&args.len()) => {
+                        let params: Vec<&table::Param> = builtin.surface().collect();
                         let mut lowered = Vec::with_capacity(args.len());
-                        for (argument, param) in args.iter().zip(builtin.params) {
+                        for (argument, param) in args.iter().zip(params) {
                             let Some(value) = self.value(argument) else {
                                 return;
                             };
-                            lowered.push(if param.path {
+                            lowered.push(if param.kind == table::Kind::Path {
                                 value.arg.into_path()
                             } else {
                                 value.arg
@@ -1854,6 +1858,17 @@ const BUTTONS: &[ButtonSet] = &[
         answers: &["YES", "NO", "CANCEL"],
     },
 ];
+
+/// An arity, said the way a reader counts. `-CMDHELP` brackets are genuine
+/// optionality — `CreateShortcut` takes two arguments or seven — so an error
+/// saying "takes 7" about a call that gave 2 would be false.
+fn arguments(arity: &std::ops::RangeInclusive<usize>) -> String {
+    match (*arity.start(), *arity.end()) {
+        (least, usize::MAX) => format!("{least} or more argument(s)"),
+        (least, most) if least == most => format!("{least} argument(s)"),
+        (least, most) => format!("{least} to {most} argument(s)"),
+    }
+}
 
 /// The dotted name a callee spells: `detailPrint`, `string.len`. Three
 /// namespaces exist and NSIS enforces the boundary between them (§13), so the

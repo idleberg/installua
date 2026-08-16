@@ -52,6 +52,14 @@ pub struct Row {
     /// Mutually exclusive option sets: `File`'s `/oname=` branch against its
     /// repeated-filespec branch. The error names both spellings (§15.23).
     pub conflicts: &'static [&'static [&'static str]],
+    /// A branching instruction read as an ordinary `bool`-valued call (§15.20):
+    /// `if fileExists(p) then` fuses into the branch and `local ok =
+    /// fileExists(p)` materialises, from this one bit.
+    ///
+    /// It cannot be derived from [`Kind::Label`], which is the obvious guess:
+    /// `MessageBox` has label positions and is not a predicate. The label kind
+    /// says *the compiler fills this*; this says *the call answers a question*.
+    pub predicate: bool,
 }
 
 const fn ann(ty: Ty, kind: Kind) -> Ann {
@@ -66,6 +74,7 @@ const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) 
         class,
         params: &[],
         conflicts: &[],
+        predicate: false,
     }
 }
 
@@ -82,6 +91,21 @@ const fn exposed(
         params,
         example: Some(example),
         ..row(nsis, Some(installua), Class::Exposed)
+    }
+}
+
+/// An `Exposed` row whose call site is a question rather than a statement
+/// (§15.20). The `Kind::Label` positions are the compiler's; the surface takes
+/// the ones before them.
+const fn predicate(
+    nsis: &'static str,
+    installua: &'static str,
+    params: &'static [Ann],
+    example: &'static str,
+) -> Row {
+    Row {
+        predicate: true,
+        ..exposed(nsis, installua, params, example)
     }
 }
 
@@ -450,13 +474,17 @@ pub const ROWS: &[Row] = &[
         "IfAbort",
         "an installer-wide flag or mode: one overlay row each",
     ),
-    exposed(
+    // `IfErrors` **clears** the flag it reads — verified under wine (§15.20) —
+    // so the call is the side effect and eliminating it when its result is
+    // unused would silently break error handling. Nothing eliminates calls
+    // today; when something does, this comment is the reason it must not.
+    predicate(
         "IfErrors",
         "errors",
         &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
         "clearErrors()\nif errors() then detailPrint(\"failed\") end",
     ),
-    exposed(
+    predicate(
         "IfFileExists",
         "fileExists",
         &[
@@ -470,7 +498,7 @@ pub const ROWS: &[Row] = &[
         "IfRebootFlag",
         "an installer-wide flag or mode: one overlay row each",
     ),
-    exposed(
+    predicate(
         "IfSilent",
         "silent",
         &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],

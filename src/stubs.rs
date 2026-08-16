@@ -23,7 +23,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use crate::builtins::{self, Builtin};
+use crate::builtins;
 use crate::table::{self, Class, Param};
 use crate::types::Ty;
 
@@ -311,7 +311,7 @@ fn instructions() -> String {
         // A predicate has no output *parameter* — the branch supplies the value
         // — so its return type comes from the builtin rather than from the row
         // (§15.20). The two tables meet here and nowhere else.
-        if builtins::lookup(name).is_some_and(|builtin| builtin.kind == builtins::Kind::Predicate) {
+        if builtins::lookup(name).is_some_and(|builtin| builtin.predicate) {
             out.push_str("---@return boolean\n");
         }
         let _ = writeln!(out, "function {name}({}) end\n", names.join(", "));
@@ -630,12 +630,4 @@ pub fn selene_toml() -> String {
          [lints]\n\
          deprecated = \"deny\"\n",
     )
-}
-
-/// One `Builtin` the table does not carry, kept out of the generated stub on
-/// purpose: a `LoweringTarget` must never autocomplete, or
-/// `intCmp(a, b, "yes", "no", "maybe")` reappears in completion and §8's
-/// condition design is bypassed on day one (§15.23).
-pub fn never_completed(builtin: &Builtin) -> bool {
-    table::by_nsis(builtin.nsis).is_some_and(|entry| entry.class != Class::Exposed)
 }

@@ -23,5 +23,12 @@ examples/**/*-setup.exe
 examples/*/assets/*.ico
 examples/*/assets/*.exe
 
+# Tier 3 for the overlay examples writes the script where the fixtures are and
+# removes it again; these are what an interrupted run leaves behind. The
+# fixtures themselves are committed -- unlike the examples' artwork, they are
+# small, real files of their type and every test needs them present.
+tests/fixtures/assembling.nsi
+tests/fixtures/*.exe
+
 # lua-language-server scratch (--logpath, --check_out_path)
 verification/**/.out*

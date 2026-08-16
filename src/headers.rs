@@ -14,8 +14,19 @@
 //! value. That is why an output is a `Param` position rather than a `returns`
 //! field the way an instruction's is (§15.23).
 
-use crate::builtins::Param;
 use crate::types::Ty;
+
+/// One macro argument. Deliberately *not* [`crate::table::Param`]: an
+/// instruction's parameter is a row of `-CMDHELP` with a direction, optionality
+/// and enum members, and a macro's is a positional slot in an `!insertmacro`
+/// with none of those. Sharing the struct would mean carrying four fields that
+/// can never be anything but their defaults.
+#[derive(Clone, Copy, Debug)]
+pub struct Param {
+    pub ty: Ty,
+    /// A path position: `/` is normalised to `\` (§5).
+    pub path: bool,
+}
 
 pub struct Macro {
     /// The header it comes from, without the `.nsh`.

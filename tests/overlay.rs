@@ -15,6 +15,9 @@
 //! mandatory example pair" is only data entry if the *mandatory* half is
 //! enforced; otherwise it is a debate about whether this one needs a test.
 
+use std::path::Path;
+use std::process::Command;
+
 use installua::diag::Diagnostics;
 use installua::table::{self, Class};
 
@@ -38,7 +41,13 @@ fn program() -> String {
         source.push_str("\tend),\n");
     }
 
-    source.push_str("}\n");
+    // `WriteUninstaller` with no uninstaller is *"Error: no Uninstall section
+    // specified"* — a whole-script fact, not a per-line one, so no example can
+    // carry it and the program has to. This is the first thing tier 3 caught,
+    // and it had been in the golden since the day the row was written.
+    source.push_str(
+        "}\n\nuninstaller {\n\tsection(\"Uninstall\", function()\n\t\trmDir(INSTDIR)\n\tend),\n}\n",
+    );
     source
 }
 
@@ -93,6 +102,66 @@ fn the_examples_match_their_golden() {
         built, expected,
         "regenerate with:\n  cargo test --test overlay -- --ignored write_the_golden"
     );
+}
+
+/// Tier 3, with an empty warning allowlist (§14).
+///
+/// The golden above answers *"did the output change?"*. Only `makensis`
+/// answers *"is the output valid NSIS?"*, and the two are not the same
+/// question: swap `CreateShortcut`'s link and target and the golden passes
+/// forever, because it records what the compiler emits rather than what NSIS
+/// accepts. Phase 6 writes a row per command from a `-CMDHELP` line somebody
+/// read, so that is the failure this is here for.
+///
+/// Skips cleanly when there is no `makensis`, the same trade §14 makes
+/// everywhere else.
+#[test]
+fn the_examples_assemble_under_wx() {
+    let Some(makensis) = makensis() else {
+        eprintln!("skipping: `makensis` is not installed");
+        return;
+    };
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(&program(), &mut diags)
+        .unwrap_or_else(|| panic!("{}", diags.render("overlay-examples.lua")));
+
+    // `File` resolves relative to the script, so the script goes where the
+    // fixtures are — see tests/fixtures/README.md.
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures");
+    let script = fixtures.join("assembling.nsi");
+    std::fs::write(&script, &built).expect("write the script");
+
+    let output = Command::new(&makensis)
+        .arg("-WX")
+        .arg(&script)
+        .current_dir(&fixtures)
+        .output()
+        .expect("run makensis");
+
+    let _ = std::fs::remove_file(&script);
+    let _ = std::fs::remove_file(fixtures.join("examples.exe"));
+
+    assert!(
+        output.status.success(),
+        // Both streams: `makensis` prints its progress to stdout and the line
+        // that says why to stderr, and only one of those is the message.
+        "makensis -WX rejected the overlay examples:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn makensis() -> Option<String> {
+    let name = std::env::var("MAKENSIS").unwrap_or_else(|_| "makensis".to_string());
+    Command::new(&name)
+        .arg("-VERSION")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|_| name)
 }
 
 /// Regenerates the golden and the source beside it. Ignored, because a test

@@ -91,3 +91,9 @@ installer {
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
 	end),
 }
+
+uninstaller {
+	section("Uninstall", function()
+		rmDir(INSTDIR)
+	end),
+}

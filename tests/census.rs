@@ -206,6 +206,47 @@ fn the_snapshot_matches_the_local_makensis() {
 }
 
 #[test]
+fn only_an_exposed_row_is_callable() {
+    // The lowerer used to read a second table, and this is the invariant that
+    // replaced it: `builtins::lookup` answers from the census, so a row is
+    // callable exactly when its bucket says so. Without the filter, every
+    // `Todo` row in the table would become a silently working call the moment
+    // the join found it a shape (§15.23).
+    for entry in table::table() {
+        let Some(name) = entry.installua else {
+            continue;
+        };
+        assert_eq!(
+            installua::builtins::lookup(name).is_some(),
+            entry.class == Class::Exposed,
+            "`{name}` is `{}` and lookup disagrees",
+            entry.class.bucket()
+        );
+    }
+}
+
+#[test]
+fn the_surface_is_not_the_nsis_argument_list() {
+    // Two of §15.23's distinctions, as one claim about arity: an output is a
+    // Lua *return* rather than an argument, and a `Kind::Label` position is the
+    // compiler's. `readRegStr` takes three arguments where `ReadRegStr` takes
+    // four, and `fileExists` takes one where `IfFileExists` takes three.
+    let cases = [("readRegStr", 3..=3), ("fileExists", 1..=1)];
+    for (name, expected) in cases {
+        let entry = installua::builtins::lookup(name).expect(name);
+        assert_eq!(entry.arity(), expected, "{name}");
+    }
+
+    // And the brackets are real optionality rather than decoration, which is
+    // what makes an `exposed(…)` row worth more than the hand-written one it
+    // replaced: `CreateShortcut link target` and its five trailing options are
+    // one row.
+    let shortcut = installua::builtins::lookup("createShortcut").expect("createShortcut");
+    assert_eq!(*shortcut.arity().start(), 2);
+    assert!(*shortcut.arity().end() > 2, "{:?}", shortcut.arity());
+}
+
+#[test]
 fn coverage_matches_its_golden() {
     // The golden is the burndown: a PR that moves twelve commands out of
     // `todo` shows exactly which twelve here (§14).
