@@ -7,18 +7,29 @@
 //! concurrently in one process, against in-memory strings, with no file system
 //! involved: the CLI is one caller of this API and never a privileged one.
 //!
-//! The pipeline is four passes (§9-1):
+//! The pipeline (§9-1):
 //!
 //! ```text
-//! source ──frontend──▶ AST ──lower──▶ IR ──emit──▶ .nsi
+//! source ──frontend──▶ AST ──resolve──▶ symbols ──lower──▶ CFG ──layout──▶ IR ──emit──▶ .nsi
 //! ```
+//!
+//! `resolve` runs to completion before any body is lowered, which is what makes
+//! the language order-free (§15.6) — and it can be, because Installua compiles
+//! rather than executing Lua at build time, so there is no evaluation order for
+//! a declaration to have to precede.
 
 pub mod ast;
+pub mod builtins;
+pub mod cfg;
 pub mod diag;
 pub mod emit;
 pub mod frontend;
 pub mod ir;
+pub mod layout;
 pub mod lower;
+pub mod regs;
+pub mod resolve;
+pub mod types;
 
 use crate::ast::Program;
 use crate::diag::Diagnostics;
@@ -33,18 +44,32 @@ pub fn check(source: &str, diags: &mut Diagnostics) -> Option<Program> {
     frontend::check(source, diags)
 }
 
-/// Compiles `source` to `.nsi` text. `None` when any error was raised.
-pub fn build(source: &str, diags: &mut Diagnostics) -> Option<String> {
+/// Compiles as far as the IR, stopping before layout and emission.
+///
+/// This exists because §14 asks for assertions at pass boundaries rather than
+/// only end to end: Phase 2's exit criterion is a claim about the CFG — that a
+/// fused condition allocates no temporaries — and reading it out of emitted
+/// text would be inferring a property from the absence of a line.
+pub fn compile(source: &str, diags: &mut Diagnostics) -> Option<ir::Module> {
     let program = check(source, diags)?;
     if diags.has_errors() {
         return None;
     }
 
-    let module = lower::lower(&program, diags);
-    lower::check_required(&module, diags);
+    let resolved = resolve::resolve(&program, diags);
     if diags.has_errors() {
         return None;
     }
 
-    Some(emit::emit(&module))
+    let module = lower::lower(&program, &resolved, diags);
+    lower::check_required(&module, diags);
+    if diags.has_errors() {
+        return None;
+    }
+    Some(module)
+}
+
+/// Compiles `source` to `.nsi` text. `None` when any error was raised.
+pub fn build(source: &str, diags: &mut Diagnostics) -> Option<String> {
+    compile(source, diags).map(|module| emit::emit(&module))
 }

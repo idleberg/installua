@@ -35,6 +35,62 @@ const CASES: &[(Code, &str)] = &[
     (Code::IndexExpression, "local x = pages[1]"),
     (Code::UnsupportedIterator, "for k, v in pairs(t) do end"),
     (Code::RuntimeRequire, r#"require("WinVer")"#),
+    // Resolution and types. These are the cases that have to reach lowering, so
+    // each is a whole program rather than a fragment.
+    (
+        Code::UndefinedName,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function() detailPrint(nope) end), }",
+    ),
+    (
+        Code::NotBool,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local count = 1\n\
+         if count then detailPrint(\"reached\") end\n\
+         end), }",
+    ),
+    (
+        Code::OrAsValue,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local custom = \"\"\n\
+         local dir = custom or \"C:/App\"\n\
+         end), }",
+    ),
+    (
+        Code::TypeMismatch,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local n = 1\n\
+         local s = \"one\"\n\
+         if n == s then detailPrint(\"never\") end\n\
+         end), }",
+    ),
+    (
+        Code::TypeConflict,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local n = 1\n\
+         n = \"one\"\n\
+         end), }",
+    ),
+    (
+        Code::WrongArity,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function() detailPrint(\"a\", \"b\") end), }",
+    ),
+    (
+        Code::BreakOutsideLoop,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function() break end), }",
+    ),
+    (
+        Code::ContinueOutsideLoop,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function() continue() end), }",
+    ),
+    (Code::RegisterExhaustion, EXHAUSTED),
     (Code::NotYetImplemented, "uninstaller {}"),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
     (Code::BadFieldValue, r#"attributes { unicode = "yes" }"#),
@@ -44,6 +100,19 @@ const CASES: &[(Code, &str)] = &[
     ),
     (Code::MissingAttribute, r#"attributes { name = "Spine" }"#),
 ];
+
+/// Twenty-one locals in one body. Twenty is not the language's limit, it is the
+/// placeholder allocator's, and the diagnostic has to say so (§12).
+const EXHAUSTED: &str = concat!(
+    "attributes { outFile = \"a.exe\" }\n",
+    "installer { section(\"Core\", function()\n",
+    "local a1 = 1 local a2 = 1 local a3 = 1 local a4 = 1 local a5 = 1\n",
+    "local a6 = 1 local a7 = 1 local a8 = 1 local a9 = 1 local a10 = 1\n",
+    "local a11 = 1 local a12 = 1 local a13 = 1 local a14 = 1 local a15 = 1\n",
+    "local a16 = 1 local a17 = 1 local a18 = 1 local a19 = 1 local a20 = 1\n",
+    "local a21 = 1\n",
+    "end), }",
+);
 
 /// 1100 characters: verified in Phase 0 to compile clean under `-WX` and
 /// measure 1023 at runtime, with no `makensis` diagnostic at any point.

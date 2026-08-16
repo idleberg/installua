@@ -125,7 +125,39 @@ pub enum Code {
     /// `require`. Loading is compile-time, and spelled `import`/`include`.
     RuntimeRequire,
 
+    // -- resolution and types (§15.6, §15.14, §15.20, §15.24)
+    /// A name that resolves to nothing. Resolution is order-free, so this
+    /// really does mean *nowhere in the file* (§15.6).
+    UndefinedName,
+    /// A non-`bool` in a condition, or as an operand of `and`/`or`/`not`.
+    /// By-type truthiness is not merely inference-dependent, it disagrees with
+    /// Lua on `0` and `""` — the two values a reader is most likely to test
+    /// (§15.20).
+    NotBool,
+    /// `local x = a or b` on strings: the default-value idiom. Under Lua's
+    /// semantics it is dead code, and under the intended NSIS semantics the
+    /// source lies, so there is no reading that works (§15.20).
+    OrAsValue,
+    /// A comparison whose operands are different types, or whose types are not
+    /// known. Defaulting to `StrCmp` is how a compiler becomes a text expander
+    /// with a type system bolted on (§15.14).
+    TypeMismatch,
+    /// A variable assigned two different types. A register is one slot, so this
+    /// is NSIS-shaped rather than arbitrary, and it reports the disagreement
+    /// rather than privileging whichever line came first (§15.24).
+    TypeConflict,
+    /// A call with the wrong number of arguments.
+    WrongArity,
+
     // -- lowering
+    /// `break` outside a loop.
+    BreakOutsideLoop,
+    /// `continue()` outside a loop. It is a call that jumps (§8), so unlike
+    /// `break` it parses anywhere.
+    ContinueOutsideLoop,
+    /// The placeholder register file ran out. Twenty is not the real limit —
+    /// the allocator is (§12).
+    RegisterExhaustion,
     /// Well-formed, whitelisted, and outside what this version emits. This is
     /// the honest edge of the vertical slice (PLAN §0), not a parse failure.
     NotYetImplemented,
@@ -161,6 +193,15 @@ impl Code {
         Code::IndexExpression,
         Code::UnsupportedIterator,
         Code::RuntimeRequire,
+        Code::UndefinedName,
+        Code::NotBool,
+        Code::OrAsValue,
+        Code::TypeMismatch,
+        Code::TypeConflict,
+        Code::WrongArity,
+        Code::BreakOutsideLoop,
+        Code::ContinueOutsideLoop,
+        Code::RegisterExhaustion,
         Code::NotYetImplemented,
         Code::UnknownField,
         Code::BadFieldValue,
@@ -189,6 +230,15 @@ impl Code {
             Code::IndexExpression => "index-expression",
             Code::UnsupportedIterator => "unsupported-iterator",
             Code::RuntimeRequire => "runtime-require",
+            Code::UndefinedName => "undefined-name",
+            Code::NotBool => "not-a-bool",
+            Code::OrAsValue => "or-as-value",
+            Code::TypeMismatch => "type-mismatch",
+            Code::TypeConflict => "type-conflict",
+            Code::WrongArity => "wrong-arity",
+            Code::BreakOutsideLoop => "break-outside-loop",
+            Code::ContinueOutsideLoop => "continue-outside-loop",
+            Code::RegisterExhaustion => "register-exhaustion",
             Code::NotYetImplemented => "not-yet-implemented",
             Code::UnknownField => "unknown-field",
             Code::BadFieldValue => "bad-field-value",
