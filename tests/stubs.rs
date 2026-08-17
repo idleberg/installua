@@ -119,7 +119,10 @@ fn every_alias_the_stub_uses_is_one_it_declares() {
         else {
             continue;
         };
-        for word in rest.split([' ', '|']) {
+        // `,`, `{` and `}` because an options table is written inline —
+        // `---@param options? { showMode: installua.ShowMode, … }` — and the
+        // type is one word inside it like anywhere else.
+        for word in rest.split([' ', '|', ',', '{', '}']) {
             let word = word.trim();
             if !word.starts_with("installua.") || word.contains('<') {
                 continue;

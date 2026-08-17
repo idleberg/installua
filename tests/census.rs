@@ -238,17 +238,72 @@ fn the_surface_is_not_the_nsis_argument_list() {
         assert_eq!(entry.arity(), expected, "{name}");
     }
 
-    // And the brackets are real optionality rather than decoration, which is
-    // what makes an `exposed(…)` row worth more than the hand-written one it
-    // replaced: `CreateShortcut link target` and its five trailing options are
-    // one row.
+    // And the brackets are real optionality, which is now said by *name* rather
+    // than by counting: `CreateShortcut` takes exactly two arguments and six
+    // named options, so no call site has to know that the description is the
+    // ninth position (§15.23).
     let shortcut = installua::builtins::lookup("createShortcut").expect("createShortcut");
-    assert_eq!(*shortcut.arity().start(), 2);
-    assert!(*shortcut.arity().end() > 2, "{:?}", shortcut.arity());
+    assert_eq!(shortcut.arity(), 2..=2);
+    let names: Vec<&str> = shortcut.fields().map(|(field, _)| field.name).collect();
+    assert_eq!(
+        names,
+        [
+            "parameters",
+            "iconFile",
+            "iconIndex",
+            "showMode",
+            "hotkey",
+            "comment"
+        ]
+    );
+
+    // A repeated tail is the one place a count is still the caller's.
+    let file = installua::builtins::lookup("file").expect("file");
+    assert_eq!(file.arity(), 1..=usize::MAX);
 }
 
 #[test]
-fn an_optional_input_before_an_output_can_be_filled() {
+fn every_optional_position_is_reachable() {
+    // An optional position reachable neither positionally nor by name is a
+    // position no call site can write, and the census is where that is a
+    // failure rather than a mystery.
+    //
+    // Which of the two it is comes from the row's shape rather than from the
+    // overlay: a single trailing optional is unambiguous and stays an argument
+    // (`abort("stopped")`), and anything else is a named field. The name is
+    // written either way, because it is what the stub and the error message
+    // call the position.
+    let mut unreachable: Vec<String> = Vec::new();
+    for entry in table::table() {
+        if entry.class != Class::Exposed {
+            continue;
+        }
+        let tail = entry.tail_optional().map(|param| param.shape.name);
+        for param in entry.surface() {
+            let reachable = param.required()
+                || tail == Some(param.shape.name)
+                || entry
+                    .fields()
+                    .any(|(_, named)| named.shape.name == param.shape.name);
+            if !reachable {
+                unreachable.push(format!("{}: {}", entry.nsis, param.shape.name));
+            }
+        }
+    }
+    assert_eq!(unreachable, Vec::<String>::new());
+
+    // And the two shapes are really two: `Abort [message]` counts, and
+    // `CreateShortcut`'s six optionals cannot.
+    let abort = installua::builtins::lookup("abort").expect("abort");
+    assert_eq!(abort.arity(), 0..=1);
+    assert_eq!(abort.fields().count(), 0);
+    let shortcut = installua::builtins::lookup("createShortcut").expect("createShortcut");
+    assert!(shortcut.tail_optional().is_none());
+    assert_eq!(shortcut.fields().count(), 6);
+}
+
+#[test]
+fn an_optional_input_before_anything_else_can_be_filled() {
     // This replaces `an_exposed_rows_outputs_come_first`, which refused any row
     // whose output was not leading because the emitter concatenated
     // `[dest] ++ inputs`. The emitter now places by table position, so the
@@ -263,22 +318,34 @@ fn an_optional_input_before_an_output_can_be_filled() {
     // A row that needs a fill and has none emits a line one token short, which
     // NSIS may accept — `FileReadByte $1 $0` is well-formed whichever way round
     // the registers go — so this is checked here rather than left to tier 3.
+    //
+    // Now that the optional positions are named, an output is no longer the
+    // only thing that can follow one: `createShortcut(link, target, { comment =
+    // … })` writes the ninth position and declines the four before it. So the
+    // rule is every optional input that precedes *any* emitted position, with
+    // one exception — a `toggle` is a `/FLAG`, which NSIS tells from the next
+    // argument lexically rather than by counting.
     for entry in table::table() {
         if entry.class != Class::Exposed {
             continue;
         }
-        let last_output = entry
-            .params
-            .iter()
-            .rposition(|param| param.dir() == Dir::Out);
-        let Some(last_output) = last_output else {
+        let emitted = |param: &table::Param| {
+            param.dir() == Dir::Out || (param.kind != Kind::Label && param.kind != Kind::Fused)
+        };
+        let last = entry.params.iter().rposition(emitted);
+        let Some(last) = last else {
             continue;
         };
-        for param in &entry.params[..last_output] {
+        for param in &entry.params[..last] {
+            let toggle = param.field.is_some_and(|field| field.toggle.is_some());
             assert!(
-                param.required() || param.fill.is_some() || param.kind == Kind::Label,
-                "{}: `{}` is optional and precedes an output, so the emitter needs \
-                 a fill for it — reaching the output means writing this position",
+                param.required()
+                    || param.fill.is_some()
+                    || toggle
+                    || param.kind == Kind::Label
+                    || param.kind == Kind::Fused,
+                "{}: `{}` is optional and something after it is emitted, so the emitter \
+                 needs a fill for it — reaching that position means writing this one",
                 entry.nsis,
                 param.shape.name
             );

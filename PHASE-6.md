@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: the alphabetical grind is done and the output work behind it is finished.
-25 → 77 exposed, 167 → 115 todo.**
+**Status: the alphabetical grind is done, and both surface gaps behind it are closed.
+25 → 79 exposed, 167 → 113 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -15,12 +15,12 @@ in `-CMDHELP` order either way.
 | Task | Where | Result |
 | --- | --- | --- |
 | One table, not two | [`src/builtins.rs`](src/builtins.rs) | the instruction half is gone; `lookup` answers from the census |
-| Optional parameters are real | [`src/lower/expr.rs`](src/lower/expr.rs) | `-CMDHELP` brackets became an arity *range* |
+| Optional parameters are real | [`src/lower/expr.rs`](src/lower/expr.rs) | `-CMDHELP` brackets are optionality, reached by *name* |
 | Tier 3 for the example pairs | [`tests/overlay.rs`](tests/overlay.rs) | all 25 examples assemble under `makensis -WX` |
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 88 tests
+cargo test          # 91 tests
 ```
 
 ---
@@ -370,6 +370,132 @@ compile-time path is `Kind::Value` — §5's `/`-to-`\` rewrite exists because *
 wants `\` at install time, and this string never reaches Windows. `SearchPath`'s
 annotation is the same conclusion from a different direction.
 
+## Batch 7 — a position is named when counting cannot say which one it is
+
+`arity` was a range and the lowerer zipped arguments to `surface()` by index, so which
+parameter an argument *meant* was decided by how many arguments there were. That worked
+for trailing optionals and failed twice.
+
+**It failed outright on a leading optional.** `ExecShell [flags] verb file [parameters
+[showmode]]` puts the optional first, so `execShell("open", url)` zipped `"open"` to
+`flags` and the URL to `verb`. Every annotation landed one position left of what the
+author meant. The emitted text was *accidentally* correct — NSIS re-parses positionally
+and read two tokens as `verb file` — so tier 2 and tier 3 both passed. What was lost was
+the checking: the `Kind::Path` annotation belonged to `file` and was applied to `verb`,
+and [`stubs.rs`](src/stubs.rs) described the signature shifted by one.
+
+**It was already bad on the trailing ones.** `CreateShortcut` is two required positions
+and seven optional. Setting the comment meant passing all nine, four of which the author
+does not care about and three of which are enums they would have to look up.
+
+The line is **ambiguity, not optionality**. An argument list is unambiguous exactly when
+every optional position is one *trailing* position: an extra argument can then only mean
+that position, and nothing is being counted. So `Abort [message]` keeps the spelling it
+had, and the rows where the meaning of the fourth argument depends on whether the third
+was given take **named fields of one trailing table** instead.
+
+```lua
+abort("stopped")                      -- one trailing optional: still an argument
+regDll(p, "DllInstall")               -- likewise
+execShell("open", url, { showMode = "SW_HIDE" })
+execShell("open", url, { invokeIdList = true, parameters = "-q" })
+createShortcut(DESKTOP .. "/App.lnk", INSTDIR .. "/app.exe", { comment = "Launch App" })
+```
+
+`Instruction::tail_optional` is where the two shapes are told apart, and it answers from
+the snapshot alone. Eight of the nine `Exposed` rows with an optional input are the
+unambiguous shape and did not change at all; the two that are named are the two the work
+was for.
+
+Which positions are named is still not a judgement — it follows from `req: false` and the
+order in the snapshot, the same place the arity and the enum members come from. The
+overlay adds one thing per optional: a *name*, because `-CMDHELP` calls them `showmode`
+and `hex_string_like_12848412AB`. The name is written on every optional whether or not the
+row ends up naming it, because the stub and the error message call the position something
+either way.
+
+The three consequences predicted before anybody started, and how each landed:
+
+1. **The arity check stopped being an open range.** It is a point for a named row, `n` or
+   `n + 1` for an unambiguous trailing optional, and unbounded only for a real repeated
+   tail (`File a b c`). An unknown key names the legal ones — `` `execShell` has no option
+   `showmode` `` beats *"takes 2 to 5 arguments"*, and that is the whole gain restated as
+   an error message.
+2. **`flags` became a boolean.** `/INVOKEIDLIST` is spelled by the compiler, so the field
+   is `invokeIdList = true`: a ninth instance of *emitted, never written*. A `toggle` is
+   also the one optional that never needs a `fill` — NSIS tells a `/FLAG` from the next
+   argument lexically rather than by counting.
+3. **The table is a literal**, with constant keys checked at compile time, the rule
+   `attributes {}` already carries.
+
+Two rows came out of `todo` with it: `ExecShell` and `ExecShellWait`. `ExecShell`'s `file`
+is deliberately `Kind::Value` — §5's `/`-to-`\` rewrite is about a Windows *file* path,
+and that position is a shell target that may be a URL. Win32 accepts `/` as a separator,
+so `INSTDIR .. "/readme.txt"` still opens; `https://example.invalid` put through §5 would
+not.
+
+### Naming an option means writing the ones before it
+
+`fill` existed for exactly one row and now carries the whole scheme. NSIS still counts
+arguments, so `createShortcut(link, target, { comment = … })` has to write the five
+positions the author declined:
+
+```
+CreateShortcut "$DESKTOP\App.lnk" "$INSTDIR\app.exe" "" "" 0 SW_SHOWNORMAL "" "Launch App"
+```
+
+The census rule that used to say *"an optional input before an **output** needs a fill"*
+now says *before **anything emitted***, which is what makes the line above derivable from
+the table rather than from this paragraph.
+
+### `-CMDHELP` has a typo, and the parser has to know
+
+`CreateShortcut … [icon_file [icon index [showmode …` — and `icon index` is a *single*
+argument missing its underscore. NSIS's own source settles it rather than leaving it to
+inference:
+
+```cpp
+// Source/script.cpp
+ent.offsets[3]=add_string(line.gettoken_str(4));                       // icon_file
+ent.offsets[4]=(line.gettoken_int(5,&s) << CS_II_SHIFT) & CS_II_MASK;  // icon index
+...
+ERROR_MSG(_T("CreateShortcut: cannot interpret icon index\n"));
+```
+
+Token 5 is read once, and the error message spells the concept with the space too, so the
+missing underscore is consistent within the file. `Source/tokens.cpp` agrees on the count:
+`{TOK_CREATESHORTCUT, …, 2, 7, …}` is nine tokens, one of which is the `/NoWorkingDir`
+flag `eattoken` removes. **Eight arguments.**
+
+The snapshot records what `makensis` *prints*, which is the point of it, so the correction
+cannot live there. It is judgement and it lives in the overlay, as `Kind::Fused` — a
+position that is not one. Nine emitted arguments where NSIS takes eight assembles fine and
+puts the description in the keyboard shortcut.
+
+`Fused` joins `Kind::Label` as the second kind excluded from `surface()`, and the two are
+excluded for opposite reasons: a label is an argument to NSIS and not to Installua, and a
+fused half is an argument to neither.
+
+### What it cost
+
+Nothing that was already written. The first cut of this applied the table *uniformly*,
+which turned `abort("stopped")` into `abort { message = "stopped" }` in five example
+programs and `f:seek(0, "END")` into `f:seek(0, { mode = "END" })` — and neither row has
+an ambiguity to remove, so the uniformity was the whole cost and bought nothing. Scoping
+the rule to the rows that need it left every existing call site alone.
+
+The objection to scoping it was that adding a second optional to such a row would rewrite
+its surface. It would — as a *compile error* on every call site, from a snapshot refresh
+the census already gates. That is the loud kind of change, not the silent kind, and it is
+not worth an API tax on `abort`.
+
+`messageBox` is hand-lowered and already took a table (§15.18); it is untouched. Six
+commands in the table have a leading optional; the four beyond `ExecShell` and
+`ExecShellWait` — `InstType`, `LangString`, `PageEx`, `SectionGroup` — are blocked on
+§13, locale tables and pages first.
+
+---
+
 ## What the join replaced
 
 `builtins.rs` held a parameter table the lowerer read, written before the `-CMDHELP` join
@@ -404,15 +530,15 @@ defaults (§15.27).
 ## Brackets are optionality, and now they behave like it
 
 The seed table required an exact argument count because every row it had was
-all-required. The joined table knows better, and `Instruction::arity` returns a range:
-`CreateShortcut` takes two arguments or seven, `Abort` takes none or one, and a `Rep::Many`
-tail has no upper bound at all.
+all-required. The joined table knows better: a bracketed position is genuine optionality,
+and batch 7 made it reachable *by name* rather than by counting.
 
-This is where the rewire pays for itself rather than merely tidying. `createShortcut`'s five
-optional positions — icon file, icon index, start options, keyboard shortcut, description —
-were already annotated in the overlay because the census demands an annotation per
-parameter. They were simply unreachable. One `exposed(…)` row now delivers the whole
-command, which is what makes "one row per command" a true statement about effort.
+This is where the rewire pays for itself rather than merely tidying. `createShortcut`'s six
+optional positions — parameters, icon file, icon index, start options, keyboard shortcut,
+description — were already annotated in the overlay because the census demands an
+annotation per parameter. They were simply unreachable. One `exposed(…)` row now delivers
+the whole command, which is what makes "one row per command" a true statement about
+effort.
 
 ## Tier 3 found the thing tier 2 cannot
 
@@ -438,9 +564,13 @@ tier 3 catches and tier 2 cannot.
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 118 is section-index binding (§13), the `hwnd` surface, the classic UI,
+  left in the 113 is section-index binding (§13), the `hwnd` surface, the classic UI,
   pages, script-wide settings and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
+- **The `Opt` half of the table is still unreachable.** `CopyFiles`'s `/SILENT`, `File`'s
+  `/r`, `GetDLLVersion`'s `/ProductVersion`: `join()` copies them and nothing emits them.
+  They are the same shape as a `toggle` field and want the same treatment, which is now a
+  small job rather than a design.
 - **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
   `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
   pass a call that is simply dead.
@@ -448,55 +578,3 @@ tier 3 catches and tier 2 cannot.
   blocker is a file rather than a design: its example reads the build machine at compile
   time, and neither the `.ico` in `tests/fixtures` nor any NSIS-shipped DLL has version
   info. A real PE with one, committed there, is the whole task.
-
-### Optionals should be named, not counted
-
-`arity` is a range and the lowerer zips arguments to `surface()` by index, so which
-parameter an argument *means* is decided by how many arguments there are. That works for
-trailing optionals and fails twice.
-
-**It fails outright on a leading optional.** `ExecShell [flags] verb file [parameters
-[showmode]]` puts the optional first, so `execShell("open", url)` zips `"open"` to `flags`
-and the URL to `verb`. Every annotation lands one position left of what the author meant.
-The emitted text is *accidentally* correct — NSIS re-parses positionally and reads two
-tokens as `verb file` — so tier 2 and tier 3 both pass. What is lost is the checking: the
-`Kind::Path` annotation belongs to `file` and was applied to `verb`, so §5's `/`-to-`\`
-rewrite silently does not happen, and [`stubs.rs`](src/stubs.rs) describes the signature
-shifted by one.
-
-**It is already bad on the trailing ones.** `CreateShortcut` is two required positions and
-seven optional, `arity` `2..=9`. Setting the comment means passing all nine, four of which
-the author does not care about and three of which are enums they would have to look up.
-That row is exposed and shipped; the leading-optional gap is the narrow case of a defect
-already in the table.
-
-The fix: **required positions stay positional, optional positions become named fields of
-one trailing table.**
-
-```lua
-execShell("open", url, { showmode = "SW_HIDE" })
-execShell("open", url, { invokeIdList = true, parameters = "-q" })
-createShortcut(DESKTOP .. "/App.lnk", INSTDIR .. "/app.exe", { comment = "Launch App" })
-```
-
-Which positions are named is not a judgement — it is `req: false` in the snapshot, the same
-place the arity and the enum members already come from. The overlay adds one thing per
-optional: a name, because `-CMDHELP` calls them `showmode` and
-`hex_string_like_12848412AB`.
-
-Three consequences worth stating before anybody starts.
-
-1. **The arity check stops being a range.** The positional count must *equal* the required
-   count, and an unknown key names the legal ones — `` `execShell` has no option
-   `showMode` `` beats `takes 2 to 9, and 4 were given`.
-2. **`flags` becomes a boolean.** `/INVOKEIDLIST` is spelled by the compiler, so the field
-   is `invokeIdList = true`: a ninth instance of *emitted, never written*.
-3. **The table must be a literal**, with constant keys checked at compile time — the rule
-   `attributes {}` already carries. A computed key is an error, not a fallback.
-
-Eight rows have optional inputs at all: `Abort`, `CopyFiles`, `CreateShortcut`,
-`FileRead`, `GetTempFileName`, `MessageBox`, `RegDLL`, `WriteRegNone`. The predicates'
-optional *labels* are `Kind::Label` and excluded from `surface()`, so they are untouched.
-`messageBox` is hand-lowered and needs its own pass. Six commands in the table have a
-leading optional; the other four — `InstType`, `LangString`, `PageEx`, `SectionGroup` —
-are blocked on §13, locale tables and pages first.

@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           77
+  exposed           79
   attribute         14
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             115
+  todo             113
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -29,8 +29,6 @@ todo:
   EnableWindow            addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   Exec                    one argument that is part path and part switches; §5's `/`-to-`\` rule cannot apply to half a string
   ExecWait                one argument that is part path and part switches; §5's `/`-to-`\` rule cannot apply to half a string
-  ExecShell               a *leading* optional parameter: positional arguments cannot say which optional they mean
-  ExecShellWait           a *leading* optional parameter: positional arguments cannot say which optional they mean
   FindWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   FindClose               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)

@@ -552,8 +552,7 @@ impl BodyLowerer<'_, '_> {
         };
 
         let name = builtin.installua.unwrap_or(builtin.nsis);
-        self.builtin_arity(builtin, name, args.len(), span)?;
-        let lowered = self.positional(builtin, name, args)?;
+        let lowered = self.surface_args(builtin, name, args, 0, span)?;
 
         match builtin.predicate {
             true => match dest {
@@ -611,88 +610,189 @@ impl BodyLowerer<'_, '_> {
         }
     }
 
-    /// The count check, said in the reader's units: `-CMDHELP` brackets are
-    /// genuine optionality, so a row can take two arguments or seven.
-    fn builtin_arity(
-        &mut self,
-        builtin: &table::Instruction,
-        name: &str,
-        given: usize,
-        span: Span,
-    ) -> Option<()> {
-        let arity = builtin.arity();
-        if arity.contains(&given) {
-            return Some(());
-        }
-        self.diags.push(
-            Diagnostic::error(
-                Code::WrongArity,
-                span,
-                format!(
-                    "`{name}` takes {}, and {given} were given",
-                    arguments(&arity)
-                ),
-            )
-            .note(format!("it becomes `{}` (§6)", builtin.nsis)),
-        );
-        None
-    }
-
-    /// The arguments a caller wrote, checked and converted against the surface
-    /// positions they land in.
-    fn positional(
+    /// Everything a caller wrote for one instruction, checked and placed
+    /// against the surface positions it means.
+    ///
+    /// **A position is named when counting cannot say which one it is** — see
+    /// [`table::Instruction::positional`]. Counting used to decide it
+    /// everywhere, and that is what this replaces. It failed outright on a
+    /// *leading* optional: `ExecShell [flags] verb file …` bound
+    /// `execShell("open", url)`'s `"open"` to `flags`, putting every annotation
+    /// one position left of what the author meant. It was already bad wherever
+    /// there were several, since setting `createShortcut`'s description meant
+    /// writing all nine arguments. It was fine for `abort [message]`, which is
+    /// why that one is still `abort("stopped")`.
+    ///
+    /// The result is one entry per surface position, in table order, holding
+    /// what belongs there: empty for a position nobody filled, and several for
+    /// the one repeated tail a row may have (`File a b c`). `skip` is how a
+    /// method drops its receiver, which is a syntactic prefix here and an
+    /// ordinary first parameter in NSIS.
+    fn surface_args(
         &mut self,
         builtin: &table::Instruction,
         name: &str,
         args: &[Expr],
-    ) -> Option<Vec<ir::Arg>> {
+        skip: usize,
+        span: Span,
+    ) -> Option<Vec<Vec<ir::Arg>>> {
         // The user-facing positions: the inputs, minus the ones the compiler
         // fills. `fileExists(p)` takes one argument where `IfFileExists` takes
         // three, and that difference is §15.20's whole point.
-        let params: Vec<&table::Param> = builtin.surface().collect();
-        let mut lowered = Vec::with_capacity(args.len());
-        for (index, argument) in args.iter().enumerate() {
-            // A repeated trailing position — `File a b c` — annotates every
-            // argument past the last one with the last one's own type, because
+        let surface: Vec<&table::Param> = builtin.surface().skip(skip).collect();
+        let named = builtin.fields().next().is_some();
+
+        // The options table is the last argument when there is one to be. A row
+        // with no optional position has no table, so `f({…})` there stays what
+        // it always was: a table where a value was wanted.
+        let (given, options) = match args.split_last() {
+            Some((Expr::Table { fields, .. }, rest)) if named => (rest, Some(fields)),
+            _ => (args, None),
+        };
+
+        // The positions an argument can land in: the required ones, plus the
+        // trailing optional when the row has exactly one and nothing about the
+        // count is in doubt.
+        let tail = builtin.tail_optional().is_some();
+        let counted: Vec<(usize, &table::Param)> = surface
+            .iter()
+            .enumerate()
+            .filter(|(_, param)| param.required() || tail)
+            .map(|(index, param)| (index, *param))
+            .collect();
+        let least = counted.iter().filter(|(_, p)| p.required()).count();
+        let most = match counted.last() {
+            Some((_, param)) if param.shape.rep == table::Rep::Many => usize::MAX,
+            _ => counted.len(),
+        };
+        let arity = least..=most;
+        if !arity.contains(&given.len()) {
+            let mut diagnostic = Diagnostic::error(
+                Code::WrongArity,
+                span,
+                format!(
+                    "`{name}` takes {}, and {} were given",
+                    arguments(&arity),
+                    given.len()
+                ),
+            )
+            .note(format!("it becomes `{}` (§6)", builtin.nsis));
+            if named {
+                diagnostic = diagnostic.note(format!(
+                    "its optional positions are named rather than counted: {}",
+                    fields(builtin)
+                ));
+            }
+            self.diags.push(diagnostic);
+            return None;
+        }
+
+        let mut placed: Vec<Vec<ir::Arg>> = surface.iter().map(|_| Vec::new()).collect();
+        for (index, argument) in given.iter().enumerate() {
+            // A repeated trailing position — `File a b c` — takes every
+            // argument past the last one, with the last one's own type, because
             // that is what the repetition means.
-            let param = params.get(index).or_else(|| params.last())?;
-            let value = self.value(argument)?;
-            // Assignable, not equal. The lattice already says which types
-            // subsume which — `a.join(b) == b` is exactly "a fits where b is
-            // wanted" — and equality got this wrong in one direction that
-            // matters: a literal `0` is `nonneg`, so every `Ty::int()` position
-            // rejected every integer literal (§15.14).
-            if param.ty != Ty::Unknown
-                && value.ty != Ty::Unknown
-                && value.ty.join(param.ty) != param.ty
-            {
-                let mut diagnostic = Diagnostic::error(
-                    Code::TypeMismatch,
-                    argument.span(),
-                    format!("`{name}` wants a {}, and this is a {}", param.ty, value.ty),
-                )
-                .note("types come from the instruction table, never from an annotation (§15.14)");
-                // `int` is what a user calls both signs (§15.14), so the
-                // message above reads "wants a int, and this is a int" when the
-                // sign is the whole disagreement. Say what it will not say.
-                if param.ty.is_int() && value.ty.is_int() {
-                    diagnostic = diagnostic.note(
-                        "this position cannot be negative, and the value is not known to be \
-                         non-negative",
-                    );
-                }
-                self.diags.push(diagnostic);
+            let (position, param) = *counted.get(index).or_else(|| counted.last())?;
+            let lowered = self.coerce(param, name, argument)?;
+            placed[position].push(lowered);
+        }
+
+        for field in options.into_iter().flatten() {
+            let TableField::Named { name: key, value } = field else {
+                self.todo(span, "a positional entry in an options table");
+                return None;
+            };
+            let position = surface.iter().position(|param| {
+                param
+                    .field
+                    .is_some_and(|field| field.name == key.text && !param.required())
+            });
+            let Some(position) = position else {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        key.span,
+                        format!("`{name}` has no option `{}`", key.text),
+                    )
+                    .note(format!("its options are {}", fields(builtin))),
+                );
+                return None;
+            };
+            if !placed[position].is_empty() {
+                self.diags.push(Diagnostic::error(
+                    Code::UnknownField,
+                    key.span,
+                    format!("`{}` is set twice", key.text),
+                ));
                 return None;
             }
-            // Pathness is decided at the parameter, so the expression lowerer
-            // never has to know where its result is going (§15.23).
-            lowered.push(if param.kind == table::Kind::Path {
-                value.arg.into_path()
-            } else {
-                value.arg
-            });
+            let param = surface[position];
+            let lowered = match param.field.and_then(|field| field.toggle) {
+                // A position whose only legal value is a token NSIS spells
+                // itself. The field is a `bool` and the compiler writes the
+                // token, so there is nothing for the user to look up.
+                Some(nsis) => match value {
+                    Expr::Bool { value: true, .. } => ir::Arg::raw(nsis),
+                    Expr::Bool { value: false, .. } => continue,
+                    other => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::BadFieldValue,
+                                other.span(),
+                                format!("`{}` is on or off", key.text),
+                            )
+                            .note(format!(
+                                "write `{} = true`, and the compiler writes `{nsis}`",
+                                key.text
+                            )),
+                        );
+                        return None;
+                    }
+                },
+                None => self.coerce(param, name, value)?,
+            };
+            placed[position].push(lowered);
         }
-        Some(lowered)
+
+        Some(placed)
+    }
+
+    /// One argument, checked against the position it lands in and converted for
+    /// it.
+    fn coerce(&mut self, param: &table::Param, name: &str, argument: &Expr) -> Option<ir::Arg> {
+        let value = self.value(argument)?;
+        // Assignable, not equal. The lattice already says which types
+        // subsume which — `a.join(b) == b` is exactly "a fits where b is
+        // wanted" — and equality got this wrong in one direction that
+        // matters: a literal `0` is `nonneg`, so every `Ty::int()` position
+        // rejected every integer literal (§15.14).
+        if param.ty != Ty::Unknown && value.ty != Ty::Unknown && value.ty.join(param.ty) != param.ty
+        {
+            let mut diagnostic = Diagnostic::error(
+                Code::TypeMismatch,
+                argument.span(),
+                format!("`{name}` wants a {}, and this is a {}", param.ty, value.ty),
+            )
+            .note("types come from the instruction table, never from an annotation (§15.14)");
+            // `int` is what a user calls both signs (§15.14), so the
+            // message above reads "wants a int, and this is a int" when the
+            // sign is the whole disagreement. Say what it will not say.
+            if param.ty.is_int() && value.ty.is_int() {
+                diagnostic = diagnostic.note(
+                    "this position cannot be negative, and the value is not known to be \
+                     non-negative",
+                );
+            }
+            self.diags.push(diagnostic);
+            return None;
+        }
+        // Pathness is decided at the parameter, so the expression lowerer
+        // never has to know where its result is going (§15.23).
+        Some(if param.kind == table::Kind::Path {
+            value.arg.into_path()
+        } else {
+            value.arg
+        })
     }
 
     /// The registers the instruction writes, given the ones a caller asked to
@@ -757,8 +857,7 @@ impl BodyLowerer<'_, '_> {
             return None;
         }
 
-        self.builtin_arity(builtin, name, args.len(), span)?;
-        let lowered = self.positional(builtin, name, args)?;
+        let lowered = self.surface_args(builtin, name, args, 0, span)?;
         let placed = self.destinations(builtin, dests, span);
         let all = place(builtin, lowered, placed);
         self.emit(ir::Instruction::new(builtin.nsis, all));
@@ -809,25 +908,9 @@ impl BodyLowerer<'_, '_> {
         };
 
         // The receiver is the first parameter in NSIS and a syntactic prefix
-        // here, so the method's own arity is the surface minus it.
-        let params: Vec<&table::Param> = builtin.surface().skip(1).collect();
-        let arity = builtin.arity();
-        let least = arity.start().saturating_sub(1);
-        let most = arity.end().saturating_sub(1);
-        if args.len() < least || args.len() > most {
-            return self.wrong_arity(&method.text, least, args.len(), span);
-        }
-
-        let mut lowered = vec![handle.arg];
-        for (index, argument) in args.iter().enumerate() {
-            let value = self.value(argument)?;
-            let param = params.get(index).or_else(|| params.last())?;
-            lowered.push(if param.kind == table::Kind::Path {
-                value.arg.into_path()
-            } else {
-                value.arg
-            });
-        }
+        // here, so the method's own surface is the instruction's minus it.
+        let mut lowered = vec![vec![handle.arg]];
+        lowered.extend(self.surface_args(builtin, &method.text, args, 1, span)?);
 
         match (builtin.returns(), dest) {
             (Some(ty), dest) => {
@@ -2042,24 +2125,34 @@ fn methods() -> String {
 /// means writing a mode the author never named. Pending-until-needed keeps
 /// `fileSeek(f, 0)` at `FileSeek $1 0` and makes `local p = fileSeek(f, 0)`
 /// into `FileSeek $1 0 SET $0`, from one table field and no special case.
-fn place(builtin: &table::Instruction, inputs: Vec<ir::Arg>, dests: Vec<ir::Arg>) -> Vec<ir::Arg> {
+fn place(
+    builtin: &table::Instruction,
+    inputs: Vec<Vec<ir::Arg>>,
+    dests: Vec<ir::Arg>,
+) -> Vec<ir::Arg> {
     let mut emitted = Vec::with_capacity(builtin.params.len());
     let mut pending: Vec<ir::Arg> = Vec::new();
-    let mut inputs = inputs.into_iter().peekable();
+    let mut inputs = inputs.into_iter();
     let mut dests = dests.into_iter();
 
     for param in &builtin.params {
         let argument = match param.dir() {
             table::Dir::Out => dests.next(),
+            // Neither of these is a surface position, so neither consumes one:
+            // a label is §8's and a fused half is not an argument at all.
             table::Dir::In if param.kind == table::Kind::Label => continue,
+            table::Dir::In if param.kind == table::Kind::Fused => continue,
             table::Dir::In if param.shape.rep == table::Rep::Many => {
                 // The repeated tail is the last position by construction, so
                 // draining is safe and the count is the caller's.
-                emitted.append(&mut pending);
-                emitted.extend(inputs.by_ref());
+                let group = inputs.next().unwrap_or_default();
+                if !group.is_empty() {
+                    emitted.append(&mut pending);
+                    emitted.extend(group);
+                }
                 continue;
             }
-            table::Dir::In => inputs.next(),
+            table::Dir::In => inputs.next().and_then(|group| group.into_iter().next()),
         };
         match argument {
             Some(argument) => {
@@ -2075,9 +2168,19 @@ fn place(builtin: &table::Instruction, inputs: Vec<ir::Arg>, dests: Vec<ir::Arg>
     emitted
 }
 
-/// An arity, said the way a reader counts. `-CMDHELP` brackets are genuine
-/// optionality — `CreateShortcut` takes two arguments or seven — so an error
-/// saying "takes 7" about a call that gave 2 would be false.
+/// A row's option names, for the error that has to list them. Naming the legal
+/// ones is the whole gain over counting: `` `execShell` has no option
+/// `showmode` `` says what to write, where "takes 2 to 5 arguments" does not.
+fn fields(builtin: &table::Instruction) -> String {
+    builtin
+        .fields()
+        .map(|(field, _)| format!("`{}`", field.name))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// An arity, said the way a reader counts. A repeated tail — `File a b c` — is
+/// the one row shape left where the count is the caller's.
 fn arguments(arity: &std::ops::RangeInclusive<usize>) -> String {
     match (*arity.start(), *arity.end()) {
         (least, usize::MAX) => format!("{least} or more argument(s)"),

@@ -31,7 +31,7 @@ installer {
 		createDirectory(INSTDIR .. "/logs")
 	end),
 	section("CreateShortcut", function()
-		createShortcut(DESKTOP .. "/App.lnk", INSTDIR .. "/app.exe")
+		createShortcut(DESKTOP .. "/App.lnk", INSTDIR .. "/app.exe", { comment = "Launch App" })
 	end),
 	section("DeleteINISec", function()
 		deleteIniSection(INSTDIR .. "/app.ini", "Settings")
@@ -62,6 +62,12 @@ installer {
 	section("EnumRegValue", function()
 		local entry = enumRegValue(HKLM, "Software/Example", 0)
 		detailPrint(entry)
+	end),
+	section("ExecShell", function()
+		execShell("open", "https://example.invalid", { showMode = "SW_HIDE" })
+	end),
+	section("ExecShellWait", function()
+		execShellWait("open", INSTDIR .. "/readme.txt")
 	end),
 	section("ExpandEnvStrings", function()
 		local temp = expandEnvStrings("%TEMP%")

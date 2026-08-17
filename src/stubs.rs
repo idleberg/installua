@@ -294,16 +294,24 @@ fn instructions() -> String {
             continue;
         }
 
+        // The completion a reader gets is the call they can write, so the two
+        // shapes are said apart: an unambiguous trailing optional is a `?`
+        // parameter, and everything else optional is a named field below
+        // (§15.23).
         let mut names = Vec::new();
-        for (index, param) in entry.inputs().enumerate() {
-            // A label position is the compiler's, not the surface's (§15.20).
-            if param.kind == table::Kind::Label {
-                continue;
-            }
+        for (index, param) in entry.positional().enumerate() {
             let ident = identifier(param.shape.name);
             let optional = if param.required() { "" } else { "?" };
             let _ = writeln!(out, "---@param {ident}{optional} {}", union(name, index));
             names.push(ident);
+        }
+        let options: Vec<String> = entry
+            .fields()
+            .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)))
+            .collect();
+        if !options.is_empty() {
+            let _ = writeln!(out, "---@param options? {{ {} }}", options.join(", "));
+            names.push("options".to_string());
         }
         for param in entry.outputs() {
             let _ = writeln!(out, "---@return {}", lua_type(param));
@@ -379,11 +387,7 @@ fn identifier(name: &str) -> String {
 fn union(name: &str, index: usize) -> String {
     let mut types: Vec<String> = Vec::new();
     for entry in exposed().filter(|entry| entry.installua == Some(name)) {
-        let Some(param) = entry
-            .inputs()
-            .filter(|param| param.kind != table::Kind::Label)
-            .nth(index)
-        else {
+        let Some(param) = entry.positional().nth(index) else {
             continue;
         };
         let ty = lua_type(param);
@@ -517,11 +521,17 @@ pub fn selene_std() -> String {
             continue;
         }
         let _ = writeln!(out, "  {name}:\n    args:");
-        for param in entry.inputs() {
+        for param in entry.positional() {
             let _ = writeln!(out, "      - type: {}", selene_type(param));
             if !param.required() {
                 let _ = writeln!(out, "        required: false");
             }
+        }
+        // One trailing table for every optional position, or none at all. A
+        // `selene` argument list is positional, so this is as much as it can
+        // say — the field names are the language server's job.
+        if entry.fields().next().is_some() {
+            let _ = writeln!(out, "      - type: table\n        required: false");
         }
     }
 

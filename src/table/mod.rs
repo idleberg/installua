@@ -121,6 +121,45 @@ pub enum Kind {
     /// kind, the generated stub completes `fileExists(path, then, else)` and
     /// teaches the shape this language exists to remove.
     Label,
+    /// A position that is not one, because the help text has a typo in it.
+    ///
+    /// `-CMDHELP` prints `CreateShortcut … [icon index [showmode …`, and `icon
+    /// index` is a *single* argument missing its underscore. NSIS's own parser
+    /// settles it — `script.cpp` reads token 5 once, with `gettoken_int`, and
+    /// its error message calls the thing "icon index" as well — and `tokens.cpp`
+    /// agrees on the count: `{TOK_CREATESHORTCUT, …, 2, 7, …}` is nine tokens,
+    /// one of which is the `/NoWorkingDir` flag `eattoken` removes. Eight
+    /// arguments.
+    ///
+    /// The snapshot records what `makensis` *prints*, which is the whole point
+    /// of it, so the correction cannot live there. It is judgement and it lives
+    /// in the overlay: the second half is a parameter in `generated.rs` and
+    /// nowhere else — never offered, never emitted, never counted. Without it
+    /// `createShortcut` emits nine arguments, which assembles and puts the
+    /// description in the keyboard shortcut.
+    Fused,
+}
+
+/// What an *optional* position is called.
+///
+/// Whether it is reached by that name or positionally is not a judgement — it
+/// follows from `req: false` and the position's place in the snapshot, via
+/// [`Instruction::tail_optional`]. The name is written either way, because it
+/// is what the stub and the error message call the position, and it has to be
+/// written by hand because `-CMDHELP` calls them `showmode` and
+/// `hex_string_like_12848412AB` (§15.23).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Field {
+    pub name: &'static str,
+    /// The token the emitter writes when the field is `true`, for a position
+    /// whose only legal value is one NSIS spells itself: `execShell`'s
+    /// `invokeIdList` becomes `/INVOKEIDLIST`. A ninth instance of *emitted,
+    /// never written*.
+    ///
+    /// A toggle is also the one optional that never needs a [`Param::fill`]:
+    /// NSIS tells it from a following argument by its leading `/` rather than
+    /// by counting, so leaving it out shifts nothing.
+    pub toggle: Option<&'static str>,
 }
 
 /// §14's census bucket. There is exactly one enum, because the buckets and the
@@ -193,6 +232,9 @@ pub struct Param {
     /// What the emitter writes here when the caller omitted this position **and
     /// a later one still has to be emitted**. See [`overlay::Ann::fill`].
     pub fill: Option<&'static str>,
+    /// The name this position takes in the trailing options table, when it is
+    /// optional. A required position is positional and has none.
+    pub field: Option<Field>,
 }
 
 impl Param {
@@ -242,11 +284,55 @@ impl Instruction {
     }
 
     /// The positions a *user* writes: the inputs, minus the ones the compiler
-    /// fills. A `Kind::Label` is an argument to NSIS and not to Installua, so
-    /// `fileExists(p)` takes one argument where `IfFileExists` takes three
-    /// (§15.20).
+    /// fills and the ones that are not really positions. A `Kind::Label` is an
+    /// argument to NSIS and not to Installua, so `fileExists(p)` takes one
+    /// argument where `IfFileExists` takes three (§15.20); a `Kind::Fused` is
+    /// not an argument to either.
     pub fn surface(&self) -> impl Iterator<Item = &Param> {
-        self.inputs().filter(|param| param.kind != Kind::Label)
+        self.inputs()
+            .filter(|param| param.kind != Kind::Label && param.kind != Kind::Fused)
+    }
+
+    /// The positions a caller writes as *arguments*, including the trailing
+    /// optional when the row has exactly one.
+    ///
+    /// The line is ambiguity rather than optionality. `Abort [message]` has one
+    /// optional position and it is last, so an extra argument can only mean
+    /// that position and `abort("stopped")` decides nothing by counting.
+    /// `CreateShortcut`'s six optionals do: whether the fourth argument is the
+    /// icon file or the icon index depends on whether the third was given. So
+    /// those are named instead (§15.23), and `ExecShell`'s *leading* optional
+    /// has no positional spelling at all.
+    pub fn positional(&self) -> impl Iterator<Item = &Param> {
+        let tail = self.tail_optional().is_some();
+        self.surface().filter(move |param| param.required() || tail)
+    }
+
+    /// The single trailing optional, when that is the row's whole optional
+    /// half. `None` when there is nothing optional, when there is more than
+    /// one, or when an optional is followed by a required position — all three
+    /// being the cases a count cannot resolve.
+    pub fn tail_optional(&self) -> Option<&Param> {
+        let surface: Vec<&Param> = self.surface().collect();
+        let (last, rest) = surface.split_last()?;
+        if last.required() || rest.iter().any(|param| !param.required()) {
+            return None;
+        }
+        Some(last)
+    }
+
+    /// The named half: one entry per optional surface position, in emit order,
+    /// and empty for a row whose optional is unambiguously positional.
+    pub fn fields(&self) -> impl Iterator<Item = (Field, &Param)> {
+        let named = self.tail_optional().is_none();
+        self.surface()
+            .filter(move |param| named && !param.required())
+            .filter_map(|param| param.field.map(|field| (field, param)))
+    }
+
+    /// The field of that name, if the row has one.
+    pub fn field(&self, name: &str) -> Option<(Field, &Param)> {
+        self.fields().find(|(field, _)| field.name == name)
     }
 
     /// What the call evaluates to: the first output's type, because that is
@@ -259,18 +345,20 @@ impl Instruction {
         self.outputs().next().map(|param| param.ty)
     }
 
-    /// The smallest legal argument count: the bracketed positions in
-    /// `-CMDHELP` are genuinely optional and NSIS defaults them.
+    /// The legal *argument* count. A range only where a count still decides
+    /// something: one trailing optional (`abort` takes none or one) and real
+    /// repetition (`File a b c`, where `usize::MAX` is the honest upper bound).
+    ///
+    /// Everywhere else it is a point, because the optional positions are named
+    /// and counting arguments no longer says which one a caller meant.
     pub fn arity(&self) -> std::ops::RangeInclusive<usize> {
-        let surface: Vec<&Param> = self.surface().collect();
-        let required = surface.iter().filter(|param| param.required()).count();
-        // A repeated trailing position — `File a b c` — has no upper bound, and
-        // `usize::MAX` is the honest spelling of that rather than a guess.
-        let most = match surface.last() {
+        let positional: Vec<&Param> = self.positional().collect();
+        let least = positional.iter().filter(|param| param.required()).count();
+        let most = match positional.last() {
             Some(param) if param.shape.rep == Rep::Many => usize::MAX,
-            _ => surface.len(),
+            _ => positional.len(),
         };
-        required..=most
+        least..=most
     }
 }
 
@@ -380,6 +468,7 @@ fn join() -> Vec<Instruction> {
                         ty,
                         kind,
                         fill: annotation.and_then(|annotation| annotation.fill),
+                        field: annotation.and_then(|annotation| annotation.field),
                     }
                 })
                 .collect();

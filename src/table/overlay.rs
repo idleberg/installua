@@ -22,7 +22,7 @@
 //! retired row there, which is not a contradiction: the emitter needs its
 //! shape and the user needs the replacement.
 
-use super::{Class, Kind};
+use super::{Class, Field, Kind};
 use crate::types::Ty;
 
 /// The hand-written half of one parameter, positional against the skeleton's
@@ -42,9 +42,13 @@ pub struct Ann {
     /// leaving the position out. `SET` is what NSIS itself uses when `mode` is
     /// absent, so supplying it changes nothing about what the line does.
     ///
-    /// Only ever read for an optional input that precedes an output; a trailing
-    /// optional is simply not emitted, which is what "optional" already meant.
+    /// Only ever read for an optional input that precedes another emitted
+    /// position; a trailing optional is simply not emitted, which is what
+    /// "optional" already meant.
     pub fill: Option<&'static str>,
+    /// The name this position takes in the trailing options table. Required
+    /// positions are positional and carry none (§15.23).
+    pub field: Option<Field>,
 }
 
 pub struct Row {
@@ -80,15 +84,51 @@ const fn ann(ty: Ty, kind: Kind) -> Ann {
         ty,
         kind,
         fill: None,
+        field: None,
     }
 }
 
-/// An annotation that also says what to write when the position is skipped.
-const fn filled(ty: Ty, kind: Kind, fill: &'static str) -> Ann {
+/// An optional position, which is a *named field of the trailing options table*
+/// rather than a counted argument (§15.23).
+///
+/// The name is the only thing added by hand: `req: false` is the snapshot's and
+/// so is the type of thing that goes there. `-CMDHELP` calls these `showmode`
+/// and `hex_string_like_12848412AB`, which is why the name cannot simply be
+/// derived from it.
+const fn opt(ty: Ty, kind: Kind, name: &'static str) -> Ann {
     Ann {
-        fill: Some(fill),
+        field: Some(Field { name, toggle: None }),
         ..ann(ty, kind)
     }
+}
+
+/// An optional position that also says what to write when it is skipped and a
+/// later position is not. Every named field before another emitted position
+/// needs one, because NSIS counts arguments and the caller did not write them.
+const fn filled(ty: Ty, kind: Kind, name: &'static str, fill: &'static str) -> Ann {
+    Ann {
+        fill: Some(fill),
+        ..opt(ty, kind, name)
+    }
+}
+
+/// An optional position whose only legal value is a token NSIS spells itself,
+/// so the field is a `bool` and the compiler writes the token: `execShell(…,
+/// { invokeIdList = true })` becomes `ExecShell /INVOKEIDLIST …`.
+const fn toggle(name: &'static str, nsis: &'static str) -> Ann {
+    Ann {
+        field: Some(Field {
+            name,
+            toggle: Some(nsis),
+        }),
+        ..ann(Ty::Bool, Kind::Value)
+    }
+}
+
+/// A position that is not one: see [`Kind::Fused`]. Never offered and never
+/// emitted, so the argument count stays NSIS's rather than `-CMDHELP`'s.
+const fn fused(ty: Ty) -> Ann {
+    ann(ty, Kind::Fused)
 }
 
 const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) -> Row {
@@ -178,7 +218,7 @@ pub const ROWS: &[Row] = &[
     exposed(
         "Abort",
         "abort",
-        &[ann(Ty::Str, Kind::Value)],
+        &[opt(Ty::Str, Kind::Value, "message")],
         "abort(\"stopped\")",
     ),
     todo(
@@ -282,7 +322,7 @@ pub const ROWS: &[Row] = &[
         &[
             ann(Ty::Str, Kind::Path),
             ann(Ty::Str, Kind::Path),
-            ann(Ty::nonneg(), Kind::Value),
+            opt(Ty::nonneg(), Kind::Value, "sizeInKb"),
         ],
         "copyFiles(INSTDIR .. \"/data\", INSTDIR .. \"/backup\")",
     ),
@@ -297,21 +337,31 @@ pub const ROWS: &[Row] = &[
         "CreateFont",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
+    // The row the options table was designed for. Two required positions and
+    // six named ones: setting the description used to mean writing all nine
+    // arguments, four of which the author does not care about and three of
+    // which are enums they would have to look up.
+    //
+    // `icon index` is one NSIS argument with a typo in its name — the parser
+    // reads token 5 once, with `gettoken_int` — hence the [`Kind::Fused`] half.
+    // Every field but the last carries a fill, because NSIS still counts the
+    // positions the caller declined.
     exposed(
         "CreateShortcut",
         "createShortcut",
         &[
             ann(Ty::Str, Kind::Path),
             ann(Ty::Str, Kind::Path),
-            ann(Ty::Str, Kind::Value),
-            ann(Ty::Str, Kind::Path),
-            ann(Ty::nonneg(), Kind::Value),
-            ann(Ty::nonneg(), Kind::Value),
-            ann(Ty::Str, Kind::Enum),
-            ann(Ty::Str, Kind::Enum),
-            ann(Ty::Str, Kind::Value),
+            filled(Ty::Str, Kind::Value, "parameters", "\"\""),
+            filled(Ty::Str, Kind::Path, "iconFile", "\"\""),
+            filled(Ty::nonneg(), Kind::Value, "iconIndex", "0"),
+            fused(Ty::nonneg()),
+            filled(Ty::Str, Kind::Enum, "showMode", "SW_SHOWNORMAL"),
+            filled(Ty::Str, Kind::Enum, "hotkey", "\"\""),
+            opt(Ty::Str, Kind::Value, "comment"),
         ],
-        "createShortcut(DESKTOP .. \"/App.lnk\", INSTDIR .. \"/app.exe\")",
+        "createShortcut(DESKTOP .. \"/App.lnk\", INSTDIR .. \"/app.exe\", \
+         { comment = \"Launch App\" })",
     ),
     todo(
         "SetDatablockOptimize",
@@ -438,17 +488,43 @@ pub const ROWS: &[Row] = &[
         "ExecWait",
         "one argument that is part path and part switches; §5's `/`-to-`\\` rule cannot apply to half a string",
     ),
-    // `ExecShell [flags] verb file [parameters [showmode]]`: the optional
-    // position is *first*, so `execShell("open", f)` would bind `"open"` to
-    // `flags`. Trailing optionals work because they are positional and a
-    // leading one is not — the same gap PHASE-6 records, met by a real row.
-    todo(
+    // `ExecShell [flags] verb file [parameters [showmode]]`. The optional
+    // position is *first*, which is what the options table settles: `verb` and
+    // `file` are the two required positions and nothing else is counted, so
+    // `execShell("open", url)` can no longer bind `"open"` to `flags`.
+    //
+    // `flags` is a `toggle` because its only legal value is `/INVOKEIDLIST`,
+    // which the compiler spells. It is also the one optional here that needs no
+    // fill: NSIS tells it from `verb` by the leading `/`.
+    //
+    // `file` is `Kind::Value` and that is not an oversight. §5's `/`-to-`\`
+    // rewrite is about a Windows *file* path, and this position is a shell
+    // target — a path, a URL, or a registered document. Win32 takes `/` as a
+    // separator, so `INSTDIR .. "/readme.txt"` still opens; a URL put through
+    // §5 becomes `https:\\…` and does not.
+    exposed(
         "ExecShell",
-        "a *leading* optional parameter: positional arguments cannot say which optional they mean",
+        "execShell",
+        &[
+            toggle("invokeIdList", "/INVOKEIDLIST"),
+            ann(Ty::Str, Kind::Enum),
+            ann(Ty::Str, Kind::Value),
+            filled(Ty::Str, Kind::Value, "parameters", "\"\""),
+            opt(Ty::Str, Kind::Enum, "showMode"),
+        ],
+        "execShell(\"open\", \"https://example.invalid\", { showMode = \"SW_HIDE\" })",
     ),
-    todo(
+    exposed(
         "ExecShellWait",
-        "a *leading* optional parameter: positional arguments cannot say which optional they mean",
+        "execShellWait",
+        &[
+            toggle("invokeIdList", "/INVOKEIDLIST"),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+            filled(Ty::Str, Kind::Value, "parameters", "\"\""),
+            opt(Ty::Str, Kind::Value, "showMode"),
+        ],
+        "execShellWait(\"open\", INSTDIR .. \"/readme.txt\")",
     ),
     exposed(
         "ExpandEnvStrings",
@@ -518,7 +594,7 @@ pub const ROWS: &[Row] = &[
         &[
             ann(Ty::Handle, Kind::Value),
             ann(Ty::Str, Kind::Value),
-            ann(Ty::nonneg(), Kind::Value),
+            opt(Ty::nonneg(), Kind::Value, "maxLen"),
         ],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nfor line in lines(f) do detailPrint(line) end\nf:close()",
     ),
@@ -551,7 +627,7 @@ pub const ROWS: &[Row] = &[
         &[
             ann(Ty::Handle, Kind::Value),
             ann(Ty::Str, Kind::Value),
-            ann(Ty::nonneg(), Kind::Value),
+            opt(Ty::nonneg(), Kind::Value, "maxLen"),
         ],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal line = f:readUtf16Le()\ndetailPrint(line)\nf:close()",
     ),
@@ -581,7 +657,7 @@ pub const ROWS: &[Row] = &[
         &[
             ann(Ty::Handle, Kind::Value),
             ann(Ty::int(), Kind::Value),
-            filled(Ty::Str, Kind::Enum, "SET"),
+            filled(Ty::Str, Kind::Enum, "mode", "SET"),
             ann(Ty::nonneg(), Kind::Value),
         ],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal size = f:seek(0, \"END\")\ndetailPrint(\"size \" .. size)\nf:close()",
@@ -601,7 +677,10 @@ pub const ROWS: &[Row] = &[
     exposed(
         "GetTempFileName",
         "getTempFileName",
-        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Path)],
+        &[
+            ann(Ty::Str, Kind::Value),
+            opt(Ty::Str, Kind::Path, "baseDir"),
+        ],
         "local scratch = getTempFileName()\ndetailPrint(scratch)",
     ),
     // The argument is a `KNOWNFOLDERID` GUID, not a name: NSIS ships no
@@ -875,7 +954,10 @@ pub const ROWS: &[Row] = &[
     exposed(
         "RegDLL",
         "regDll",
-        &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Value)],
+        &[
+            ann(Ty::Str, Kind::Path),
+            opt(Ty::Str, Kind::Value, "entryPoint"),
+        ],
         "regDll(INSTDIR .. \"/shell.dll\")",
     ),
     exposed(
@@ -1296,7 +1378,7 @@ pub const ROWS: &[Row] = &[
             ann(Ty::Handle, Kind::Value),
             ann(Ty::Str, Kind::Path),
             ann(Ty::Str, Kind::Value),
-            ann(Ty::Str, Kind::Value),
+            opt(Ty::Str, Kind::Value, "hexData"),
         ],
         "writeRegNone(HKLM, \"Software/Example\", \"Marker\")",
     ),

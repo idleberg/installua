@@ -148,6 +148,86 @@ fn an_optional_position_is_written_only_when_something_after_it_is() {
     );
 }
 
+/// Optional positions are named, and naming one writes every position before it.
+///
+/// This is the rule an example cannot show either, because an example is one
+/// call site and the point is which *other* call sites are now writable.
+/// `createShortcut` is the case that motivated it: setting the description used
+/// to mean writing all nine arguments, four of which the author does not care
+/// about and three of which are enums they would have to look up.
+#[test]
+fn an_optional_position_is_reached_by_name_and_fills_the_ones_before_it() {
+    let build = |body: &str| {
+        let mut diags = Diagnostics::new();
+        let source = format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n\
+             {body}\n\
+             end), }}"
+        );
+        installua::build(&source, &mut diags)
+            .unwrap_or_else(|| panic!("{}", diags.render("<test>")))
+    };
+
+    // The last option, and the five before it are the compiler's problem.
+    // `iconIndex`'s `0` is one argument rather than two: `-CMDHELP` prints
+    // `icon index`, and that is one NSIS argument whose name has a space in it.
+    let comment = build(
+        "createShortcut(DESKTOP .. \"/App.lnk\", INSTDIR .. \"/app.exe\", \
+         { comment = \"Launch App\" })",
+    );
+    assert!(
+        comment.contains(
+            "CreateShortcut \"$DESKTOP\\App.lnk\" \"$INSTDIR\\app.exe\" \"\" \"\" 0 \
+             SW_SHOWNORMAL \"\" \"Launch App\"\n"
+        ),
+        "reaching `comment` should fill the five positions before it:\n{comment}"
+    );
+
+    // Nothing named: nothing filled. The two required positions are the line.
+    let bare = build("createShortcut(DESKTOP .. \"/App.lnk\", INSTDIR .. \"/app.exe\")");
+    assert!(
+        bare.contains("CreateShortcut \"$DESKTOP\\App.lnk\" \"$INSTDIR\\app.exe\"\n"),
+        "an unnamed option stays absent:\n{bare}"
+    );
+
+    // A leading optional, which is what counting could never do: `"open"` is
+    // the first *required* position, so it can only mean `verb`.
+    let shell = build("execShell(\"open\", \"https://example.invalid\", { invokeIdList = true })");
+    assert!(
+        shell.contains("ExecShell /INVOKEIDLIST \"open\" \"https://example.invalid\"\n"),
+        "a toggle is spelled by the compiler and placed by the table:\n{shell}"
+    );
+
+    // And `false` is the absence rather than a token, so it emits nothing.
+    let off = build("execShell(\"open\", \"https://example.invalid\", { invokeIdList = false })");
+    assert!(
+        off.contains("ExecShell \"open\" \"https://example.invalid\"\n"),
+        "`false` is not a flag:\n{off}"
+    );
+}
+
+/// The error that replaces "takes 2 to 9 arguments, and 4 were given".
+#[test]
+fn an_unknown_option_names_the_ones_that_exist() {
+    let mut diags = Diagnostics::new();
+    let built = installua::build(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         execShell(\"open\", \"https://example.invalid\", { showmode = \"SW_HIDE\" })\n\
+         end), }",
+        &mut diags,
+    );
+
+    assert!(built.is_none() || diags.has_errors());
+    let rendered = diags.render("<test>");
+    assert!(
+        rendered.contains("`execShell` has no option `showmode`")
+            && rendered.contains("`invokeIdList`, `parameters`, `showMode`"),
+        "{rendered}"
+    );
+}
+
 /// A row that writes two registers, called by someone who wants one or none.
 ///
 /// The example on the row binds both, because that is the shape worth showing.

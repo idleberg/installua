@@ -37,7 +37,7 @@ Section "CreateDirectory"
 SectionEnd
 
 Section "CreateShortcut"
-  CreateShortcut "$DESKTOP\App.lnk" "$INSTDIR\app.exe"
+  CreateShortcut "$DESKTOP\App.lnk" "$INSTDIR\app.exe" "" "" 0 SW_SHOWNORMAL "" "Launch App"
 SectionEnd
 
 Section "DeleteINISec"
@@ -77,6 +77,14 @@ SectionEnd
 Section "EnumRegValue"
   EnumRegValue $0 HKLM "Software\Example" 0
   DetailPrint $0
+SectionEnd
+
+Section "ExecShell"
+  ExecShell "open" "https://example.invalid" "" "SW_HIDE"
+SectionEnd
+
+Section "ExecShellWait"
+  ExecShellWait "open" "$INSTDIR/readme.txt"
 SectionEnd
 
 Section "ExpandEnvStrings"
