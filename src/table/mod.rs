@@ -22,6 +22,7 @@
 //! update (§14).
 
 pub mod cmdhelp;
+pub mod doc;
 pub mod generated;
 pub mod overlay;
 
@@ -189,6 +190,9 @@ pub struct Param {
     pub shape: Shape,
     pub ty: Ty,
     pub kind: Kind,
+    /// What the emitter writes here when the caller omitted this position **and
+    /// a later one still has to be emitted**. See [`overlay::Ann::fill`].
+    pub fill: Option<&'static str>,
 }
 
 impl Param {
@@ -375,6 +379,7 @@ fn join() -> Vec<Instruction> {
                         shape: *shape,
                         ty,
                         kind,
+                        fill: annotation.and_then(|annotation| annotation.fill),
                     }
                 })
                 .collect();

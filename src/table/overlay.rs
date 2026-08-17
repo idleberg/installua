@@ -32,6 +32,19 @@ use crate::types::Ty;
 pub struct Ann {
     pub ty: Ty,
     pub kind: Kind,
+    /// The token the emitter writes when the caller omitted this position and a
+    /// *later* one still has to be emitted.
+    ///
+    /// `FileSeek handle offset [mode] [$(user_var: new position)]` is the only
+    /// command in the table that needs it, and it needs it badly: NSIS parses
+    /// `FileSeek $1 0 $0` with `$0` as the **mode** and rejects it, so an author
+    /// who wants the new position without naming a mode cannot be served by
+    /// leaving the position out. `SET` is what NSIS itself uses when `mode` is
+    /// absent, so supplying it changes nothing about what the line does.
+    ///
+    /// Only ever read for an optional input that precedes an output; a trailing
+    /// optional is simply not emitted, which is what "optional" already meant.
+    pub fill: Option<&'static str>,
 }
 
 pub struct Row {
@@ -63,7 +76,19 @@ pub struct Row {
 }
 
 const fn ann(ty: Ty, kind: Kind) -> Ann {
-    Ann { ty, kind }
+    Ann {
+        ty,
+        kind,
+        fill: None,
+    }
+}
+
+/// An annotation that also says what to write when the position is skipped.
+const fn filled(ty: Ty, kind: Kind, fill: &'static str) -> Ann {
+    Ann {
+        fill: Some(fill),
+        ..ann(ty, kind)
+    }
 }
 
 const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) -> Row {
@@ -467,33 +492,63 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Handle, Kind::Value), ann(Ty::Str, Kind::Value)],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"w\")\nf:write(\"done\")\nf:close()",
     ),
-    todo(
+    // `FileReadByte handle $(user_var: output)` puts its output **second**, and
+    // the emitter used to write destinations first unconditionally: the row
+    // would have emitted `FileReadByte $0 $1`, which is two registers, which
+    // assembles. At run time it reads from the destination and writes over the
+    // handle. `place` reads the position from here instead.
+    exposed(
         "FileReadByte",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "f:readByte",
+        &[ann(Ty::Handle, Kind::Value), ann(Ty::nonneg(), Kind::Value)],
+        "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal b = f:readByte()\ndetailPrint(\"byte \" .. b)\nf:close()",
     ),
     todo(
         "FileWriteByte",
         "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
     ),
-    todo(
+    // The output is in the *middle* here, which is why "outputs lead" and
+    // "outputs trail" were never the two cases.
+    exposed(
         "FileReadUTF16LE",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "f:readUtf16Le",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal line = f:readUtf16Le()\ndetailPrint(line)\nf:close()",
     ),
     todo(
         "FileWriteUTF16LE",
         "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
     ),
-    todo(
+    exposed(
         "FileReadWord",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "f:readWord",
+        &[ann(Ty::Handle, Kind::Value), ann(Ty::nonneg(), Kind::Value)],
+        "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal w = f:readWord()\ndetailPrint(\"word \" .. w)\nf:close()",
     ),
     todo(
         "FileWriteWord",
         "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
     ),
-    todo(
+    // The row that needed `fill`. `mode` is optional and sits *before* the
+    // output, and `FileSeek $1 0 $0` is not the answer — NSIS reads `$0` as the
+    // mode and rejects the line. So `local p = f:seek(0)` has to write a mode
+    // nobody named, and `SET` is the one NSIS uses when the position is absent.
+    // `f:seek(0)` with nothing reading the result still emits `FileSeek $1 0`:
+    // the fill is written only when a later position is.
+    exposed(
         "FileSeek",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "f:seek",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::int(), Kind::Value),
+            filled(Ty::Str, Kind::Enum, "SET"),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal size = f:seek(0, \"END\")\ndetailPrint(\"size \" .. size)\nf:close()",
     ),
     language("Function", "`func`"),
     language("FunctionEnd", "the end of a `func` body"),

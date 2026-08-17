@@ -107,6 +107,34 @@ Section "FileWrite"
   FileClose $0
 SectionEnd
 
+Section "FileReadByte"
+  FileOpen $0 "$INSTDIR\log.txt" "r"
+  FileReadByte $0 $1
+  DetailPrint "byte $1"
+  FileClose $0
+SectionEnd
+
+Section "FileReadUTF16LE"
+  FileOpen $0 "$INSTDIR\log.txt" "r"
+  FileReadUTF16LE $0 $1
+  DetailPrint $1
+  FileClose $0
+SectionEnd
+
+Section "FileReadWord"
+  FileOpen $0 "$INSTDIR\log.txt" "r"
+  FileReadWord $0 $1
+  DetailPrint "word $1"
+  FileClose $0
+SectionEnd
+
+Section "FileSeek"
+  FileOpen $0 "$INSTDIR\log.txt" "r"
+  FileSeek $0 0 "END" $1
+  DetailPrint "size $1"
+  FileClose $0
+SectionEnd
+
 Section "GetFullPathName"
   GetFullPathName $0 "$INSTDIR\app.exe"
   DetailPrint $0

@@ -79,6 +79,30 @@ installer {
 		f:write("done")
 		f:close()
 	end),
+	section("FileReadByte", function()
+		local f = fileOpen(INSTDIR .. "/log.txt", "r")
+		local b = f:readByte()
+		detailPrint("byte " .. b)
+		f:close()
+	end),
+	section("FileReadUTF16LE", function()
+		local f = fileOpen(INSTDIR .. "/log.txt", "r")
+		local line = f:readUtf16Le()
+		detailPrint(line)
+		f:close()
+	end),
+	section("FileReadWord", function()
+		local f = fileOpen(INSTDIR .. "/log.txt", "r")
+		local w = f:readWord()
+		detailPrint("word " .. w)
+		f:close()
+	end),
+	section("FileSeek", function()
+		local f = fileOpen(INSTDIR .. "/log.txt", "r")
+		local size = f:seek(0, "END")
+		detailPrint("size " .. size)
+		f:close()
+	end),
 	section("GetFullPathName", function()
 		local full = getFullPathName(INSTDIR .. "/app.exe")
 		detailPrint(full)

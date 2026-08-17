@@ -104,6 +104,50 @@ fn the_examples_match_their_golden() {
     );
 }
 
+/// The two things an example cannot show, because an example is one call site
+/// and these differ *between* call sites.
+#[test]
+fn an_optional_position_is_written_only_when_something_after_it_is() {
+    let build = |body: &str| {
+        let mut diags = Diagnostics::new();
+        let source = format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n\
+             local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\n\
+             {body}\n\
+             f:close()\n\
+             end), }}"
+        );
+        installua::build(&source, &mut diags)
+            .unwrap_or_else(|| panic!("{}", diags.render("<test>")))
+    };
+
+    // The output is optional, so a call nobody reads writes no register. A
+    // temporary here would be correct NSIS and would still enter the clobber
+    // set, costing a caller a save for a value that was never wanted.
+    let discarded = build("f:seek(0, \"END\")");
+    assert!(
+        discarded.contains("FileSeek $0 0 \"END\"\n"),
+        "an unread optional output should not be emitted:\n{discarded}"
+    );
+
+    // And `mode` is optional but *precedes* the output, so reading the result
+    // means writing a mode the author never named — `FileSeek $0 0 $1` is not
+    // an option, NSIS reads `$1` as the mode and rejects the line.
+    let filled = build("local p = f:seek(0)\ndetailPrint(\"at \" .. p)");
+    assert!(
+        filled.contains("FileSeek $0 0 SET $1\n"),
+        "reaching the output should fill `mode`:\n{filled}"
+    );
+
+    // Same position, same row, nothing after it: not written.
+    let bare = build("f:seek(0)");
+    assert!(
+        bare.contains("FileSeek $0 0\n"),
+        "a trailing optional stays absent:\n{bare}"
+    );
+}
+
 /// Tier 3, with an empty warning allowlist (§14).
 ///
 /// The golden above answers *"did the output change?"*. Only `makensis`

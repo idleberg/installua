@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           70
+  exposed           74
   attribute         14
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             122
+  todo             118
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -41,13 +41,9 @@ todo:
   FileBufSize             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   ReserveFile             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileErrorText           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileReadByte            file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileWriteByte           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileReadUTF16LE         file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileWriteUTF16LE        file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileReadWord            file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileWriteWord           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileSeek                file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   GetDlgItem              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   InstallDirRegKey        registry surface beyond `readReg`/`writeReg`: one overlay row each
   InstallColors           the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled

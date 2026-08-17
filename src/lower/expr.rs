@@ -640,18 +640,20 @@ impl BodyLowerer<'_, '_> {
 
             false => match (builtin.returns(), dest) {
                 (Some(ty), Some(dest)) => {
-                    let mut all = vec![ir::Arg::dest(dest.clone())];
-                    all.extend(lowered);
+                    let all = place(builtin, lowered, Some(ir::Arg::dest(dest.clone())));
                     self.emit(ir::Instruction::new(builtin.nsis, all));
                     Some(ty)
                 }
                 (Some(ty), None) => {
-                    // The instruction has an output register whether or not
-                    // anybody wanted one, so it gets a temporary rather than a
-                    // guess at which register is spare.
-                    let slot = self.claim_temp(span);
-                    let mut all = vec![ir::Arg::dest(slot)];
-                    all.extend(lowered);
+                    // A *required* output register exists whether or not anybody
+                    // wanted one, so it gets a temporary rather than a guess at
+                    // which register is spare. An *optional* one is simply not
+                    // written: `fileSeek(f, 0, "END")` in statement position is
+                    // `FileSeek $1 0 END`, and a register nobody reads would
+                    // still enter the clobber set and cost a caller a save.
+                    let wanted = builtin.outputs().next().is_some_and(|out| out.required());
+                    let slot = wanted.then(|| ir::Arg::dest(self.claim_temp(span)));
+                    let all = place(builtin, lowered, slot);
                     self.emit(ir::Instruction::new(builtin.nsis, all));
                     Some(ty)
                 }
@@ -700,43 +702,74 @@ impl BodyLowerer<'_, '_> {
             );
             return None;
         }
-        if dest.is_some() {
+        // The table names these `f:close`, `f:read`, `f:write` — it has since
+        // Phase 5 — and this used to hold a second copy as a hardcoded match.
+        // Two vocabularies for one set is what the join exists to remove, and
+        // the copy could not describe a method with an *output* at all, which is
+        // what `f:readByte` and `f:seek` are.
+        let Some(builtin) = builtins::lookup(&format!("f:{}", method.text)) else {
             self.diags.push(
                 Diagnostic::error(
-                    Code::TypeMismatch,
-                    span,
-                    format!("`{}` produces no value", method.text),
+                    Code::UndefinedName,
+                    method.span,
+                    format!("a handle has no `{}`", method.text),
                 )
-                .note("it acts on the file rather than answering a question"),
+                .note(format!("the methods are {}", methods())),
             );
             return None;
-        }
-
-        let (nsis, arity) = match method.text.as_str() {
-            "close" => ("FileClose", 0),
-            "write" => ("FileWrite", 1),
-            other => {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::UndefinedName,
-                        method.span,
-                        format!("a handle has no `{other}`"),
-                    )
-                    .note("the methods are `close` and `write`"),
-                );
-                return None;
-            }
         };
-        if args.len() != arity {
-            return self.wrong_arity(&method.text, arity, args.len(), span);
+
+        // The receiver is the first parameter in NSIS and a syntactic prefix
+        // here, so the method's own arity is the surface minus it.
+        let params: Vec<&table::Param> = builtin.surface().skip(1).collect();
+        let arity = builtin.arity();
+        let least = arity.start().saturating_sub(1);
+        let most = arity.end().saturating_sub(1);
+        if args.len() < least || args.len() > most {
+            return self.wrong_arity(&method.text, least, args.len(), span);
         }
 
         let mut lowered = vec![handle.arg];
-        for argument in args {
-            lowered.push(self.value(argument)?.arg);
+        for (index, argument) in args.iter().enumerate() {
+            let value = self.value(argument)?;
+            let param = params.get(index).or_else(|| params.last())?;
+            lowered.push(if param.kind == table::Kind::Path {
+                value.arg.into_path()
+            } else {
+                value.arg
+            });
         }
-        self.emit(ir::Instruction::new(nsis, lowered));
-        None
+
+        match (builtin.returns(), dest) {
+            (Some(ty), Some(dest)) => {
+                let all = place(builtin, lowered, Some(ir::Arg::dest(dest.clone())));
+                self.emit(ir::Instruction::new(builtin.nsis, all));
+                Some(ty)
+            }
+            (Some(ty), None) => {
+                let wanted = builtin.outputs().next().is_some_and(|out| out.required());
+                let slot = wanted.then(|| ir::Arg::dest(self.claim_temp(span)));
+                let all = place(builtin, lowered, slot);
+                self.emit(ir::Instruction::new(builtin.nsis, all));
+                Some(ty)
+            }
+            (None, Some(_)) => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        span,
+                        format!("`{}` produces no value", method.text),
+                    )
+                    .note("it acts on the file rather than answering a question"),
+                );
+                None
+            }
+            (None, None) => {
+                let all = place(builtin, lowered, None);
+                self.emit(ir::Instruction::new(builtin.nsis, all));
+                None
+            }
+        }
     }
 
     // -- namespaces --------------------------------------------------------
@@ -1872,6 +1905,86 @@ const BUTTONS: &[ButtonSet] = &[
         answers: &["YES", "NO", "CANCEL"],
     },
 ];
+
+/// The handle's methods, for the error that says a name is not one of them.
+/// Read from the table rather than listed, so a new `f:` row appears here the
+/// day it is written.
+fn methods() -> String {
+    let mut names: Vec<&str> = table::table()
+        .iter()
+        .filter(|entry| entry.class == table::Class::Exposed)
+        .filter_map(|entry| entry.installua)
+        .filter_map(|name| name.strip_prefix("f:"))
+        .collect();
+    names.sort_unstable();
+    names
+        .iter()
+        .map(|name| format!("`{name}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The emitted argument list, in **NSIS** order.
+///
+/// The surface order and the NSIS order are not the same list, and treating
+/// them as one is how `FileReadByte $0 $1` gets emitted for
+/// `local b = fileReadByte(f)` — two registers, so it assembles, and at run time
+/// it reads from the destination and writes over the handle. The output is
+/// second in `-CMDHELP` and the emitter used to write it first, unconditionally.
+///
+/// So the table says where everything goes and this walks it:
+///
+/// - an **output** takes the next destination, or is skipped when there is none
+///   (only reachable for an optional output — a required one was given a
+///   temporary before the call);
+/// - a [`Kind::Label`] input is the compiler's and is never emitted here;
+/// - any other input takes the next lowered argument, and a [`Rep::Many`] tail
+///   takes all of them;
+/// - an input the caller omitted becomes *pending* rather than absent, and is
+///   written only if some later position turns out to be emitted.
+///
+/// That last rule is the whole reason `fill` exists. `FileSeek handle offset
+/// [mode] [$(user_var: new position)]` cannot be written `FileSeek $1 0 $0` —
+/// NSIS reads `$0` as the mode and rejects the line — so reaching the output
+/// means writing a mode the author never named. Pending-until-needed keeps
+/// `fileSeek(f, 0)` at `FileSeek $1 0` and makes `local p = fileSeek(f, 0)`
+/// into `FileSeek $1 0 SET $0`, from one table field and no special case.
+fn place(
+    builtin: &table::Instruction,
+    inputs: Vec<ir::Arg>,
+    dest: Option<ir::Arg>,
+) -> Vec<ir::Arg> {
+    let mut emitted = Vec::with_capacity(builtin.params.len());
+    let mut pending: Vec<ir::Arg> = Vec::new();
+    let mut inputs = inputs.into_iter().peekable();
+    let mut dests = dest.into_iter();
+
+    for param in &builtin.params {
+        let argument = match param.dir() {
+            table::Dir::Out => dests.next(),
+            table::Dir::In if param.kind == table::Kind::Label => continue,
+            table::Dir::In if param.shape.rep == table::Rep::Many => {
+                // The repeated tail is the last position by construction, so
+                // draining is safe and the count is the caller's.
+                emitted.append(&mut pending);
+                emitted.extend(inputs.by_ref());
+                continue;
+            }
+            table::Dir::In => inputs.next(),
+        };
+        match argument {
+            Some(argument) => {
+                emitted.append(&mut pending);
+                emitted.push(argument);
+            }
+            // Not "absent" yet: whether this position is written depends on
+            // whether anything after it is. A position with no `fill` that turns
+            // out to be needed is a table bug, and the census refuses it.
+            None => pending.extend(param.fill.map(ir::Arg::raw)),
+        }
+    }
+    emitted
+}
 
 /// An arity, said the way a reader counts. `-CMDHELP` brackets are genuine
 /// optionality — `CreateShortcut` takes two arguments or seven — so an error

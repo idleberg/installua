@@ -20,6 +20,7 @@ usage:
   installua init [dir]                   installua.toml, .luarc.json, selene.toml
   installua stubs [dir]                  .installua/meta/*.lua and the selene std
   installua table <cmdhelp.txt>          regenerate the instruction skeletons
+  installua language <cmdhelp.txt>       regenerate LANGUAGE.md's table (§14)
 
 options:
   -o <file.nsi>   write here instead of alongside the input
@@ -47,6 +48,7 @@ fn main() -> ExitCode {
         Some((&"init", rest)) => init(rest),
         Some((&"stubs", rest)) => stubs(rest),
         Some((&"table", rest)) => table(rest),
+        Some((&"language", rest)) => language(rest),
         Some((other, _)) => usage_error(&format!("unknown command `{other}`")),
     }
 }
@@ -307,6 +309,19 @@ fn table(args: &[&str]) -> ExitCode {
         return ExitCode::from(2);
     };
     print!("{}", installua::table::cmdhelp::generate(&text));
+    ExitCode::SUCCESS
+}
+
+/// `installua language`: the §14 census as the correspondence table
+/// `LANGUAGE.md` is, so the document cannot outlive the rows it describes.
+fn language(args: &[&str]) -> ExitCode {
+    let [snapshot] = args else {
+        return usage_error("`language` needs exactly one snapshot file");
+    };
+    let Some(text) = read(Path::new(snapshot)) else {
+        return ExitCode::from(2);
+    };
+    print!("{}", installua::table::doc::language(&text));
     ExitCode::SUCCESS
 }
 

@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: the preparatory tasks are done and the grind is done. 25 → 70 exposed,
-167 → 122 todo, `A` through `Z`.**
+**Status: the alphabetical grind is done and the first design item after it has landed.
+25 → 74 exposed, 167 → 118 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -20,7 +20,7 @@ in `-CMDHELP` order either way.
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 84 tests
+cargo test          # 86 tests
 ```
 
 ---
@@ -153,10 +153,10 @@ case gets a second note, because `int` is what the user's spelling calls both si
 `ExecWait command_line [$(user_var: return value)]` has its output **last**, and the
 emitter builds `[dest] ++ inputs`. Writing that row would have emitted
 `ExecWait $0 "cmd"`: a script that assembles, and does the wrong thing.
-[`an_exposed_rows_outputs_come_first`](tests/census.rs) now refuses an `Exposed` row
-whose outputs are not leading. `FileRead` is its one exception, and it is one because
-nothing generic emits it — `for line in lines(f)` is a hand-written lowering that
-places the register itself. A *second* exception is a reason to fix the emitter.
+`an_exposed_rows_outputs_come_first` refused any `Exposed` row whose outputs were not
+leading, with `FileRead` as its one exception — and the comment said a *second* exception
+would be a reason to fix the emitter rather than extend the list. Batch 5 found four, and
+did. The test is gone; see "Outputs go where the table says" below.
 
 ## Batch 4 — S through Z
 
@@ -208,6 +208,108 @@ by design — the section body is the smallest region containing the behaviour �
 cannot carry an honest example until something can say where a call is legal. `SetSilent`
 is back in the backlog with that as its reason, and it is the first entry in the backlog
 that names a missing *check* rather than a missing design.
+
+## Batch 5 — outputs go where the table says
+
+Four rows, and the emitter changed to make them possible:
+
+| NSIS | Installua |
+| --- | --- |
+| `FileReadByte`, `FileReadWord` | `f:readByte()`, `f:readWord()` |
+| `FileReadUTF16LE` | `f:readUtf16Le([maxlen])` |
+| `FileSeek` | `f:seek(offset [, mode])` |
+
+### The concatenation that assembled
+
+No output was ever passed as an argument — `surface()` filters `Dir::Out` out, so
+`local key = enumRegKey(HKLM, sub, 0)` was already the shape and twenty rows used it. The
+call shape was never the problem. The **emitted** line was: the emitter built
+`[dest] ++ inputs` unconditionally, and NSIS does not put the register first.
+
+```
+local b = fileReadByte(f)        -- FileReadByte handle $(user_var: output)
+
+emitted     FileReadByte $0 $1   -- $0 read as the handle, $1 written as the output
+wanted      FileReadByte $1 $0
+```
+
+Two registers either way, so `makensis` takes it without a word — verified, both orders
+assemble. At run time it reads from the destination and writes **over the handle**, and
+the next read on that handle reads from a byte value. Tier 2 sees a golden that changed
+as asked; tier 3 sees valid NSIS. Neither tier can see this, which is why the census
+carried an invariant refusing such rows instead.
+
+`FileReadUTF16LE` puts its output in the *middle*, so "leading" and "trailing" were never
+the two cases. `place()` in [`lower/expr.rs`](src/lower/expr.rs) now walks `params` in
+table order and asks each position what goes there.
+
+### Three things the walk has to decide, not two
+
+**Where** the destination goes was the known one. Reading the syntax lines turned up two
+more, and `FileSeek` has both:
+
+```
+FileSeek $(user_var: handle) offset [mode] [$(user_var: new position)]
+```
+
+**Whether to write a destination at all.** The output is optional, so the two call sites
+want different token counts:
+
+```lua
+f:seek(0, "END")               -- FileSeek $0 0 "END"
+local p = f:seek(0, "END")     -- FileSeek $0 0 "END" $1
+```
+
+`returns()` hands back the type unconditionally and the emitter always wrote a
+destination, so the statement form used to claim a temporary: correct NSIS, and a register
+nobody reads still enters the clobber set and can cost a caller a save.
+
+**What to write for a position the caller skipped.** `mode` is optional and sits *before*
+the output, and the obvious emission is rejected:
+
+```
+FileSeek $0 0 $1     ->  Error in script -- aborting     ($1 is parsed as the mode)
+FileSeek $0 0 SET $1 ->  (assembles)
+```
+
+So reaching the output means writing a mode nobody named. `Ann::fill` carries it, `SET` is
+what NSIS itself uses when the position is absent, and the walk keeps every skipped
+position *pending* rather than absent — written only if something after it turns out to be
+written. One rule, and `f:seek(0)` still emits `FileSeek $0 0`.
+
+`FileSeek` is the only command in the table that needs a fill, which is exactly why it did
+not turn up until somebody read the line.
+
+### Two tests traded
+
+`an_exposed_rows_outputs_come_first` is gone: it existed only to refuse rows the emitter
+could not place. In its place,
+[`an_optional_input_before_an_output_can_be_filled`](tests/census.rs) checks the narrower
+thing — an optional position before an output must carry a `fill`, because a row that
+needs one and lacks it emits a line one token short, and NSIS may well accept it.
+
+[`an_optional_position_is_written_only_when_something_after_it_is`](tests/overlay.rs)
+covers the three call sites, since an example is one call site and this differs between
+them.
+
+### The method table was a second table
+
+`f:readByte` could not be written at all until `method()` stopped being a hardcoded
+`match` on `"close"` and `"write"`. The overlay has named these `f:close`, `f:read` and
+`f:write` since Phase 5, so the match was a second vocabulary for one set — and it had no
+way to express a method with an *output*, which is what all four of these are. Method
+dispatch now reads the table: the receiver is the first parameter, the arity is the
+surface minus it, and outputs go through the same `place()`. The "a handle has no `x`"
+error lists the methods by reading the table, so a new `f:` row appears in it the day it
+is written.
+
+### What this did not unblock
+
+`ExecWait` still has the `Exec` family's reason — one argument that is part path and part
+switches, where §5's rewrite cannot apply to half a string — and that ruling is the older
+of its two blockers. The `GetDLLVersion` and `GetFileTime` families need the plural-output
+work as well. The rest of the non-leading-output commands are behind §13, the `hwnd`
+surface, the classic UI or §15.19.
 
 ## What the join replaced
 
@@ -277,21 +379,66 @@ tier 3 catches and tier 2 cannot.
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 122 is section-index binding (§13), the `hwnd` surface, the classic UI,
+  left in the 118 is section-index binding (§13), the `hwnd` surface, the classic UI,
   pages, script-wide settings and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
 - **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
   `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
   pass a call that is simply dead.
-- **`arity` is a range, and nothing yet says which optional position a caller means.**
-  Trailing optionals work because they are positional. `ExecShell` is the row that needs
-  more: a *leading* optional, where the count of arguments no longer says which position
-  each one is. Four commands are waiting on it.
-- **The emitter writes destinations first**, which is true of every exposed row and not
-  of NSIS — `ExecWait` and `GetTempFileName` put theirs last. A test refuses such a row
-  today; placing outputs by position is the fix, and it is the same change as the plural
-  case below.
 - **Multiple outputs are still one output.** `Instruction::returns` takes the first
-  `Dir::Out` parameter, which is every exposed row today. `GetDLLVersion` writes two, and
-  §15.23 says the count *is* the Lua arity, so the plural case is a lowering change rather
-  than a row.
+  `Dir::Out` parameter, which is every exposed row today. `GetDLLVersion`, `GetFileTime`
+  and their `*Local` twins write two, and §15.23 says the count *is* the Lua arity, so the
+  plural case is a lowering change rather than a row. Batch 5 placed outputs by position,
+  which is half of it; the other half is the multi-`dest` binding path.
+
+### Optionals should be named, not counted
+
+`arity` is a range and the lowerer zips arguments to `surface()` by index, so which
+parameter an argument *means* is decided by how many arguments there are. That works for
+trailing optionals and fails twice.
+
+**It fails outright on a leading optional.** `ExecShell [flags] verb file [parameters
+[showmode]]` puts the optional first, so `execShell("open", url)` zips `"open"` to `flags`
+and the URL to `verb`. Every annotation lands one position left of what the author meant.
+The emitted text is *accidentally* correct — NSIS re-parses positionally and reads two
+tokens as `verb file` — so tier 2 and tier 3 both pass. What is lost is the checking: the
+`Kind::Path` annotation belongs to `file` and was applied to `verb`, so §5's `/`-to-`\`
+rewrite silently does not happen, and [`stubs.rs`](src/stubs.rs) describes the signature
+shifted by one.
+
+**It is already bad on the trailing ones.** `CreateShortcut` is two required positions and
+seven optional, `arity` `2..=9`. Setting the comment means passing all nine, four of which
+the author does not care about and three of which are enums they would have to look up.
+That row is exposed and shipped; the leading-optional gap is the narrow case of a defect
+already in the table.
+
+The fix: **required positions stay positional, optional positions become named fields of
+one trailing table.**
+
+```lua
+execShell("open", url, { showmode = "SW_HIDE" })
+execShell("open", url, { invokeIdList = true, parameters = "-q" })
+createShortcut(DESKTOP .. "/App.lnk", INSTDIR .. "/app.exe", { comment = "Launch App" })
+```
+
+Which positions are named is not a judgement — it is `req: false` in the snapshot, the same
+place the arity and the enum members already come from. The overlay adds one thing per
+optional: a name, because `-CMDHELP` calls them `showmode` and
+`hex_string_like_12848412AB`.
+
+Three consequences worth stating before anybody starts.
+
+1. **The arity check stops being a range.** The positional count must *equal* the required
+   count, and an unknown key names the legal ones — `` `execShell` has no option
+   `showMode` `` beats `takes 2 to 9, and 4 were given`.
+2. **`flags` becomes a boolean.** `/INVOKEIDLIST` is spelled by the compiler, so the field
+   is `invokeIdList = true`: a ninth instance of *emitted, never written*.
+3. **The table must be a literal**, with constant keys checked at compile time — the rule
+   `attributes {}` already carries. A computed key is an error, not a fallback.
+
+Eight rows have optional inputs at all: `Abort`, `CopyFiles`, `CreateShortcut`,
+`FileRead`, `GetTempFileName`, `MessageBox`, `RegDLL`, `WriteRegNone`. The predicates'
+optional *labels* are `Kind::Label` and excluded from `surface()`, so they are untouched.
+`messageBox` is hand-lowered and needs its own pass. Six commands in the table have a
+leading optional; the other four — `InstType`, `LangString`, `PageEx`, `SectionGroup` —
+are blocked on §13, locale tables and pages first.

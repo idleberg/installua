@@ -14,9 +14,10 @@
 use std::collections::BTreeSet;
 use std::process::Command;
 
-use installua::table::{self, Class, Dir, Note, overlay};
+use installua::table::{self, Class, Dir, Kind, Note, overlay};
 
 const SNAPSHOT: &str = include_str!("../tables/cmdhelp-3.12.txt");
+const LANGUAGE: &str = include_str!("../LANGUAGE.md");
 
 #[test]
 fn every_command_is_classified() {
@@ -247,33 +248,41 @@ fn the_surface_is_not_the_nsis_argument_list() {
 }
 
 #[test]
-fn an_exposed_rows_outputs_come_first() {
-    // The emitter builds `[dest] ++ inputs`, so an output anywhere but the
-    // front emits its register in the wrong position — `ExecWait $0 "cmd"` for
-    // `ExecWait command_line [$(user_var: return value)]`. The failure is
-    // silent: the script assembles and does the wrong thing. Until the emitter
-    // places outputs by position, this is the invariant that keeps the grind
-    // from writing that row by accident.
-    // `FileRead handle $(user_var: output) [maxlen]` is the one exception, and
-    // it is one because nothing generic emits it: `for line in lines(f)` is a
-    // hand-written lowering that places the register itself. A second exception
-    // is a reason to fix the emitter rather than to extend this list.
+fn an_optional_input_before_an_output_can_be_filled() {
+    // This replaces `an_exposed_rows_outputs_come_first`, which refused any row
+    // whose output was not leading because the emitter concatenated
+    // `[dest] ++ inputs`. The emitter now places by table position, so the
+    // ordering restriction is gone and a narrower one takes its place.
+    //
+    // Reaching an output means writing every position before it, including the
+    // optional ones the caller declined. `FileSeek handle offset [mode]
+    // [$(user_var: new position)]` is the case: NSIS parses `FileSeek $1 0 $0`
+    // with `$0` as the *mode* and rejects the line, so the compiler has to
+    // supply a mode nobody named. It can only do that from `Ann::fill`.
+    //
+    // A row that needs a fill and has none emits a line one token short, which
+    // NSIS may accept — `FileReadByte $1 $0` is well-formed whichever way round
+    // the registers go — so this is checked here rather than left to tier 3.
     for entry in table::table() {
-        if entry.class != Class::Exposed || entry.nsis == "FileRead" {
+        if entry.class != Class::Exposed {
             continue;
         }
-        let outputs = entry.params.iter().filter(|param| param.dir() == Dir::Out);
-        assert_eq!(
-            outputs.count(),
-            entry
-                .params
-                .iter()
-                .take_while(|param| param.dir() == Dir::Out)
-                .count(),
-            "{}: the emitter writes destinations first, so every output must be \
-             a leading parameter",
-            entry.nsis
-        );
+        let last_output = entry
+            .params
+            .iter()
+            .rposition(|param| param.dir() == Dir::Out);
+        let Some(last_output) = last_output else {
+            continue;
+        };
+        for param in &entry.params[..last_output] {
+            assert!(
+                param.required() || param.fill.is_some() || param.kind == Kind::Label,
+                "{}: `{}` is optional and precedes an output, so the emitter needs \
+                 a fill for it — reaching the output means writing this position",
+                entry.nsis,
+                param.shape.name
+            );
+        }
     }
 }
 
@@ -283,4 +292,17 @@ fn coverage_matches_its_golden() {
     // `todo` shows exactly which twelve here (§14).
     let expected = include_str!("golden/coverage.txt");
     assert_eq!(table::coverage(), expected);
+}
+
+#[test]
+fn language_md_is_the_census() {
+    // `LANGUAGE.md` is generated, and a generated document nobody regenerates
+    // is worse than none: it reads as current. So the checked-in file is the
+    // golden, and adding an overlay row without refreshing it fails here.
+    assert_eq!(
+        table::doc::language(SNAPSHOT),
+        LANGUAGE,
+        "LANGUAGE.md is stale: regenerate it with \
+         `cargo run -q -- language tables/cmdhelp-3.12.txt > LANGUAGE.md`"
+    );
 }
