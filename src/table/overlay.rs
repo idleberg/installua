@@ -299,27 +299,64 @@ pub const ROWS: &[Row] = &[
         &[opt(Ty::Str, Kind::Value, "message")],
         "abort(\"stopped\")",
     ),
-    todo(
+    // MUI2 has no define for the branding area and no opinion about it: it
+    // *styles* whatever it finds (`SetCtlColors $mui.Branding.Text /BRANDING`),
+    // which is the opposite of owning it. So this is an ordinary attribute.
+    //
+    // `size` is `STR` although the snapshot prints members for it. `(height|
+    // width)` there is a metavariable saying *which dimension the edge implies*
+    // and not a pair of keywords — the value NSIS reads is a number, optionally
+    // suffixed `u` for dialog units. Enumerating it would reject every legal
+    // value and complete to two illegal ones. The same trap as
+    // `PERemoveResource`, and the second row to hit it.
+    //
+    // `padding` is `STR` for a second reason, found by running the line rather
+    // than by reading it: the two numbers have to agree on their unit. `top 20u
+    // 2u` assembles and `top 20u 2` is *Invalid number!*, so an `Int` padding
+    // could never be written beside a `u` size. And it would have to be: a
+    // bare-pixel size is *Must use dialog units on non-Win32 platforms!*, which
+    // makes `u` the only form that builds on the machine this compiles on.
+    //
+    // That the two agree is a constraint no `Setting` can state, and the
+    // compiler does not check it — `makensis` does, by name, which is the one
+    // case where deferring is better than a worse message.
+    attribute(
         "AddBrandingImage",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "brandingImage",
+        Setting::Table(&[
+            part("edge", Setting::Enum),
+            part("size", STR),
+            part("padding", STR),
+        ]),
     ),
     language("AddSize", "a `section`'s `size` option"),
     todo(
         "AutoCloseWindow",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    todo(
+    // The full-screen background is a *second window*, drawn behind the wizard
+    // and unaffected by which page UI is in front of it. MUI2 never mentions
+    // either row, so neither was ever a classic-UI question.
+    //
+    // `/ITALIC`, `/UNDERLINE` and `/STRIKE` are unreachable: an attribute has no
+    // options table, and giving it one is a shape rather than a row.
+    attribute(
         "BGFont",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "bgFont",
+        Setting::Table(&[
+            part("face", STR),
+            part("height", Setting::Int),
+            part("weight", Setting::Int),
+        ]),
     ),
     todo(
         "BGGradient",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "`off | (top [bottom [text]])` is an alternation, and the snapshot flattens \
+         it to one required position: the shape has no `Setting`",
     ),
-    todo(
-        "BrandingText",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
-    ),
+    // `/TRIMLEFT`, `/TRIMRIGHT` and `/TRIMCENTER` are one fused flag with three
+    // suffixes, which the options table cannot say and an attribute cannot hold.
+    attribute("BrandingText", "brandingText", STR),
     todo(
         "BringToFront",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
@@ -330,14 +367,17 @@ pub const ROWS: &[Row] = &[
         "a plugin is called as `plugin.method(…)` (§11)",
     ),
     attribute("Caption", "caption", STR),
-    todo(
+    rejected(
         "ChangeUI",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "MUI2 calls it five times to install its own dialog resources; a sixth call \
+         does not configure the UI, it replaces it",
     ),
     exposed("ClearErrors", "clearErrors", &[], "clearErrors()"),
     todo(
         "ComponentText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 emits this line itself from `MUI_COMPONENTSPAGE_TEXT_TOP`, `…_TEXT_INSTTYPE` and `…_TEXT_COMPLIST`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     // The four rows that write *two* registers. A 64-bit value split across a
     // high and a low half is one number in every language that has one, and
@@ -519,7 +559,9 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "DirText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 emits this line itself from `MUI_DIRECTORYPAGE_TEXT_TOP` and `…_TEXT_DESTINATION`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     rejected("DirShow", "NSIS itself reports this one as not working"),
     todo(
@@ -543,7 +585,9 @@ pub const ROWS: &[Row] = &[
     attribute("AllowRootDirInstall", "allowRootDirInstall", TRUEFALSE),
     todo(
         "CheckBitmap",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "MUI2 emits this line itself from `MUI_COMPONENTSPAGE_CHECKBITMAP`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     todo(
         "EnableWindow",
@@ -906,12 +950,16 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "InstallColors",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "MUI2 emits this line itself from `MUI_INSTFILESPAGE_COLORS`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     attribute("InstallDir", "installDir", PATH),
     todo(
         "InstProgressFlags",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "MUI2 emits this line itself from `MUI_INSTFILESPAGE_PROGRESSBAR`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     language("InstType", "an `installer`'s `installTypes` field"),
     lowering("IntOp", "the arithmetic operators: `a + b`"),
@@ -961,7 +1009,9 @@ pub const ROWS: &[Row] = &[
     attribute("LicenseData", "license", PATH),
     todo(
         "LicenseForceSelection",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 emits this line itself from `MUI_LICENSEPAGE_CHECKBOX_TEXT`, `…_RADIOBUTTONS_TEXT_ACCEPT` and `…_DECLINE`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     todo(
         "LicenseLangString",
@@ -969,11 +1019,15 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "LicenseText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 emits this line itself from `MUI_LICENSEPAGE_TEXT_BOTTOM` and `MUI_LICENSEPAGE_BUTTON`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     todo(
         "LicenseBkColor",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 emits this line itself from `MUI_LICENSEPAGE_BGCOLOR`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     todo(
         "LoadLanguageFile",
@@ -1212,17 +1266,21 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Enum)],
         "setAutoClose(\"true\")",
     ),
+    // The three that change a control while the installer runs rather than
+    // setting anything at compile time. Two of them take a handle nobody can
+    // get — MUI2 keeps its `$mui.*` controls to itself — and the third has to be
+    // called from a page callback, which is the same missing design.
     todo(
         "SetCtlColors",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "addresses a control by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
     todo(
         "SetBrandingImage",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "runs from a page callback, and there is no way to write one yet (nsDialogs)",
     ),
     todo(
         "LoadAndSetImage",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "addresses a control by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
     todo(
         "SetCompress",
@@ -1280,9 +1338,18 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Flags)],
         "setFileAttributes(INSTDIR .. \"/readme.txt\", \"READONLY\")",
     ),
-    todo(
+    // Not superseded by MUI2 — *read* by it. `Interface.nsh` builds its bold
+    // header font out of `$(^Font)` and `$(^FontSize)`, which is exactly what
+    // this line sets, so it is the input MUI derives from rather than something
+    // MUI replaces. An installer-wide attribute that happens to be spelled with
+    // a `Set` prefix.
+    //
+    // `/LANG=` is unreachable, which makes this the repeated-per-language shape
+    // batch 13 built for `LangString` and one row short of needing it.
+    attribute(
         "SetFont",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "font",
+        Setting::Table(&[part("face", STR), part("size", Setting::Int)]),
     ),
     exposed(
         "SetOutPath",
@@ -1389,7 +1456,8 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "SubCaption",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 blanks exactly one index of it and leaves the rest free; a row owned \
+         for one argument value and open for the others has no shape in the table",
     ),
     // `Target x86-unicode` is `cpu` and `unicode` hyphenated together, and both
     // of those are rows already. A third spelling of the same two settings would
@@ -1405,25 +1473,26 @@ pub const ROWS: &[Row] = &[
         "UninstallExeName",
         "NSIS retired it: write `writeUninstaller` from a section",
     ),
-    todo(
-        "UninstallCaption",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
-    ),
-    todo(
-        "UninstallIcon",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
-    ),
+    attribute("UninstallCaption", "uninstallCaption", STR),
+    // Already done, under the name §15.3 gives it: `icon` inside `uninstaller
+    // {}` is the same field for the other half, and it lowers to `MUI_UNICON`
+    // rather than to this line, because MUI2 emits `UninstallIcon` itself from
+    // that define and would otherwise win.
+    language("UninstallIcon", "`icon` in `uninstaller {}`"),
     todo(
         "UninstPage",
         "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
     ),
     todo(
         "UninstallText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 emits this line itself from `MUI_UNCONFIRMPAGE_TEXT_TOP` and `…_TEXT_LOCATION`, so a raw one assembles clean under \
+         `-WX` and then loses: it has to lower to the define, and where MUI \
+         settings live is unruled",
     ),
     todo(
         "UninstallSubCaption",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "MUI2 blanks exactly one index of it and leaves the rest free; a row owned \
+         for one argument value and open for the others has no shape in the table",
     ),
     exposed(
         "UnRegDLL",
@@ -1431,10 +1500,7 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Path)],
         "unRegDll(INSTDIR .. \"/shell.dll\")",
     ),
-    todo(
-        "WindowIcon",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
-    ),
+    attribute("WindowIcon", "windowIcon", ONOFF),
     exposed(
         "WriteINIStr",
         "writeIniStr",
@@ -1578,7 +1644,8 @@ pub const ROWS: &[Row] = &[
     attribute("PESubsysVer", "peSubsysVer", STR),
     todo(
         "XPStyle",
-        "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
+        "MUI2 emits `XPStyle On` unconditionally, so a user's `off` is a last-one-wins \
+         race with no diagnostic: reject it or promise an ordering, and neither is ruled",
     ),
     attribute(
         "RequestExecutionLevel",
@@ -1647,30 +1714,34 @@ pub const ROWS: &[Row] = &[
     directive("!gettlbversion"),
     directive("!searchparse"),
     directive("!searchreplace"),
-    todo(
+    // The six button and status labels. MUI2 supplies no define for any of
+    // them, so they are ordinary attributes — but they are a §15.26 interaction
+    // rather than a UI one: the default text comes from the NLF of whatever
+    // language is running, and writing one of these overrides *every* language
+    // at once. That is worth a diagnostic and is not a reason to withhold them.
+    //
+    // The four labels of `MiscButtonText` are one line and therefore one field:
+    // NSIS reads them by position, so writing only the last still means writing
+    // the three before it, and a table is where that is checkable.
+    attribute(
         "MiscButtonText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "buttonText",
+        Setting::Table(&[
+            part("back", STR),
+            part("next", STR),
+            part("cancel", STR),
+            part("close", STR),
+        ]),
     ),
-    todo(
-        "DetailsButtonText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
-    ),
-    todo(
-        "UninstallButtonText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
-    ),
-    todo(
-        "InstallButtonText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
-    ),
+    attribute("DetailsButtonText", "detailsButtonText", STR),
+    attribute("UninstallButtonText", "uninstallButtonText", STR),
+    attribute("InstallButtonText", "installButtonText", STR),
     todo(
         "SpaceTexts",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
+        "`none | (required [available])` is an alternation, and the snapshot flattens \
+         it to one required position: the shape has no `Setting`",
     ),
-    todo(
-        "CompletedText",
-        "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
-    ),
+    attribute("CompletedText", "completedText", STR),
     todo(
         "GetFunctionAddress",
         "takes the address of a function or label; `Call`-by-address has no Lua shape (§3)",

@@ -515,6 +515,20 @@ impl Lowerer<'_, '_> {
     // -- attributes -------------------------------------------------------
 
     fn attributes(&mut self, fields: &[TableField], span: Span) {
+        // `SetCompressor` first, whatever the author wrote first. NSIS refuses
+        // it *after the header has changed* — "can't change compressor after
+        // data already got compressed or header already changed!" — and
+        // `AddBrandingImage` changes the header, so `{ brandingImage = …,
+        // compressor = "lzma" }` would fail and the same table written the
+        // other way round would not. A Lua table has no order (§12), so the
+        // order is the compiler's, exactly as `VIProductVersion` before
+        // `VIAddVersionKey` is in [`Self::version_info`].
+        let mut fields: Vec<&TableField> = fields.iter().collect();
+        fields.sort_by_key(|field| match field {
+            TableField::Named { name, .. } if name.text == "compressor" => 0,
+            _ => 1,
+        });
+
         for field in fields {
             let TableField::Named { name, value } = field else {
                 self.todo(span, "a positional entry in `attributes {}`");

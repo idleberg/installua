@@ -1184,13 +1184,207 @@ that install-time code can reach — and the surface for that is a separate ques
 this one, because it is about how a **running** program names a section rather than how a
 declaration does.
 
+## Batch 16 — "classic UI" was the wrong name for thirty rows
+
+Thirty `todo` rows carry one of two reasons: *the classic UI's appearance* (15) and *a
+classic-UI caption or button label* (15). Both reasons are wrong, and the project already
+decided the thing they were waiting for. `PLAN.md`'s command table says **MUI2 only;
+classic pages reach through `raw`** — so "wait until the classic UI has a design" was never
+a real blocker. There is no classic UI coming.
+
+What the reasons should have said is a different question, and it has a different answer per
+row: *does MUI2 emit this command itself?* That is checkable rather than arguable, so it was
+checked, against the shipped `Contrib/Modern UI 2` sources rather than against memory. Four
+groups fall out, and only one of them is a rejection.
+
+### MUI2 emits it, so writing it raw is silently overwritten
+
+Ten rows. MUI2 emits every one of these lines from inside its page macros, reading a
+`!define` it supplies a default for through `MUI_DEFAULT`. Three of them (`LicenseText`,
+`LicenseForceSelection`, `ComponentText`) sit in an `!ifdef` chain, but every branch emits —
+there is no path on which MUI2 stays silent and the user's own line survives.
+
+| Row | MUI2 reads | Emitted at |
+| --- | --- | --- |
+| `CheckBitmap` | `MUI_COMPONENTSPAGE_CHECKBITMAP` | `Pages/Components.nsh:43` |
+| `ComponentText` | `MUI_COMPONENTSPAGE_TEXT_TOP`, `…_TEXT_INSTTYPE`, `…_TEXT_COMPLIST` | `Pages/Components.nsh:70` |
+| `InstallColors` | `MUI_INSTFILESPAGE_COLORS` | `Pages/InstallFiles.nsh:27` |
+| `InstProgressFlags` | `MUI_INSTFILESPAGE_PROGRESSBAR` | `Pages/InstallFiles.nsh:28` |
+| `DirText` | `MUI_DIRECTORYPAGE_TEXT_TOP`, `…_TEXT_DESTINATION` | `Pages/Directory.nsh:47` |
+| `LicenseText` | `MUI_LICENSEPAGE_TEXT_BOTTOM`, `MUI_LICENSEPAGE_BUTTON` | `Pages/License.nsh:61` |
+| `LicenseBkColor` | `MUI_LICENSEPAGE_BGCOLOR` | `Pages/License.nsh:24` |
+| `LicenseForceSelection` | `MUI_LICENSEPAGE_CHECKBOX_TEXT`, `…_RADIOBUTTONS_TEXT_ACCEPT`, `…_DECLINE` | `Pages/License.nsh:65-67` |
+| `UninstallText` | `MUI_UNCONFIRMPAGE_TEXT_TOP`, `…_TEXT_LOCATION` | `Pages/UninstallConfirm.nsh:42` |
+| `UninstallIcon` | `MUI_UNICON` | `Interface.nsh:119` |
+
+This is the batch's finding, and it is the kind tier 3 cannot catch. A user who writes
+`CheckBitmap` gets a script that assembles clean under `-WX` and an installer whose
+checkboxes are MUI's defaults, because the page macro runs after the attribute and wins.
+Emitting the raw command would be *worse than not exposing the row at all*: it would look
+like it worked. So every one of the ten lowers to the `!define`, never to its own name.
+
+Three consequences follow:
+
+1. **The surface name is neither the classic one nor the MUI one.** `icon` already lowers to
+   `MUI_ICON` or `MUI_UNICON` by half (`src/lower/mod.rs:1142`), and that is the precedent:
+   the surface says what the thing *is*, the compiler says what NSIS reads. So not
+   `checkBitmap` at top level and not `MUI_COMPONENTSPAGE_CHECKBITMAP` either.
+2. **All ten are page-scoped** — most of them literally, inside MUI2's own `PageEx` blocks
+   (`Pages/Components.nsh:64-72`). That is §15.7's sequential-`!define` hazard exactly: the
+   define has to precede the `!insertmacro MUI_PAGE_*` that reads it, and a user cannot be
+   asked to know that. It is the argument for the compiler owning define ordering, and it
+   is now backed by ten rows rather than by principle.
+3. **`UninstallIcon` may already be done.** `icon` inside `uninstaller {}` emits
+   `MUI_UNICON` today. If that is the whole of the row, it is a `language` reclassification
+   and not surface work.
+
+### MUI2 emits it and there is nothing to configure
+
+Two rows, and the only genuine rejections of the thirty:
+
+- **`ChangeUI`** — MUI2 calls it five times to install its own dialog resources
+  (`all "${MUI_UI}"`, plus the header-image and no-description variants). A user's call
+  does not configure MUI; it fights MUI. `rejected`.
+- **`XPStyle`** — `Interface.nsh` emits `XPStyle On` unconditionally, with the comment *"XP
+  style setting in manifest resource"*. A user writing `XPStyle off` produces a
+  last-one-wins race with no diagnostic. Leaning `rejected`, but this is the one row of the
+  thirty that wants a decision rather than a lookup: rejecting it removes a real capability,
+  and exposing it means promising an ordering the manifest may override anyway.
+
+### MUI2 has no opinion, so these are ordinary surface
+
+Sixteen rows, and the correction the earlier grouping got most wrong. These are absent
+from the MUI2 sources entirely — not superseded, not conflicting, just orthogonal:
+
+- **`BGGradient`, `BGFont`** — the full-screen background *window*, which is a separate
+  window from the wizard and is unaffected by which page UI is in use.
+- **`BrandingText`, `AddBrandingImage`, `SetBrandingImage`** — MUI2 supplies no define for
+  any of them. It does style the branding area it finds (`SetCtlColors $mui.Branding.*
+  /BRANDING`, `Interface.nsh:269-271`), which is the opposite of owning it: MUI decorates
+  whatever the author put there.
+- **`SetFont`** — see below; MUI2 reads it rather than replacing it.
+- **`WindowIcon`, `UninstallCaption`, `CompletedText`, `SpaceTexts`**
+- **`MiscButtonText`, `InstallButtonText`, `DetailsButtonText`, `UninstallButtonText`** —
+  button labels come from the NLF language file by default, and these override it. That
+  makes them a §15.26 localization interaction rather than a UI one: overriding here
+  overrides *every* language at once, which is worth a diagnostic and is not a blocker.
+- **`SubCaption`, `UninstallSubCaption`** — partial. MUI2 blanks exactly one index each
+  (`SubCaption 4 " "`, `UninstallSubCaption 2 " "`, both `Pages/InstallFiles.nsh:29-30`);
+  the other indices are untouched and free. A row that is owned for one argument value and
+  free for the rest is a shape the table has no way to say, and this is the second row
+  wanting a per-value rule after `PERemoveResource`.
+
+### Four rows where the name misled and the signature did not
+
+`SetCtlColors`, `SetBrandingImage`, `LoadAndSetImage` and `SetFont` were filed together
+under *appearance* because of what they affect. Reading the signature rather than the name
+splits them three ways — two of them are already counted in the sixteen above, and this is
+why:
+
+- **`SetCtlColors hwnd …` and `LoadAndSetImage … ctrl …`** take a control and change it
+  while the installer runs. MUI2 calls `SetCtlColors` on twenty-odd of its own controls
+  through `$mui.*` handles it does not export, so a user calling either needs a handle of
+  their own. These leave the "classic UI" reason and join the `hwnd`/nsDialogs cluster,
+  which grows from 14 to 16.
+- **`SetBrandingImage [/IMGID=…] bitmap.bmp`** takes no handle: it fills the slot
+  `AddBrandingImage` reserved, from inside a page callback. It belongs beside
+  `AddBrandingImage` in the group above, not with the handle rows.
+- **`SetFont [/LANG=…] face size`** is not an instruction at all — it is the installer-wide
+  font attribute, and MUI2 *reads* it: `Interface.nsh:241` builds its bold header font from
+  `$(^Font)`/`$(^FontSize)`, which is exactly what `SetFont` sets. Far from being
+  superseded by MUI, it is the input MUI derives from. An ordinary attribute row, with
+  `/LANG=` making it the repeated-per-language shape batch 13 already built.
+
+### What landed
+
+Thirteen of the thirty moved: eleven attributes, one `language`, one `rejected`. `todo`
+goes 84 → 71, `attribute` 36 → 47.
+
+| | Rows |
+| --- | --- |
+| New attributes | `brandingText`, `uninstallCaption`, `completedText`, `detailsButtonText`, `uninstallButtonText`, `installButtonText`, `windowIcon`, `buttonText`, `brandingImage`, `bgFont`, `font` |
+| `language` | `UninstallIcon` — already done as `icon` in `uninstaller {}` |
+| `rejected` | `ChangeUI` |
+
+Every one of the eleven is proved by `tests/overlay.rs`, which derives its program from the
+rows themselves: a new attribute needs no hand-written example because the `Setting` *is*
+the example, and tier 3 hands the result to `makensis -WX`. Which is how the next two
+findings arrived — by running the lines rather than by reading them.
+
+### `AddBrandingImage` takes two numbers that have to agree
+
+The row was going to be `edge`, `size`, `padding` with an `Int` padding. `makensis` said
+*"Error while adding image branding support: Invalid number!"*, and the reason is not the
+one the syntax line suggests:
+
+- `top 20u 2u` assembles. `top 20u 2` is *Invalid number!* — the two arguments must use the
+  **same unit**, so an `Int` padding could never be written beside a `u` size.
+- `top 20 2` is *"Must use dialog units on non-Win32 platforms!"* — a bare pixel count
+  cannot be compiled on the machine this project compiles on at all. So `u` is not one form
+  among two; it is the only form that builds here.
+
+Both parts are therefore `Str`. That they agree is a cross-field constraint no `Setting` can
+state, and the compiler does not check it — `makensis` does, by name, which is the one case
+where deferring beats a worse message.
+
+Separately, `(height|width)` in the snapshot is a **metavariable** and not a pair of
+keywords: it names which dimension the edge implies, and the value is a number. Enumerating
+it would have rejected every legal value and completed to two illegal ones. Second row to
+hit that trap after `PERemoveResource`.
+
+### `SetCompressor` has to come first, and now does
+
+`AddBrandingImage` changes the installer header, and NSIS refuses `SetCompressor` after the
+header has changed — *"can't change compressor after data already got compressed or header
+already changed!"*. So `attributes { brandingImage = …, compressor = "lzma" }` failed and
+the same table written the other way round did not.
+
+A Lua table has no order (§12), so this is the compiler's to own, and it now is:
+`compressor` is hoisted to the front of the attribute block, exactly as `VIProductVersion`
+is hoisted before `VIAddVersionKey`. One line moved in
+`examples/01-mui-uninstaller/generated.nsi`, which is the whole visible effect.
+
+This is the second ordering hazard the attributes block has turned up, and both were found
+by tier 3 rather than by reading NSIS's prose. There is no reason to think it is the last.
+
+### The three that did not land, and why the reason changed
+
+Not "blocked on the classic UI" in any of the three cases:
+
+- **`BGGradient`, `SpaceTexts`** — both are alternations (`off | (top [bottom [text]])`,
+  `none | (required [available])`) and `-CMDHELP` flattens each to a single required
+  position. `Setting` has no shape for "one keyword *or* a tuple", so the row is blocked on
+  a shape rather than on a design.
+- **`SubCaption`, `UninstallSubCaption`** — MUI2 blanks exactly one index each and leaves
+  the rest free. A row owned for one argument value and open for the others is the same gap
+  `PERemoveResource` opened, and the second row to want a per-value rule.
+- **`XPStyle`** — still wants a ruling rather than a lookup. MUI2 emits `XPStyle On`
+  unconditionally, so a user's `off` is a last-one-wins race with no diagnostic. Rejecting it
+  removes a real capability; exposing it promises an ordering the manifest may override.
+
+`SetCtlColors` and `LoadAndSetImage` moved to the `hwnd` pile as planned, and
+`SetBrandingImage` to the page-callback pile beside it.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
-- **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 84 is the classic UI (30), the `hwnd` surface and pages (14), addressing a
-  section at install time (12), and a handful of one-offs. Every one of those is a design
-  question rather than data entry, which is what the grind was for.
+- **The `todo` reasons are grouped**, and the grind retired the groups it could. Batch 16
+  emptied the two *classic UI* groups: of the 71 left, the `hwnd` surface and pages is 16
+  (after two rows moved there), addressing a section at install time is 12, the nine
+  remaining MUI defines are the largest single block, and the rest are one-offs.
+- **Where MUI settings live has no answer.** Nine rows above and the ~70 `MUI_*` settings
+  `PLAN.md` defers all want the same thing: a place in the surface for a page-scoped
+  `!define`. Three spellings are on the table — a meaning-grouped `text = { … }` on the
+  block, an option bag on `page(…)`, and a thin `mui = { … }` passthrough. The first is the
+  only one consistent with `caption` and `installDir`, and the only one where the compiler
+  keeps ownership of §15.7's ordering. The batch that lands the first of the nine picks one.
+- **A `Setting` cannot say "either a keyword or a tuple".** `BGGradient` and `SpaceTexts`
+  are both `off | (…)`, and the snapshot flattens each to one required position. Two rows,
+  one shape, and the shape is the work.
+- **The attributes block has ordering hazards and no inventory.** Two are now handled —
+  `VIProductVersion` before `VIAddVersionKey`, `SetCompressor` before anything that touches
+  the header — and both were found by a golden failing rather than by looking. A third would
+  be found the same way, which is to say by luck.
 - **A running program cannot name a section.** The twelve rows above. `Section [/o] name
   [section index output]` is the mechanism NSIS offers and the compiler already owns every
   section's position, so the data is there; what is missing is the spelling. A field on a

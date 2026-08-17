@@ -6,9 +6,9 @@ Unicode true
 
 !include "MUI2.nsh"
 
+SetCompressor lzma
 Name "${APP}"
 OutFile "${APP}-${VERSION}-setup.exe"
-SetCompressor lzma
 RequestExecutionLevel admin
 VIProductVersion 1.4.2.0
 VIAddVersionKey CompanyName "Example Ltd"

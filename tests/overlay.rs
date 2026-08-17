@@ -202,6 +202,13 @@ const REAL: &[(&str, &str, &str)] = &[
     ("PERemoveResource", "resname", "\"#105\""),
     ("PERemoveResource", "reslang", "\"ALL\""),
     ("ManifestAppendCustomString", "path", "\"/assembly\""),
+    // `(height|width)` in the snapshot is a metavariable and not a pair of
+    // keywords: NSIS reads a number here, suffixed `u` for dialog units. Both
+    // parts carry the suffix because NSIS requires them to agree — `top 20u 2`
+    // is *Invalid number!* — and a bare number is *Must use dialog units on
+    // non-Win32 platforms!*, so `u` is the only form this test can assemble.
+    ("AddBrandingImage", "size", "\"20u\""),
+    ("AddBrandingImage", "padding", "\"2u\""),
 ];
 
 #[test]
