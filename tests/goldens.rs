@@ -22,7 +22,17 @@ use installua::diag::{Code, Diagnostics};
 const GOLDENS: &[(&str, &[Code])] = &[
     ("components", &[]),
     ("control-flow", &[]),
+    ("pages", &[]),
     ("returns", &[Code::DeepRecursion]),
+];
+
+/// Files tier 3 needs on disk beside the script, because NSIS reads them at
+/// *assembly* time rather than at install time: `LicenseData` opens the licence
+/// and `CheckBitmap` loads the bitmap while `makensis` is still running. The
+/// contents do not matter to any assertion here, only that opening them works.
+const ASSETS: &[(&str, &[u8])] = &[
+    ("LICENSE.txt", b"Terms.\n"),
+    ("check.bmp", include_bytes!("golden/assets/check.bmp")),
 ];
 
 fn golden() -> PathBuf {
@@ -73,6 +83,9 @@ fn goldens_assemble_under_wx() {
         std::fs::create_dir_all(&directory).expect("temp directory");
         let script = directory.join(format!("{name}.nsi"));
         std::fs::write(&script, build(&source, expected)).expect("write the script");
+        for (asset, bytes) in ASSETS {
+            std::fs::write(directory.join(asset), bytes).expect("write the asset");
+        }
 
         let output = Command::new(&makensis)
             .arg("-WX")

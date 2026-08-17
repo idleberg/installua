@@ -12,14 +12,19 @@
 //!   3. `!include`s
 //!   4. header init lines (`${Using:StrFunc}`)
 //!   5. attributes, in overlay order
-//!   6. MUI defines, then pages, then uninstaller pages, then `MUI_LANGUAGE` —
-//!      four lists rather than one, because MUI2 reads a `!define` at the point
-//!      the next page macro is inserted (§15.7) and puts the language last
-//!   7. `Var`s
+//!   6. `Var`s — before the pages and not merely before the bodies, because
+//!      `page.directory { variable = … }` puts one in a `DirVar` and NSIS
+//!      refuses a variable it has not seen declared
+//!   7. MUI defines, then the pages, then the uninstaller's, then
+//!      `MUI_LANGUAGE` — because MUI2 reads a `!define` at the point the next
+//!      page macro is inserted (§15.7) and puts the language last. A
+//!      *page-scoped* define is not in the first list at all: it belongs to the
+//!      [`Page`] it configures, which is what keeps two Directory pages with
+//!      different text expressible
 //!   8. functions
 //!   9. sections, in source order — a sequence, never reordered
 //!
-//! Phase 1 filled 1, 5 and 9; Phase 2 adds 7 and 8. The rest exist empty,
+//! Phase 1 filled 1, 5 and 9; Phase 2 adds 6 and 8. The rest exist empty,
 //! because a widening is a smaller change than a reordering.
 
 use crate::cfg;
@@ -35,23 +40,28 @@ pub struct Module {
     pub includes: Vec<String>,
     pub inits: Vec<Instruction>,
     pub attributes: Vec<Instruction>,
-    /// `!define MUI_ICON` and friends. Separate from [`Module::defines`]
-    /// because these are the compiler's, not the user's, and MUI2 reads them
-    /// **when the page macro is inserted** — so they precede the pages and a
-    /// page-scoped one would have to sit between two of them (§15.7).
+    /// Globals, declared by assignment (§15.24), collected during lowering and
+    /// emitted before anything that names one (§12) — which is the pages as
+    /// well as the bodies, since `DirVar` takes a variable rather than a value.
+    pub vars: Vec<String>,
+    /// `!define MUI_ICON` and friends: the settings MUI2 reads **once**, on the
+    /// first page of a type, behind an `!ifndef` interface guard. Separate from
+    /// [`Module::defines`] because these are the compiler's, not the user's.
+    ///
+    /// The page-scoped ones — the settings MUI2 `!undef`s after the macro — are
+    /// not here; they are [`Page::defines`], because a define read *at* the
+    /// insertion point cannot live in a list that precedes every insertion
+    /// point (§15.7).
     pub mui_defines: Vec<Define>,
-    /// `!insertmacro MUI_PAGE_*`, in the order the user listed them: page order
-    /// is user-visible, so unlike attributes these are never reordered.
-    pub pages: Vec<Instruction>,
-    /// `!insertmacro MUI_UNPAGE_*`. A separate list because MUI2 requires every
-    /// installer page before every uninstaller page, whatever order the two
-    /// blocks were written in (§15.3).
-    pub unpages: Vec<Instruction>,
+    /// The pages, in the order the user listed them: page order is
+    /// user-visible, so unlike attributes these are never reordered.
+    pub pages: Vec<Page>,
+    /// The uninstaller's. A separate list because MUI2 requires every installer
+    /// page before every uninstaller page, whatever order the two blocks were
+    /// written in (§15.3).
+    pub unpages: Vec<Page>,
     /// `!insertmacro MUI_LANGUAGE`, which has to come after every page.
     pub languages: Vec<Instruction>,
-    /// Globals, declared by assignment (§15.24), collected during lowering and
-    /// emitted before the first body that touches them (§12).
-    pub vars: Vec<String>,
     pub functions: Vec<Function>,
     /// `InstType` lines, in the order they were written — which is the whole of
     /// what an install type *is* to NSIS, since a section names one by its
@@ -119,7 +129,33 @@ impl Module {
 #[derive(Clone, Debug)]
 pub struct Define {
     pub name: String,
-    pub value: Arg,
+    /// `None` for a define whose *existence* is the whole message:
+    /// `!define MUI_DIRECTORYPAGE_VERIFYONLEAVE` is read by an `!ifdef` and
+    /// never expanded, so giving it a value would be inventing one.
+    pub value: Option<Arg>,
+}
+
+/// One MUI2 page: the `!insertmacro MUI_PAGE_*` line, the `!define`s that
+/// configure it, and the `!undef`s that stop them leaking into the next one.
+///
+/// A page owns its defines rather than the module owning all of them, because
+/// MUI2 reads a page-scoped setting **at** the insertion point and `!undef`s it
+/// straight after (§15.7). Two Directory pages with different text is the case
+/// that decides it: under one shared list the second define would sit after the
+/// first insertion and the first page would ship with the wrong words.
+///
+/// [`Self::undefines`] exists because MUI2's own cleanup has two holes in it,
+/// not because ours is an alternative to it. `UninstallConfirm.nsh` clears its
+/// two text settings and not `MUI_UNCONFIRMPAGE_VARIABLE`; `License.nsh` clears
+/// `MUI_LICENSEPAGE_CHECKBOX_TEXT_ACCEPT`, which is a name nothing defines —
+/// the radio button texts are spelled `…_RADIOBUTTONS_TEXT_ACCEPT`. So this
+/// list is the difference between what a page sets and what MUI2 clears,
+/// computed once in the lowering.
+#[derive(Clone, Debug)]
+pub struct Page {
+    pub defines: Vec<Define>,
+    pub insert: Instruction,
+    pub undefines: Vec<String>,
 }
 
 #[derive(Clone, Debug)]

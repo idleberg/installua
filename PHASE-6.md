@@ -1489,15 +1489,101 @@ there would produce `https:\\…`. That comment was written while these two rows
 `todo` that contradicted it. Three batches in a row now, the blocker was a sentence
 nobody had read against the rest of the file.
 
+## Batch 20 — the page block, and the rule that decided every setting's home
+
+Fourteen rows, and the only one of the four remaining groups that really was blocked on
+design. The design is [`PHASE-6-PAGES.md`](PHASE-6-PAGES.md); this is what building it
+found.
+
+A page is a **positional entry** in `installer {}` / `uninstaller {}`, reached by member
+access:
+
+```lua
+installer {
+  checkBitmap = "check.bmp",
+
+  page.license { file = "LICENSE.txt", checkbox = "I accept the terms." },
+  page.directory { topText = "Choose where it goes.", verifyOnLeave = true },
+  page.instFiles {},
+
+  section("Core", function() … end),
+}
+```
+
+`page.directory` and not `page("Directory", …)` because the seven pages are a **closed**
+set MUI2 picks, where a section's name is an open one the author picks — so one completes
+and the other cannot. That sharpens §15.1's `lang.X` rule, which until now justified
+itself only by "completion works" without saying when completion is available.
+
+### MUI2's source drew the line, so no setting needed a judgement
+
+The question the last four batches deferred was where a `MUI_*` setting lives. It has a
+mechanical answer, and it is in MUI2's own files:
+
+- a setting written inside the `PageEx` MUI2 generates, and `!undef`'d after, is
+  **page-scoped**;
+- a setting written inside an `!ifndef`-guarded `MUI_*PAGE_INTERFACE` macro runs on the
+  **first** page of its type and never again.
+
+The second kind is a block field, because putting it on the page would be a lie a second
+page tells silently. Four settings fall on that side despite names that say otherwise:
+`CheckBitmap`, `InstallColors`, `InstProgressFlags` and `LicenseBkColor`. Nine rows had
+been carrying a reason that said only *"where MUI settings live is unruled"*; reading two
+hundred lines of `Contrib/Modern UI 2` answered it for all nine at once.
+
+### The grouping is a correctness property, and MUI2's own cleanup has holes
+
+`ir::Module.pages` is `Vec<Page>` now, each page owning its `!define`s, because MUI2
+expands them **at** the insertion point. A shared list up front would give two Directory
+pages the last page's text — which is the hazard §15.7 named and the shape that could not
+express it.
+
+Then tier 3 found the other half. MUI2 clears most page settings itself, so a second
+`!undef` is warning 6155 and an error under `-WX`; but `UninstallConfirm.nsh` never clears
+`MUI_UNCONFIRMPAGE_VARIABLE`, and `License.nsh` clears
+`MUI_LICENSEPAGE_CHECKBOX_TEXT_ACCEPT`, which is a name nothing defines — the radio button
+texts are spelled `…_RADIOBUTTONS_TEXT_ACCEPT`. So each page carries the **difference**
+between what it sets and what MUI2 clears, and a first attempt that undefined everything
+failed to assemble.
+
+### `license` left the block, and `Var`s moved ahead of the pages
+
+`installer { license = … }` was page data written at block level: exactly one page read it,
+and a script naming no License page dropped it without a word. It is `page.license { file =
+… }` now, where that mistake is unwritable — the second of the two options
+`examples/01-mui-uninstaller/README.md` had named as open since Phase 0.
+
+`page.directory { variable = target }` forced one reordering. `DirVar` takes a *variable*
+rather than a value, so the field names a global — and `Module`'s field order had the
+`Var` lines after the pages, which NSIS rejects. Globals now come sixth, before the MUI
+defines. A `Var` declaration is inert, so moving it earlier is strictly safer.
+
+### What landed
+
+| move | rows |
+| ---- | ---- |
+| `todo` → page attribute | 7 |
+| `todo` → block attribute | 4 |
+| `todo` → rejected | 3 |
+
+`todo` 60 → **46**; `attribute` 52 → 63; `rejected` 12 → 15.
+
+`PageEx`, `PageExEnd` and `PageCallbacks` are `Rejected` rather than `Todo`: `PageEx` is
+the block MUI2 *generates* around every one of its pages, so writing one is not
+configuring the UI but reimplementing MUI2 beside it. `Page` and `UninstPage` keep the old
+reason and stay `todo` — their signature is an alternation whose `custom` half is the
+nsDialogs insertion point, and MUI2 ships no `MUI_PAGE_CUSTOM` to reach it through.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could. Batch 16
   emptied the two *classic UI* groups, batch 17 the *compile time and positional* one,
-  batch 18 the *file surface* one and batch 19 the *part path and part switches* pair. Of
-  the 60 left, the `hwnd` surface and pages is 16 (after two rows moved there), addressing
-  a section at install time is 12, the nine remaining MUI defines are the largest single
-  block, and the rest are one-offs.
+  batch 18 the *file surface* one, batch 19 the *part path and part switches* pair, and
+  batch 20 the *where MUI settings live is unruled* group. Of the 46 left, the `hwnd`
+  surface is 14, addressing a section at install time is 12, §15.26's locale tables are 5,
+  and the rest are one-offs. Two groups remain, and neither is a reason nobody read: both
+  name design that really is missing.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
   sixteen batches because the reason was true of the shape they were rejected as. Batch 18
@@ -1511,12 +1597,14 @@ nobody had read against the rest of the file.
 - **A `Setting` cannot say "meaningful only when a sibling holds one value".**
   `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.
-- **Where MUI settings live has no answer.** Nine rows above and the ~70 `MUI_*` settings
-  `PLAN.md` defers all want the same thing: a place in the surface for a page-scoped
-  `!define`. Three spellings are on the table — a meaning-grouped `text = { … }` on the
-  block, an option bag on `page(…)`, and a thin `mui = { … }` passthrough. The first is the
-  only one consistent with `caption` and `installDir`, and the only one where the compiler
-  keeps ownership of §15.7's ordering. The batch that lands the first of the nine picks one.
+- **`MUI_STARTMENUPAGE` is newly expressible and not yet written.** It was unspellable
+  under a bare list of page names, because its macro takes arguments; under `page.*` it is
+  another page with fields. The same goes for the settings with no NSIS command behind
+  them — `MUI_WELCOMEPAGE_TEXT`, `MUI_FINISHPAGE_*` — which no census row tracks, so they
+  are invisible to the burndown and want an inventory of their own.
+- **`SubCaption` and `UninstallSubCaption` are still blocked, and not by the page world.**
+  MUI2 blanks exactly one index of nine and leaves the rest free. The shape a table has no
+  way to say is a row *owned for one argument value and open for the others*.
 - **A `Setting` cannot say "either a keyword or a tuple".** `BGGradient` and `SpaceTexts`
   are both `off | (…)`, and the snapshot flattens each to one required position. Two rows,
   one shape, and the shape is the work.

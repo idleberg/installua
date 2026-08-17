@@ -194,11 +194,12 @@ fn blocks() -> String {
         "\n---@class (exact) installua.Installer\n\
          ---@field installDir? string\n\
          ---@field icon? string\n\
-         ---@field license? string\n\
          ---@field caption? string\n\
-         ---@field text? string\n\
          ---@field installTypes? string[]\n\
-         ---@field pages? table\n\n\
+         ---@field checkBitmap? string\n\
+         ---@field installColors? string\n\
+         ---@field progressBar? string\n\
+         ---@field licenseBkColor? string\n\n\
          ---@param options installua.Attributes\n\
          function attributes(options) end\n\n\
          ---@param options installua.Installer\n\
@@ -206,8 +207,70 @@ fn blocks() -> String {
          ---@param options installua.Installer\n\
          function uninstaller(options) end\n\n",
     );
+    out.push_str(PAGES);
     out
 }
+
+/// The seven pages (§15.7), as a table of constructors rather than a list of
+/// names.
+///
+/// `page.directory { … }` and not `page("Directory", … )` because the set is
+/// **closed**: MUI2 picks these seven and a user picks a section's name, so a
+/// member completes where a string cannot. That is also what buys a per-page
+/// field class — the settings differ by page, and one `page(name, options)`
+/// signature would have to take the union of all of them.
+///
+/// Hand-written, like `installua.Installer` above and for the same reason: a
+/// block's value is an expression in a table rather than an argument, and the
+/// parameter model has nothing to say about it. `tests/stubs.rs` compiles every
+/// field against the compiler to keep the two honest.
+const PAGES: &str = "\
+---@class (exact) installua.Page\n\
+---@field headerText? string\n\
+---@field headerSubText? string\n\
+---@field pre? fun()\n\
+---@field show? fun()\n\
+---@field leave? fun()\n\
+\n\
+---@class (exact) installua.Page.Full\n\
+---@field pre? fun()\n\
+---@field show? fun()\n\
+---@field leave? fun()\n\
+\n\
+---@class (exact) installua.Page.License : installua.Page\n\
+---@field file string\n\
+---@field bottomText? string\n\
+---@field button? string\n\
+---@field checkbox? string\n\
+---@field radioButtons? { accept?: string, decline?: string }\n\
+\n\
+---@class (exact) installua.Page.Components : installua.Page\n\
+---@field topText? string\n\
+---@field instTypeText? string\n\
+---@field listText? string\n\
+\n\
+---@class (exact) installua.Page.Directory : installua.Page\n\
+---@field topText? string\n\
+---@field destinationText? string\n\
+---@field variable? string\n\
+---@field verifyOnLeave? boolean\n\
+\n\
+---@class (exact) installua.Page.Confirm : installua.Page\n\
+---@field topText? string\n\
+---@field locationText? string\n\
+---@field variable? string\n\
+\n\
+---@class installua.Pages\n\
+---@field welcome fun(options?: installua.Page.Full)\n\
+---@field license fun(options: installua.Page.License)\n\
+---@field components fun(options?: installua.Page.Components)\n\
+---@field directory fun(options?: installua.Page.Directory)\n\
+---@field instFiles fun(options?: installua.Page)\n\
+---@field finish fun(options?: installua.Page.Full)\n\
+---@field confirm fun(options?: installua.Page.Confirm)\n\
+\n\
+---@type installua.Pages\n\
+page = {}\n\n";
 
 /// The top-level `attributes {}` fields and their Lua types.
 ///

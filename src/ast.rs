@@ -207,6 +207,19 @@ impl Expr {
             _ => None,
         }
     }
+
+    /// The same, for a callee written as `base.member` — `page.directory { … }`.
+    /// The member comes back whole rather than as text, because it is the thing
+    /// a diagnostic points at.
+    pub fn callee_field(&self) -> Option<(&str, &Name)> {
+        match self {
+            Expr::Call { callee, .. } => match callee.as_ref() {
+                Expr::Field { base, name, .. } => Some((base.name()?, name)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

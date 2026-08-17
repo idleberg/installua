@@ -30,8 +30,12 @@ attributes {
 installer {
 	installDir = PROGRAMFILES64 .. "/" .. APP,
 	icon = "assets/install.ico",
-	license = "assets/LICENSE.txt",
-	pages = { "Welcome", "License", "Directory", "InstFiles", "Finish" },
+
+	page.welcome {},
+	page.license { file = "assets/LICENSE.txt" },
+	page.directory {},
+	page.instFiles {},
+	page.finish {},
 
 	-- `.onInit`'s leading dot is emitted, never written (§15.7).
 	onInit(function()
@@ -65,7 +69,9 @@ installer {
 -- One block, and the `un.` prefix has no spelling at all (§15.3).
 uninstaller {
 	icon = "assets/uninstall.ico",
-	pages = { "Confirm", "InstFiles" },
+
+	page.confirm {},
+	page.instFiles {},
 
 	onInit(function()
 		local answer = messageBox {

@@ -373,12 +373,22 @@ pub const ROWS: &[Row] = &[
          does not configure the UI, it replaces it",
     ),
     exposed("ClearErrors", "clearErrors", &[], "clearErrors()"),
-    todo(
-        "ComponentText",
-        "MUI2 emits this line itself from `MUI_COMPONENTSPAGE_TEXT_TOP`, `…_TEXT_INSTTYPE` and `…_TEXT_COMPLIST`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
+    // The first of the page settings, and the row that carries the convention
+    // for all of them: the field path is `page.<page>.<field>`, and it is
+    // dotted for the reason `versionInfo.keys` is — a dotted name is reached
+    // through its owner and never written flat, so these are out of
+    // `attributes {}` by construction.
+    //
+    // One row can carry several fields, the way `versionInfo.keys` carries
+    // every key: the row is named for the field its **first** argument becomes,
+    // and the arguments after it are the fields beside it. Here that is
+    // `instTypeText` and `listText`.
+    //
+    // What MUI2 owns is the *line*. `ComponentText` is written by MUI2, from
+    // these three defines, inside the `PageEx` it generates — so a second one
+    // written by us assembles clean under `-WX` and then loses. What stays
+    // public is the *setting*, exactly as `icon` is public and `Icon` is not.
+    attribute("ComponentText", "page.components.topText", STR),
     // The four rows that write *two* registers. A 64-bit value split across a
     // high and a low half is one number in every language that has one, and
     // Installua does not: §3 has no 64-bit type, so the halves stay halves and
@@ -556,23 +566,29 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Value)],
         "detailPrint(\"installing\")",
     ),
-    todo(
-        "DirText",
-        "MUI2 emits this line itself from `MUI_DIRECTORYPAGE_TEXT_TOP` and `…_TEXT_DESTINATION`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
+    // `destinationText` beside it.
+    attribute("DirText", "page.directory.topText", STR),
     rejected("DirShow", "NSIS itself reports this one as not working"),
-    todo(
+    // A *variable* rather than a value: NSIS stores the chosen directory into
+    // it, so the field takes a global by name (§15.24) and `Handled` says the
+    // page's own lowering shapes it.
+    attribute(
         "DirVar",
-        "an installer-wide flag or mode: one overlay row each",
+        "page.directory.variable",
+        Setting::Handled("string"),
     ),
-    // Not an attribute: `makensis` answers `command DirVerify not valid
-    // outside PageEx`, which the tier-3 assembly of the attribute rows found
-    // the first time it ran. `PageEx` has no Installua shape yet.
-    todo(
+    // `makensis` answers `command DirVerify not valid outside PageEx`, which
+    // the tier-3 assembly of the attribute rows found the first time it ran —
+    // and that is the whole argument for the page block, not against it. MUI2
+    // writes the line inside the `PageEx` it generates, from
+    // `MUI_DIRECTORYPAGE_VERIFYONLEAVE`, and the define is the surface.
+    //
+    // `Handled` rather than a `Bool`, because there is no off-word to emit:
+    // MUI2 asks `!ifdef`, so `false` is the define's absence.
+    attribute(
         "DirVerify",
-        "only valid inside `PageEx`, and the page surface has no design yet",
+        "page.directory.verifyOnLeave",
+        Setting::Handled("boolean"),
     ),
     exposed(
         "GetInstDirError",
@@ -582,12 +598,13 @@ pub const ROWS: &[Row] = &[
     ),
     // `(true|false)` rather than `on|off`, which is why the pair is on the row.
     attribute("AllowRootDirInstall", "allowRootDirInstall", TRUEFALSE),
-    todo(
-        "CheckBitmap",
-        "MUI2 emits this line itself from `MUI_COMPONENTSPAGE_CHECKBITMAP`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
+    // The first of the four settings that *look* page-scoped and are not. MUI2
+    // writes this one inside `MUI_COMPONENTSPAGE_INTERFACE`, behind an
+    // `!ifndef` that runs on the first components page and never again — so
+    // putting it on the page would be a lie a second page tells silently. It is
+    // a block field, and the path says which block: `installer {}` and not
+    // `attributes {}`, because a raw `CheckBitmap` line loses to MUI2's.
+    attribute("CheckBitmap", "installer.checkBitmap", PATH),
     todo(
         "EnableWindow",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
@@ -986,19 +1003,13 @@ pub const ROWS: &[Row] = &[
             part("name", STR),
         ]),
     ),
-    todo(
-        "InstallColors",
-        "MUI2 emits this line itself from `MUI_INSTFILESPAGE_COLORS`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
+    // `MUI_INSTFILESPAGE_INTERFACE`, once, on the first InstFiles page.
+    attribute("InstallColors", "installer.installColors", STR),
     attribute("InstallDir", "installDir", PATH),
-    todo(
-        "InstProgressFlags",
-        "MUI2 emits this line itself from `MUI_INSTFILESPAGE_PROGRESSBAR`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
+    // The same macro, and the name is the surface's rather than NSIS's: what a
+    // caller is choosing is how the progress bar looks, not which flags a line
+    // carries.
+    attribute("InstProgressFlags", "installer.progressBar", STR),
     language("InstType", "an `installer`'s `installTypes` field"),
     lowering("IntOp", "the arithmetic operators: `a + b`"),
     lowering(
@@ -1044,29 +1055,28 @@ pub const ROWS: &[Row] = &[
         "LangStringUP",
         "NSIS retired it: `langString` is the spelling",
     ),
-    attribute("LicenseData", "license", PATH),
-    todo(
+    // Not a block field any more. `installer { license = … }` was page data
+    // written at block level: exactly one page read it, and a script that named
+    // no License page dropped it without a word. `MUI_PAGE_LICENSE` takes the
+    // file as its macro *argument*, so the page is where it is required and
+    // where forgetting it is a diagnostic.
+    attribute("LicenseData", "page.license.file", PATH),
+    // `radioButtons` beside it, as a table of `accept` and `decline`. The row
+    // is named for the checkbox because that is the branch MUI2 reads first.
+    attribute(
         "LicenseForceSelection",
-        "MUI2 emits this line itself from `MUI_LICENSEPAGE_CHECKBOX_TEXT`, `…_RADIOBUTTONS_TEXT_ACCEPT` and `…_DECLINE`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
+        "page.license.checkbox",
+        Setting::Handled("string"),
     ),
     todo(
         "LicenseLangString",
         "§15.26's locale tables are designed and unimplemented",
     ),
-    todo(
-        "LicenseText",
-        "MUI2 emits this line itself from `MUI_LICENSEPAGE_TEXT_BOTTOM` and `MUI_LICENSEPAGE_BUTTON`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
-    todo(
-        "LicenseBkColor",
-        "MUI2 emits this line itself from `MUI_LICENSEPAGE_BGCOLOR`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
+    // `button` beside it.
+    attribute("LicenseText", "page.license.bottomText", STR),
+    // `MUI_LICENSEPAGE_INTERFACE`, once, on the first License page — so a block
+    // field, like the other three of its kind.
+    attribute("LicenseBkColor", "installer.licenseBkColor", STR),
     todo(
         "LoadLanguageFile",
         "§15.26's locale tables are designed and unimplemented",
@@ -1109,21 +1119,36 @@ pub const ROWS: &[Row] = &[
     ),
     attribute("Name", "name", STR),
     attribute("OutFile", "outFile", PATH),
+    // These four shared one reason, and the page block splits them in two.
+    //
+    // `Page` and `UninstPage` keep it: their syntax line is an alternation
+    // whose `custom` half is where an nsDialogs page is inserted, MUI2 ships no
+    // `MUI_PAGE_CUSTOM` to insert one through, and so that half is real work
+    // rather than a spelling this language declines.
+    //
+    // The other three are `Rejected` now. `PageEx` is the classic page block
+    // MUI2 *generates* around every one of its pages — `PageEx directory` …
+    // `PageExEnd` is what `!insertmacro MUI_PAGE_DIRECTORY` expands to — so
+    // writing one is not configuring the UI, it is reimplementing MUI2 beside
+    // it.
     todo(
         "Page",
         "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
     ),
-    todo(
+    rejected(
         "PageCallbacks",
-        "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
+        "legal only inside `PageEx`, where MUI2 fills it with the names of the functions it \
+         generates; the page's `pre`, `show` and `leave` are the surface",
     ),
-    todo(
+    rejected(
         "PageEx",
-        "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
+        "the classic page block MUI2 generates around every page; `page.directory {}` \
+         configures that block, and a second one beside it replaces the UI rather than \
+         settling it",
     ),
-    todo(
+    rejected(
         "PageExEnd",
-        "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
+        "the other half of `PageEx`, which MUI2 generates and Installua does not open",
     ),
     lowering(
         "Pop",
@@ -1524,12 +1549,10 @@ pub const ROWS: &[Row] = &[
         "UninstPage",
         "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
     ),
-    todo(
-        "UninstallText",
-        "MUI2 emits this line itself from `MUI_UNCONFIRMPAGE_TEXT_TOP` and `…_TEXT_LOCATION`, so a raw one assembles clean under \
-         `-WX` and then loses: it has to lower to the define, and where MUI \
-         settings live is unruled",
-    ),
+    // `locationText` beside it. `confirm` is the uninstaller's first page and
+    // exists in no other half, which is why the field path has no `un.` in it:
+    // the block the page is written in supplies that (§15.3).
+    attribute("UninstallText", "page.confirm.topText", STR),
     todo(
         "UninstallSubCaption",
         "MUI2 blanks exactly one index of it and leaves the rest free; a row owned \

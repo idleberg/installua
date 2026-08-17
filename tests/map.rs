@@ -19,7 +19,7 @@ attributes { outFile = "a.exe" }
 seen = ""
 
 installer {
-	pages = { "InstFiles" },
+	page.instFiles {},
 
 	section("Core", function()
 		detailPrint("ordinary")

@@ -27,12 +27,13 @@ jump table is recovered by fusion holds on the first real use.
 
 ## What it left open
 
-**`license` has no home in the model.** `MUI_PAGE_LICENSE` takes its file as a **macro
-argument**, not a `!define` — unlike every other page setting. `installer { license = … }`
-therefore emits into the argument of an `!insertmacro`, which §15.23's `Param` model does
-not currently describe. Either the overlay gains an emit position meaning *argument of the
-page macro*, or `license` becomes a `page { "License", file = … }` field. The second is
-more honest and costs a line of source.
+**`license` had no home in the model — Phase 6 gave it one.** `MUI_PAGE_LICENSE` takes
+its file as a **macro argument**, not a `!define`, unlike every other page setting. As
+`installer { license = … }` it was page data written at block level: exactly one page read
+it, and a script naming no License page dropped it without a word. It is
+`page.license { file = … }` now, where the file is required and forgetting it is a
+diagnostic — the second of the two options this section named, and it did cost a line of
+source.
 
 **`uninstaller { icon = … }` does not emit inside the uninstaller region.** `MUI_UNICON`
 is a `!define` that MUI reads at interface-init time, so it must precede the **installer's**
@@ -52,7 +53,10 @@ form rather than positional trailing `nil`s.
 `writeUninstaller` · `messageBox` · `os.exit` (`Quit`)
 
 Attributes: `name` · `outFile` · `unicode` · `compressor` · `requestExecutionLevel` ·
-`versionInfo.product` · `versionInfo.keys` · `installDir` · `icon` · `license` · `pages`
+`versionInfo.product` · `versionInfo.keys` · `installDir` · `icon`
+
+Pages: `page.welcome` · `page.license` (`file`) · `page.directory` · `page.instFiles` ·
+`page.finish` · `page.confirm`
 
 MUI subset needed: `MUI_ICON` · `MUI_UNICON` · `MUI_PAGE_WELCOME` · `MUI_PAGE_LICENSE` ·
 `MUI_PAGE_DIRECTORY` · `MUI_PAGE_INSTFILES` · `MUI_PAGE_FINISH` · `MUI_UNPAGE_CONFIRM` ·

@@ -1,24 +1,19 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed           85
-  attribute         52
+  attribute         63
   lowering-target   18
   language          12
   directive         37
-  rejected          12
-  todo              60
+  rejected          15
+  todo              46
 
 todo:
   AutoCloseWindow         addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   BGGradient              `off | (top [bottom [text]])` is an alternation, and the snapshot flattens it to one required position: the shape has no `Setting`
   BringToFront            addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  ComponentText           MUI2 emits this line itself from `MUI_COMPONENTSPAGE_TEXT_TOP`, `…_TEXT_INSTTYPE` and `…_TEXT_COMPLIST`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   GetDLLVersionLocal      its example reads the build machine at compile time, and no fixture yet carries a version resource
   CreateFont              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  DirText                 MUI2 emits this line itself from `MUI_DIRECTORYPAGE_TEXT_TOP` and `…_TEXT_DESTINATION`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
-  DirVar                  an installer-wide flag or mode: one overlay row each
-  DirVerify               only valid inside `PageEx`, and the page surface has no design yet
-  CheckBitmap             MUI2 emits this line itself from `MUI_COMPONENTSPAGE_CHECKBITMAP`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   EnableWindow            addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   FindWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   FindClose               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
@@ -26,21 +21,13 @@ todo:
   FindNext                runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   ReserveFile             `file…` and `/plugin file.dll` are two alternatives in one line, and the second is a plugin DLL (§11)
   GetDlgItem              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  InstallColors           MUI2 emits this line itself from `MUI_INSTFILESPAGE_COLORS`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
-  InstProgressFlags       MUI2 emits this line itself from `MUI_INSTFILESPAGE_PROGRESSBAR`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   IsWindow                addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   LangString              §15.26's locale tables are designed and unimplemented
-  LicenseForceSelection   MUI2 emits this line itself from `MUI_LICENSEPAGE_CHECKBOX_TEXT`, `…_RADIOBUTTONS_TEXT_ACCEPT` and `…_DECLINE`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   LicenseLangString       §15.26's locale tables are designed and unimplemented
-  LicenseText             MUI2 emits this line itself from `MUI_LICENSEPAGE_TEXT_BOTTOM` and `MUI_LICENSEPAGE_BUTTON`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
-  LicenseBkColor          MUI2 emits this line itself from `MUI_LICENSEPAGE_BGCOLOR`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   LoadLanguageFile        §15.26's locale tables are designed and unimplemented
   LogSet                  the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
   LogText                 the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
   Page                    a page construct; custom pages need a design (nsDialogs) that does not exist yet
-  PageCallbacks           a page construct; custom pages need a design (nsDialogs) that does not exist yet
-  PageEx                  a page construct; custom pages need a design (nsDialogs) that does not exist yet
-  PageExEnd               a page construct; custom pages need a design (nsDialogs) that does not exist yet
   SectionSetFlags         addresses a section by index: a real compile-time to install-time name binding (§13)
   SectionGetFlags         addresses a section by index: a real compile-time to install-time name binding (§13)
   SectionSetInstTypes     addresses a section by index: a real compile-time to install-time name binding (§13)
@@ -62,7 +49,6 @@ todo:
   SubCaption              MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
   Target                  says `cpu` and `unicode` in one word, and both are attributes already
   UninstPage              a page construct; custom pages need a design (nsDialogs) that does not exist yet
-  UninstallText           MUI2 emits this line itself from `MUI_UNCONFIRMPAGE_TEXT_TOP` and `…_TEXT_LOCATION`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   UninstallSubCaption     MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
   SpaceTexts              `none | (required [available])` is an alternation, and the snapshot flattens it to one required position: the shape has no `Setting`
   GetFunctionAddress      takes the address of a function or label; `Call`-by-address has no Lua shape (§3)

@@ -12,7 +12,6 @@ attributes {
 	icon = "assets/icon.ico",
 	installDirRegKey = { root = HKCR, key = "key.out", name = "name" },
 	installDir = "installDir.out",
-	license = "assets/license.txt",
 	name = "name",
 	outFile = "outFile.out",
 	compress = "off",

@@ -105,10 +105,19 @@ fn no_alias_is_declared_twice() {
 #[test]
 fn every_alias_the_stub_uses_is_one_it_declares() {
     let meta = meta();
+    // Aliases and classes are one namespace here: either declares the name.
+    // A class line can carry a parent — `---@class (exact) X : Y` — so the
+    // name is the first word after the optional `(exact)` and not the rest of
+    // the line.
     let declared: Vec<String> = meta
         .lines()
-        .filter_map(|line| line.strip_prefix("---@alias "))
-        .map(|name| name.trim().to_string())
+        .filter_map(|line| {
+            let rest = line
+                .strip_prefix("---@alias ")
+                .or_else(|| line.strip_prefix("---@class (exact) "))
+                .or_else(|| line.strip_prefix("---@class "))?;
+            rest.split_whitespace().next().map(str::to_string)
+        })
         .collect();
 
     for line in meta.lines() {
@@ -121,8 +130,10 @@ fn every_alias_the_stub_uses_is_one_it_declares() {
         };
         // `,`, `{` and `}` because an options table is written inline —
         // `---@param options? { showMode: installua.ShowMode, … }` — and the
-        // type is one word inside it like anywhere else.
-        for word in rest.split([' ', '|', ',', '{', '}']) {
+        // parentheses because a field can hold a function type:
+        // `---@field directory fun(options?: installua.Page.Directory)`. The
+        // type is one word inside either of them, like anywhere else.
+        for word in rest.split([' ', '|', ',', '{', '}', '(', ')']) {
             // `installua.Manifestsupportedos[]` is a list of the alias, and it
             // is the alias that has to be declared.
             let word = word.trim().trim_end_matches("[]");
@@ -130,9 +141,7 @@ fn every_alias_the_stub_uses_is_one_it_declares() {
                 continue;
             }
             assert!(
-                declared.iter().any(|alias| alias == word)
-                    || meta.contains(&format!("---@class (exact) {word}\n"))
-                    || meta.contains(&format!("---@class {word}\n")),
+                declared.iter().any(|name| name == word),
                 "the stub uses `{word}` and never declares it"
             );
         }

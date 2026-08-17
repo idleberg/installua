@@ -13,7 +13,6 @@ FileErrorText "text" "withoutIgnore"
 Icon "assets\icon.ico"
 InstallDirRegKey HKCR "key.out" "name"
 InstallDir "installDir.out"
-LicenseData "assets\license.txt"
 Name "name"
 OutFile "outFile.out"
 SetCompress off

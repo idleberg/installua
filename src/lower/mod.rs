@@ -40,10 +40,9 @@ pub use sig::{Inferred, Signature};
 /// One exclusion: the dotted names are `versionInfo`'s members and are reached
 /// through it, never written flat.
 ///
-/// The overlap with [`V1_INSTALLER_FIELDS`] is not one. `caption`, `icon`,
-/// `installDir` and `license` are script-wide NSIS commands that `installer {}`
-/// also accepts, so they belong to both blocks; `pages` and `text` have no row
-/// at all and are the two names that guard rejects.
+/// The overlap with [`V1_INSTALLER_FIELDS`] is not one. Every name in that list
+/// is a script-wide NSIS command that `installer {}` also accepts, so they
+/// belong to both blocks.
 fn attribute_names() -> Vec<&'static str> {
     table::table()
         .iter()
@@ -54,14 +53,39 @@ fn attribute_names() -> Vec<&'static str> {
 }
 
 /// The frozen v1 `installer {}` / `uninstaller {}` field surface.
+///
+/// The last four look page-scoped and are not. MUI2 writes each of them inside
+/// an `!ifndef`-guarded `MUI_*PAGE_INTERFACE` macro, which runs on the **first**
+/// page of its type and never again — so a `checkBitmap` on a second components
+/// page would be read by nothing, and the block is the only home where that
+/// cannot be written.
+///
+/// The pages themselves are not fields at all: `page.directory { … }` is a
+/// positional entry, symmetric with `section(…)`, because a page has a body of
+/// settings and a field would have to grow one.
 const V1_INSTALLER_FIELDS: &[&str] = &[
     "installDir",
     "icon",
     "installTypes",
-    "license",
-    "pages",
-    "text",
     "caption",
+    "checkBitmap",
+    "installColors",
+    "progressBar",
+    "licenseBkColor",
+];
+
+/// The fields NSIS reads once for the whole script, so only `installer {}` has
+/// them: written in both blocks they would define one name twice, which is a
+/// redefinition warning and so an error under `-WX` (§14 tier 3).
+///
+/// `icon` is not one of these. It is two defines — `MUI_ICON` and
+/// `MUI_UNICON` — and is genuinely the same field for the other half (§15.3).
+const ONCE_GLOBAL_FIELDS: &[&str] = &[
+    "installDir",
+    "checkBitmap",
+    "installColors",
+    "progressBar",
+    "licenseBkColor",
 ];
 
 /// NSIS numbers install types one to thirty-two and rejects anything else
@@ -106,42 +130,230 @@ impl std::fmt::Display for Half {
     }
 }
 
-/// One MUI2 page. The `MUI_*` surface is roughly seventy settings and this is
-/// the subset the five programs reach (PLAN §0); the rest is overlay data.
+/// What one field of a `page.* {}` table holds.
+#[derive(Clone, Copy, Debug)]
+enum Holds {
+    Str,
+    /// `true` defines it and `false` does not: the setting **is** the define's
+    /// existence — MUI2 asks `!ifdef` and never expands it — so there is no
+    /// value to write and no third state to have.
+    Flag,
+    /// A global, named bare: `variable = target`. NSIS wants a *variable* in
+    /// this position rather than a value, because `DirVar` stores into it, so a
+    /// string would be the wrong kind of thing even where it reads alike.
+    Var,
+    /// `function() … end`, lowered to an NSIS `Function` MUI2 calls by name.
+    Callback,
+    /// A string that also turns its setting on: `checkbox = "I accept"` is
+    /// `MUI_LICENSEPAGE_CHECKBOX` *and* `…_CHECKBOX_TEXT`, because MUI2 asks
+    /// `!ifdef` about the first and expands the second. The payload is the
+    /// second, and it is cleared exactly when the first is.
+    Text(&'static str),
+    /// A table whose keys are further defines, and whose presence turns the
+    /// setting on the way [`Holds::Text`] does.
+    Nested(&'static [PageField]),
+}
+
+/// One setting of one page: the name a user writes, the `MUI_*` define it
+/// becomes, and what it holds.
+///
+/// The NSIS line is absent on purpose. `DirText`, `ComponentText` and
+/// `LicenseText` are written by MUI2, from these defines, inside the `PageEx`
+/// it generates; a second one written by us assembles clean under `-WX` and
+/// then loses the race (§15.7). What is private to MUI2 is the **line**, and
+/// what stays public is the **setting** — the split `icon`/`MUI_ICON` already
+/// lives on.
+#[derive(Debug)]
+struct PageField {
+    installua: &'static str,
+    define: &'static str,
+    holds: Holds,
+    /// Whether MUI2 clears the define once the page is inserted. `false` means
+    /// the compiler emits the `!undef` itself, and that is not an alternative
+    /// to MUI2's cleanup but the two holes in it: `UninstallConfirm.nsh` never
+    /// clears `MUI_UNCONFIRMPAGE_VARIABLE`, and `License.nsh` clears
+    /// `MUI_LICENSEPAGE_CHECKBOX_TEXT_ACCEPT`, which is a name nothing defines.
+    /// Without this a second page of the same type inherits the first one's.
+    cleared: bool,
+}
+
+const fn field(installua: &'static str, define: &'static str, holds: Holds) -> PageField {
+    PageField {
+        installua,
+        define,
+        holds,
+        cleared: true,
+    }
+}
+
+/// The same, for a define MUI2 leaves standing.
+const fn sticky(installua: &'static str, define: &'static str, holds: Holds) -> PageField {
+    PageField {
+        installua,
+        define,
+        holds,
+        cleared: false,
+    }
+}
+
+/// The three hooks every page has. MUI2 clears all three itself, in
+/// `MUI_PAGE_FUNCTION_CUSTOM`.
+const COMMON_FIELDS: &[PageField] = &[
+    field("pre", "MUI_PAGE_CUSTOMFUNCTION_PRE", Holds::Callback),
+    field("show", "MUI_PAGE_CUSTOMFUNCTION_SHOW", Holds::Callback),
+    field("leave", "MUI_PAGE_CUSTOMFUNCTION_LEAVE", Holds::Callback),
+];
+
+/// The bold heading strip inside the page — not the title bar, which is
+/// `caption` on the block, and not the page's own body text.
+///
+/// Absent from `welcome` and `finish`: those are full-window pages with no
+/// header to write into, and `Pages.nsh` calls `MUI_HEADER_TEXT_PAGE` from the
+/// other five and not from them.
+const HEADER_FIELDS: &[PageField] = &[
+    field("headerText", "MUI_PAGE_HEADER_TEXT", Holds::Str),
+    field("headerSubText", "MUI_PAGE_HEADER_SUBTEXT", Holds::Str),
+];
+
+const LICENSE_FIELDS: &[PageField] = &[
+    field("bottomText", "MUI_LICENSEPAGE_TEXT_BOTTOM", Holds::Str),
+    field("button", "MUI_LICENSEPAGE_BUTTON", Holds::Str),
+    field(
+        "checkbox",
+        "MUI_LICENSEPAGE_CHECKBOX",
+        Holds::Text("MUI_LICENSEPAGE_CHECKBOX_TEXT"),
+    ),
+    // The two texts are `sticky` because of a typo in MUI2: `License.nsh`
+    // unsets `MUI_LICENSEPAGE_CHECKBOX_TEXT_ACCEPT` and `…_DECLINE`, which are
+    // not names anything defines — the radio button texts are spelled
+    // `MUI_LICENSEPAGE_RADIOBUTTONS_TEXT_*` — so they survive the page and
+    // `MUI_DEFAULT` on the next one declines to overwrite them.
+    field(
+        "radioButtons",
+        "MUI_LICENSEPAGE_RADIOBUTTONS",
+        Holds::Nested(&[
+            sticky(
+                "accept",
+                "MUI_LICENSEPAGE_RADIOBUTTONS_TEXT_ACCEPT",
+                Holds::Str,
+            ),
+            sticky(
+                "decline",
+                "MUI_LICENSEPAGE_RADIOBUTTONS_TEXT_DECLINE",
+                Holds::Str,
+            ),
+        ]),
+    ),
+];
+
+const COMPONENTS_FIELDS: &[PageField] = &[
+    field("topText", "MUI_COMPONENTSPAGE_TEXT_TOP", Holds::Str),
+    field(
+        "instTypeText",
+        "MUI_COMPONENTSPAGE_TEXT_INSTTYPE",
+        Holds::Str,
+    ),
+    field("listText", "MUI_COMPONENTSPAGE_TEXT_COMPLIST", Holds::Str),
+];
+
+const DIRECTORY_FIELDS: &[PageField] = &[
+    field("topText", "MUI_DIRECTORYPAGE_TEXT_TOP", Holds::Str),
+    field(
+        "destinationText",
+        "MUI_DIRECTORYPAGE_TEXT_DESTINATION",
+        Holds::Str,
+    ),
+    field("variable", "MUI_DIRECTORYPAGE_VARIABLE", Holds::Var),
+    field(
+        "verifyOnLeave",
+        "MUI_DIRECTORYPAGE_VERIFYONLEAVE",
+        Holds::Flag,
+    ),
+];
+
+const CONFIRM_FIELDS: &[PageField] = &[
+    field("topText", "MUI_UNCONFIRMPAGE_TEXT_TOP", Holds::Str),
+    field(
+        "locationText",
+        "MUI_UNCONFIRMPAGE_TEXT_LOCATION",
+        Holds::Str,
+    ),
+    sticky("variable", "MUI_UNCONFIRMPAGE_VARIABLE", Holds::Var),
+];
+
+/// One MUI2 page, and the settings that belong to it rather than to the block.
+///
+/// Which of the two a setting is is MUI2's own source to say and not a
+/// judgement: a setting written inside the generated `PageEx` and `!undef`'d
+/// after is page-scoped, and one written inside an `!ifndef`-guarded
+/// `MUI_*PAGE_INTERFACE` macro is applied once, on the first page of its type,
+/// and ignored on every later one. The second kind is a block field — see
+/// [`V1_INSTALLER_FIELDS`] — because putting it on the page would be a lie the
+/// second page tells silently.
 struct Page {
     installua: &'static str,
     nsis: &'static str,
-    /// Which halves MUI2 defines a macro for. `Confirm` exists only as
+    /// Which halves MUI2 defines a macro for. `confirm` exists only as
     /// `MUI_UNPAGE_CONFIRM`, and there is no `MUI_PAGE_CONFIRM` to fall back
     /// on — so this is a fact about MUI2 rather than a policy of ours.
     halves: [bool; 2],
+    header: bool,
+    own: &'static [PageField],
 }
 
-const fn page(installua: &'static str, nsis: &'static str) -> Page {
+const fn page(installua: &'static str, nsis: &'static str, own: &'static [PageField]) -> Page {
     Page {
         installua,
         nsis,
         halves: [true, true],
+        header: true,
+        own,
     }
 }
 
+/// The seven pages, as a **closed set**: this is why a page is reached by
+/// member access (`page.directory`) where a section is reached by string
+/// (`section("Tools", …)`). A user picks a section's name and MUI2 picks
+/// these, so one completes and the other cannot (§15.1).
 const V1_PAGES: &[Page] = &[
-    page("Welcome", "WELCOME"),
-    page("License", "LICENSE"),
-    page("Components", "COMPONENTS"),
-    page("Directory", "DIRECTORY"),
-    page("InstFiles", "INSTFILES"),
-    page("Finish", "FINISH"),
     Page {
-        installua: "Confirm",
+        installua: "welcome",
+        nsis: "WELCOME",
+        halves: [true, true],
+        header: false,
+        own: &[],
+    },
+    page("license", "LICENSE", LICENSE_FIELDS),
+    page("components", "COMPONENTS", COMPONENTS_FIELDS),
+    page("directory", "DIRECTORY", DIRECTORY_FIELDS),
+    page("instFiles", "INSTFILES", &[]),
+    Page {
+        installua: "finish",
+        nsis: "FINISH",
+        halves: [true, true],
+        header: false,
+        own: &[],
+    },
+    Page {
+        installua: "confirm",
         nsis: "CONFIRM",
         halves: [false, true],
+        header: true,
+        own: CONFIRM_FIELDS,
     },
 ];
 
 impl Page {
     fn has(&self, half: Half) -> bool {
         self.halves[half as usize]
+    }
+
+    /// Every field this page accepts, in the order the defines are emitted —
+    /// which is this order and not the user's, because a Lua table has none
+    /// (§12).
+    fn fields(&self) -> impl Iterator<Item = &'static PageField> {
+        let header: &'static [PageField] = if self.header { HEADER_FIELDS } else { &[] };
+        self.own.iter().chain(header).chain(COMMON_FIELDS)
     }
 }
 
@@ -317,7 +529,7 @@ impl Lowerer<'_, '_> {
                 let value = self.resolved.consts.get(name)?;
                 Some(ir::Define {
                     name: name.clone(),
-                    value: ir::Arg::str(value.value.text()),
+                    value: Some(ir::Arg::str(value.value.text())),
                 })
             })
             .collect();
@@ -1140,11 +1352,11 @@ impl Lowerer<'_, '_> {
     /// two spellings — the whole of §15.3's duality is [`Half`] threaded
     /// through this one function. `un.` has no surface spelling at all.
     ///
-    /// Three passes rather than one, because a field's meaning can depend on
-    /// another field written below it: `license` is an argument to the
-    /// `License` page, and a table has no order for the user to get right (§12).
+    /// Two passes rather than one: the named fields are settings the whole
+    /// block carries, and the positional entries — sections, pages, callbacks —
+    /// read some of them. A Lua table has no order for the user to get right
+    /// (§12), so the order is the compiler's.
     fn installer(&mut self, fields: &[TableField], half: Half) {
-        let mut license = None;
         for field in fields {
             let TableField::Named { name, value } = field else {
                 continue;
@@ -1153,21 +1365,42 @@ impl Lowerer<'_, '_> {
                 "installDir" if half == Half::Installer => {
                     self.string_attribute("InstallDir", "installDir", value, true);
                 }
+                // The five block-level MUI settings. Each is a line MUI2 writes
+                // itself, from this define, so writing the line instead would
+                // assemble clean under `-WX` and then lose (§15.7).
                 "icon" => {
                     let define = match half {
                         Half::Installer => "MUI_ICON",
                         Half::Uninstaller => "MUI_UNICON",
                     };
-                    if let Some(arg) = self.constant_arg(value, "icon") {
-                        self.module.mui_defines.push(ir::Define {
-                            name: define.to_string(),
-                            value: arg.into_path(),
-                        });
-                    }
+                    self.mui_define(define, value, "icon", true);
                 }
-                "license" => license = self.constant_arg(value, "license").map(ir::Arg::into_path),
+                "checkBitmap" if half == Half::Installer => {
+                    self.mui_define("MUI_COMPONENTSPAGE_CHECKBITMAP", value, "checkBitmap", true);
+                }
+                "installColors" if half == Half::Installer => {
+                    self.mui_define("MUI_INSTFILESPAGE_COLORS", value, "installColors", false);
+                }
+                "progressBar" if half == Half::Installer => {
+                    self.mui_define("MUI_INSTFILESPAGE_PROGRESSBAR", value, "progressBar", false);
+                }
+                "licenseBkColor" if half == Half::Installer => {
+                    self.mui_define("MUI_LICENSEPAGE_BGCOLOR", value, "licenseBkColor", false);
+                }
                 "installTypes" => self.install_types(value, half),
-                "pages" => {}
+                other if half == Half::Uninstaller && ONCE_GLOBAL_FIELDS.contains(&other) => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not an `uninstaller` field"),
+                        )
+                        .note(
+                            "NSIS reads it once, script-wide, so both halves writing it would \
+                             define one name twice — write it in `installer {}` (§15.3)",
+                        ),
+                    );
+                }
                 other if V1_INSTALLER_FIELDS.contains(&other) => {
                     self.todo(name.span, &format!("the `{other}` field"));
                 }
@@ -1185,19 +1418,24 @@ impl Lowerer<'_, '_> {
         }
 
         for field in fields {
-            if let TableField::Named { name, value } = field
-                && name.text == "pages"
-            {
-                self.pages(value, half, license.as_ref());
-            }
-        }
-
-        for field in fields {
             let TableField::Positional { value } = field else {
                 continue;
             };
             self.body_entry(value, half);
         }
+    }
+
+    /// One block-level `!define MUI_*`, from a field whose value is build-time.
+    fn mui_define(&mut self, define: &str, value: &Expr, field: &str, path: bool) {
+        let Some(arg) = self.constant_arg(value, field) else {
+            return;
+        };
+        let arg = if path { arg.into_path() } else { arg };
+        self.module.mui_defines.push(ir::Define {
+            name: define.to_string(),
+            value: Some(arg),
+        });
+        self.mui = true;
     }
 
     /// `installTypes = { "Full", "Minimal" }` — the presets the components page
@@ -1265,97 +1503,357 @@ impl Lowerer<'_, '_> {
         }
     }
 
-    /// `pages = { "Welcome", "License", … }`, in the order written: page order
-    /// is what the user sees, so it is the one list in the output that is never
-    /// sorted.
-    fn pages(&mut self, value: &Expr, half: Half, license: Option<&ir::Arg>) {
-        let Expr::Table { fields, .. } = value else {
-            self.bad_value(
-                value.span(),
-                "pages",
-                "a list",
-                "write `pages = { \"Welcome\", \"Directory\", \"InstFiles\" }`",
+    /// `page.directory { topText = "…" }` — one page and the settings that
+    /// belong to it, as a positional entry in the block that supplies its half.
+    ///
+    /// Page order is the order the entries were written, and it is the one list
+    /// in the output that is never sorted: it is what the user sees.
+    fn page(&mut self, call: &Expr, which: &Name, half: Half) {
+        let Some(page) = V1_PAGES.iter().find(|page| page.installua == which.text) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    which.span,
+                    format!("`{}` is not a page", which.text),
+                )
+                .note(format!(
+                    "the pages are {}",
+                    list(
+                        &V1_PAGES
+                            .iter()
+                            .map(|page| page.installua)
+                            .collect::<Vec<_>>()
+                    )
+                )),
             );
             return;
         };
+        if !page.has(half) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    which.span,
+                    format!("there is no {half} `{}` page", which.text),
+                )
+                .note(format!(
+                    "MUI2 defines no `{}{}`",
+                    half.page_prefix(),
+                    page.nsis
+                )),
+            );
+            return;
+        }
 
-        for field in fields {
-            let TableField::Positional { value } = field else {
-                self.todo(value.span(), "a named entry in `pages`");
+        let Expr::Call { args, .. } = call else {
+            return;
+        };
+        let written: &[TableField] = match args.as_slice() {
+            [] => &[],
+            [Expr::Table { fields, .. }] => fields,
+            _ => {
+                self.todo(call.span(), "this page in this form");
+                return;
+            }
+        };
+        let mut named: Vec<(&Name, &Expr)> = Vec::new();
+        for entry in written {
+            match entry {
+                TableField::Named { name, value } => named.push((name, value)),
+                TableField::Positional { value } => {
+                    self.todo(value.span(), "a positional entry in a page");
+                }
+            }
+        }
+
+        // `MUI_PAGE_LICENSE` takes the file as its macro argument rather than
+        // as a define, which is why `file` is handled here and not in
+        // [`Page::own`]. It lives on the page and not on the block because a
+        // block-level `license` with no License page listed evaporates without
+        // a word, and here that is unwritable.
+        let mut macro_args = Vec::new();
+        if page.installua == "license" {
+            let file = named
+                .iter()
+                .find(|(name, _)| name.text == "file")
+                .and_then(|(_, value)| self.constant_arg(value, "file"));
+            match file {
+                Some(arg) => macro_args.push(arg.into_path()),
+                None => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::MissingAttribute,
+                            which.span,
+                            "a `license` page needs a `file`",
+                        )
+                        .note("write `page.license { file = \"LICENSE.txt\" }`")
+                        .note("`MUI_PAGE_LICENSE` takes the file as its argument"),
+                    );
+                    return;
+                }
+            }
+        }
+
+        let mut defines = Vec::new();
+        let mut undefines = Vec::new();
+        for field in page.fields() {
+            let Some((_, value)) = named.iter().find(|(name, _)| name.text == field.installua)
+            else {
                 continue;
             };
-            let Some(name) = self.constant_string(value, "pages") else {
-                continue;
-            };
-            let Some(page) = V1_PAGES.iter().find(|page| page.installua == name) else {
+            self.page_field(field, value, half, page, &mut defines, &mut undefines);
+        }
+
+        // MUI2 reads `!ifdef MUI_LICENSEPAGE_CHECKBOX` first and the radio
+        // buttons only in its `!else`, so writing both is not a page with two
+        // controls — it is a page whose second setting does nothing.
+        if page.installua == "license" {
+            let both = ["checkbox", "radioButtons"]
+                .iter()
+                .all(|want| named.iter().any(|(name, _)| name.text == *want));
+            if both {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        which.span,
+                        "a `license` page takes `checkbox` or `radioButtons`, not both",
+                    )
+                    .note(
+                        "MUI2 reads the checkbox first and the radio buttons only if it is absent",
+                    ),
+                );
+            }
+        }
+
+        for (name, _) in &named {
+            let known = name.text == "file" && page.installua == "license"
+                || page.fields().any(|field| field.installua == name.text);
+            if !known {
                 self.diags.push(
                     Diagnostic::error(
                         Code::UnknownField,
-                        value.span(),
-                        format!("`{name}` is not a page"),
+                        name.span,
+                        format!("`{}` is not a `{}` page field", name.text, page.installua),
                     )
                     .note(format!(
-                        "the pages are {}",
+                        "the fields are {}",
                         list(
-                            &V1_PAGES
-                                .iter()
-                                .map(|page| page.installua)
+                            &page
+                                .fields()
+                                .map(|field| field.installua)
                                 .collect::<Vec<_>>()
                         )
                     )),
                 );
-                continue;
-            };
-            if !page.has(half) {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::UnknownField,
-                        value.span(),
-                        format!("there is no {half} `{name}` page"),
-                    )
-                    .note(format!(
-                        "MUI2 defines no `{}{}`",
-                        half.page_prefix(),
-                        page.nsis
-                    )),
-                );
-                continue;
             }
+        }
 
-            let mut args = Vec::new();
-            if page.installua == "License" {
-                match license {
-                    Some(arg) => args.push(arg.clone()),
-                    None => {
+        let mut all = vec![ir::Arg::raw(format!("{}{}", half.page_prefix(), page.nsis))];
+        all.extend(macro_args);
+        let lowered = ir::Page {
+            defines,
+            insert: ir::Instruction::new("!insertmacro", all),
+            undefines,
+        };
+        match half {
+            Half::Installer => self.module.pages.push(lowered),
+            Half::Uninstaller => self.module.unpages.push(lowered),
+        }
+        self.mui = true;
+    }
+
+    /// One page setting, as the `!define`s it becomes and the `!undef`s that
+    /// keep it off the next page.
+    fn page_field(
+        &mut self,
+        field: &PageField,
+        value: &Expr,
+        half: Half,
+        page: &Page,
+        defines: &mut Vec<ir::Define>,
+        undefines: &mut Vec<String>,
+    ) {
+        let mut define = |name: &str, value: Option<ir::Arg>, cleared: bool| {
+            defines.push(ir::Define {
+                name: name.to_string(),
+                value,
+            });
+            if !cleared {
+                undefines.push(name.to_string());
+            }
+        };
+
+        match field.holds {
+            Holds::Str => {
+                if let Some(arg) = self.constant_arg(value, field.installua) {
+                    define(field.define, Some(arg), field.cleared);
+                }
+            }
+            Holds::Flag => match self.constant(value) {
+                // `false` is not a define with a false value: MUI2 asks
+                // `!ifdef`, so the only way to say no is to say nothing.
+                Some(ConstValue::Bool(false)) => {}
+                Some(ConstValue::Bool(true)) => define(field.define, None, field.cleared),
+                _ => self.bad_value(
+                    value.span(),
+                    field.installua,
+                    "a `bool`",
+                    "MUI2 reads this one with `!ifdef`, so it is on or absent",
+                ),
+            },
+            Holds::Var => {
+                let Some(name) = value.name() else {
+                    self.bad_value(
+                        value.span(),
+                        field.installua,
+                        "a global",
+                        "NSIS stores the chosen directory into this one, so it wants the \
+                         variable and not its value (§15.24)",
+                    );
+                    return;
+                };
+                let known = self
+                    .resolved
+                    .globals
+                    .iter()
+                    .any(|global| global.name == name);
+                if !known {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            value.span(),
+                            format!("`{name}` is not a global"),
+                        )
+                        .note("a global is declared by assigning to it at the top level (§15.24)"),
+                    );
+                    return;
+                }
+                define(
+                    field.define,
+                    Some(ir::Arg::var(format!("${name}"))),
+                    field.cleared,
+                );
+            }
+            Holds::Callback => {
+                let Some(name) = self.page_callback(value, half, page, field.installua) else {
+                    return;
+                };
+                define(field.define, Some(ir::Arg::str(name)), field.cleared);
+            }
+            Holds::Text(text) => {
+                if let Some(arg) = self.constant_arg(value, field.installua) {
+                    define(field.define, None, field.cleared);
+                    define(text, Some(arg), field.cleared);
+                }
+            }
+            Holds::Nested(parts) => {
+                let Expr::Table { fields, .. } = value else {
+                    self.bad_value(
+                        value.span(),
+                        field.installua,
+                        "a table",
+                        "write `radioButtons = { accept = \"Yes\", decline = \"No\" }`",
+                    );
+                    return;
+                };
+                define(field.define, None, field.cleared);
+                for part in parts {
+                    let written = fields.iter().find_map(|entry| match entry {
+                        TableField::Named { name, value } if name.text == part.installua => {
+                            Some(value)
+                        }
+                        _ => None,
+                    });
+                    let Some(written) = written else { continue };
+                    if let Some(arg) = self.constant_arg(written, part.installua) {
+                        define(part.define, Some(arg), part.cleared);
+                    }
+                }
+                for entry in fields {
+                    let TableField::Named { name, .. } = entry else {
+                        continue;
+                    };
+                    if !parts.iter().any(|part| part.installua == name.text) {
                         self.diags.push(
                             Diagnostic::error(
-                                Code::MissingAttribute,
-                                value.span(),
-                                "a `License` page needs a `license`",
+                                Code::UnknownField,
+                                name.span,
+                                format!("`{}` is not a `{}` field", name.text, field.installua),
                             )
-                            .note("write `license = \"LICENSE.txt\"` beside `pages`")
-                            .note("`MUI_PAGE_LICENSE` takes the file as its argument"),
+                            .note(format!(
+                                "the fields are {}",
+                                list(&parts.iter().map(|part| part.installua).collect::<Vec<_>>())
+                            )),
                         );
-                        continue;
                     }
                 }
             }
-
-            let macro_name = format!("{}{}", half.page_prefix(), page.nsis);
-            let mut all = vec![ir::Arg::raw(macro_name)];
-            all.extend(args);
-            let instruction = ir::Instruction::new("!insertmacro", all);
-            match half {
-                Half::Installer => self.module.pages.push(instruction),
-                Half::Uninstaller => self.module.unpages.push(instruction),
-            }
-            self.mui = true;
         }
     }
 
-    /// A positional entry in `installer {}`: a `section` or a callback.
+    /// `pre = function() … end` — an NSIS `Function` MUI2 calls by name.
+    ///
+    /// The name is the compiler's, because nothing in the source is one: the
+    /// hook is written where it runs. `un.` leads the uninstaller's, since MUI2
+    /// calls it from an uninstaller page and NSIS spells that half in the
+    /// function's name (§15.3).
+    fn page_callback(
+        &mut self,
+        value: &Expr,
+        half: Half,
+        page: &Page,
+        which: &str,
+    ) -> Option<String> {
+        let Expr::Function {
+            params,
+            block,
+            span,
+        } = value
+        else {
+            self.todo(value.span(), &format!("this `{which}` form"));
+            return None;
+        };
+        if !params.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    *span,
+                    format!("`{which}` takes no arguments"),
+                )
+                .note("NSIS calls it, and `Call` has no argument list (§3)"),
+            );
+            return None;
+        }
+
+        // A second `page.directory` in the same half is legal, so the name has
+        // to distinguish them.
+        let stem = format!("{}mui.{}.{which}", half.prefix(), page.installua);
+        let mut name = stem.clone();
+        let mut nth = 2;
+        while self.module.functions.iter().any(|f| f.name == name) {
+            name = format!("{stem}.{nth}");
+            nth += 1;
+        }
+
+        let body = self.body(block, &[], *span, None);
+        self.module.functions.push(ir::Function {
+            name: name.clone(),
+            body,
+        });
+        Some(name)
+    }
+
+    /// A positional entry in `installer {}`: a `section`, a page or a callback.
     fn body_entry(&mut self, value: &Expr, half: Half) {
         let Some(name) = value.callee_name() else {
+            // `page.directory { … }`: a member rather than a bare name, which
+            // is what a **closed** set of names buys — an editor completes the
+            // seven and a typo is caught where it is written (§15.1).
+            if let Some((base, which)) = value.callee_field()
+                && base == "page"
+            {
+                self.page(value, which, half);
+                return;
+            }
             self.todo(value.span(), "this entry");
             return;
         };

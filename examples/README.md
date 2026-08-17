@@ -89,8 +89,11 @@ that is pure where `errors()` is not.
 **Attributes — 15**
 
 `name` · `outFile` · `unicode` · `compressor` · `requestExecutionLevel` · `installDir` ·
-`icon` · `license` · `pages` · `caption` · `text` · `manifest.*` · `versionInfo.product` ·
-`versionInfo.keys` · `crcCheck`
+`icon` · `caption` · `manifest.*` · `versionInfo.product` · `versionInfo.keys` · `crcCheck`
+
+**Pages — 7**, as positional entries in `installer {}` and `uninstaller {}` (§15.7):
+`page.welcome` · `page.license` · `page.components` · `page.directory` · `page.instFiles` ·
+`page.finish` · `page.confirm`
 
 **Declarations — 7**
 

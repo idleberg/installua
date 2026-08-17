@@ -46,7 +46,9 @@ end)
 
 installer {
 	installDir = PROGRAMFILES64 .. "/" .. APP,
-	pages = { "Directory", "InstFiles" },
+
+	page.directory {},
+	page.instFiles {},
 
 	section("Core", function()
 		setOutPath(INSTDIR)

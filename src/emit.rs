@@ -85,16 +85,32 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     // 5. Attributes, in overlay order.
     out.section("attribute", module.attributes.iter().map(line));
 
-    // 6. MUI defines, page macros, `MUI_LANGUAGE`.
-    out.section("MUI define", module.mui_defines.iter().map(define_line));
-    out.section("page", module.pages.iter().map(line));
-    out.section("page", module.unpages.iter().map(line));
-    out.section("language", module.languages.iter().map(line));
-
-    // 7. `Var`s. A `Var` used before it is declared is a hard error in NSIS,
+    // 6. `Var`s. A `Var` used before it is declared is a hard error in NSIS,
     //    unlike a `Function`, which is why these are collected rather than
-    //    emitted where they were written (§12).
+    //    emitted where they were written (§12). Ahead of the pages because
+    //    `page.directory { variable = … }` names one in a `DirVar`.
     out.section("Var", module.vars.iter().map(|name| format!("Var {name}")));
+
+    // 7. MUI defines, page macros, `MUI_LANGUAGE`.
+    out.section("MUI define", module.mui_defines.iter().map(define_line));
+    // Each page brings its own settings with it: MUI2 reads a page-scoped
+    // `!define` at the insertion point, so the three lists interleave per page
+    // rather than running one after the other (§15.7).
+    for half in [&module.pages, &module.unpages] {
+        for (index, page) in half.iter().enumerate() {
+            // A page that carries settings gets a blank line in front of it, so
+            // a reader can see where one page's defines end and the next one's
+            // begin. A run of bare `!insertmacro` lines stays a run (§9-6).
+            let bare = page.defines.is_empty() && page.undefines.is_empty();
+            if index == 0 || !bare {
+                out.blank();
+            }
+            for text in page_lines(page) {
+                out.line(text, Origin::Emitted("page"));
+            }
+        }
+    }
+    out.section("language", module.languages.iter().map(line));
 
     // 8. Functions. NSIS hoists calls, so these could go anywhere; before the
     //    sections is a readability choice, and that is a sufficient one (§9-6).
@@ -206,8 +222,22 @@ fn body(out: &mut Out, body: &crate::cfg::Body, depth: usize) {
     }
 }
 
+/// One page: its settings, its macro, and the `!undef`s that keep the settings
+/// off the next page. Three runs rather than three lists, because MUI2 reads a
+/// page-scoped `!define` at the insertion point (§15.7).
+fn page_lines(page: &ir::Page) -> impl Iterator<Item = String> {
+    page.defines
+        .iter()
+        .map(define_line)
+        .chain([line(&page.insert)])
+        .chain(page.undefines.iter().map(|name| format!("!undef {name}")))
+}
+
 fn define_line(define: &ir::Define) -> String {
-    format!("!define {} {}", define.name, argument(&define.value))
+    match &define.value {
+        Some(value) => format!("!define {} {}", define.name, argument(value)),
+        None => format!("!define {}", define.name),
+    }
 }
 
 fn line(instruction: &ir::Instruction) -> String {

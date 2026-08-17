@@ -27,7 +27,9 @@ gitDescribe = ""
 
 installer {
 	installDir = PROGRAMFILES64 .. "/" .. APP,
-	pages = { "Directory", "InstFiles" },
+
+	page.directory {},
+	page.instFiles {},
 
 	onInit(function()
 		local account = userInfo.getAccountType()
