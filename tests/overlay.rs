@@ -264,6 +264,87 @@ fn a_flag_is_reached_by_name_and_placed_by_the_table() {
     );
 }
 
+/// A flag that carries a value, in the two shapes the table has for it.
+///
+/// `File`'s `/x` is a list because it repeats, and `MessageBox`'s `/SD` is a
+/// field of §15.18's own table because its value has to be an answer the
+/// buttons beside it can give. Neither is a position, and neither is a `bool`.
+#[test]
+fn a_flag_can_carry_a_value() {
+    let build = |body: &str| {
+        let mut diags = Diagnostics::new();
+        let source = format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n\
+             {body}\n\
+             end), }}"
+        );
+        installua::build(&source, &mut diags)
+            .unwrap_or_else(|| panic!("{}", diags.render("<test>")))
+    };
+
+    // One `/x` per element, in the order they were written, each a path: §5's
+    // `/` → `\` applies to an exclusion as much as to the filespec it excludes.
+    let excluded = build(
+        "file(\"assets/icon.ico\", { recursive = true, exclude = { \"build/*.tmp\", \"*.log\" } })",
+    );
+    assert!(
+        excluded.contains("File /r /x \"build\\*.tmp\" /x \"*.log\" \"assets\\icon.ico\"\n"),
+        "a list is one flag per element:\n{excluded}"
+    );
+
+    // An empty list is no flag at all, the way `false` is.
+    let none = build("file(\"assets/icon.ico\", { exclude = {} })");
+    assert!(
+        none.contains("File \"assets\\icon.ico\"\n"),
+        "an empty list writes nothing:\n{none}"
+    );
+
+    // `/SD` follows the text, which is where `Opt::after` says it goes, and the
+    // answer is spelled the way `messageBox` returns it rather than as `IDNO`.
+    let silent =
+        build("messageBox { text = \"Restart?\", buttons = \"YESNO\", silentAnswer = \"NO\" }");
+    assert!(
+        silent.contains("MessageBox MB_YESNO \"Restart?\" /SD IDNO\n"),
+        "the silent answer is written where NSIS wants it:\n{silent}"
+    );
+}
+
+/// The two errors a valued flag can give that a `bool` one cannot.
+#[test]
+fn a_valued_flag_says_what_it_wants() {
+    let errors = |body: &str| {
+        let mut diags = Diagnostics::new();
+        let source = format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n\
+             {body}\n\
+             end), }}"
+        );
+        let built = installua::build(&source, &mut diags);
+        assert!(built.is_none() || diags.has_errors(), "{body} was accepted");
+        diags.render("<test>")
+    };
+
+    // Not a `bool`, so "on or off" would be the wrong sentence.
+    let scalar = errors("file(\"assets/icon.ico\", { exclude = \"*.tmp\" })");
+    assert!(
+        scalar.contains("`exclude` is a list") && scalar.contains("`/x` for each"),
+        "{scalar}"
+    );
+
+    // An answer this dialog cannot give. NSIS accepts `/SD IDYES` under
+    // `MB_OKCANCEL` and the silent install then takes a branch nobody wrote,
+    // which is exactly why the check is here and not there.
+    let impossible =
+        errors("messageBox { text = \"Go?\", buttons = \"OKCANCEL\", silentAnswer = \"YES\" }");
+    assert!(
+        impossible.contains("`OKCANCEL` cannot answer `YES`")
+            && impossible.contains("`OK`, `CANCEL`"),
+        "{impossible}"
+    );
+}
+
 /// The error that replaces "takes 2 to 9 arguments, and 4 were given".
 #[test]
 fn an_unknown_option_names_the_ones_that_exist() {

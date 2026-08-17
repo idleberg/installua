@@ -306,13 +306,17 @@ fn instructions() -> String {
             names.push(ident);
         }
         // Both halves of the options table, in one type: the optional positions
-        // that are named rather than counted, and the flags, which are `boolean`
-        // because the compiler writes the `/FLAG` itself (§15.23).
+        // that are named rather than counted, and the flags, which are mostly
+        // `boolean` because the compiler writes the `/FLAG` itself (§15.23).
         let fields = entry
             .fields()
             .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)));
         let options: Vec<String> = fields
-            .chain(entry.flags().map(|(name, _)| format!("{name}: boolean")))
+            .chain(
+                entry
+                    .flags()
+                    .filter_map(|(name, flag)| Some(format!("{name}: {}", flag_type(flag)?))),
+            )
             .collect();
         if !options.is_empty() {
             let _ = writeln!(out, "---@param options? {{ {} }}", options.join(", "));
@@ -330,6 +334,21 @@ fn instructions() -> String {
         let _ = writeln!(out, "function {name}({}) end\n", names.join(", "));
     }
     out
+}
+
+/// The Lua type of one flag's field. A `bool` for the ordinary flag, whose
+/// value is only whether to write it, and a list where the flag repeats
+/// (`File`'s `/x`).
+///
+/// `None` is a flag that is not this table's to describe: `Offer::Handled`
+/// belongs to a hand-shaped declaration above, and the other two variants have
+/// no name to be reached by at all.
+fn flag_type(flag: &table::Flag) -> Option<&'static str> {
+    match flag.offer {
+        table::Offer::Named(_) => Some("boolean"),
+        table::Offer::List { .. } => Some("string[]"),
+        table::Offer::Handled(_) | table::Offer::Always | table::Offer::Unoffered(_) => None,
+    }
 }
 
 /// Names whose Lua surface is not the NSIS shape, declared by hand above and

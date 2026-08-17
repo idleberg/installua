@@ -74,7 +74,7 @@ installer {
 		detailPrint(temp)
 	end),
 	section("File", function()
-		file("assets/icon.ico")
+		file("assets/icon.ico", { exclude = { "*.tmp", "*.log" } })
 	end),
 	section("FlushINI", function()
 		flushIni(INSTDIR .. "/app.ini")
@@ -163,7 +163,7 @@ installer {
 		if rtlLanguage() then detailPrint("right to left") end
 	end),
 	section("MessageBox", function()
-		messageBox("finished")
+		messageBox { text = "Restart now?", buttons = "YESNO", silentAnswer = "NO" }
 	end),
 	section("Quit", function()
 		os.exit()

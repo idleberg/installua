@@ -20,7 +20,7 @@ in `-CMDHELP` order either way.
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 93 tests
+cargo test          # 95 tests
 ```
 
 ---
@@ -568,6 +568,63 @@ the flag is the easy half.
 
 ---
 
+## Batch 9 — a flag that carries a value
+
+Batch 8 left two flags on `Exposed` rows unreachable, both for the same stated reason:
+`File`'s `/x filespec` and `MessageBox`'s `/SD IDOK` take a **value**, and every flag the
+surface could write was a `bool`. They are the batch, and they turn out to want different
+things:
+
+```lua
+file("assets/icon.ico", { recursive = true, exclude = { "build/*.tmp", "*.log" } })
+--> File /r /x "build\*.tmp" /x "*.log" "assets\icon.ico"
+
+messageBox { text = "Restart?", buttons = "YESNO", silentAnswer = "NO" }
+--> MessageBox MB_YESNO "Restart?" /SD IDNO
+```
+
+**`/x` repeats, so its field is a list and the emitter writes the flag once per element.**
+That is not a convenience — it is the only shape in which a caller can say *two*
+exclusions, since a field holds one value and the flag is what repeats. Each element is a
+`Kind::Path`, so §5 applies to an exclusion as much as to the filespec it excludes, and an
+empty list writes nothing the way `false` does. `Offer::List { name, kind }` is the whole
+addition, and `Written::flags` went from `Vec<bool>` to a list of occurrences per flag:
+empty is not written, one entry carrying nothing is `/REBOOTOK`, and a value per element
+is `/x`.
+
+**`/SD` is not in the generic table at all**, and the reason is a check rather than a
+shape: the answer has to be one the buttons beside it can give. `silentAnswer = "YES"`
+under `buttons = "OKCANCEL"` is a silent install taking a branch nobody wrote, and NSIS
+assembles it without complaint. Only §15.18's hand-shaped lowering can see both fields at
+once, so `/SD` became a fourth field of `messageBox`'s own table and the table records
+that with `Offer::Handled` — a name that is legal in the row's options, written by
+someone other than `Instruction::flags`. The answer is spelled `"NO"`, the way
+`messageBox` *returns* it, and the compiler writes the `ID`.
+
+**There is no `unoffered` helper in the overlay any more.** Every flag on an `Exposed` row
+is now reachable, so the only `Offer::Unoffered` left is the one `join()` hands a row that
+has said nothing at all — which is the census's business rather than a judgement anyone
+writes. The variant kept its reason string for exactly that one use.
+
+| `Offer` | Means | Rows |
+| --- | --- | --- |
+| `Named` | a `boolean` field of the options table | 13 flags across 9 rows |
+| `List` | a `string[]` field, one flag per element | `File`'s `/x` |
+| `Always` | written on every call | `WriteRegMultiStr`'s `/REGEDIT5` |
+| `Handled` | a hand-shaped row writes it | `MessageBox`'s `/SD` |
+| `Unoffered` | the join's default for an unjudged flag | no `Exposed` row |
+
+### What it did not touch
+
+The five other valued flags in the snapshot — `ReserveFile`'s `/x`, `SendMessage`'s
+`/TIMEOUT`, `SetBrandingImage`'s `/IMGID`, `SetFont`'s and `VIAddVersionKey`'s `/LANG` —
+are all on `todo` or `attribute` rows, so none of them has a command to hang off yet. Four
+of the five take **one** value and do not repeat, which `Offer::List` cannot say; that is a
+sibling variant of about ten lines, and writing it now would ship an untested path. It
+lands with the first row that needs it.
+
+---
+
 ## What the join replaced
 
 `builtins.rs` held a parameter table the lowerer read, written before the `-CMDHELP` join
@@ -639,10 +696,10 @@ tier 3 catches and tier 2 cannot.
   left in the 112 is section-index binding (§13), the `hwnd` surface, the classic UI,
   pages, script-wide settings and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
-- **A flag that takes a value has no spelling.** `File`'s `/x filespec` and
-  `MessageBox`'s `/SD IDOK` are the only two on an `Exposed` row, and both are
-  `Offer::Unoffered` with that as their reason. `/x` also repeats, so its field would hold
-  a list — which is a decision about tables in the surface, not a missing branch.
+- **A flag that takes one value and does not repeat has no spelling.** `Offer::List`
+  covers `File`'s `/x` because it repeats; `SendMessage`'s `/TIMEOUT=n` and the three
+  other single-valued flags are all on `todo` rows, and the variant that spells them
+  should arrive with the first of those rows rather than before it.
 - **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
   `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
   pass a call that is simply dead.

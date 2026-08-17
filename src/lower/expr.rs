@@ -44,9 +44,24 @@ pub(super) struct Written {
     /// One entry per surface position, in table order: empty where nobody
     /// filled it, and several for the one repeated tail a row may have.
     inputs: Vec<Vec<ir::Arg>>,
-    /// One entry per flag `-CMDHELP` prints for the row, in its order: whether
-    /// this call writes it.
-    flags: Vec<bool>,
+    /// One entry per flag `-CMDHELP` prints for the row, in its order: the
+    /// times this call writes it. Empty is "not written"; `[None]` is a flag
+    /// written once and carrying nothing (`/REBOOTOK`); and a value per element
+    /// is a flag that repeats, which `File`'s `/x` is the only one of.
+    flags: Vec<Vec<Option<ir::Arg>>>,
+}
+
+/// What a `messageBox` call said, before any of it is checked against the
+/// button set. Four fields rather than a tuple because `silentAnswer` made the
+/// tuple's third and fourth members indistinguishable at the call site.
+struct MessageBoxFields {
+    text: ir::Arg,
+    buttons: String,
+    icon: Option<String>,
+    /// The answer a silent install gives, with the span to blame when it is not
+    /// one this dialog can produce. `None` leaves `/SD` unwritten, which is
+    /// NSIS's own default.
+    silent: Option<(String, Span)>,
 }
 
 /// A value and what the lattice knows about it.
@@ -717,12 +732,15 @@ impl BodyLowerer<'_, '_> {
             placed[position].push(lowered);
         }
 
-        // A flag is written when the call names it and `true`, and on every call
-        // when NSIS requires it (`WriteRegMultiStr /REGEDIT5`).
-        let mut flags: Vec<bool> = builtin
+        // A flag is written when the call names it, and on every call when NSIS
+        // requires it (`WriteRegMultiStr /REGEDIT5`).
+        let mut flags: Vec<Vec<Option<ir::Arg>>> = builtin
             .options
             .iter()
-            .map(|flag| flag.offer == table::Offer::Always)
+            .map(|flag| match flag.offer {
+                table::Offer::Always => vec![None],
+                _ => Vec::new(),
+            })
             .collect();
         let mut set: Vec<bool> = vec![false; flags.len()];
 
@@ -764,23 +782,70 @@ impl BodyLowerer<'_, '_> {
                     return None;
                 }
                 set[flag] = true;
-                let nsis = builtin.options[flag].opt.nsis;
-                match value {
-                    Expr::Bool { value: on, .. } => flags[flag] = *on,
-                    other => {
-                        self.diags.push(
-                            Diagnostic::error(
-                                Code::BadFieldValue,
-                                other.span(),
-                                format!("`{}` is on or off", key.text),
-                            )
-                            .note(format!(
-                                "write `{} = true`, and the compiler writes `{nsis}`",
-                                key.text
-                            )),
-                        );
+                let option = builtin.options[flag];
+                let nsis = option.opt.nsis;
+                match option.offer {
+                    // A list is written once per element, so the field holds
+                    // the elements and the emitter repeats the flag: there is
+                    // no other shape in which `{ exclude = { a, b } }` can mean
+                    // two `/x`.
+                    table::Offer::List { kind, .. } => {
+                        let Expr::Table { fields, .. } = value else {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    Code::BadFieldValue,
+                                    value.span(),
+                                    format!("`{}` is a list", key.text),
+                                )
+                                .note(format!(
+                                    "write `{} = {{ \"a\", \"b\" }}`, and the compiler writes a \
+                                     `{nsis}` for each",
+                                    key.text
+                                )),
+                            );
+                            return None;
+                        };
+                        for field in fields {
+                            let TableField::Positional { value } = field else {
+                                self.diags.push(
+                                    Diagnostic::error(
+                                        Code::BadFieldValue,
+                                        key.span,
+                                        format!("`{}` holds values, not names", key.text),
+                                    )
+                                    .note(format!("each of its elements becomes one `{nsis}`")),
+                                );
+                                return None;
+                            };
+                            let element = self.flag_value(kind, &key.text, value)?;
+                            flags[flag].push(Some(element));
+                        }
+                    }
+                    // Only reachable if a row grew a `Handled` flag without the
+                    // hand-shaped lowering that is supposed to write it —
+                    // `messageBox` never arrives here at all.
+                    table::Offer::Handled(_) => {
+                        self.todo(key.span, &format!("the `{}` option", key.text));
                         return None;
                     }
+                    _ => match value {
+                        Expr::Bool { value: true, .. } => flags[flag].push(None),
+                        Expr::Bool { value: false, .. } => {}
+                        other => {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    Code::BadFieldValue,
+                                    other.span(),
+                                    format!("`{}` is on or off", key.text),
+                                )
+                                .note(format!(
+                                    "write `{} = true`, and the compiler writes `{nsis}`",
+                                    key.text
+                                )),
+                            );
+                            return None;
+                        }
+                    },
                 }
                 continue;
             };
@@ -861,6 +926,32 @@ impl BodyLowerer<'_, '_> {
             value.arg.into_path()
         } else {
             value.arg
+        })
+    }
+
+    /// One element of a [`table::Offer::List`] field, checked and converted for
+    /// the flag it follows.
+    ///
+    /// Not [`Self::coerce`], because a flag is not a position and has no
+    /// [`table::Param`] to check against: the kind is the whole of what the
+    /// table says about the value, and the type is `str` because every flag
+    /// NSIS spells with a value takes text.
+    fn flag_value(&mut self, kind: table::Kind, name: &str, argument: &Expr) -> Option<ir::Arg> {
+        let value = self.value(argument)?;
+        if value.ty != Ty::Unknown && value.ty.join(Ty::Str) != Ty::Str {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    argument.span(),
+                    format!("`{name}` wants a str, and this is a {}", value.ty),
+                )
+                .note("types come from the instruction table, never from an annotation (§15.14)"),
+            );
+            return None;
+        }
+        Some(match kind {
+            table::Kind::Path => value.arg.into_path(),
+            _ => value.arg,
         })
     }
 
@@ -1575,7 +1666,12 @@ impl BodyLowerer<'_, '_> {
     /// is recovered from the comparison. A one-button dialog has no table at
     /// all, which is why the short form costs exactly one line.
     fn message_box(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
-        let (text, buttons, icon) = self.message_box_fields(args, span)?;
+        let MessageBoxFields {
+            text,
+            buttons,
+            icon,
+            silent,
+        } = self.message_box_fields(args, span)?;
         let Some(set) = BUTTONS.iter().find(|set| set.installua == buttons) else {
             self.diags.push(
                 Diagnostic::error(
@@ -1619,13 +1715,37 @@ impl BodyLowerer<'_, '_> {
             flags.push_str(&format!("|MB_ICON{icon}"));
         }
 
+        // `/SD IDNO`, checked against the buttons rather than against a list of
+        // its own: an answer this dialog cannot give is a silent install that
+        // takes a branch nobody wrote, and NSIS accepts the line either way.
+        let mut arguments = vec![ir::Arg::raw(flags), text];
+        if let Some((answer, where_)) = silent {
+            if !set.answers.contains(&answer.as_str()) {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        where_,
+                        format!("`{}` cannot answer `{answer}`", set.installua),
+                    )
+                    .note(format!(
+                        "its answers are {}",
+                        set.answers
+                            .iter()
+                            .map(|answer| format!("`{answer}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                );
+                return None;
+            }
+            arguments.push(ir::Arg::raw("/SD".to_string()));
+            arguments.push(ir::Arg::raw(format!("ID{answer}")));
+        }
+
         // One button, or an answer nobody reads: one line, no table, and the
         // fusion machinery is never entered.
         if set.answers.len() == 1 || dest.is_none() {
-            self.emit(ir::Instruction::new(
-                "MessageBox",
-                vec![ir::Arg::raw(flags), text],
-            ));
+            self.emit(ir::Instruction::new("MessageBox", arguments));
             if let Some(dest) = dest {
                 self.diags.push(
                     Diagnostic::warning(
@@ -1663,7 +1783,7 @@ impl BodyLowerer<'_, '_> {
             Terminator::Branch {
                 test: Test::Predicate {
                     name: "MessageBox".to_string(),
-                    args: vec![ir::Arg::raw(flags), text],
+                    args: arguments,
                     keywords: set
                         .answers
                         .iter()
@@ -1693,11 +1813,7 @@ impl BodyLowerer<'_, '_> {
     /// `messageBox("done")` and `messageBox { text = …, buttons = … }` — the
     /// positional-or-table pair §15.23 establishes, with `text` as the first
     /// positional parameter and `buttons` defaulting to `OK`.
-    fn message_box_fields(
-        &mut self,
-        args: &[Expr],
-        span: Span,
-    ) -> Option<(ir::Arg, String, Option<String>)> {
+    fn message_box_fields(&mut self, args: &[Expr], span: Span) -> Option<MessageBoxFields> {
         let [argument] = args else {
             self.diags.push(
                 Diagnostic::error(
@@ -1715,10 +1831,16 @@ impl BodyLowerer<'_, '_> {
 
         let Expr::Table { fields, .. } = argument else {
             let text = self.value(argument)?;
-            return Some((text.arg, "OK".to_string(), None));
+            return Some(MessageBoxFields {
+                text: text.arg,
+                buttons: "OK".to_string(),
+                icon: None,
+                silent: None,
+            });
         };
 
         let (mut text, mut buttons, mut icon) = (None, "OK".to_string(), None);
+        let mut silent = None;
         for field in fields {
             let TableField::Named { name, value } = field else {
                 self.todo(span, "a positional entry in `messageBox`");
@@ -1728,6 +1850,10 @@ impl BodyLowerer<'_, '_> {
                 "text" => text = Some(self.value(value)?),
                 "buttons" => buttons = self.constant(value)?.text(),
                 "icon" => icon = Some(self.constant(value)?.text()),
+                // The `/SD` half of §15.18. It is a field here rather than in
+                // the generic options table because it is only meaningful
+                // against `buttons`, which is checked below (`Offer::Handled`).
+                "silentAnswer" => silent = Some((self.constant(value)?.text(), name.span)),
                 other => {
                     self.diags.push(
                         Diagnostic::error(
@@ -1735,7 +1861,7 @@ impl BodyLowerer<'_, '_> {
                             name.span,
                             format!("`{other}` is not a `messageBox` field"),
                         )
-                        .note("the fields are `text`, `buttons` and `icon`"),
+                        .note("the fields are `text`, `buttons`, `icon` and `silentAnswer`"),
                     );
                     return None;
                 }
@@ -1749,7 +1875,12 @@ impl BodyLowerer<'_, '_> {
             );
             return None;
         };
-        Some((text.arg, buttons, icon))
+        Some(MessageBoxFields {
+            text: text.arg,
+            buttons,
+            icon,
+            silent,
+        })
     }
 
     /// `local a, b = f(x)`. Several names, one call.
@@ -2206,16 +2337,19 @@ fn place(builtin: &table::Instruction, written: Written, dests: Vec<ir::Arg>) ->
 
     // The flags this call writes, by the number of parameters each one follows.
     let flags = |before: usize, emitted: &mut Vec<ir::Arg>, pending: &mut Vec<ir::Arg>| {
-        for (flag, _) in builtin
+        for (flag, writes) in builtin
             .options
             .iter()
             .zip(&written.flags)
-            .filter(|(flag, on)| **on && flag.opt.after == before)
+            .filter(|(flag, _)| flag.opt.after == before)
         {
-            // A flag is an emitted token like any other, so anything pending in
-            // front of it is no longer optional.
-            emitted.append(pending);
-            emitted.push(ir::Arg::raw(flag.opt.nsis));
+            for value in writes {
+                // A flag is an emitted token like any other, so anything pending
+                // in front of it is no longer optional.
+                emitted.append(pending);
+                emitted.push(ir::Arg::raw(flag.opt.nsis));
+                emitted.extend(value.clone());
+            }
         }
     };
 

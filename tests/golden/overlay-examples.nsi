@@ -93,7 +93,7 @@ Section "ExpandEnvStrings"
 SectionEnd
 
 Section "File"
-  File "assets\icon.ico"
+  File /x "*.tmp" /x "*.log" "assets\icon.ico"
 SectionEnd
 
 Section "FlushINI"
@@ -227,7 +227,7 @@ __GENERATED_endif_0:
 SectionEnd
 
 Section "MessageBox"
-  MessageBox MB_OK "finished"
+  MessageBox MB_YESNO "Restart now?" /SD IDNO
 SectionEnd
 
 Section "Quit"

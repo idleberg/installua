@@ -117,8 +117,26 @@ pub enum Offer {
     /// nothing to decide: `WriteRegMultiStr` without `/REGEDIT5` is an error
     /// rather than a different instruction.
     Always,
-    /// Not offered, with the reason. `File`'s `/x` and `MessageBox`'s `/SD`
-    /// both take a *value*, which is a shape this scheme does not have yet.
+    /// A named field holding a *list*, written as one `/FLAG value` pair per
+    /// element: `file(p, { exclude = { "*.tmp", "*.log" } })` becomes `File /x
+    /// "*.tmp" /x "*.log" p`. The repetition is the overlay's to know — the
+    /// snapshot records that `/x` takes a value ([`Opt::value`]) and not that
+    /// the syntax line lets it repeat.
+    List {
+        name: &'static str,
+        /// The element's kind, applied to each one: `Path` for `/x`, because a
+        /// filespec is a path and §5 turns `/` into `\`.
+        kind: Kind,
+    },
+    /// A named field of a *hand-shaped* row's own table, written by the
+    /// lowering that shapes it rather than by [`Instruction::flags`].
+    /// `MessageBox`'s `/SD` is the one: the answer it names has to be legal for
+    /// the button set beside it, and checking one field against another is a
+    /// thing the generic options table cannot do (§15.18).
+    Handled(&'static str),
+    /// Not offered, with the reason — which as of batch 9 is always the join's
+    /// own: a row that says nothing about a flag leaves it here. Every flag on
+    /// an `Exposed` row is reachable, and the census is what keeps it that way.
     Unoffered(&'static str),
 }
 
@@ -130,10 +148,12 @@ pub struct Flag {
 }
 
 impl Flag {
-    /// The options-table name, when the flag has one.
+    /// The options-table name, when the flag has one. `Handled` has one too:
+    /// the name is legal inside its row's table, and only *who writes it*
+    /// differs.
     pub fn name(&self) -> Option<&'static str> {
         match self.offer {
-            Offer::Named(name) => Some(name),
+            Offer::Named(name) | Offer::List { name, .. } | Offer::Handled(name) => Some(name),
             Offer::Always | Offer::Unoffered(_) => None,
         }
     }

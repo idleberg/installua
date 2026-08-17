@@ -147,12 +147,21 @@ const fn always() -> Offer {
     Offer::Always
 }
 
-/// A flag the surface does not reach yet, with the reason. `Exposed` rows are
-/// allowed to have these — an unreachable *flag* is a missing convenience,
-/// where an unreachable optional *position* would be a hole in the command.
-const fn unoffered(why: &'static str) -> Offer {
-    Offer::Unoffered(why)
+/// A flag reached by this name and holding a list, one `/FLAG value` pair per
+/// element. See [`Offer::List`].
+const fn list(name: &'static str, kind: Kind) -> Offer {
+    Offer::List { name, kind }
 }
+
+/// A flag a hand-shaped row writes itself. See [`Offer::Handled`].
+const fn handled(name: &'static str) -> Offer {
+    Offer::Handled(name)
+}
+
+// There is no `unoffered` helper: every flag on an `Exposed` row is reachable
+// now, so writing one would take saying which flag is not — and the only
+// [`Offer::Unoffered`] left is the one the join gives a row that has said
+// nothing at all.
 
 const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) -> Row {
     Row {
@@ -604,24 +613,22 @@ pub const ROWS: &[Row] = &[
         "FindNext",
         "runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)",
     ),
-    // Three of the four flags are booleans and become fields; `/x` is the
-    // exception, and it is the shape the whole scheme does not have yet — it
-    // takes a filespec *and* repeats, so one field would have to hold a list.
+    // Three of the four flags are booleans and become fields; `/x` is the row
+    // `Offer::List` exists for. It takes a filespec *and* repeats, so its field
+    // holds the exclusions and the emitter writes one `/x` each — which is the
+    // only shape in which a caller can say two of them.
     flagged(
         exposed(
             "File",
             "file",
             &[ann(Ty::Str, Kind::Path)],
-            "file(\"assets/icon.ico\")",
+            "file(\"assets/icon.ico\", { exclude = { \"*.tmp\", \"*.log\" } })",
         ),
         &[
             named("nonFatal"),
             named("keepAttributes"),
             named("recursive"),
-            unoffered(
-                "`/x filespec` takes a value and repeats, so one field would have to hold a \
-                 list of exclusions",
-            ),
+            list("exclude", Kind::Path),
         ],
     ),
     todo(
@@ -947,12 +954,13 @@ pub const ROWS: &[Row] = &[
                 ann(Ty::Str, Kind::Label),
                 ann(Ty::Str, Kind::Label),
             ],
-            "messageBox(\"finished\")",
+            "messageBox { text = \"Restart now?\", buttons = \"YESNO\", silentAnswer = \"NO\" }",
         ),
-        &[unoffered(
-            "`/SD IDOK` takes a value, and the answer a silent install gives belongs with \
-             §15.18's table rather than beside it",
-        )],
+        // `silentAnswer` is a field of §15.18's own table rather than of the
+        // generic one, because the answer has to be legal for the `buttons`
+        // beside it: `silentAnswer = "YES"` under `buttons = "OKCANCEL"` is an
+        // error, and only the hand-shaped lowering can see both fields at once.
+        &[handled("silentAnswer")],
     ),
     rejected(
         "Nop",
