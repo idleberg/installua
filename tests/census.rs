@@ -204,6 +204,7 @@ fn the_generated_table_matches_the_snapshot() {
             assert_eq!(parsed.req, shape.req, "{}", skeleton.nsis);
             assert_eq!(parsed.rep, shape.rep, "{}", skeleton.nsis);
             assert_eq!(parsed.members, shape.members, "{}", skeleton.nsis);
+            assert_eq!(parsed.open, shape.open, "{}", skeleton.nsis);
         }
         assert_eq!(
             parsed.options.len(),
@@ -217,6 +218,65 @@ fn the_generated_table_matches_the_snapshot() {
             assert_eq!(parsed.after, opt.after, "{}", skeleton.nsis);
         }
     }
+}
+
+/// The five commands that decide what `-CMDHELP`'s spaces mean.
+///
+/// A space separates positions and also joins the words of one name, and the
+/// parser tells them apart by what else is in the bracket. These five are the
+/// evidence for that rule and the only thing that would catch it drifting: two
+/// where the words are one name, two where they are separate positions, and one
+/// where the parentheses are a sentence.
+#[test]
+fn the_notation_is_not_the_parameter_list() {
+    let by_name = |nsis: &str| {
+        table::cmdhelp::parse(SNAPSHOT)
+            .into_iter()
+            .find(|parsed| parsed.nsis == nsis)
+            .unwrap_or_else(|| panic!("{nsis} is in the snapshot"))
+    };
+    let names = |nsis: &str| {
+        by_name(nsis)
+            .params
+            .iter()
+            .map(|param| param.name.clone())
+            .collect::<Vec<_>>()
+    };
+
+    // `[text (can contain $0)] [text without ignore (can contain $0)]`: the
+    // parenthesised half is commentary and the unparenthesised half is a name.
+    assert_eq!(names("FileErrorText"), ["text", "text_without_ignore"]);
+    assert_eq!(names("CompletedText"), ["completed_text"]);
+
+    // `[height weight /ITALIC /UNDERLINE /STRIKE]` goes on to list flags, so
+    // its words are positions; `[return_check label_to_goto_if_equal […]]`
+    // spells its names with underscores and opens a further optional.
+    assert!(names("CreateFont").contains(&"height".to_string()));
+    assert!(names("CreateFont").contains(&"weight".to_string()));
+    assert!(names("MessageBox").contains(&"return_check".to_string()));
+    assert!(
+        names("MessageBox").contains(&"label_to_goto_if_equal".to_string()),
+        "{:?}",
+        names("MessageBox")
+    );
+
+    // `none|all|…|Win10|{GUID}`: seven keywords and a placeholder, which is a
+    // set worth offering and not one worth enforcing.
+    let supported = by_name("ManifestSupportedOS");
+    let param = &supported.params[0];
+    assert!(param.open, "the placeholder opens the set");
+    assert_eq!(
+        param.members,
+        ["none", "all", "WinVista", "Win7", "Win8", "Win8.1", "Win10"]
+    );
+
+    // The braces around `flag={smooth|colored}` wrap the whole list instead,
+    // and mean nothing at all.
+    let gradient = by_name("BGGradient");
+    assert!(
+        gradient.params.iter().all(|param| !param.open),
+        "a wrapped list is not a placeholder"
+    );
 }
 
 #[test]

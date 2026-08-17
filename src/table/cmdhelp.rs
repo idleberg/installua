@@ -42,6 +42,9 @@ pub struct ParsedParam {
     pub rep: Rep,
     /// `mode=SET|CUR|END`, read off the indented continuation line.
     pub members: Vec<String>,
+    /// The member list ends in a **placeholder** — `…|Win10|{GUID}` — so the
+    /// keywords are the ones worth completing and not the ones worth enforcing.
+    pub open: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -130,7 +133,11 @@ fn command(name: &str, syntax: &str) -> Parsed {
 /// maybe b, then maybe c" — so a nested optional is flat as far as the
 /// parameter list is concerned.
 fn parse_into(command: &mut Parsed, syntax: &str, required: bool) {
-    for token in tokenize(syntax) {
+    parse_tokens(command, tokenize(syntax), required);
+}
+
+fn parse_tokens(command: &mut Parsed, tokens: Vec<Token>, required: bool) {
+    for token in tokens {
         match token {
             Token::Alternation => {
                 command.note = Note::Alternation;
@@ -160,7 +167,11 @@ fn parse_into(command: &mut Parsed, syntax: &str, required: bool) {
                     });
                     continue;
                 }
-                parse_into(command, &text, required && !optional);
+                let mut inner = tokenize(&text);
+                if optional {
+                    merge_prose(&mut inner);
+                }
+                parse_tokens(command, inner, required && !optional);
             }
             Token::Word(word) => word_param(command, &word, required),
         }
@@ -181,6 +192,55 @@ fn flag_with_argument(text: &str) -> Option<String> {
         return None;
     }
     Some(first.to_string())
+}
+
+/// `[back button text]` is **one** optional parameter whose name has spaces in
+/// it, and `[return_check label_to_goto_if_equal …]` is two.
+///
+/// `-CMDHELP` separates positions with spaces and writes multi-word names with
+/// spaces too, so the notation is ambiguous on its face. Three things resolve
+/// it, and a group needs all three:
+///
+/// - **nothing but words.** `CreateFont … [height weight /ITALIC /UNDERLINE
+///   /STRIKE]` is five positions, and a group that goes on to list flags is a
+///   tail of positions rather than a name.
+/// - **no nested optional.** `[icon index [showmode …]]` and `[return_check
+///   label_to_goto_if_equal [return_check2 label2]]` both open a further
+///   position, which is what a name does not do. `CreateShortcut`'s two words
+///   *are* one argument, and the overlay says so with [`Kind::Fused`] — the
+///   snapshot keeps printing what `makensis` prints.
+/// - **no underscore.** Every multi-word parameter NSIS names — `top_color`,
+///   `accept_text`, `pre_function`, `label_to_goto_if_equal` — joins its words
+///   with one, so words that use none are English rather than names.
+///
+/// What is left is nine groups in 3.12, all of them a caption: `[back button
+/// text]`, `[space required text]`, `[text without ignore]`.
+///
+/// Only inside a bracket, because a *required* run of words really is several
+/// positions: `PEAddResource … file restype resname` is three.
+///
+/// [`Kind::Fused`]: super::Kind::Fused
+fn merge_prose(tokens: &mut Vec<Token>) {
+    if tokens.len() < 2 {
+        return;
+    }
+    let words: Option<Vec<&str>> = tokens
+        .iter()
+        .map(|token| match token {
+            // `/OVERWRITE|/REPLACE` and `state(1|0)` are a choice, not a phrase.
+            Token::Word(word)
+                if !word.contains('_') && !word.starts_with('/') && !word.contains('|') =>
+            {
+                Some(word.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    let Some(words) = words else {
+        return;
+    };
+
+    *tokens = vec![Token::Word(words.join("_"))];
 }
 
 fn word_param(command: &mut Parsed, word: &str, required: bool) {
@@ -232,6 +292,7 @@ fn word_param(command: &mut Parsed, word: &str, required: bool) {
                 req: required,
                 rep: Rep::One,
                 members: Vec::new(),
+                open: false,
             },
         );
         return;
@@ -261,7 +322,7 @@ fn word_param(command: &mut Parsed, word: &str, required: bool) {
     } else {
         parenthesised
     };
-    let members = split_members(source);
+    let (members, open) = split_members(source);
 
     let name = if members.is_empty() {
         word.to_string()
@@ -280,6 +341,7 @@ fn word_param(command: &mut Parsed, word: &str, required: bool) {
             req: required,
             rep: if repeated { Rep::Many } else { Rep::One },
             members,
+            open,
         },
     );
 }
@@ -311,10 +373,20 @@ fn push(command: &mut Parsed, param: ParsedParam) {
 /// `OP=(+ - * / % | & ^ ~ ! || && << >> >>>)` separates with spaces *because
 /// `|` is itself a member*. Splitting the second on `|` loses the two operators
 /// a user is most likely to get wrong.
-fn split_members(text: &str) -> Vec<String> {
-    let text = text.trim().trim_matches(|c| "(){}".contains(c));
+fn split_members(text: &str) -> (Vec<String>, bool) {
+    // The braces around `flag={smooth|colored}` wrap the whole list and mean
+    // nothing; the ones around `{GUID}` wrap **one** alternative and mean it is
+    // a placeholder. Trimming the outer pair first is what keeps the two apart,
+    // since no annotation in 3.12 is a lone placeholder.
+    let text = text.trim();
+    let text = match text.chars().next() {
+        Some('(') => text.strip_prefix('(').and_then(|t| t.strip_suffix(')')),
+        Some('{') => text.strip_prefix('{').and_then(|t| t.strip_suffix('}')),
+        _ => None,
+    }
+    .unwrap_or(text);
     if text.is_empty() {
-        return Vec::new();
+        return (Vec::new(), false);
     }
 
     // `mode=modeflag[|modeflag[...]]]` describes recursion, not a member list:
@@ -322,7 +394,7 @@ fn split_members(text: &str) -> Vec<String> {
     // unparseable annotation is no annotation (§14) — the overlay says what
     // `MessageBox`'s flags are, and §15.18 already ruled on them.
     if text.contains("...") {
-        return Vec::new();
+        return (Vec::new(), false);
     }
 
     let text = expand_families(text);
@@ -331,18 +403,30 @@ fn split_members(text: &str) -> Vec<String> {
     } else if text.contains('|') {
         text.split('|').map(str::to_string).collect()
     } else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
 
-    raw.into_iter()
+    // `{GUID}` is not a keyword. NSIS wraps a **placeholder** in braces where a
+    // keyword would go, and `makensis` rejects the literal word `GUID`, so
+    // recording it as a member offers a completion that cannot compile and
+    // — worse — makes the check reject the real GUIDs it stands for.
+    let mut open = false;
+    let members = raw
+        .into_iter()
+        .filter(|member| {
+            let placeholder = member.trim().starts_with('{') && member.trim().ends_with('}');
+            open |= placeholder;
+            !placeholder
+        })
         .map(|member| {
             member
                 .trim()
-                .trim_matches(|c| "(){}[]".contains(c))
+                .trim_matches(|c| "()[]".contains(c))
                 .to_string()
         })
         .filter(|member| !member.is_empty())
-        .collect()
+        .collect();
+    (members, open)
 }
 
 /// `HKLM[32|64]` is three registry roots written as one member, and `SHCTX`
@@ -393,7 +477,7 @@ fn continuation(command: &mut Parsed, line: &str) {
         return;
     }
 
-    let members = split_members(values);
+    let (members, open) = split_members(values);
 
     // `root_key` annotates the parameter `-CMDHELP` spells `rootkey`, and
     // `OP` annotates `OP`. Both match once the punctuation and case are gone.
@@ -401,6 +485,7 @@ fn continuation(command: &mut Parsed, line: &str) {
     for param in &mut command.params {
         if normalise(&param.name) == wanted {
             param.members = members;
+            param.open = open;
             return;
         }
     }
@@ -455,6 +540,15 @@ fn tokenize(syntax: &str) -> Vec<Token> {
                     word.push(c);
                     word.push_str(&text);
                     word.push(close);
+                    continue;
+                }
+
+                // `[text (can contain $0)]`: a parenthesised group that follows
+                // a *word* annotates it, and prose in a parameter list is not a
+                // parameter list. A group that follows a group is a second
+                // choice — `(top|left|…) (height|width)` — and one that opens
+                // the fragment is the first, so neither is commentary.
+                if c == '(' && matches!(tokens.last(), Some(Token::Word(_))) {
                     continue;
                 }
 
@@ -541,7 +635,7 @@ pub fn generate(snapshot: &str) -> String {
         out.push_str("        params: &[");
         for param in &command.params {
             out.push_str(&format!(
-                "\n            Shape {{ name: {:?}, dir: Dir::{:?}, var: {}, req: {}, rep: Rep::{:?}, members: &[{}] }},",
+                "\n            Shape {{ name: {:?}, dir: Dir::{:?}, var: {}, req: {}, rep: Rep::{:?}, members: &[{}], open: {} }},",
                 param.name,
                 param.dir,
                 param.var,
@@ -553,6 +647,7 @@ pub fn generate(snapshot: &str) -> String {
                     .map(|member| format!("{member:?}"))
                     .collect::<Vec<_>>()
                     .join(", "),
+                param.open,
             ));
         }
         out.push_str(if command.params.is_empty() {

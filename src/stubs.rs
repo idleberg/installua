@@ -61,10 +61,17 @@ fn aliases() -> String {
          --------------------------------------------------------------------------------\n\n",
     );
 
-    for (name, members) in alias_table() {
+    for (name, members, open) in alias_table() {
         let _ = writeln!(out, "---@alias {name}");
         for member in members {
             let _ = writeln!(out, "---| '\"{member}\"'");
+        }
+        // An **open** enum lists what is worth completing and then admits the
+        // rest: `ManifestSupportedOS`'s `{GUID}` is every GUID there is, and an
+        // alias that stopped at the seven names would mark a legal one wrong.
+        // The literals still complete, because LuaLS offers them first.
+        if open {
+            let _ = writeln!(out, "---| string");
         }
         out.push('\n');
     }
@@ -77,8 +84,8 @@ fn aliases() -> String {
 /// is one idea whether `FileOpen` or a future command asks for it — and because
 /// a single catch-all alias would silently give the first enum's members to
 /// every other enum, which is a wrong completion rather than a missing one.
-fn alias_table() -> Vec<(String, Vec<&'static str>)> {
-    let mut aliases: Vec<(String, Vec<&'static str>)> = Vec::new();
+fn alias_table() -> Vec<(String, Vec<&'static str>, bool)> {
+    let mut aliases: Vec<(String, Vec<&'static str>, bool)> = Vec::new();
 
     for entry in table::table() {
         // Attributes as well as instructions: `compressor` and
@@ -108,8 +115,8 @@ fn alias_table() -> Vec<(String, Vec<&'static str>)> {
                 Some(field) => alias_of(field),
                 None => alias_of(param.shape.name),
             };
-            if !aliases.iter().any(|(known, _)| *known == name) {
-                aliases.push((name, param.members().to_vec()));
+            if !aliases.iter().any(|(known, _, _)| *known == name) {
+                aliases.push((name, param.members().to_vec(), param.open()));
             }
         }
     }
@@ -229,6 +236,20 @@ fn attribute_fields() -> Vec<(&'static str, String)> {
 /// going to write anyway. Its enum parts are keyed on the *parameter*, matching
 /// the alias [`alias_table`] emits for them.
 fn setting_type(entry: &table::Instruction, field: &str, holds: table::Setting) -> String {
+    let ty = bare_type(entry, field, holds);
+    // A repeating position takes a list of one value, the same way a repeating
+    // *line* takes a list of one line. That the two spell alike in Lua and
+    // differently in NSIS is the point: a caller writes what the field holds
+    // and never learns which kind of repetition it is.
+    match entry.params.first() {
+        Some(param) if param.repeats() => format!("{ty}[]"),
+        _ => ty,
+    }
+}
+
+/// The type of one value of the field, before the snapshot is asked whether the
+/// position it stands against repeats.
+fn bare_type(entry: &table::Instruction, field: &str, holds: table::Setting) -> String {
     match holds {
         table::Setting::Bool { .. } => "boolean".to_string(),
         table::Setting::Int => "integer".to_string(),
@@ -246,7 +267,7 @@ fn setting_type(entry: &table::Instruction, field: &str, holds: table::Setting) 
                             .get(index)
                             .map(|param| alias_of(param.shape.name))
                             .unwrap_or_else(|| "string".to_string()),
-                        other => setting_type(entry, part.field, other),
+                        other => bare_type(entry, part.field, other),
                     };
                     let optional = entry
                         .params
@@ -260,7 +281,7 @@ fn setting_type(entry: &table::Instruction, field: &str, holds: table::Setting) 
         // A list of whatever one line takes. The brackets go on the outside
         // because the repetition is of the *line*, which is the whole of what
         // the inner type describes.
-        table::Setting::Each(one) => format!("{}[]", setting_type(entry, field, *one)),
+        table::Setting::Each(one) => format!("{}[]", bare_type(entry, field, *one)),
     }
 }
 

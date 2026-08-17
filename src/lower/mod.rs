@@ -614,6 +614,11 @@ impl Lowerer<'_, '_> {
             table::Setting::Each(_) => {
                 self.todo(value.span(), &format!("`{field}` nested in itself"));
             }
+            // A position the snapshot marks `Rep::Many` takes as many values as
+            // the caller has, all on the one line.
+            one if entry.params.first().is_some_and(table::Param::repeats) => {
+                self.many_setting(entry, field, one, value);
+            }
             // Every other shape is one value on one line, which is
             // [`Self::value_arg`] — the same function a *part* of a table goes
             // through, so the two cannot drift apart.
@@ -667,6 +672,13 @@ impl Lowerer<'_, '_> {
             },
             table::Setting::Enum => {
                 let text = self.keyword(value, field)?;
+                // An **open** enum lists the keywords worth completing and does
+                // not close the set: `ManifestSupportedOS`'s `{GUID}` stands for
+                // every GUID there is, so checking against the seven names it
+                // prints beside it would reject the values it exists to allow.
+                if param.is_some_and(table::Param::open) {
+                    return Some(ir::Arg::raw(text));
+                }
                 let allowed = param.map(table::Param::members).unwrap_or_default();
                 self.enumerated(field, &text, allowed, value.span())
                     .then(|| ir::Arg::raw(text))
@@ -778,6 +790,83 @@ impl Lowerer<'_, '_> {
             }
             self.setting_line(entry, field, each, element);
         }
+    }
+
+    /// `manifestSupportedOS = { "Win7", "Win10" }`: one line, as many values as
+    /// were written.
+    ///
+    /// The third thing in this file that reads a Lua list, and the only one the
+    /// **snapshot** asks for: `Rep::Many` is `-CMDHELP`'s `[...]`, so no row
+    /// says a position repeats and none can be wrong about it. The list is
+    /// ordered for the same reason a [`table::Setting::Each`]'s is — NSIS reads
+    /// these positionally — and the difference between the two is invisible in
+    /// Lua and the whole of the difference in NSIS: one line here, one line per
+    /// element there.
+    ///
+    /// A *call* spells the same repetition with varargs — `file(a, b, c)` — and
+    /// a field cannot, because a field takes one value. The surface forces the
+    /// asymmetry rather than choosing it.
+    fn many_setting(
+        &mut self,
+        entry: &'static table::Instruction,
+        field: &str,
+        holds: table::Setting,
+        value: &Expr,
+    ) {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                field,
+                "a list",
+                &format!(
+                    "`{}` takes one or more values on the one line, so write `{field} = {{ … }}`",
+                    entry.nsis
+                ),
+            );
+            return;
+        };
+
+        let mut args = Vec::new();
+        for given in fields {
+            let TableField::Positional { value: element } = given else {
+                let TableField::Named { name, .. } = given else {
+                    unreachable!("a table field is one or the other");
+                };
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        name.span,
+                        format!("`{field}` takes a list, so `{}` names nothing", name.text),
+                    )
+                    .note(format!(
+                        "`{}` reads its values by position, not by name",
+                        entry.nsis
+                    )),
+                );
+                continue;
+            };
+            if let Some(arg) =
+                self.value_arg(holds, entry.params.first(), field, entry.nsis, element)
+            {
+                args.push(arg);
+            }
+        }
+
+        // An empty list is not an empty line: `ManifestSupportedOS` with no
+        // value is a syntax error to NSIS, and writing nothing at all is what
+        // the caller meant.
+        if args.is_empty() {
+            self.bad_value(
+                value.span(),
+                field,
+                "at least one value",
+                &format!("leave `{field}` out to write no `{}` line", entry.nsis),
+            );
+            return;
+        }
+        self.module
+            .attributes
+            .push(ir::Instruction::new(entry.nsis, args));
     }
 
     /// `installDirRegKey = { root = HKLM, key = "Software/App", name = "Path" }`:

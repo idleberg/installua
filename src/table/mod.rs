@@ -84,6 +84,10 @@ pub struct Shape {
     pub req: bool,
     pub rep: Rep,
     pub members: &'static [&'static str],
+    /// The members are worth *offering* but not worth enforcing, because
+    /// `-CMDHELP` ended the list with a placeholder: `…|Win10|{GUID}` accepts
+    /// any GUID beside the seven names, and a closed check would reject them.
+    pub open: bool,
 }
 
 /// A flag, as `-CMDHELP` states it. Not a parameter, because its position in
@@ -369,6 +373,15 @@ impl Param {
     /// The enum members, or empty when the position takes any value.
     pub fn members(&self) -> &'static [&'static str] {
         self.shape.members
+    }
+
+    /// Whether a value outside [`Self::members`] is still legal (§15.23).
+    pub fn open(&self) -> bool {
+        self.shape.open
+    }
+
+    pub fn repeats(&self) -> bool {
+        self.shape.rep == Rep::Many
     }
 }
 

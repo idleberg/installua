@@ -4,6 +4,7 @@ Caption "caption"
 CRCCheck on
 AllowRootDirInstall true
 FileBufSize 1
+FileErrorText "text" "withoutIgnore"
 Icon "assets\icon.ico"
 InstallDirRegKey HKCR "key.out" "name"
 InstallDir "installDir.out"
@@ -26,6 +27,7 @@ ManifestAppendCustomString "/assembly" "string"
 ManifestDPIAware true
 ManifestDPIAwareness "manifestDpiAwareness"
 ManifestLongPathAware true
+ManifestSupportedOS none
 ManifestMaxVersionTested "10.0.19041.0"
 ManifestDisableWindowFiltering true
 ManifestGdiScaling true

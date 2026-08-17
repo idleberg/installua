@@ -687,14 +687,15 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Handle, Kind::Value)],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"w\")\nf:close()",
     ),
-    // The one row a `Setting::Table` cannot reach, and not for a reason in this
-    // file: `-CMDHELP` prints `[text (can contain $0)] [text without ignore …]`,
-    // and the parenthesised prose is parsed as four positions rather than two.
-    // A part stands against a position, so the parts would stand against
-    // sentence fragments. The snapshot parser is the fix, not the overlay.
-    todo(
+    // `[text (can contain $0)] [text without ignore (can contain $0)]`: two
+    // optional strings, once the parser stops reading the commentary and the
+    // caption as positions. `$0` in them is NSIS's own runtime substitution and
+    // not a §5 sigil, so both parts are plain `STR` — a path here would be
+    // wrong twice over, since these are sentences shown to a user.
+    attribute(
         "FileErrorText",
-        "its snapshot line has prose in the parameter list, so its positions are mis-parsed",
+        "fileErrorText",
+        Setting::Table(&[part("text", STR), part("withoutIgnore", STR)]),
     ),
     exposed(
         "FileOpen",
@@ -1609,10 +1610,11 @@ pub const ROWS: &[Row] = &[
     // does not: `"PerMonitorV2,system"` is one argument to both.
     attribute("ManifestDPIAwareness", "manifestDpiAwareness", STR),
     attribute("ManifestLongPathAware", "manifestLongPathAware", TRUEFALSE),
-    todo(
-        "ManifestSupportedOS",
-        "its snapshot members include `GUID`, which is a placeholder `makensis` rejects as a keyword",
-    ),
+    // The row says `Enum` and nothing else. That the position repeats is
+    // `-CMDHELP`'s `[...]`, and that the seven names do not close the set is its
+    // `{GUID}` — so `manifestSupportedOS = { "Win7", "Win10" }` and
+    // `{ "{e2011457-1546-43c5-a5fe-008deee3d3f0}" }` are both this one line.
+    attribute("ManifestSupportedOS", "manifestSupportedOS", Setting::Enum),
     // `maj.min.bld.rev`, a string for the same reason as `PESubsysVer`.
     attribute("ManifestMaxVersionTested", "manifestMaxVersionTested", STR),
     attribute(

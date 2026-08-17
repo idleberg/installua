@@ -90,10 +90,16 @@ fn attribute_program() -> String {
             continue;
         }
 
-        source.push_str(&format!(
-            "\t{field} = {},\n",
-            derived(entry, 0, field, holds)
-        ));
+        // A position the snapshot repeats takes a list of what one value is.
+        // One element for the same reason a [`table::Setting::Each`] gets one:
+        // the golden is here to prove the shape emits, and that two become two
+        // is [`a_repeating_position_fills_one_line`].
+        let value = derived(entry, 0, field, holds);
+        let value = match entry.params.first() {
+            Some(param) if param.repeats() => format!("{{ {value} }}"),
+            _ => value,
+        };
+        source.push_str(&format!("\t{field} = {value},\n"));
     }
 
     source.push_str(
@@ -273,6 +279,83 @@ fn a_repeating_setting_repeats() {
         ],
         "in:\n{built}"
     );
+}
+
+/// Two values become **one** line, which is the whole of what separates a
+/// repeating *position* from a repeating line.
+///
+/// `manifestSupportedOS` and `manifestAppendCustomString` are both a Lua list of
+/// what one value is, and the golden only ever writes one element of either, so
+/// the difference between them is checked here or nowhere.
+#[test]
+fn a_repeating_position_fills_one_line() {
+    let source = "attributes {\n\
+        \toutFile = \"a.exe\",\n\
+        \tname = \"a\",\n\
+        \tmanifestSupportedOS = { \"Win7\", \"Win10\" },\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags).unwrap_or_default();
+    assert!(!diags.has_errors(), "{}", diags.render("many.lua"));
+
+    let lines: Vec<&str> = built
+        .lines()
+        .filter(|line| line.starts_with("ManifestSupportedOS"))
+        .collect();
+    assert_eq!(lines, ["ManifestSupportedOS Win7 Win10"], "in:\n{built}");
+}
+
+/// An **open** enum takes a value it does not list, and a closed one still does
+/// not.
+///
+/// Both halves, because the gain is only real if it is confined to the rows
+/// `-CMDHELP` marks: an open check everywhere would be no check at all.
+#[test]
+fn an_open_enum_takes_what_it_does_not_list() {
+    const GUID: &str = "{e2011457-1546-43c5-a5fe-008deee3d3f0}";
+    let source = format!(
+        "attributes {{\n\
+         \toutFile = \"a.exe\",\n\
+         \tname = \"a\",\n\
+         \tmanifestSupportedOS = {{ \"Win10\", \"{GUID}\" }},\n\
+         }}\n"
+    );
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(&source, &mut diags).unwrap_or_default();
+    assert!(!diags.has_errors(), "{}", diags.render("open.lua"));
+    assert!(
+        built.contains(&format!("ManifestSupportedOS Win10 {GUID}")),
+        "in:\n{built}"
+    );
+
+    // `compressor` lists three and means three.
+    let closed = "attributes { outFile = \"a.exe\", name = \"a\", compressor = \"brotli\" }\n";
+    let mut diags = Diagnostics::new();
+    installua::build(closed, &mut diags);
+    assert!(diags.has_errors(), "a closed enum still closes");
+}
+
+/// The three ways a repeating position can be written wrong. `fileErrorText` is
+/// beside them because its two parts are both optional and NSIS counts
+/// arguments: the second cannot be reached without the first.
+#[test]
+fn a_repeating_position_wants_a_list() {
+    const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
+    for (what, written) in [
+        ("not a list at all", "manifestSupportedOS = \"Win10\""),
+        ("an empty list", "manifestSupportedOS = {}"),
+        ("a named entry", "manifestSupportedOS = { os = \"Win10\" }"),
+        (
+            "a value it cannot reach",
+            "fileErrorText = { withoutIgnore = \"x\" }",
+        ),
+    ] {
+        let mut diags = Diagnostics::new();
+        installua::build(&format!("{PRELUDE}{written} }}\n"), &mut diags);
+        assert!(diags.has_errors(), "{what} was accepted: {written}");
+    }
 }
 
 /// The two ways a [`table::Setting::Each`] can be written wrong, neither of

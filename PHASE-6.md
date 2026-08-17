@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
 **Status: the alphabetical grind is done, and every surface gap behind it is closed.
-25 → 80 exposed, 14 → 34 attributes, 167 → 92 todo.**
+25 → 80 exposed, 14 → 36 attributes, 167 → 90 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -964,6 +964,9 @@ and `makensis` rejects it as a keyword, so the row would complete to a word that
 work. `PERemoveResource` has the same wart in `reslang|ALL`, which is why its language part
 is a `STR` and gets no alias: offering `reslang` is worse than offering nothing.
 
+*(Batch 14 fixed the parser and landed the row. `PERemoveResource`'s half is unmarked
+notation and stayed as it is — see "Still open".)*
+
 ### What the stub cannot say, the compiler does
 
 `{ path: string, string: string }[]` is checked by lua-language-server — `file = 1` is
@@ -973,25 +976,114 @@ is refused, along with a non-list and an element that is not a table;
 `a_repeating_setting_repeats` is the only place that two entries become two lines, in
 order, is checked at all.
 
+## Batch 14 — notation that is not a parameter list
+
+**34 → 36 attributes, 92 → 90 todo.**
+
+Every earlier batch trusted the snapshot's parameter count. Two rows were blocked because
+it was wrong, and both for the same reason: `-CMDHELP` writes prose, names and choices with
+the same punctuation it writes positions with, and the parser was reading all of it as
+positions. Three rules in [`cmdhelp.rs`](src/table/cmdhelp.rs) now separate them, and
+`the_notation_is_not_the_parameter_list` pins each one to the command that decides it.
+
+### A space is both a separator and a letter
+
+`MiscButtonText [back button text]` is one optional caption. `CreateFont … [height weight
+/ITALIC /UNDERLINE /STRIKE]` is five positions. Nothing in the notation distinguishes them,
+so the parser asks three questions of the bracket, and merges only when all three agree:
+
+| | one name | several positions |
+| --- | --- | --- |
+| anything but words? | `[back button text]` | `[height weight /ITALIC …]` |
+| a nested optional? | `[space required text]` | `[icon index [showmode …]]` |
+| an underscore? | `[text without ignore]` | `[return_check label_to_goto_if_equal]` |
+
+The third is the load-bearing one: **every** multi-word parameter NSIS names joins its
+words with an underscore — `top_color`, `accept_text`, `pre_function` — so words that use
+none are English. Nine groups in 3.12 merge, all of them captions.
+
+`CreateShortcut`'s `[icon index …]` deliberately does not, and keeps its
+[`Kind::Fused`](src/table/mod.rs) correction. It opens a further optional, which a name does
+not do, so the rule declines and the overlay goes on saying by hand what it always said.
+The snapshot keeps printing what `makensis` prints; the judgement stays where judgement
+lives.
+
+### A parenthesis is both a choice and a sentence
+
+`FileErrorText [text (can contain $0)] [text without ignore (can contain $0)]` produced
+**eight** positions, four of them the words `can`, `contain` and `$0`. A parenthesised
+group that follows a *word* annotates it; one that follows a group is a second choice —
+`(top|left|bottom|right) (height|width)` — and one that opens the fragment is the first.
+Only the first kind is commentary, and only `FileErrorText` has any.
+
+The two survivors are both plain `STR`. `$0` in them is NSIS's own runtime substitution
+rather than a §5 sigil, and a path here would be wrong twice over: these are sentences
+shown to a user.
+
+### A brace is both a wrapper and a placeholder
+
+`ManifestSupportedOS none|all|…|Win10|{GUID}` recorded eight members, the last of them the
+literal word `GUID` — which `makensis` rejects, so the row could not be written at all. But
+dropping it is not enough either, because a **real** GUID is legal there and a closed check
+would reject it. `Shape` gained one bit:
+
+```
+members: &["none", "all", "WinVista", "Win7", "Win8", "Win8.1", "Win10"], open: true
+```
+
+An open enum offers the seven and enforces none, in the compiler and in the stub alike —
+the alias ends `---| string`, so LuaLS still completes the names and stops marking a GUID
+wrong. `compressor` lists three and still means three;
+`an_open_enum_takes_what_it_does_not_list` checks both halves, because an open check
+everywhere would be no check at all.
+
+`flag={smooth|colored}` proves the two brace uses apart: those wrap the whole list and mean
+nothing, so the outer pair is stripped before the members are read.
+
+### A position that repeats, at last
+
+With `{GUID}` out of the way `ManifestSupportedOS` needed only its `[...]`, and it is a
+**row of two words**:
+
+```rust
+attribute("ManifestSupportedOS", "manifestSupportedOS", Setting::Enum),
+```
+
+Everything else is the snapshot's. That the position repeats is `Rep::Many`, so no row says
+it and none can be wrong about it — the same division batch 12 drew for `req` and `members`.
+
+`manifestSupportedOS = { "Win7", "Win10" }` and `manifestAppendCustomString = { … }` are
+both a Lua list, and the difference between them is invisible in Lua and the whole of the
+difference in NSIS: one line here, one line **per element** there. `Setting::Each` is the
+row's judgement because only NSIS's prose says a line repeats; `Rep::Many` is read off
+`-CMDHELP` because `[...]` says so out loud. `a_repeating_position_fills_one_line` is the
+only place the distinction is checked, since the golden writes one element of either.
+
+A *call* spells the same repetition with varargs — `file(a, b, c)` — and a field cannot,
+because a field takes one value. The surface forces that asymmetry rather than choosing it.
+
+### The six rows this did not land
+
+`MiscButtonText`, `DetailsButtonText`, `UninstallButtonText`, `InstallButtonText`,
+`SpaceTexts` and `CompletedText` all parse correctly now and are all still `todo`. Their
+blocker was never the notation: a classic-UI caption needs a home in `installer {}` or
+`page {}`, and that home does not exist yet. The parser fix moved them from *unparseable*
+to *undesigned*, which is worth having and is not a row.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 92 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
+  left in the 90 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
   surface and pages (14), and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
-- **The snapshot parser reads notation as parameters**, in two shapes, and it is the last
-  thing standing between the table and three rows. `FileErrorText [text (can contain $0)]`
-  becomes four positions instead of one, so no `Part` can stand against them.
-  `ManifestSupportedOS`'s `{GUID}` and `PERemoveResource`'s `reslang|ALL` become *members*
-  named `GUID` and `reslang`, which are placeholders `makensis` rejects as keywords — so
-  the first row cannot be written at all and the second gives up its completion. Both
-  fixes are bounded and local: parentheses in a parameter list are commentary, and a
-  metavariable in an alternation is not a keyword.
-- **A position that repeats has no spelling.** `Setting::Each` repeats the *line*;
-  `Rep::Many` repeats a *position* within one, and `ManifestSupportedOS` is the only
-  attribute that wants it. It is blocked on the bullet above rather than on this one, so
-  the spelling should arrive with the row rather than before it.
+- **A metavariable with no marker is still a keyword.** `PERemoveResource restype resname
+  reslang|ALL` reads `reslang` as a member beside `ALL`, and unlike `{GUID}` there is
+  nothing in the notation that says it is a placeholder — not a brace, not a case, not a
+  position. The row pays for it with a plain `STR` and no completion, which is the right
+  trade and not a fix. What would fix it is a shape this table does not have: *one of these
+  keywords, or any string*, which is `open` at the level of a value rather than of a set.
+  One row wants it, so it should arrive with the second.
 - **A flag that takes one value and does not repeat has no spelling.** `Offer::List`
   covers `File`'s `/x` because it repeats; `SendMessage`'s `/TIMEOUT=n` and the three
   other single-valued flags are all on `todo` rows, and the variant that spells them

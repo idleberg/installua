@@ -123,7 +123,9 @@ fn every_alias_the_stub_uses_is_one_it_declares() {
         // `---@param options? { showMode: installua.ShowMode, … }` — and the
         // type is one word inside it like anywhere else.
         for word in rest.split([' ', '|', ',', '{', '}']) {
-            let word = word.trim();
+            // `installua.Manifestsupportedos[]` is a list of the alias, and it
+            // is the alias that has to be declared.
+            let word = word.trim().trim_end_matches("[]");
             if !word.starts_with("installua.") || word.contains('<') {
                 continue;
             }

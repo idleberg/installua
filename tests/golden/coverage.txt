@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed           80
-  attribute         34
+  attribute         36
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo              92
+  todo              90
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -33,7 +33,6 @@ todo:
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindNext                runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   ReserveFile             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileErrorText           its snapshot line has prose in the parameter list, so its positions are mis-parsed
   FileWriteByte           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileWriteUTF16LE        file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileWriteWord           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
@@ -90,7 +89,6 @@ todo:
   UninstallSubCaption     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   WindowIcon              the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   XPStyle                 the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  ManifestSupportedOS     its snapshot members include `GUID`, which is a placeholder `makensis` rejects as a keyword
   MiscButtonText          a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   DetailsButtonText       a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallButtonText     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
