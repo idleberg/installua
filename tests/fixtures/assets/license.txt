@@ -1,0 +1,5 @@
+Fixture licence text.
+
+`LicenseData` opens this file at compile time and fails with "open failed" when
+it is not there, so it is a real file rather than a name. Its contents are never
+asserted on — only that `makensis` could read them.

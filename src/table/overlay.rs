@@ -22,7 +22,7 @@
 //! retired row there, which is not a contradiction: the emitter needs its
 //! shape and the user needs the replacement.
 
-use super::{Class, Field, Kind, Offer};
+use super::{Class, Field, Kind, Offer, Setting};
 use crate::types::Ty;
 
 /// The hand-written half of one parameter, positional against the skeleton's
@@ -214,12 +214,25 @@ const fn predicate(
     }
 }
 
-/// A field of one of the four blocks (§15.10, §15.26). The types come from the
-/// block's own lowering rather than from here, because an attribute's value is
-/// a Lua expression in a table and not an argument list.
-const fn attribute(nsis: &'static str, field: &'static str) -> Row {
-    row(nsis, Some(field), Class::Attribute)
+/// A field of one of the four blocks (§15.10, §15.26), and what it holds.
+///
+/// The [`Setting`] is the whole of the row: [`crate::lower`] switches on it
+/// rather than on the field's name, so adding a script-wide setting is this one
+/// line. There is no [`Ann`] list, because an attribute's value is a Lua
+/// expression in a table and not an argument list.
+const fn attribute(nsis: &'static str, field: &'static str, holds: Setting) -> Row {
+    row(nsis, Some(field), Class::Attribute(holds))
 }
+
+/// The two commonest [`Setting`]s, spelled short because the rows are a column.
+const STR: Setting = Setting::Str { path: false };
+const PATH: Setting = Setting::Str { path: true };
+
+/// A `bool` NSIS spells `on|off`, which is most of them.
+const ONOFF: Setting = Setting::Bool {
+    on: "on",
+    off: "off",
+};
 
 /// Emitter-only: the compiler writes it, the user never does. The text says
 /// what the user writes instead, which is what `installua coverage` prints
@@ -294,7 +307,7 @@ pub const ROWS: &[Row] = &[
         "CallInstDLL",
         "a plugin is called as `plugin.method(…)` (§11)",
     ),
-    attribute("Caption", "caption"),
+    attribute("Caption", "caption", STR),
     todo(
         "ChangeUI",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
@@ -376,7 +389,7 @@ pub const ROWS: &[Row] = &[
         ),
         &[named("silent"), named("filesOnly")],
     ),
-    attribute("CRCCheck", "crcCheck"),
+    attribute("CRCCheck", "crcCheck", ONOFF),
     exposed(
         "CreateDirectory",
         "createDirectory",
@@ -491,9 +504,12 @@ pub const ROWS: &[Row] = &[
         "DirVar",
         "an installer-wide flag or mode: one overlay row each",
     ),
+    // Not an attribute: `makensis` answers `command DirVerify not valid
+    // outside PageEx`, which the tier-3 assembly of the attribute rows found
+    // the first time it ran. `PageEx` has no Installua shape yet.
     todo(
         "DirVerify",
-        "an installer-wide flag or mode: one overlay row each",
+        "only valid inside `PageEx`, and the page surface has no design yet",
     ),
     exposed(
         "GetInstDirError",
@@ -501,9 +517,14 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::nonneg(), Kind::Value)],
         "local why = getInstDirError()\ndetailPrint(\"instdir \" .. why)",
     ),
-    todo(
+    // `(true|false)` rather than `on|off`, which is why the pair is on the row.
+    attribute(
         "AllowRootDirInstall",
-        "an installer-wide flag or mode: one overlay row each",
+        "allowRootDirInstall",
+        Setting::Bool {
+            on: "true",
+            off: "false",
+        },
     ),
     todo(
         "CheckBitmap",
@@ -631,10 +652,7 @@ pub const ROWS: &[Row] = &[
             list("exclude", Kind::Path),
         ],
     ),
-    todo(
-        "FileBufSize",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
-    ),
+    attribute("FileBufSize", "fileBufSize", Setting::Int),
     exposed(
         "FlushINI",
         "flushIni",
@@ -799,7 +817,7 @@ pub const ROWS: &[Row] = &[
     // handle at all and hides the installer's own window. `LockWindow` is the
     // same mistake, and both are rows rather than a design.
     exposed("HideWindow", "hideWindow", &[], "hideWindow()"),
-    attribute("Icon", "icon"),
+    attribute("Icon", "icon", PATH),
     // A predicate's name drops the `If` and keeps the rest — `IfSilent` is
     // `silent` — except where that collides: `IfAbort` would be `abort`, which
     // is already `Abort`, so it is `aborted`. The past tense is also what it
@@ -856,7 +874,7 @@ pub const ROWS: &[Row] = &[
         "InstallColors",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
     ),
-    attribute("InstallDir", "installDir"),
+    attribute("InstallDir", "installDir", PATH),
     todo(
         "InstProgressFlags",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
@@ -909,7 +927,7 @@ pub const ROWS: &[Row] = &[
         "LangStringUP",
         "NSIS retired it: `langString` is the spelling",
     ),
-    attribute("LicenseData", "license"),
+    attribute("LicenseData", "license", PATH),
     todo(
         "LicenseForceSelection",
         "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
@@ -966,8 +984,8 @@ pub const ROWS: &[Row] = &[
         "Nop",
         "a statement that does nothing has no spelling: write nothing",
     ),
-    attribute("Name", "name"),
-    attribute("OutFile", "outFile"),
+    attribute("Name", "name", STR),
+    attribute("OutFile", "outFile", PATH),
     todo(
         "Page",
         "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
@@ -1186,7 +1204,7 @@ pub const ROWS: &[Row] = &[
         "compile time and positional: it changes the `file` calls after it rather than \
          executing, so a call inside an `if` would be a lie",
     ),
-    attribute("SetCompressor", "compressor"),
+    attribute("SetCompressor", "compressor", Setting::Enum),
     todo(
         "SetCompressorDictSize",
         "compile time and positional: it changes the `file` calls after it rather than \
@@ -1197,7 +1215,7 @@ pub const ROWS: &[Row] = &[
         "compile time and positional: it changes the `file` calls after it rather than \
          executing, so a call inside an `if` would be a lie",
     ),
-    attribute("SetDateSave", "dateSave"),
+    attribute("SetDateSave", "dateSave", ONOFF),
     exposed(
         "SetDetailsView",
         "setDetailsView",
@@ -1313,26 +1331,14 @@ pub const ROWS: &[Row] = &[
         "only meaningful from `.onInit`, and an example lives in a section: the row \
          needs a place to say where a call is legal",
     ),
-    todo(
-        "ShowInstDetails",
-        "an installer-wide flag or mode: one overlay row each",
-    ),
-    todo(
-        "ShowUninstDetails",
-        "an installer-wide flag or mode: one overlay row each",
-    ),
+    attribute("ShowInstDetails", "showInstDetails", Setting::Enum),
+    attribute("ShowUninstDetails", "showUninstDetails", Setting::Enum),
     todo(
         "ShowWindow",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    todo(
-        "SilentInstall",
-        "an installer-wide flag or mode: one overlay row each",
-    ),
-    todo(
-        "SilentUnInstall",
-        "an installer-wide flag or mode: one overlay row each",
-    ),
+    attribute("SilentInstall", "silentInstall", Setting::Enum),
+    attribute("SilentUnInstall", "silentUninstall", Setting::Enum),
     exposed(
         "Sleep",
         "sleep",
@@ -1364,11 +1370,8 @@ pub const ROWS: &[Row] = &[
         "Target",
         "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
     ),
-    todo(
-        "CPU",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
-    ),
-    attribute("Unicode", "unicode"),
+    attribute("CPU", "cpu", Setting::Enum),
+    attribute("Unicode", "unicode", Setting::Handled("boolean")),
     rejected(
         "UninstallExeName",
         "NSIS retired it: write `writeUninstaller` from a section",
@@ -1522,7 +1525,11 @@ pub const ROWS: &[Row] = &[
         "XPStyle",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
     ),
-    attribute("RequestExecutionLevel", "requestExecutionLevel"),
+    attribute(
+        "RequestExecutionLevel",
+        "requestExecutionLevel",
+        Setting::Enum,
+    ),
     todo(
         "ManifestAppendCustomString",
         "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
@@ -1632,14 +1639,23 @@ pub const ROWS: &[Row] = &[
         "InitPluginsDir",
         "the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)",
     ),
-    todo(
-        "AllowSkipFiles",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
-    ),
+    attribute("AllowSkipFiles", "allowSkipFiles", ONOFF),
     language("Var", "a global is declared by assigning to it (§15.24)"),
-    attribute("VIAddVersionKey", "versionInfo.keys"),
-    attribute("VIProductVersion", "versionInfo.product"),
-    attribute("VIFileVersion", "versionInfo.file"),
+    attribute(
+        "VIAddVersionKey",
+        "versionInfo.keys",
+        Setting::Handled("table"),
+    ),
+    attribute(
+        "VIProductVersion",
+        "versionInfo.product",
+        Setting::Handled("string"),
+    ),
+    attribute(
+        "VIFileVersion",
+        "versionInfo.file",
+        Setting::Handled("string"),
+    ),
     exposed(
         "LockWindow",
         "lockWindow",

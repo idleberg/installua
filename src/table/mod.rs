@@ -221,6 +221,37 @@ pub struct Field {
     pub toggle: Option<&'static str>,
 }
 
+/// What one block field holds, which is the whole of what its lowering needs to
+/// know. A field is one row and no code: [`crate::lower`] switches on this
+/// rather than on the field's name, so a new setting is an overlay line.
+///
+/// The closed sets are *not* here. `-CMDHELP` prints `DirVerify auto|leave` and
+/// the snapshot records those two words, so [`Setting::Enum`] names the shape and
+/// the generated half names the members — which is the join doing the job it
+/// exists for (§15.23).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Setting {
+    /// `Name "${APP}"`: one string. `path` applies §5's `/`-to-`\`, which is
+    /// right for a file the build machine reads and wrong for a caption.
+    Str { path: bool },
+    /// A Lua `bool`, emitted as the pair of words NSIS spells it with
+    /// (§15.16). `CRCCheck` also accepts `force`, and offering it would take a
+    /// third state this field does not have.
+    Bool { on: &'static str, off: &'static str },
+    /// One of the bare keywords the snapshot lists. NSIS *ignores* a keyword it
+    /// does not know rather than objecting, so the closed set is checked here
+    /// or nowhere (§13).
+    Enum,
+    /// A whole number, emitted bare.
+    Int,
+    /// Shaped by the block's own lowering instead: `unicode` sets a field of
+    /// the module rather than emitting a line, and `versionInfo` is a nested
+    /// table. The analogue of [`Offer::Handled`] one level up, and it carries
+    /// the Lua type for the same reason — the stub generator has to describe a
+    /// field it does not lower.
+    Handled(&'static str),
+}
+
 /// §14's census bucket. There is exactly one enum, because the buckets and the
 /// overlay's `class` field are the same thing named twice (§15.23).
 ///
@@ -230,8 +261,8 @@ pub struct Field {
 pub enum Class {
     /// An Installua callable, with an emission example.
     Exposed,
-    /// A field of one of the four blocks (§15.10, §15.26).
-    Attribute,
+    /// A field of one of the four blocks (§15.10, §15.26), and what it holds.
+    Attribute(Setting),
     /// Reachable only as the output of `if`/`messageBox`, never callable. The
     /// emitter needs the shape; the stub generator must not offer it, or
     /// `intCmp(a, b, "yes", "no", "maybe")` reappears in completion and §8 is
@@ -260,7 +291,7 @@ impl Class {
     pub fn bucket(&self) -> &'static str {
         match self {
             Class::Exposed => "exposed",
-            Class::Attribute => "attribute",
+            Class::Attribute(_) => "attribute",
             Class::LoweringTarget(_) => "lowering-target",
             Class::Directive => "directive",
             Class::Language(_) => "language",

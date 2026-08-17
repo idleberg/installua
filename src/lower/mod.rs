@@ -28,24 +28,30 @@ use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 use crate::ir;
 use crate::regs::Slot;
 use crate::resolve::{ConstValue, Resolved};
+use crate::table;
 use crate::types::Ty;
 
 pub use sig::{Inferred, Signature};
 
-/// The frozen v1 attribute surface (Phase 0). A name in here is scheduled; a
-/// name outside it is a typo.
-const V1_ATTRIBUTES: &[&str] = &[
-    "name",
-    "outFile",
-    "unicode",
-    "compressor",
-    "requestExecutionLevel",
-    "caption",
-    "manifest",
-    "versionInfo",
-    "crcCheck",
-    "dateSave",
-];
+/// The `attributes {}` surface, read from the census rather than frozen here: a
+/// name is an attribute exactly when a [`table::Class::Attribute`] row claims
+/// it, which is what makes a new setting one overlay line (§15.23).
+///
+/// One exclusion: the dotted names are `versionInfo`'s members and are reached
+/// through it, never written flat.
+///
+/// The overlap with [`V1_INSTALLER_FIELDS`] is not one. `caption`, `icon`,
+/// `installDir` and `license` are script-wide NSIS commands that `installer {}`
+/// also accepts, so they belong to both blocks; `pages` and `text` have no row
+/// at all and are the two names that guard rejects.
+fn attribute_names() -> Vec<&'static str> {
+    table::table()
+        .iter()
+        .filter(|entry| matches!(entry.class, table::Class::Attribute(_)))
+        .filter_map(|entry| entry.installua)
+        .filter(|field| !field.contains('.'))
+        .collect()
+}
 
 /// The frozen v1 `installer {}` / `uninstaller {}` field surface.
 const V1_INSTALLER_FIELDS: &[&str] = &["installDir", "icon", "license", "pages", "text", "caption"];
@@ -503,44 +509,9 @@ impl Lowerer<'_, '_> {
             };
 
             match name.text.as_str() {
-                "name" => self.string_attribute("Name", "name", value, false),
-                "outFile" => self.string_attribute("OutFile", "outFile", value, true),
-                "installDir" => self.string_attribute("InstallDir", "installDir", value, true),
-                "caption" => self.string_attribute("Caption", "caption", value, false),
-                "icon" => self.string_attribute("Icon", "icon", value, true),
-                "license" => self.string_attribute("LicenseData", "license", value, true),
-                "compressor" => {
-                    // `SetCompressor` is a *preprocessor-adjacent* attribute:
-                    // it takes a bare keyword, not a string, and NSIS accepts
-                    // any word here and ignores the ones it does not know.
-                    if let Some(text) = self.constant_string(value, "compressor") {
-                        self.enumerated(
-                            "compressor",
-                            &text,
-                            &["zlib", "bzip2", "lzma"],
-                            value.span(),
-                            |text| ir::Instruction::new("SetCompressor", vec![ir::Arg::raw(text)]),
-                        );
-                    }
-                }
-                "requestExecutionLevel" => {
-                    if let Some(text) = self.constant_string(value, "requestExecutionLevel") {
-                        self.enumerated(
-                            "requestExecutionLevel",
-                            &text,
-                            &["none", "user", "highest", "admin"],
-                            value.span(),
-                            |text| {
-                                ir::Instruction::new(
-                                    "RequestExecutionLevel",
-                                    vec![ir::Arg::raw(text)],
-                                )
-                            },
-                        );
-                    }
-                }
-                "crcCheck" => self.flag_attribute("CRCCheck", "crcCheck", value, "on", "off"),
-                "dateSave" => self.flag_attribute("SetDateSave", "dateSave", value, "on", "off"),
+                // The two nested ones. `versionInfo` is a table of its own and
+                // `unicode` emits nothing — it sets a field the emitter reads
+                // first, so a later `raw` can override it (§15.16).
                 "versionInfo" => self.version_info(value),
                 "unicode" => match self.constant(value) {
                     Some(ConstValue::Bool(value)) => self.module.unicode = value,
@@ -552,35 +523,122 @@ impl Lowerer<'_, '_> {
                          local `makensis` was built, which is why it is always emitted (§15.16)",
                     ),
                 },
-                // A name that belongs to the other block is a five-second fix
-                // rather than a five-second wait, so it says which block rather
-                // than which version (§9-4).
-                other if V1_INSTALLER_FIELDS.contains(&other) => {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::UnknownField,
-                            name.span,
-                            format!("`{other}` is not an attribute"),
-                        )
-                        .note(
-                            "it belongs in `installer {}` — and in `uninstaller {}`, which is \
-                             the same field for the other half (§15.3)",
-                        ),
-                    );
+                other => match table::by_installua(other) {
+                    Some(entry) => self.setting(entry, &name.text, value),
+                    // A name that belongs to the other block is a five-second
+                    // fix rather than a five-second wait, so it says which
+                    // block rather than which version (§9-4). Reached only by
+                    // `pages` and `text`: the other four installer fields are
+                    // `Attribute` rows and NSIS lets them be set script-wide.
+                    None if V1_INSTALLER_FIELDS.contains(&other) => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::UnknownField,
+                                name.span,
+                                format!("`{other}` is not an attribute"),
+                            )
+                            .note(
+                                "it belongs in `installer {}` — and in `uninstaller {}`, \
+                                 which is the same field for the other half (§15.3)",
+                            ),
+                        );
+                    }
+                    None => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::UnknownField,
+                                name.span,
+                                format!("`{other}` is not an attribute"),
+                            )
+                            .note(format!("the attributes are {}", list(&attribute_names()))),
+                        );
+                    }
+                },
+            }
+        }
+    }
+
+    /// One `attributes {}` field, lowered from its row.
+    ///
+    /// The whole of the per-field knowledge is [`table::Setting`], so this is
+    /// the function that has to grow when a *shape* is new and not when a
+    /// setting is (§15.23).
+    fn setting(&mut self, entry: &'static table::Instruction, field: &str, value: &Expr) {
+        let table::Class::Attribute(holds) = entry.class else {
+            // A row reached by name from `attributes {}` that is not an
+            // attribute at all: `name = detailPrint` names an instruction.
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    value.span(),
+                    format!("`{field}` is not an attribute"),
+                )
+                .note(format!(
+                    "it is `{}`, which is called rather than set",
+                    entry.nsis
+                )),
+            );
+            return;
+        };
+
+        match holds {
+            table::Setting::Str { path } => {
+                let Some(arg) = self.constant_arg(value, field) else {
+                    return;
+                };
+                let arg = if path { arg.into_path() } else { arg };
+                self.module
+                    .attributes
+                    .push(ir::Instruction::new(entry.nsis, vec![arg]));
+            }
+            table::Setting::Bool { on, off } => match self.constant(value) {
+                Some(ConstValue::Bool(flag)) => {
+                    let word = if flag { on } else { off };
+                    self.module
+                        .attributes
+                        .push(ir::Instruction::new(entry.nsis, vec![ir::Arg::raw(word)]));
                 }
-                other if V1_ATTRIBUTES.contains(&other) => {
-                    self.todo(name.span, &format!("the `{other}` attribute"));
-                }
-                other => {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::UnknownField,
-                            name.span,
-                            format!("`{other}` is not an attribute"),
-                        )
-                        .note(format!("the attributes are {}", list(V1_ATTRIBUTES))),
-                    );
-                }
+                _ => self.bad_value(
+                    value.span(),
+                    field,
+                    "a `bool`",
+                    &format!("it becomes `{} {on}` or `{} {off}`", entry.nsis, entry.nsis),
+                ),
+            },
+            table::Setting::Enum => {
+                let Some(text) = self.constant_string(value, field) else {
+                    return;
+                };
+                // The members come from the snapshot rather than from a list
+                // here: `-CMDHELP` already prints them (§15.23).
+                let allowed = entry
+                    .params
+                    .first()
+                    .map(table::Param::members)
+                    .unwrap_or_default();
+                self.enumerated(field, &text, allowed, value.span(), |text| {
+                    ir::Instruction::new(entry.nsis, vec![ir::Arg::raw(text)])
+                });
+            }
+            table::Setting::Int => match self.constant(value) {
+                Some(ConstValue::Int(number)) => self.module.attributes.push(ir::Instruction::new(
+                    entry.nsis,
+                    vec![ir::Arg::raw(number.to_string())],
+                )),
+                _ => self.bad_value(
+                    value.span(),
+                    field,
+                    "an `int`",
+                    &format!(
+                        "it becomes `{} <n>`, with the number written bare",
+                        entry.nsis
+                    ),
+                ),
+            },
+            // Only reachable if a row grew a `Handled` setting without the arm
+            // above that is supposed to shape it.
+            table::Setting::Handled(_) => {
+                self.todo(value.span(), &format!("the `{field}` attribute"));
             }
         }
     }
@@ -624,23 +682,9 @@ impl Lowerer<'_, '_> {
         self.module.attributes.push(build(text));
     }
 
-    /// A `bool` attribute that NSIS spells as a word.
-    fn flag_attribute(&mut self, nsis: &str, field: &str, value: &Expr, on: &str, off: &str) {
-        match self.constant(value) {
-            Some(ConstValue::Bool(flag)) => {
-                let word = if flag { on } else { off };
-                self.module
-                    .attributes
-                    .push(ir::Instruction::new(nsis, vec![ir::Arg::raw(word)]));
-            }
-            _ => self.bad_value(
-                value.span(),
-                field,
-                "a `bool`",
-                &format!("it becomes `{nsis} {on}` or `{nsis} {off}`"),
-            ),
-        }
-    }
+    // There is no `flag_attribute` helper any more, nor an `int_` or `enum_`
+    // one: the shapes are [`Self::setting`]'s arms, and a helper per shape would
+    // be a second place to look for the same four lines.
 
     /// `versionInfo = { product = "1.4.2.0", keys = { … } }`.
     ///

@@ -86,11 +86,12 @@ fn alias_table() -> Vec<(String, Vec<&'static str>)> {
         // and their members are in the same snapshot as everyone else's.
         let named = match entry.class {
             Class::Exposed => None,
-            // A `bool` attribute needs no alias: NSIS's `on|off` is a Lua
-            // `true|false` here (§15.16), and an alias of the NSIS spellings
-            // would complete the two words this language does not accept.
-            Class::Attribute if entry.installua.is_some_and(boolean) => continue,
-            Class::Attribute => entry.installua,
+            // Only an enum wants one. A `bool` attribute needs none: NSIS's
+            // `on|off` is a Lua `true|false` here (§15.16), and an alias of the
+            // NSIS spellings would complete the two words this language does not
+            // accept.
+            Class::Attribute(table::Setting::Enum) => entry.installua,
+            Class::Attribute(_) => continue,
             _ => continue,
         };
 
@@ -109,12 +110,6 @@ fn alias_table() -> Vec<(String, Vec<&'static str>)> {
     }
 
     aliases
-}
-
-/// The attributes NSIS spells `on|off` or `true|false` and Installua spells as
-/// a Lua `bool` (§15.16).
-fn boolean(field: &str) -> bool {
-    matches!(field, "unicode" | "crcCheck" | "dateSave")
 }
 
 /// `openmode` ⇒ `installua.OpenMode`, and so does `open_mode`.
@@ -209,21 +204,21 @@ fn blocks() -> String {
 fn attribute_fields() -> Vec<(&'static str, String)> {
     table::table()
         .iter()
-        .filter(|entry| entry.class == Class::Attribute)
-        .filter_map(|entry| entry.installua)
-        .filter(|field| !field.contains('.'))
-        .map(|field| {
-            // A `bool` attribute is one NSIS spells `on|off` or `true|false`
-            // and Installua spells as a Lua `bool` (§15.16); anything else with
-            // members is the alias generated above.
-            let ty = match field {
-                field if boolean(field) => "boolean".to_string(),
-                _ => match table::by_installua(field) {
-                    Some(entry) if entry.params.iter().any(|p| !p.members().is_empty()) => {
-                        alias_of(field)
-                    }
-                    _ => "string".to_string(),
-                },
+        .filter_map(|entry| match entry.class {
+            Class::Attribute(holds) => Some((entry.installua?, holds)),
+            _ => None,
+        })
+        .filter(|(field, _)| !field.contains('.'))
+        .map(|(field, holds)| {
+            // The Lua type is the row's `Setting` and nothing else. An enum
+            // becomes the alias generated above, which is what makes its members
+            // complete rather than merely legal.
+            let ty = match holds {
+                table::Setting::Bool { .. } => "boolean".to_string(),
+                table::Setting::Int => "integer".to_string(),
+                table::Setting::Enum => alias_of(field),
+                table::Setting::Str { .. } => "string".to_string(),
+                table::Setting::Handled(ty) => ty.to_string(),
             };
             (field, ty)
         })

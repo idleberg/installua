@@ -74,7 +74,9 @@ fn header() -> String {
 
 fn status(class: Class) -> &'static str {
     match class {
-        Class::Exposed | Class::Attribute | Class::LoweringTarget(_) | Class::Language(_) => "✅",
+        Class::Exposed | Class::Attribute(_) | Class::LoweringTarget(_) | Class::Language(_) => {
+            "✅"
+        }
         Class::Todo(_) => "⚠️",
         Class::Rejected(_) | Class::Directive => "❌",
     }
@@ -116,7 +118,7 @@ fn syntax(snapshot: &str, nsis: &str) -> String {
 fn installua(entry: &Instruction) -> String {
     match entry.class {
         Class::Exposed => code(&call(entry)),
-        Class::Attribute => match entry.installua {
+        Class::Attribute(_) => match entry.installua {
             Some(field) => code(&format!("{field} = …")),
             None => "—".to_string(),
         },

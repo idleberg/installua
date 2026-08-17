@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
 **Status: the alphabetical grind is done, and every surface gap behind it is closed.
-25 → 80 exposed, 167 → 112 todo.**
+25 → 80 exposed, 14 → 23 attributes, 167 → 103 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -20,7 +20,7 @@ in `-CMDHELP` order either way.
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 95 tests
+cargo test          # 98 tests
 ```
 
 ---
@@ -46,7 +46,8 @@ surface does not. Those two choices are made once and the rest of the family —
 commands are settings rather than instructions — `AllowSkipFiles`, `DirVar`,
 `FileBufSize` — and an `Attribute` row is only half the work: the other half widens
 `V1_ATTRIBUTES`, which Phase 0 froze. Widening a frozen surface is a decision, not
-data entry, so those stay in the backlog with the rest.
+data entry, so those stay in the backlog with the rest. *(Batch 10 made that decision:
+`V1_ATTRIBUTES` is gone and the census answers instead, so all three arrived.)*
 
 ### Four rows the batch could not write, and what they taught
 
@@ -623,6 +624,87 @@ of the five take **one** value and do not repeat, which `Offer::List` cannot say
 sibling variant of about ten lines, and writing it now would ship an untested path. It
 lands with the first row that needs it.
 
+## Batch 10 — `attributes {}` reads the table
+
+**14 → 23 attributes, 112 → 103 todo, and the second "one table, not two" is done.**
+
+`attributes {}` was the last place in the compiler where adding something took three edits
+in two files: an `attribute(…)` row in the overlay, a name in a frozen `V1_ATTRIBUTES`
+list, and a match arm in [`src/lower/mod.rs`](src/lower/mod.rs) spelling out the shape.
+That is the same bug batch 1 fixed for instructions, one level up — and it had the same
+symptom, a hardcoded `boolean()` list in [`src/stubs.rs`](src/stubs.rs) that was a *fourth*
+copy of which attributes are `bool`.
+
+The fix is `Class::Attribute(Setting)`. The class no longer says only "this is a block
+field"; it says what the field holds:
+
+| `Setting` | Written | NSIS |
+| --- | --- | --- |
+| `Str { path }` | `name = "MyApp"` | `Name "MyApp"`, `/`→`\` when `path` |
+| `Bool { on, off }` | `crcCheck = true` | `CRCCheck on` |
+| `Enum` | `silentInstall = "silent"` | `SilentInstall silent` |
+| `Int` | `fileBufSize = 8` | `FileBufSize 8` |
+| `Handled(ty)` | `unicode = true` | nothing — the emitter reads a module field |
+
+**The enum members are not on the row.** `-CMDHELP` prints `ShowInstDetails
+(hide|show|nevershow)` and the snapshot already records those three words, so `Setting::Enum`
+names the *shape* and the generated half names the members. That deleted both hardcoded
+lists in the lowering — `["zlib", "bzip2", "lzma"]` and `["none", "user", "highest",
+"admin"]` — which had been transcriptions of a file sitting in the same repository.
+
+Nine settings landed on that mechanism, and each is one line:
+
+| NSIS | Installua |
+| --- | --- |
+| `SilentInstall`, `SilentUnInstall` | `silentInstall = "silent"`, `silentUninstall` |
+| `ShowInstDetails`, `ShowUninstDetails` | `showInstDetails = "nevershow"` |
+| `AllowRootDirInstall`, `AllowSkipFiles` | two `bool`s, and NSIS spells them with different words |
+| `FileBufSize` | `fileBufSize = 8`, the only `Int` |
+| `CPU` | `cpu = "amd64"` |
+
+### The example is the row
+
+`Exposed` rows carry a hand-written example because a call site has arguments nobody can
+guess. An attribute does not: `Setting` says what the field holds and the snapshot says
+which keywords an enum takes, so
+[`attribute_program()`](tests/overlay.rs) *derives* a value for every `Attribute` row and
+gets the same two tiers the examples get — a golden at
+[`tests/golden/overlay-attributes.nsi`](tests/golden/overlay-attributes.nsi) and
+`makensis -WX` over it.
+
+That paid on its first run, which is the point of writing it before trusting the rows:
+
+```
+Error: command DirVerify not valid outside PageEx
+```
+
+`DirVerify` is not a script-wide setting at all — it is only legal inside `PageEx`, which
+Installua has no shape for. It went back to `todo` with that as its reason, which is a
+better reason than the group summary it arrived with. Third row in this phase whose group
+reason was a guess, and the first one a *test* un-guessed rather than a person reading a
+syntax line.
+
+`LicenseData` also opens its file at compile time, so `tests/fixtures/assets/license.txt`
+is a real file for the same reason `icon.ico` is.
+
+### The overlap that was not a mistake
+
+`caption`, `icon`, `installDir` and `license` are `Attribute` rows *and* `installer {}`
+fields, and the first cut of this batch rejected them from `attributes {}` — the stub test
+caught it, because the generated `installua.Attributes` class offers every `Attribute` row.
+They are script-wide NSIS commands that `installer {}` also accepts, so they belong to
+both blocks. Only `pages` and `text` are installer-only, and they are the two names that
+guard now rejects.
+
+### What it did not touch
+
+The `Manifest*` family (8 rows) and `PE*` (4) are still `todo`, and their reason is now
+accurate rather than inherited: `manifest` wants a nested table the way `versionInfo` has
+one, and every `Manifest*` setting is `notset|true|false` — a **tri-state**, where `nil`
+means "say nothing", which none of the five `Setting`s can spell. `PEAddResource` repeats
+and takes four arguments. `DirVar` and `InstallDirRegKey` are one and three arguments
+respectively, against a `Setting` model that assumes one value per line.
+
 ---
 
 ## What the join replaced
@@ -693,9 +775,17 @@ tier 3 catches and tier 2 cannot.
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 112 is section-index binding (§13), the `hwnd` surface, the classic UI,
-  pages, script-wide settings and a handful of one-offs. Every one of those is a design
-  question rather than data entry, which is what the grind was for.
+  left in the 103 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
+  surface and pages (14), the `Manifest*`/`PE*` remainder (12) and a handful of one-offs.
+  Every one of those is a design question rather than data entry, which is what the grind
+  was for.
+- **A block field that is a tri-state has no spelling.** Every `Manifest*` setting is
+  `notset|true|false`, where `notset` is *"emit no line"* — `nil` in Lua, which is not a
+  value a table field can hold and be read back. `Setting::Enum` can spell the three words
+  but not the absence, and eight rows want it. It arrives with `manifest {}`.
+- **A setting with more than one argument has no spelling either.** `InstallDirRegKey` is
+  three, `PEAddResource` is four and repeats, `FileErrorText` is two optional strings.
+  `Setting` assumes one value per line, which was true of every row batch 10 landed.
 - **A flag that takes one value and does not repeat has no spelling.** `Offer::List`
   covers `File`'s `/x` because it repeats; `SendMessage`'s `/TIMEOUT=n` and the three
   other single-valued flags are all on `todo` rows, and the variant that spells them
