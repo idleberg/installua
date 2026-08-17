@@ -1349,7 +1349,8 @@ by tier 3 rather than by reading NSIS's prose. There is no reason to think it is
 
 ### The three that did not land, and why the reason changed
 
-Not "blocked on the classic UI" in any of the three cases:
+Not "blocked on the classic UI" in any of the three cases. The third has since been ruled
+and is no longer open:
 
 - **`BGGradient`, `SpaceTexts`** — both are alternations (`off | (top [bottom [text]])`,
   `none | (required [available])`) and `-CMDHELP` flattens each to a single required
@@ -1358,20 +1359,81 @@ Not "blocked on the classic UI" in any of the three cases:
 - **`SubCaption`, `UninstallSubCaption`** — MUI2 blanks exactly one index each and leaves
   the rest free. A row owned for one argument value and open for the others is the same gap
   `PERemoveResource` opened, and the second row to want a per-value rule.
-- **`XPStyle`** — still wants a ruling rather than a lookup. MUI2 emits `XPStyle On`
-  unconditionally, so a user's `off` is a last-one-wins race with no diagnostic. Rejecting it
-  removes a real capability; exposing it promises an ordering the manifest may override.
+- **`XPStyle`** — wanted a ruling rather than a lookup, and got one: `rejected`. MUI2 emits
+  `XPStyle On` unconditionally from `MUI_INTERFACE`, so the only value a user could want is
+  `off` and it is the one value that cannot work — whichever line lands last wins, silently,
+  and `-WX` sees nothing wrong with either. Exposing it would promise an ordering the
+  manifest may override anyway. The capability this removes is one the shell decides, not
+  the script; rejecting says so once, where the author wrote it.
 
 `SetCtlColors` and `LoadAndSetImage` moved to the `hwnd` pile as planned, and
 `SetBrandingImage` to the page-callback pile beside it.
+
+## Batch 17 — a group whose reason had already retired itself
+
+Five rows, one reason, and the reason was answered by a row that shipped in batch 1.
+
+`SetCompress`, `SetCompressorDictSize`, `SetCompressionLevel`, `SetOverwrite` and
+`SetDatablockOptimize` all carried *"compile time and positional: it changes the `file`
+calls after it rather than executing, so a call inside an `if` would be a lie"*. That is a
+true statement about a **call** and says nothing about an **attribute**. `SetCompressor`
+has been `attribute("compressor", …)` since batch 1 on exactly this footing: an
+installer-wide default, written once, placed by the compiler. The other five were never
+blocked; the group was written before the attribute answer existed and nobody re-read it.
+
+| NSIS | field | holds |
+| --- | --- | --- |
+| `SetCompress` | `compress` | `off \| auto \| force` |
+| `SetCompressorDictSize` | `compressorDictSize` | `Int`, megabytes |
+| `SetCompressionLevel` | `compressionLevel` | `Int`, 0–9 |
+| `SetOverwrite` | `overwrite` | `on \| off \| try \| ifnewer \| ifdiff` |
+| `SetDatablockOptimize` | `datablockOptimize` | `on \| off` |
+
+The per-`file` override is a different feature and still absent — `file` has no
+`overwrite = …`. Withholding the installer-wide default until that exists would be
+withholding the common case for the rare one.
+
+### The two compression settings exclude each other
+
+Tier 3 found it twice in a row, and neither is in any syntax line:
+
+```
+warning 8026: SetCompressorDictSize: compressor is not set to LZMA. Effectively ignored.
+warning 8025: SetCompressionLevel: compressor is set to LZMA. Effectively ignored.
+```
+
+`compressorDictSize` is read **only** under LZMA and `compressionLevel` **only** under
+anything else, so under `-WX` no single script can carry both. The derived program writes
+every attribute, which makes it the one script that wants to.
+
+The fix is two-part and the second half is the point. `REAL` now pins
+`compressor = "lzma"` so the dictionary size has a compressor that reads it, and a new
+`EXCLUSIVE` list drops `SetCompressionLevel` from the derived program. Dropping a row from
+tier 3 without checking it elsewhere would leave a `Setting` no `makensis` ever saw, which
+is the one failure tier 3 exists to prevent — so
+`compression_level_assembles_against_a_compressor_that_reads_it` assembles it on its own,
+beside `compressor = "zlib"`.
+
+The dependency is real for authors too, and it is deferred: `makensis` states it by name
+and by line, and no `Setting` can say "meaningful only when a sibling holds one value".
+That is the third cross-field constraint in two batches, after `AddBrandingImage`'s unit
+agreement and `SetCompressor`'s ordering.
 
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could. Batch 16
-  emptied the two *classic UI* groups: of the 71 left, the `hwnd` surface and pages is 16
-  (after two rows moved there), addressing a section at install time is 12, the nine
-  remaining MUI defines are the largest single block, and the rest are one-offs.
+  emptied the two *classic UI* groups and batch 17 the *compile time and positional* one.
+  Of the 65 left, the `hwnd` surface and pages is 16 (after two rows moved there),
+  addressing a section at install time is 12, the nine remaining MUI defines are the
+  largest single block, and the rest are one-offs.
+- **A group's reason is written once and never re-read.** Batch 17's five rows were
+  unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
+  sixteen batches because the reason was true of the shape they were rejected as. Every
+  remaining group deserves the same re-reading before the design work it claims to need.
+- **A `Setting` cannot say "meaningful only when a sibling holds one value".**
+  `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
+  `makensis` is the only thing that knows. Third cross-field constraint in two batches.
 - **Where MUI settings live has no answer.** Nine rows above and the ~70 `MUI_*` settings
   `PLAN.md` defers all want the same thing: a place in the surface for a page-scoped
   `!define`. Three spellings are on the table — a meaning-grouped `text = { … }` on the

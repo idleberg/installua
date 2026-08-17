@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed           80
-  attribute         47
+  attribute         52
   lowering-target   18
   language          12
   directive         37
-  rejected          11
-  todo              71
+  rejected          12
+  todo              65
 
 todo:
   AutoCloseWindow         addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
@@ -15,7 +15,6 @@ todo:
   ComponentText           MUI2 emits this line itself from `MUI_COMPONENTSPAGE_TEXT_TOP`, `…_TEXT_INSTTYPE` and `…_TEXT_COMPLIST`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   GetDLLVersionLocal      its example reads the build machine at compile time, and no fixture yet carries a version resource
   CreateFont              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  SetDatablockOptimize    compile time and positional: it changes the `file` calls after it rather than executing, so a call inside an `if` would be a lie
   DirText                 MUI2 emits this line itself from `MUI_DIRECTORYPAGE_TEXT_TOP` and `…_TEXT_DESTINATION`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   DirVar                  an installer-wide flag or mode: one overlay row each
   DirVerify               only valid inside `PageEx`, and the page surface has no design yet
@@ -63,10 +62,6 @@ todo:
   SetCtlColors            addresses a control by handle; the `hwnd` surface wants nsDialogs designed first
   SetBrandingImage        runs from a page callback, and there is no way to write one yet (nsDialogs)
   LoadAndSetImage         addresses a control by handle; the `hwnd` surface wants nsDialogs designed first
-  SetCompress             compile time and positional: it changes the `file` calls after it rather than executing, so a call inside an `if` would be a lie
-  SetCompressorDictSize   compile time and positional: it changes the `file` calls after it rather than executing, so a call inside an `if` would be a lie
-  SetCompressionLevel     compile time and positional: it changes the `file` calls after it rather than executing, so a call inside an `if` would be a lie
-  SetOverwrite            compile time and positional: it changes the `file` calls after it rather than executing, so a call inside an `if` would be a lie
   SetSilent               only meaningful from `.onInit`, and an example lives in a section: the row needs a place to say where a call is legal
   ShowWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   SubCaption              MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
@@ -74,7 +69,6 @@ todo:
   UninstPage              a page construct; custom pages need a design (nsDialogs) that does not exist yet
   UninstallText           MUI2 emits this line itself from `MUI_UNCONFIRMPAGE_TEXT_TOP` and `…_TEXT_LOCATION`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   UninstallSubCaption     MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
-  XPStyle                 MUI2 emits `XPStyle On` unconditionally, so a user's `off` is a last-one-wins race with no diagnostic: reject it or promise an ordering, and neither is ruled
   SpaceTexts              `none | (required [available])` is an alternation, and the snapshot flattens it to one required position: the shape has no `Setting`
   GetFunctionAddress      takes the address of a function or label; `Call`-by-address has no Lua shape (§3)
   GetLabelAddress         takes the address of a function or label; `Call`-by-address has no Lua shape (§3)

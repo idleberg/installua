@@ -89,6 +89,9 @@ fn attribute_program() -> String {
         if field.contains('.') || matches!(holds, table::Setting::Handled(_)) {
             continue;
         }
+        if EXCLUSIVE.contains(&entry.nsis) {
+            continue;
+        }
 
         // A position the snapshot repeats takes a list of what one value is.
         // One element for the same reason a [`table::Setting::Each`] gets one:
@@ -209,7 +212,25 @@ const REAL: &[(&str, &str, &str)] = &[
     // non-Win32 platforms!*, so `u` is the only form this test can assemble.
     ("AddBrandingImage", "size", "\"20u\""),
     ("AddBrandingImage", "padding", "\"2u\""),
+    // Not a narrowing but a *pair*: `compressorDictSize` is read only under
+    // LZMA, and NSIS says so — `warning 8026: compressor is not set to LZMA.
+    // Effectively ignored.` — which `-WX` turns into a failure. The first
+    // keyword the snapshot lists is `zlib`, so this test has to name the
+    // compressor its own dictionary size implies. The dependency is real for
+    // authors too and is deferred to `makensis`, which states it by name.
+    ("SetCompressor", "compressor", "\"lzma\""),
 ];
+
+/// Attributes that cannot appear in the one derived program, because another
+/// attribute in it excludes them.
+///
+/// One entry, and it is a genuine pair rather than a gap in the machinery:
+/// `SetCompressorDictSize` warns unless the compressor is LZMA (8026) and
+/// `SetCompressionLevel` warns when it *is* (8025), so under `-WX` no single
+/// script can carry both. The one left out is covered by
+/// [`compression_level_assembles_against_a_compressor_that_reads_it`], because
+/// skipping it here must not mean skipping it.
+const EXCLUSIVE: &[&str] = &["SetCompressionLevel"];
 
 #[test]
 fn every_attribute_row_emits() {
@@ -883,6 +904,61 @@ fn the_attributes_assemble_under_wx() {
     assert!(
         output.status.success(),
         "makensis -WX rejected the attribute rows:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// The half of the compression pair the derived program has to leave out.
+///
+/// `SetCompressionLevel` is ignored under LZMA and `SetCompressorDictSize` is
+/// ignored under everything else, so [`EXCLUSIVE`] drops the first from the one
+/// program that writes every attribute. Dropping it there without checking it
+/// anywhere would mean a row whose `Setting` no `makensis` ever saw, which is
+/// the one thing tier 3 exists to prevent — so it gets its own script, beside
+/// the compressor that reads it.
+#[test]
+fn compression_level_assembles_against_a_compressor_that_reads_it() {
+    let Some(makensis) = makensis() else {
+        eprintln!("skipping: `makensis` is not installed");
+        return;
+    };
+
+    let source = "attributes {\n\
+         \tname = \"Level\",\n\
+         \toutFile = \"level.out\",\n\
+         \tcompressor = \"zlib\",\n\
+         \tcompressionLevel = 9,\n\
+         }\n\n\
+         installer {\n\
+         \tsection(\"Core\", function()\n\
+         \t\tdetailPrint(\"installing\")\n\
+         \tend),\n\
+         }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags)
+        .unwrap_or_else(|| panic!("{}", diags.render("compression-level.lua")));
+
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures");
+    let script = fixtures.join("compression-level.nsi");
+    std::fs::write(&script, &built).expect("write the script");
+
+    let output = Command::new(&makensis)
+        .arg("-WX")
+        .arg(&script)
+        .current_dir(&fixtures)
+        .output()
+        .expect("run makensis");
+
+    let _ = std::fs::remove_file(&script);
+    let _ = std::fs::remove_file(fixtures.join("level.out"));
+
+    assert!(
+        output.status.success(),
+        "makensis -WX rejected `compressionLevel`:\n{}{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );

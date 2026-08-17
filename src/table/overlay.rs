@@ -494,11 +494,10 @@ pub const ROWS: &[Row] = &[
         // learns that this one goes *before* the first argument.
         &[named("noWorkingDir")],
     ),
-    todo(
-        "SetDatablockOptimize",
-        "compile time and positional: it changes the `file` calls after it rather than \
-         executing, so a call inside an `if` would be a lie",
-    ),
+    // `off|on`, and on by default. Turning it off is a debugging move — it
+    // stops NSIS from sharing identical data blocks between files — which makes
+    // it exactly the kind of thing an author sets once for the whole installer.
+    attribute("SetDatablockOptimize", "datablockOptimize", ONOFF),
     // The INI family spells `INI` as `Ini` — `deleteIniStr`, not
     // `deleteINIStr` — because every other name here is camel case over words
     // and an acronym is a word. `Sec` becomes `Section` for the same reason
@@ -1282,22 +1281,26 @@ pub const ROWS: &[Row] = &[
         "LoadAndSetImage",
         "addresses a control by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    todo(
-        "SetCompress",
-        "compile time and positional: it changes the `file` calls after it rather than \
-         executing, so a call inside an `if` would be a lie",
-    ),
+    // The four compression settings and the overwrite default. All five carry
+    // the objection that retired itself: they are positional, so a *call* would
+    // be a lie inside an `if` — but an attribute is not a call. It is the
+    // installer-wide default, written once, and the compiler decides where the
+    // line goes. That is the footing `SetCompressor` has stood on since batch
+    // 1, and the only reason these four were not beside it is that nobody
+    // looked at the group again after writing the reason.
+    //
+    // The per-`file` override is a different feature and still absent: `file`
+    // has no `overwrite = …` yet. Withholding the installer-wide default until
+    // that exists would be withholding the common case for the rare one.
+    attribute("SetCompress", "compress", Setting::Enum),
     attribute("SetCompressor", "compressor", Setting::Enum),
-    todo(
-        "SetCompressorDictSize",
-        "compile time and positional: it changes the `file` calls after it rather than \
-         executing, so a call inside an `if` would be a lie",
-    ),
-    todo(
-        "SetCompressionLevel",
-        "compile time and positional: it changes the `file` calls after it rather than \
-         executing, so a call inside an `if` would be a lie",
-    ),
+    // `dict_size_mb`, so an `Int` in megabytes. NSIS reads it for LZMA only and
+    // ignores it otherwise, which is a fact about the value and not a shape.
+    attribute("SetCompressorDictSize", "compressorDictSize", Setting::Int),
+    // `level_0-9` in the snapshot, which is an `Int` with a range no `Setting`
+    // can state. `makensis` states it — *Invalid compression level* — and by
+    // name, so deferring costs a worse message and nothing else.
+    attribute("SetCompressionLevel", "compressionLevel", Setting::Int),
     attribute("SetDateSave", "dateSave", ONOFF),
     exposed(
         "SetDetailsView",
@@ -1357,11 +1360,10 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Path)],
         "setOutPath(INSTDIR)",
     ),
-    todo(
-        "SetOverwrite",
-        "compile time and positional: it changes the `file` calls after it rather than \
-         executing, so a call inside an `if` would be a lie",
-    ),
+    // Five keywords, not a boolean: `on | off | try | ifnewer | ifdiff`. The
+    // installer-wide default; a per-`file` override is a `file` feature and is
+    // not this row.
+    attribute("SetOverwrite", "overwrite", Setting::Enum),
     rejected(
         "SetPluginUnload",
         "NSIS retired it: plug-ins handle unloading themselves",
@@ -1642,10 +1644,19 @@ pub const ROWS: &[Row] = &[
     // `major.minor`, which is a string and not a number: `5.1` as a Lua number
     // would round-trip through a float and arrive as `5.1` only by luck.
     attribute("PESubsysVer", "peSubsysVer", STR),
-    todo(
+    // MUI2 emits `XPStyle On` unconditionally, from inside `MUI_INTERFACE`, so
+    // the only value a user could want is `off` and it is exactly the one that
+    // cannot work: whichever line lands last wins, silently, and `-WX` sees
+    // nothing wrong with either. Exposing it would mean promising an ordering
+    // the manifest may override anyway — the visual style is the shell's
+    // decision, not the script's.
+    //
+    // Rejecting says so once, at the place the author wrote it, instead of
+    // producing an installer whose appearance depends on a link order.
+    rejected(
         "XPStyle",
-        "MUI2 emits `XPStyle On` unconditionally, so a user's `off` is a last-one-wins \
-         race with no diagnostic: reject it or promise an ordering, and neither is ruled",
+        "MUI2 emits `XPStyle On` itself, so an `off` here is a last-one-wins race with \
+         no diagnostic; visual style is the shell's decision",
     ),
     attribute(
         "RequestExecutionLevel",

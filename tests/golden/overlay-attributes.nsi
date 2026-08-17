@@ -1,11 +1,12 @@
 Unicode true
 
-SetCompressor zlib
+SetCompressor lzma
 AddBrandingImage top "20u" "2u"
 BGFont "face" 1 1
 BrandingText "brandingText"
 Caption "caption"
 CRCCheck on
+SetDatablockOptimize on
 AllowRootDirInstall true
 FileBufSize 1
 FileErrorText "text" "withoutIgnore"
@@ -15,8 +16,11 @@ InstallDir "installDir.out"
 LicenseData "assets\license.txt"
 Name "name"
 OutFile "outFile.out"
+SetCompress off
+SetCompressorDictSize 1
 SetDateSave on
 SetFont "face" 1
+SetOverwrite on
 ShowInstDetails hide
 ShowUninstDetails hide
 SilentInstall normal
