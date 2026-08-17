@@ -153,7 +153,10 @@ fn call(entry: &Instruction) -> String {
             args.push_str(", …");
         }
     }
-    if !entry.options.is_empty() {
+    // The trailing `{ … }`, when there is one to write. Not `!options.is_empty()`
+    // — a row can carry a flag the surface does not offer, and a cell claiming
+    // an options table nobody can fill is the drift this file exists to avoid.
+    if entry.takes_options() {
         if args.is_empty() {
             args.push_str("[{ … }]");
         } else {

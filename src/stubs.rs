@@ -305,9 +305,14 @@ fn instructions() -> String {
             let _ = writeln!(out, "---@param {ident}{optional} {}", union(name, index));
             names.push(ident);
         }
-        let options: Vec<String> = entry
+        // Both halves of the options table, in one type: the optional positions
+        // that are named rather than counted, and the flags, which are `boolean`
+        // because the compiler writes the `/FLAG` itself (§15.23).
+        let fields = entry
             .fields()
-            .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)))
+            .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)));
+        let options: Vec<String> = fields
+            .chain(entry.flags().map(|(name, _)| format!("{name}: boolean")))
             .collect();
         if !options.is_empty() {
             let _ = writeln!(out, "---@param options? {{ {} }}", options.join(", "));
@@ -527,10 +532,11 @@ pub fn selene_std() -> String {
                 let _ = writeln!(out, "        required: false");
             }
         }
-        // One trailing table for every optional position, or none at all. A
-        // `selene` argument list is positional, so this is as much as it can
-        // say — the field names are the language server's job.
-        if entry.fields().next().is_some() {
+        // One trailing table for the named half — optional positions, flags, or
+        // both — or none at all. A `selene` argument list is positional, so this
+        // is as much as it can say; the field names are the language server's
+        // job.
+        if entry.takes_options() {
             let _ = writeln!(out, "      - type: table\n        required: false");
         }
     }

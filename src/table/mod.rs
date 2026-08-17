@@ -86,11 +86,11 @@ pub struct Shape {
     pub members: &'static [&'static str],
 }
 
-/// A flag. Not a parameter, because its position in NSIS syntax is arbitrary —
-/// leading for `GetDLLVersion`, medial for `SetCtlColors`, trailing for
-/// `SendMessage` — and there is nothing to gain from making a user learn that
-/// (§15.23). The Installua surface takes an unordered options table; `after`
-/// records where the emitter puts it back.
+/// A flag, as `-CMDHELP` states it. Not a parameter, because its position in
+/// NSIS syntax is arbitrary — leading for `GetDLLVersion`, medial for
+/// `SetCtlColors`, trailing for `SendMessage` — and there is nothing to gain
+/// from making a user learn that (§15.23). The Installua surface takes an
+/// unordered options table; `after` records where the emitter puts it back.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Opt {
     pub nsis: &'static str,
@@ -98,6 +98,45 @@ pub struct Opt {
     pub value: bool,
     /// The number of parameters this flag follows; 0 is leading.
     pub after: usize,
+}
+
+/// What the Installua surface does with one flag. The overlay's judgement, one
+/// entry per snapshot flag, the way [`Ann`](overlay::Ann) is one entry per
+/// snapshot parameter.
+///
+/// [`Offer::Unoffered`] carries its reason for the same argument
+/// [`Class::Todo`] does: a flag that says "not yet" without saying why is
+/// indistinguishable from one nobody has read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Offer {
+    /// A named field of the trailing options table, holding a `bool`. The
+    /// compiler writes the `/FLAG`, so `delete(p, { rebootOk = true })` is the
+    /// whole surface and the spelling never leaves the table.
+    Named(&'static str),
+    /// Written on every call, because NSIS requires it and the caller has
+    /// nothing to decide: `WriteRegMultiStr` without `/REGEDIT5` is an error
+    /// rather than a different instruction.
+    Always,
+    /// Not offered, with the reason. `File`'s `/x` and `MessageBox`'s `/SD`
+    /// both take a *value*, which is a shape this scheme does not have yet.
+    Unoffered(&'static str),
+}
+
+/// One flag, joined: what NSIS prints, and what the surface does with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Flag {
+    pub opt: Opt,
+    pub offer: Offer,
+}
+
+impl Flag {
+    /// The options-table name, when the flag has one.
+    pub fn name(&self) -> Option<&'static str> {
+        match self.offer {
+            Offer::Named(name) => Some(name),
+            Offer::Always | Offer::Unoffered(_) => None,
+        }
+    }
 }
 
 /// §15.2's fourth column and §15.23's `kind`. `Enum` is not written by hand —
@@ -262,7 +301,9 @@ pub struct Instruction {
     pub nsis: &'static str,
     pub class: Class,
     pub params: Vec<Param>,
-    pub options: &'static [Opt],
+    /// Every flag `-CMDHELP` prints for this command, in its order, each with
+    /// what the surface does with it.
+    pub options: Vec<Flag>,
     /// Mutually exclusive option sets: `File`'s `/oname=` branch against its
     /// repeated-filespec branch. The error names both spellings (§15.23).
     pub conflicts: &'static [&'static [&'static str]],
@@ -333,6 +374,37 @@ impl Instruction {
     /// The field of that name, if the row has one.
     pub fn field(&self, name: &str) -> Option<(Field, &Param)> {
         self.fields().find(|(field, _)| field.name == name)
+    }
+
+    /// The flags a caller can name, in snapshot order.
+    ///
+    /// The other half of the options table, and the half that is not a
+    /// position at all: `Delete [/REBOOTOK] filespec` has one argument and one
+    /// flag, and `delete(p, { rebootOk = true })` writes both without the
+    /// caller ever learning that the flag goes first (§15.23).
+    pub fn flags(&self) -> impl Iterator<Item = (&'static str, &Flag)> {
+        self.options
+            .iter()
+            .filter_map(|flag| flag.name().map(|name| (name, flag)))
+    }
+
+    /// The flag of that name, if the row has one.
+    pub fn flag(&self, name: &str) -> Option<&Flag> {
+        self.flags().find(|(each, _)| *each == name).map(|(_, f)| f)
+    }
+
+    /// Whether a call may end in `{ … }`. Both halves of the options table are
+    /// optional and either one alone is enough to make the table meaningful, so
+    /// this is what the lowerer, the stub and the doc all ask.
+    pub fn takes_options(&self) -> bool {
+        self.fields().next().is_some() || self.flags().next().is_some()
+    }
+
+    /// Every name legal inside the options table, positions first and flags
+    /// after, which is the order they are declared in.
+    pub fn option_names(&self) -> Vec<&'static str> {
+        let fields = self.fields().map(|(field, _)| field.name);
+        fields.chain(self.flags().map(|(name, _)| name)).collect()
     }
 
     /// What the call evaluates to: the first output's type, because that is
@@ -481,7 +553,22 @@ fn join() -> Vec<Instruction> {
                     None => Class::Todo("no overlay row: added by a newer NSIS"),
                 },
                 params,
-                options: skeleton.options,
+                options: skeleton
+                    .options
+                    .iter()
+                    .enumerate()
+                    .map(|(index, opt)| Flag {
+                        opt: *opt,
+                        // Same rule as the parameters above: no row, or a row
+                        // that says nothing about this flag, leaves the flag in
+                        // the table and out of the surface. The census is where
+                        // an `Exposed` row with an unjudged flag is a failure.
+                        offer: row
+                            .and_then(|row| row.options.get(index))
+                            .copied()
+                            .unwrap_or(Offer::Unoffered("no overlay judgement")),
+                    })
+                    .collect(),
                 conflicts: row.map(|row| row.conflicts).unwrap_or(&[]),
                 note: skeleton.note,
                 predicate: row.is_some_and(|row| row.predicate),

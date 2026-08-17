@@ -57,7 +57,7 @@ Section "DeleteRegValue"
 SectionEnd
 
 Section "Delete"
-  Delete "$INSTDIR\old.txt"
+  Delete /REBOOTOK "$INSTDIR\old.txt"
 SectionEnd
 
 Section "DetailPrint"
@@ -267,7 +267,7 @@ Section "Rename"
 SectionEnd
 
 Section "RMDir"
-  RMDir $INSTDIR
+  RMDir /r /REBOOTOK $INSTDIR
 SectionEnd
 
 Section "SearchPath"
@@ -361,6 +361,10 @@ SectionEnd
 
 Section "WriteRegBin"
   WriteRegBin HKLM "Software\Example" "Blob" "12848412AB"
+SectionEnd
+
+Section "WriteRegMultiStr"
+  WriteRegMultiStr /REGEDIT5 HKLM "Software\Example" "List" 660000000000
 SectionEnd
 
 Section "WriteRegDWORD"

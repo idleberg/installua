@@ -22,7 +22,7 @@
 //! retired row there, which is not a contradiction: the emitter needs its
 //! shape and the user needs the replacement.
 
-use super::{Class, Field, Kind};
+use super::{Class, Field, Kind, Offer};
 use crate::types::Ty;
 
 /// The hand-written half of one parameter, positional against the skeleton's
@@ -66,6 +66,10 @@ pub struct Row {
     pub installua: Option<&'static str>,
     pub class: Class,
     pub params: &'static [Ann],
+    /// What to do with each flag `-CMDHELP` prints, positional against the
+    /// skeleton's option list the way [`Ann`] is against its parameter list.
+    /// The census checks the lengths agree on an `Exposed` row.
+    pub options: &'static [Offer],
     /// Mutually exclusive option sets: `File`'s `/oname=` branch against its
     /// repeated-filespec branch. The error names both spellings (§15.23).
     pub conflicts: &'static [&'static [&'static str]],
@@ -131,6 +135,25 @@ const fn fused(ty: Ty) -> Ann {
     ann(ty, Kind::Fused)
 }
 
+/// A flag reached by this name in the trailing options table, holding a `bool`.
+/// The `/FLAG` itself stays in the table: `rmDir(dir, { recursive = true })`
+/// says what it does, where `/r` says what NSIS calls it.
+const fn named(name: &'static str) -> Offer {
+    Offer::Named(name)
+}
+
+/// A flag with no decision in it, written on every call. See [`Offer::Always`].
+const fn always() -> Offer {
+    Offer::Always
+}
+
+/// A flag the surface does not reach yet, with the reason. `Exposed` rows are
+/// allowed to have these — an unreachable *flag* is a missing convenience,
+/// where an unreachable optional *position* would be a hole in the command.
+const fn unoffered(why: &'static str) -> Offer {
+    Offer::Unoffered(why)
+}
+
 const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) -> Row {
     Row {
         nsis,
@@ -138,9 +161,17 @@ const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) 
         installua,
         class,
         params: &[],
+        options: &[],
         conflicts: &[],
         predicate: false,
     }
+}
+
+/// A row plus its flag judgements, one per flag `-CMDHELP` prints for it, in
+/// that order. Separate from [`exposed`] because thirty rows have flags and
+/// two hundred and forty-six do not.
+const fn flagged(row: Row, options: &'static [Offer]) -> Row {
+    Row { options, ..row }
 }
 
 /// A callable, with one annotation per parameter. The census requires the two
@@ -267,17 +298,21 @@ pub const ROWS: &[Row] = &[
     // The four rows that write *two* registers. A 64-bit value split across a
     // high and a low half is one number in every language that has one, and
     // Installua does not: §3 has no 64-bit type, so the halves stay halves and
-    // the call binds both. `/ProductVersion` is not reachable — no row emits an
-    // option yet — but it is optional, so the row is honest without it.
-    exposed(
-        "GetDLLVersion",
-        "getDllVersion",
-        &[
-            ann(Ty::Str, Kind::Path),
-            ann(Ty::nonneg(), Kind::Value),
-            ann(Ty::nonneg(), Kind::Value),
-        ],
-        "local high, low = getDllVersion(INSTDIR .. \"/shell.dll\")\ndetailPrint(high .. \".\" .. low)",
+    // the call binds both. `/ProductVersion` reads the *product* version rather
+    // than the file version out of the same resource, which is a different
+    // question about the same file and so a flag rather than a second name.
+    flagged(
+        exposed(
+            "GetDLLVersion",
+            "getDllVersion",
+            &[
+                ann(Ty::Str, Kind::Path),
+                ann(Ty::nonneg(), Kind::Value),
+                ann(Ty::nonneg(), Kind::Value),
+            ],
+            "local high, low = getDllVersion(INSTDIR .. \"/shell.dll\")\ndetailPrint(high .. \".\" .. low)",
+        ),
+        &[named("productVersion")],
     ),
     // The lowering is the same as `GetDLLVersion`'s and the row is not the
     // problem: the `Local` twin reads the *build* machine at compile time, so
@@ -316,15 +351,21 @@ pub const ROWS: &[Row] = &[
         ],
         "local high, low = getFileTimeLocal(\"assets/icon.ico\")\ndetailPrint(high .. \" \" .. low)",
     ),
-    exposed(
-        "CopyFiles",
-        "copyFiles",
-        &[
-            ann(Ty::Str, Kind::Path),
-            ann(Ty::Str, Kind::Path),
-            opt(Ty::nonneg(), Kind::Value, "sizeInKb"),
-        ],
-        "copyFiles(INSTDIR .. \"/data\", INSTDIR .. \"/backup\")",
+    // The one row where both halves of the options table are in use: a trailing
+    // optional position that stays an argument, and two flags that were never
+    // positions at all.
+    flagged(
+        exposed(
+            "CopyFiles",
+            "copyFiles",
+            &[
+                ann(Ty::Str, Kind::Path),
+                ann(Ty::Str, Kind::Path),
+                opt(Ty::nonneg(), Kind::Value, "sizeInKb"),
+            ],
+            "copyFiles(INSTDIR .. \"/data\", INSTDIR .. \"/backup\")",
+        ),
+        &[named("silent"), named("filesOnly")],
     ),
     attribute("CRCCheck", "crcCheck"),
     exposed(
@@ -346,22 +387,28 @@ pub const ROWS: &[Row] = &[
     // reads token 5 once, with `gettoken_int` — hence the [`Kind::Fused`] half.
     // Every field but the last carries a fill, because NSIS still counts the
     // positions the caller declined.
-    exposed(
-        "CreateShortcut",
-        "createShortcut",
-        &[
-            ann(Ty::Str, Kind::Path),
-            ann(Ty::Str, Kind::Path),
-            filled(Ty::Str, Kind::Value, "parameters", "\"\""),
-            filled(Ty::Str, Kind::Path, "iconFile", "\"\""),
-            filled(Ty::nonneg(), Kind::Value, "iconIndex", "0"),
-            fused(Ty::nonneg()),
-            filled(Ty::Str, Kind::Enum, "showMode", "SW_SHOWNORMAL"),
-            filled(Ty::Str, Kind::Enum, "hotkey", "\"\""),
-            opt(Ty::Str, Kind::Value, "comment"),
-        ],
-        "createShortcut(DESKTOP .. \"/App.lnk\", INSTDIR .. \"/app.exe\", \
-         { comment = \"Launch App\" })",
+    flagged(
+        exposed(
+            "CreateShortcut",
+            "createShortcut",
+            &[
+                ann(Ty::Str, Kind::Path),
+                ann(Ty::Str, Kind::Path),
+                filled(Ty::Str, Kind::Value, "parameters", "\"\""),
+                filled(Ty::Str, Kind::Path, "iconFile", "\"\""),
+                filled(Ty::nonneg(), Kind::Value, "iconIndex", "0"),
+                fused(Ty::nonneg()),
+                filled(Ty::Str, Kind::Enum, "showMode", "SW_SHOWNORMAL"),
+                filled(Ty::Str, Kind::Enum, "hotkey", "\"\""),
+                opt(Ty::Str, Kind::Value, "comment"),
+            ],
+            "createShortcut(DESKTOP .. \"/App.lnk\", INSTDIR .. \"/app.exe\", \
+             { comment = \"Launch App\" })",
+        ),
+        // The flag joins the six named positions in the same table, which is
+        // the point of naming them: the caller writes what they mean and never
+        // learns that this one goes *before* the first argument.
+        &[named("noWorkingDir")],
     ),
     todo(
         "SetDatablockOptimize",
@@ -389,11 +436,14 @@ pub const ROWS: &[Row] = &[
         ],
         "deleteIniStr(INSTDIR .. \"/app.ini\", \"Settings\", \"Path\")",
     ),
-    exposed(
-        "DeleteRegKey",
-        "deleteRegKey",
-        &[ann(Ty::Handle, Kind::Value), ann(Ty::Str, Kind::Path)],
-        "deleteRegKey(HKLM, \"Software/Example\")",
+    flagged(
+        exposed(
+            "DeleteRegKey",
+            "deleteRegKey",
+            &[ann(Ty::Handle, Kind::Value), ann(Ty::Str, Kind::Path)],
+            "deleteRegKey(HKLM, \"Software/Example\")",
+        ),
+        &[named("ifEmpty")],
     ),
     exposed(
         "DeleteRegValue",
@@ -405,11 +455,17 @@ pub const ROWS: &[Row] = &[
         ],
         "deleteRegValue(HKLM, \"Software/Example\", \"Path\")",
     ),
-    exposed(
-        "Delete",
-        "delete",
-        &[ann(Ty::Str, Kind::Path)],
-        "delete(INSTDIR .. \"/old.txt\")",
+    // `/REBOOTOK` is the flag the uninstaller half of every real script wants:
+    // a file the user has open cannot be deleted now, and this schedules it for
+    // the next boot instead of failing silently.
+    flagged(
+        exposed(
+            "Delete",
+            "delete",
+            &[ann(Ty::Str, Kind::Path)],
+            "delete(INSTDIR .. \"/old.txt\", { rebootOk = true })",
+        ),
+        &[named("rebootOk")],
     ),
     exposed(
         "DetailPrint",
@@ -548,11 +604,25 @@ pub const ROWS: &[Row] = &[
         "FindNext",
         "runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)",
     ),
-    exposed(
-        "File",
-        "file",
-        &[ann(Ty::Str, Kind::Path)],
-        "file(\"assets/icon.ico\")",
+    // Three of the four flags are booleans and become fields; `/x` is the
+    // exception, and it is the shape the whole scheme does not have yet — it
+    // takes a filespec *and* repeats, so one field would have to hold a list.
+    flagged(
+        exposed(
+            "File",
+            "file",
+            &[ann(Ty::Str, Kind::Path)],
+            "file(\"assets/icon.ico\")",
+        ),
+        &[
+            named("nonFatal"),
+            named("keepAttributes"),
+            named("recursive"),
+            unoffered(
+                "`/x filespec` takes a value and repeats, so one field would have to hold a \
+                 list of exclusions",
+            ),
+        ],
     ),
     todo(
         "FileBufSize",
@@ -668,11 +738,17 @@ pub const ROWS: &[Row] = &[
         "GetDlgItem",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    exposed(
-        "GetFullPathName",
-        "getFullPathName",
-        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Path)],
-        "local full = getFullPathName(INSTDIR .. \"/app.exe\")\ndetailPrint(full)",
+    // The flag goes before the *output* register — `GetFullPathName /SHORT $0
+    // path` — which is the clearest case for `Opt::after` being a position in
+    // the emitted line rather than an argument index the caller could count.
+    flagged(
+        exposed(
+            "GetFullPathName",
+            "getFullPathName",
+            &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Path)],
+            "local full = getFullPathName(INSTDIR .. \"/app.exe\")\ndetailPrint(full)",
+        ),
+        &[named("short")],
     ),
     exposed(
         "GetTempFileName",
@@ -859,18 +935,24 @@ pub const ROWS: &[Row] = &[
         "LogText",
         "the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`",
     ),
-    exposed(
-        "MessageBox",
-        "messageBox",
-        &[
-            ann(Ty::Str, Kind::Flags),
-            ann(Ty::Str, Kind::Value),
-            ann(Ty::Str, Kind::Label),
-            ann(Ty::Str, Kind::Label),
-            ann(Ty::Str, Kind::Label),
-            ann(Ty::Str, Kind::Label),
-        ],
-        "messageBox(\"finished\")",
+    flagged(
+        exposed(
+            "MessageBox",
+            "messageBox",
+            &[
+                ann(Ty::Str, Kind::Flags),
+                ann(Ty::Str, Kind::Value),
+                ann(Ty::Str, Kind::Label),
+                ann(Ty::Str, Kind::Label),
+                ann(Ty::Str, Kind::Label),
+                ann(Ty::Str, Kind::Label),
+            ],
+            "messageBox(\"finished\")",
+        ),
+        &[unoffered(
+            "`/SD IDOK` takes a value, and the answer a silent install gives belongs with \
+             §15.18's table rather than beside it",
+        )],
     ),
     rejected(
         "Nop",
@@ -960,18 +1042,27 @@ pub const ROWS: &[Row] = &[
         ],
         "regDll(INSTDIR .. \"/shell.dll\")",
     ),
-    exposed(
-        "Rename",
-        "rename",
-        &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Path)],
-        "rename(INSTDIR .. \"/old.txt\", INSTDIR .. \"/new.txt\")",
+    flagged(
+        exposed(
+            "Rename",
+            "rename",
+            &[ann(Ty::Str, Kind::Path), ann(Ty::Str, Kind::Path)],
+            "rename(INSTDIR .. \"/old.txt\", INSTDIR .. \"/new.txt\")",
+        ),
+        &[named("rebootOk")],
     ),
     language("Return", "`return`"),
-    exposed(
-        "RMDir",
-        "rmDir",
-        &[ann(Ty::Str, Kind::Path)],
-        "rmDir(INSTDIR)",
+    // `/r` is the difference between removing an empty directory and removing
+    // an installation, and `recursive` is what it is called here: the name says
+    // what happens, where `/r` says what NSIS calls it.
+    flagged(
+        exposed(
+            "RMDir",
+            "rmDir",
+            &[ann(Ty::Str, Kind::Path)],
+            "rmDir(INSTDIR, { recursive = true, rebootOk = true })",
+        ),
+        &[named("recursive"), named("rebootOk")],
     ),
     language("Section", "`section`"),
     language("SectionEnd", "the end of a `section` body"),
@@ -1330,10 +1421,25 @@ pub const ROWS: &[Row] = &[
         ],
         "writeRegBin(HKLM, \"Software/Example\", \"Blob\", \"12848412AB\")",
     ),
-    todo(
-        "WriteRegMultiStr",
-        "its `/REGEDIT5` is required rather than optional, and nothing emits an \
-         option that no argument supplies",
+    // The row `Offer::Always` exists for. `/REGEDIT5` is spelled like a flag and
+    // behaves like a keyword: NSIS rejects the line without it, and there is no
+    // second form to choose between, so the caller has nothing to decide and
+    // the compiler writes it on every call. The value is a hex string for the
+    // same reason `writeRegBin`'s is — a REG_MULTI_SZ is bytes, and §3 has no
+    // list type to build them from.
+    flagged(
+        exposed(
+            "WriteRegMultiStr",
+            "writeRegMultiStr",
+            &[
+                ann(Ty::Handle, Kind::Value),
+                ann(Ty::Str, Kind::Path),
+                ann(Ty::Str, Kind::Value),
+                ann(Ty::Str, Kind::Value),
+            ],
+            "writeRegMultiStr(HKLM, \"Software/Example\", \"List\", \"660000000000\")",
+        ),
+        &[always()],
     ),
     exposed(
         "WriteRegDWORD",

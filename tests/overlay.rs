@@ -207,6 +207,63 @@ fn an_optional_position_is_reached_by_name_and_fills_the_ones_before_it() {
     );
 }
 
+/// The other half of the options table: the flags, which were never positions.
+#[test]
+fn a_flag_is_reached_by_name_and_placed_by_the_table() {
+    let build = |body: &str| {
+        let mut diags = Diagnostics::new();
+        let source = format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n\
+             {body}\n\
+             end), }}"
+        );
+        installua::build(&source, &mut diags)
+            .unwrap_or_else(|| panic!("{}", diags.render("<test>")))
+    };
+
+    // `/r` is what NSIS calls it and `recursive` is what it does. Both flags in
+    // one table, in the snapshot's order rather than the caller's.
+    let both = build("rmDir(INSTDIR, { rebootOk = true, recursive = true })");
+    assert!(
+        both.contains("RMDir /r /REBOOTOK $INSTDIR\n"),
+        "flags are emitted in table order, not the order they were written:\n{both}"
+    );
+
+    // `false` is the absence rather than a token, exactly as it is for a toggle.
+    let off = build("rmDir(INSTDIR, { recursive = false })");
+    assert!(
+        off.contains("RMDir $INSTDIR\n"),
+        "`false` is not a flag:\n{off}"
+    );
+
+    // `Opt::after` is a place in the emitted line and not an argument index:
+    // `/SHORT` goes in front of the *output* register, which no counting of the
+    // caller's arguments could have worked out.
+    let short = build("local full = getFullPathName(INSTDIR, { short = true })\ndetailPrint(full)");
+    assert!(
+        short.contains("GetFullPathName /SHORT $0 $INSTDIR\n"),
+        "a flag can precede an output:\n{short}"
+    );
+
+    // Both halves of the table on one row: `sizeInKb` is an unambiguous
+    // trailing optional and stays an argument, and the flags never were one.
+    let copy =
+        build("copyFiles(INSTDIR .. \"/data\", INSTDIR .. \"/backup\", 100, { silent = true })");
+    assert!(
+        copy.contains("CopyFiles /SILENT \"$INSTDIR\\data\" \"$INSTDIR\\backup\" 100\n"),
+        "a counted optional and a named flag coexist:\n{copy}"
+    );
+
+    // And the flag nobody writes. `WriteRegMultiStr` without `/REGEDIT5` is an
+    // error rather than a different instruction, so the compiler supplies it.
+    let multi = build("writeRegMultiStr(HKLM, \"Software/Example\", \"List\", \"660000000000\")");
+    assert!(
+        multi.contains("WriteRegMultiStr /REGEDIT5 HKLM \"Software\\Example\" \"List\""),
+        "a required flag is written without being named:\n{multi}"
+    );
+}
+
 /// The error that replaces "takes 2 to 9 arguments, and 4 were given".
 #[test]
 fn an_unknown_option_names_the_ones_that_exist() {
@@ -224,6 +281,25 @@ fn an_unknown_option_names_the_ones_that_exist() {
     assert!(
         rendered.contains("`execShell` has no option `showmode`")
             && rendered.contains("`invokeIdList`, `parameters`, `showMode`"),
+        "{rendered}"
+    );
+
+    // A flag is in the same list, because a caller has no reason to know which
+    // half of the table a name comes from.
+    let mut diags = Diagnostics::new();
+    let built = installua::build(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         rmDir(INSTDIR, { REBOOTOK = true })\n\
+         end), }",
+        &mut diags,
+    );
+
+    assert!(built.is_none() || diags.has_errors());
+    let rendered = diags.render("<test>");
+    assert!(
+        rendered.contains("`rmDir` has no option `REBOOTOK`")
+            && rendered.contains("`recursive`, `rebootOk`"),
         "{rendered}"
     );
 }

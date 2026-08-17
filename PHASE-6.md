@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: the alphabetical grind is done, and both surface gaps behind it are closed.
-25 → 79 exposed, 167 → 113 todo.**
+**Status: the alphabetical grind is done, and every surface gap behind it is closed.
+25 → 80 exposed, 167 → 112 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -20,7 +20,7 @@ in `-CMDHELP` order either way.
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 91 tests
+cargo test          # 93 tests
 ```
 
 ---
@@ -496,6 +496,78 @@ commands in the table have a leading optional; the four beyond `ExecShell` and
 
 ---
 
+## Batch 8 — the flags, which were never positions
+
+`-CMDHELP` prints two kinds of thing and the compiler only read one. The parser has
+recorded `Opt { nsis, value, after }` since Phase 5 — thirty-one rows carry at least one —
+and `join()` copied them into `Instruction` where nothing looked at them. `Delete
+[/REBOOTOK] filespec` was a one-argument command with a flag nobody could write.
+
+A flag is **not a position**, which is why counting could never have reached it: its place
+in the line is fixed and arbitrary — leading for `GetDLLVersion`, medial for
+`SetCtlColors`, trailing for `SendMessage` — and it is the same place whatever the caller
+writes. So it goes in the table batch 7 built, next to the named positions, and the caller
+never learns which half a name came from:
+
+```lua
+delete(INSTDIR .. "/old.txt", { rebootOk = true })
+rmDir(INSTDIR, { recursive = true, rebootOk = true })
+copyFiles(src, dst, 100, { silent = true })      -- both halves at once
+createShortcut(link, target, { comment = "Launch App", noWorkingDir = true })
+```
+
+`copyFiles` is the row that shows they really are two halves: `sizeInKb` is an unambiguous
+trailing optional and stays a *counted argument*, and `silent` never was one.
+
+The overlay's judgement is one `Offer` per flag, positional against the snapshot's list
+the way `Ann` is against its parameter list — and the census checks the lengths agree on
+every `Exposed` row, for the same reason it checks the annotations: a list one short leaves
+the *last* flag unoffered and nothing goes wrong loudly.
+
+| `Offer` | Means | Rows |
+| --- | --- | --- |
+| `Named` | a `boolean` field of the options table | 13 flags across 9 rows |
+| `Always` | written on every call | `WriteRegMultiStr`'s `/REGEDIT5` |
+| `Unoffered` | not reachable, with the reason | `File`'s `/x`, `MessageBox`'s `/SD` |
+
+**`Always` is a flag with no decision in it.** `WriteRegMultiStr` without `/REGEDIT5` is
+an error rather than a different instruction, and there is no second form to choose
+between, so there is nothing to ask the caller. That row was the `todo` bucket's own
+statement of this gap — *"its `/REGEDIT5` is required rather than optional, and nothing
+emits an option that no argument supplies"* — and it is the row that comes out with the
+batch.
+
+**`Unoffered` carries its reason** for the argument `Class::Todo` already makes: a flag
+that says "not yet" without saying why is indistinguishable from one nobody has read. Both
+of the two are the same shape — `/x filespec` and `/SD IDOK` take a **value**, and a
+valued flag has no spelling in this scheme yet. `/x` is worse than the other, since it also
+repeats, so its field would have to hold a list of exclusions.
+
+### `after` is a place in the line, not an argument index
+
+`GetFullPathName [/SHORT] $(user_var: result) path_or_file` puts the flag in front of the
+**output register**:
+
+```
+GetFullPathName /SHORT $0 $INSTDIR
+```
+
+No count of the caller's arguments could have produced that, which is the second time this
+phase that the emitted order and the surface order have turned out to be different lists
+(batch 5 was the first). `place` walks the parameters and writes the flags due before each
+one, so the rule is read off `Opt::after` and stated nowhere else. A flag flushes anything
+`fill` left pending, because an emitted token is an emitted token.
+
+### What it did not touch
+
+`File`'s three boolean flags are named — `nonFatal`, `keepAttributes`, `recursive` — and
+its `/oname=` alternation is still a `conflicts` set nothing reads. `MessageBox` is
+hand-lowered and its `/SD` belongs with §15.18's table rather than beside it. The
+sixteen rows carrying flags that are still `todo` need their command classified first;
+the flag is the easy half.
+
+---
+
 ## What the join replaced
 
 `builtins.rs` held a parameter table the lowerer read, written before the `-CMDHELP` join
@@ -564,13 +636,13 @@ tier 3 catches and tier 2 cannot.
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 113 is section-index binding (§13), the `hwnd` surface, the classic UI,
+  left in the 112 is section-index binding (§13), the `hwnd` surface, the classic UI,
   pages, script-wide settings and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
-- **The `Opt` half of the table is still unreachable.** `CopyFiles`'s `/SILENT`, `File`'s
-  `/r`, `GetDLLVersion`'s `/ProductVersion`: `join()` copies them and nothing emits them.
-  They are the same shape as a `toggle` field and want the same treatment, which is now a
-  small job rather than a design.
+- **A flag that takes a value has no spelling.** `File`'s `/x filespec` and
+  `MessageBox`'s `/SD IDOK` are the only two on an `Exposed` row, and both are
+  `Offer::Unoffered` with that as their reason. `/x` also repeats, so its field would hold
+  a list — which is a decision about tables in the surface, not a missing branch.
 - **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
   `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
   pass a call that is simply dead.

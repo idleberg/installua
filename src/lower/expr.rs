@@ -33,6 +33,22 @@ use crate::types::{Sign, Ty};
 
 use super::{Binding, BodyLowerer};
 
+/// What a caller wrote for one instruction, sorted into the two things an NSIS
+/// line is made of.
+///
+/// They are two because a flag is not a position: `Delete [/REBOOTOK] filespec`
+/// has one argument whatever the caller writes, and `/REBOOTOK` goes in front
+/// of it. Keeping them apart until [`place`] is what lets the surface be one
+/// unordered options table (§15.23).
+pub(super) struct Written {
+    /// One entry per surface position, in table order: empty where nobody
+    /// filled it, and several for the one repeated tail a row may have.
+    inputs: Vec<Vec<ir::Arg>>,
+    /// One entry per flag `-CMDHELP` prints for the row, in its order: whether
+    /// this call writes it.
+    flags: Vec<bool>,
+}
+
 /// A value and what the lattice knows about it.
 pub(super) struct Typed {
     pub arg: ir::Arg,
@@ -623,6 +639,10 @@ impl BodyLowerer<'_, '_> {
     /// writing all nine arguments. It was fine for `abort [message]`, which is
     /// why that one is still `abort("stopped")`.
     ///
+    /// The same table holds the row's **flags**, which are named the same way
+    /// and are not positions at all: `rmDir(dir, { recursive = true })` writes
+    /// `RMDir /r "$INSTDIR"`, and the caller never learns that `/r` goes first.
+    ///
     /// The result is one entry per surface position, in table order, holding
     /// what belongs there: empty for a position nobody filled, and several for
     /// the one repeated tail a row may have (`File a b c`). `skip` is how a
@@ -635,17 +655,17 @@ impl BodyLowerer<'_, '_> {
         args: &[Expr],
         skip: usize,
         span: Span,
-    ) -> Option<Vec<Vec<ir::Arg>>> {
+    ) -> Option<Written> {
         // The user-facing positions: the inputs, minus the ones the compiler
         // fills. `fileExists(p)` takes one argument where `IfFileExists` takes
         // three, and that difference is §15.20's whole point.
         let surface: Vec<&table::Param> = builtin.surface().skip(skip).collect();
-        let named = builtin.fields().next().is_some();
+        let named = builtin.takes_options();
 
         // The options table is the last argument when there is one to be. A row
         // with no optional position has no table, so `f({…})` there stays what
         // it always was: a table where a value was wanted.
-        let (given, options) = match args.split_last() {
+        let (given, entries) = match args.split_last() {
             Some((Expr::Table { fields, .. }, rest)) if named => (rest, Some(fields)),
             _ => (args, None),
         };
@@ -680,7 +700,7 @@ impl BodyLowerer<'_, '_> {
             if named {
                 diagnostic = diagnostic.note(format!(
                     "its optional positions are named rather than counted: {}",
-                    fields(builtin)
+                    options(builtin)
                 ));
             }
             self.diags.push(diagnostic);
@@ -697,7 +717,16 @@ impl BodyLowerer<'_, '_> {
             placed[position].push(lowered);
         }
 
-        for field in options.into_iter().flatten() {
+        // A flag is written when the call names it and `true`, and on every call
+        // when NSIS requires it (`WriteRegMultiStr /REGEDIT5`).
+        let mut flags: Vec<bool> = builtin
+            .options
+            .iter()
+            .map(|flag| flag.offer == table::Offer::Always)
+            .collect();
+        let mut set: Vec<bool> = vec![false; flags.len()];
+
+        for field in entries.into_iter().flatten() {
             let TableField::Named { name: key, value } = field else {
                 self.todo(span, "a positional entry in an options table");
                 return None;
@@ -708,15 +737,52 @@ impl BodyLowerer<'_, '_> {
                     .is_some_and(|field| field.name == key.text && !param.required())
             });
             let Some(position) = position else {
-                self.diags.push(
-                    Diagnostic::error(
+                // Not a position, so it is a flag or it is nothing. Both halves
+                // of the table are reached by name and the caller has no reason
+                // to know which half a name is in — which is the point.
+                let flag = builtin
+                    .options
+                    .iter()
+                    .position(|flag| flag.name() == Some(key.text.as_str()));
+                let Some(flag) = flag else {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            key.span,
+                            format!("`{name}` has no option `{}`", key.text),
+                        )
+                        .note(format!("its options are {}", options(builtin))),
+                    );
+                    return None;
+                };
+                if set[flag] {
+                    self.diags.push(Diagnostic::error(
                         Code::UnknownField,
                         key.span,
-                        format!("`{name}` has no option `{}`", key.text),
-                    )
-                    .note(format!("its options are {}", fields(builtin))),
-                );
-                return None;
+                        format!("`{}` is set twice", key.text),
+                    ));
+                    return None;
+                }
+                set[flag] = true;
+                let nsis = builtin.options[flag].opt.nsis;
+                match value {
+                    Expr::Bool { value: on, .. } => flags[flag] = *on,
+                    other => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::BadFieldValue,
+                                other.span(),
+                                format!("`{}` is on or off", key.text),
+                            )
+                            .note(format!(
+                                "write `{} = true`, and the compiler writes `{nsis}`",
+                                key.text
+                            )),
+                        );
+                        return None;
+                    }
+                }
+                continue;
             };
             if !placed[position].is_empty() {
                 self.diags.push(Diagnostic::error(
@@ -754,7 +820,10 @@ impl BodyLowerer<'_, '_> {
             placed[position].push(lowered);
         }
 
-        Some(placed)
+        Some(Written {
+            inputs: placed,
+            flags,
+        })
     }
 
     /// One argument, checked against the position it lands in and converted for
@@ -909,8 +978,8 @@ impl BodyLowerer<'_, '_> {
 
         // The receiver is the first parameter in NSIS and a syntactic prefix
         // here, so the method's own surface is the instruction's minus it.
-        let mut lowered = vec![vec![handle.arg]];
-        lowered.extend(self.surface_args(builtin, &method.text, args, 1, span)?);
+        let mut lowered = self.surface_args(builtin, &method.text, args, 1, span)?;
+        lowered.inputs.insert(0, vec![handle.arg]);
 
         match (builtin.returns(), dest) {
             (Some(ty), dest) => {
@@ -2110,6 +2179,10 @@ fn methods() -> String {
 ///
 /// So the table says where everything goes and this walks it:
 ///
+/// - a **flag** is written before the parameter it precedes — `Opt::after` is a
+///   place in this line, not an argument index, which is why
+///   `getFullPathName(p, { short = true })` puts `/SHORT` in front of the
+///   *output* register;
 /// - an **output** takes the next destination, or is skipped when there is none
 ///   (only reachable for an optional output — a required one was given a
 ///   temporary before the call);
@@ -2125,17 +2198,29 @@ fn methods() -> String {
 /// means writing a mode the author never named. Pending-until-needed keeps
 /// `fileSeek(f, 0)` at `FileSeek $1 0` and makes `local p = fileSeek(f, 0)`
 /// into `FileSeek $1 0 SET $0`, from one table field and no special case.
-fn place(
-    builtin: &table::Instruction,
-    inputs: Vec<Vec<ir::Arg>>,
-    dests: Vec<ir::Arg>,
-) -> Vec<ir::Arg> {
+fn place(builtin: &table::Instruction, written: Written, dests: Vec<ir::Arg>) -> Vec<ir::Arg> {
     let mut emitted = Vec::with_capacity(builtin.params.len());
     let mut pending: Vec<ir::Arg> = Vec::new();
-    let mut inputs = inputs.into_iter();
+    let mut inputs = written.inputs.into_iter();
     let mut dests = dests.into_iter();
 
-    for param in &builtin.params {
+    // The flags this call writes, by the number of parameters each one follows.
+    let flags = |before: usize, emitted: &mut Vec<ir::Arg>, pending: &mut Vec<ir::Arg>| {
+        for (flag, _) in builtin
+            .options
+            .iter()
+            .zip(&written.flags)
+            .filter(|(flag, on)| **on && flag.opt.after == before)
+        {
+            // A flag is an emitted token like any other, so anything pending in
+            // front of it is no longer optional.
+            emitted.append(pending);
+            emitted.push(ir::Arg::raw(flag.opt.nsis));
+        }
+    };
+
+    for (index, param) in builtin.params.iter().enumerate() {
+        flags(index, &mut emitted, &mut pending);
         let argument = match param.dir() {
             table::Dir::Out => dests.next(),
             // Neither of these is a surface position, so neither consumes one:
@@ -2165,16 +2250,22 @@ fn place(
             None => pending.extend(param.fill.map(ir::Arg::raw)),
         }
     }
+    // A trailing flag — `SendMessage … /TIMEOUT=n` — follows every parameter.
+    flags(builtin.params.len(), &mut emitted, &mut pending);
     emitted
 }
 
 /// A row's option names, for the error that has to list them. Naming the legal
 /// ones is the whole gain over counting: `` `execShell` has no option
 /// `showmode` `` says what to write, where "takes 2 to 5 arguments" does not.
-fn fields(builtin: &table::Instruction) -> String {
+///
+/// Positions and flags are one list, because a caller writing `{ … }` has no
+/// reason to know which half a name comes from.
+fn options(builtin: &table::Instruction) -> String {
     builtin
-        .fields()
-        .map(|(field, _)| format!("`{}`", field.name))
+        .option_names()
+        .iter()
+        .map(|name| format!("`{name}`"))
         .collect::<Vec<_>>()
         .join(", ")
 }

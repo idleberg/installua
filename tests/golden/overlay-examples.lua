@@ -46,7 +46,7 @@ installer {
 		deleteRegValue(HKLM, "Software/Example", "Path")
 	end),
 	section("Delete", function()
-		delete(INSTDIR .. "/old.txt")
+		delete(INSTDIR .. "/old.txt", { rebootOk = true })
 	end),
 	section("DetailPrint", function()
 		detailPrint("installing")
@@ -194,7 +194,7 @@ installer {
 		rename(INSTDIR .. "/old.txt", INSTDIR .. "/new.txt")
 	end),
 	section("RMDir", function()
-		rmDir(INSTDIR)
+		rmDir(INSTDIR, { recursive = true, rebootOk = true })
 	end),
 	section("SearchPath", function()
 		local found = searchPath("notepad.exe")
@@ -263,6 +263,9 @@ installer {
 	end),
 	section("WriteRegBin", function()
 		writeRegBin(HKLM, "Software/Example", "Blob", "12848412AB")
+	end),
+	section("WriteRegMultiStr", function()
+		writeRegMultiStr(HKLM, "Software/Example", "List", "660000000000")
 	end),
 	section("WriteRegDWORD", function()
 		writeReg(HKLM, "Software/Example", "Build", 42)

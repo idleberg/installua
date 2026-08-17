@@ -83,6 +83,49 @@ fn every_exposed_row_annotates_every_parameter() {
 }
 
 #[test]
+fn every_exposed_row_judges_every_flag() {
+    // The same failure as the annotations above, one column over: a judgement
+    // list one short leaves the *last* flag `Unoffered`, which reads as "nobody
+    // has looked at it" when in fact nobody can any more — and unlike a missing
+    // type, nothing downstream goes wrong loudly.
+    //
+    // Saying "not this one, and here is why" is a legal answer. `File`'s `/x`
+    // takes a value and repeats; `MessageBox`'s `/SD` belongs with §15.18. What
+    // is refused is silence.
+    let mismatched: Vec<String> = table::table()
+        .iter()
+        .filter(|entry| entry.class == Class::Exposed)
+        .filter_map(|entry| {
+            let row = overlay::lookup(entry.nsis)?;
+            (row.options.len() != entry.options.len()).then(|| {
+                format!(
+                    "{}: {} judgements for {} flags",
+                    entry.nsis,
+                    row.options.len(),
+                    entry.options.len()
+                )
+            })
+        })
+        .collect();
+
+    assert_eq!(mismatched, Vec::<String>::new());
+
+    // One name, one thing. The two halves of the options table are looked up in
+    // order, so a flag sharing a name with an optional position would be
+    // silently unreachable rather than an error.
+    for entry in table::table() {
+        let names = entry.option_names();
+        let unique: BTreeSet<&&str> = names.iter().collect();
+        assert_eq!(
+            names.len(),
+            unique.len(),
+            "{}: two options share a name: {names:?}",
+            entry.nsis
+        );
+    }
+}
+
+#[test]
 fn every_exposed_row_has_an_installua_name() {
     let anonymous: Vec<&str> = table::table()
         .iter()

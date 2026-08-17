@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           79
+  exposed           80
   attribute         14
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             113
+  todo             112
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -97,7 +97,6 @@ todo:
   UninstallText           a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallSubCaption     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   WindowIcon              the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  WriteRegMultiStr        its `/REGEDIT5` is required rather than optional, and nothing emits an option that no argument supplies
   PEAddResource           a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
   PERemoveResource        a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
   PEDllCharacteristics    a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
