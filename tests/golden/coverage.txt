@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed           80
-  attribute         22
+  attribute         29
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             104
+  todo              97
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -83,26 +83,19 @@ todo:
   SetSilent               only meaningful from `.onInit`, and an example lives in a section: the row needs a place to say where a call is legal
   ShowWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   SubCaption              a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
-  Target                  a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  Target                  says `cpu` and `unicode` in one word, and both are attributes already
   UninstallCaption        a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallIcon           the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   UninstPage              a page construct; custom pages need a design (nsDialogs) that does not exist yet
   UninstallText           a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallSubCaption     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   WindowIcon              the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  PEAddResource           a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  PERemoveResource        a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  PEDllCharacteristics    a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  PESubsysVer             a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  PEAddResource           takes four arguments and a flag and repeats, and a setting is one value per line in `Setting`
+  PERemoveResource        takes three arguments and a flag, and a setting is one value per line in `Setting`
+  PEDllCharacteristics    takes two arguments, and a setting is one value per line in `Setting`
   XPStyle                 the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  ManifestAppendCustomStringa script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  ManifestDPIAware        a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  ManifestDPIAwareness    a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  ManifestLongPathAware   a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  ManifestSupportedOS     a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  ManifestMaxVersionTesteda script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  ManifestDisableWindowFilteringa script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
-  ManifestGdiScaling      a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row
+  ManifestAppendCustomStringtakes two arguments and repeats, and a setting is one value per line in `Setting`
+  ManifestSupportedOS     takes a list of keywords rather than one, and a repeating setting has no spelling in `Setting` yet
   MiscButtonText          a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   DetailsButtonText       a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallButtonText     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first

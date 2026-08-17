@@ -16,7 +16,14 @@ attributes {
 	silentInstall = "normal",
 	silentUninstall = "normal",
 	cpu = "x86",
+	peSubsysVer = "5.1",
 	requestExecutionLevel = "none",
+	manifestDpiAware = true,
+	manifestDpiAwareness = "manifestDpiAwareness",
+	manifestLongPathAware = true,
+	manifestMaxVersionTested = "10.0.19041.0",
+	manifestDisableWindowFiltering = true,
+	manifestGdiScaling = true,
 	allowSkipFiles = true,
 }
 

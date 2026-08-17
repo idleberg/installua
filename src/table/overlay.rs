@@ -234,6 +234,24 @@ const ONOFF: Setting = Setting::Bool {
     off: "off",
 };
 
+/// A `bool` NSIS spells `true|false`, which is the manifest's half.
+const TRUEFALSE: Setting = Setting::Bool {
+    on: "true",
+    off: "false",
+};
+
+/// A `bool` whose off-word is `notset`, for the two manifest settings whose
+/// syntax line is `notset|true` and has no `false` in it.
+///
+/// The third state the syntax line names is not a third state here: *unset* is
+/// the field being absent from the table, which emits no line at all. `notset`
+/// is only what `= false` has to be spelled as, because writing the field is a
+/// statement and NSIS has one word for "I looked and chose the default".
+const NOTSET: Setting = Setting::Bool {
+    on: "true",
+    off: "notset",
+};
+
 /// Emitter-only: the compiler writes it, the user never does. The text says
 /// what the user writes instead, which is what `installua coverage` prints
 /// beside it.
@@ -518,14 +536,7 @@ pub const ROWS: &[Row] = &[
         "local why = getInstDirError()\ndetailPrint(\"instdir \" .. why)",
     ),
     // `(true|false)` rather than `on|off`, which is why the pair is on the row.
-    attribute(
-        "AllowRootDirInstall",
-        "allowRootDirInstall",
-        Setting::Bool {
-            on: "true",
-            off: "false",
-        },
-    ),
+    attribute("AllowRootDirInstall", "allowRootDirInstall", TRUEFALSE),
     todo(
         "CheckBitmap",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
@@ -1366,9 +1377,13 @@ pub const ROWS: &[Row] = &[
         "SubCaption",
         "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
     ),
+    // `Target x86-unicode` is `cpu` and `unicode` hyphenated together, and both
+    // of those are rows already. A third spelling of the same two settings would
+    // be a second way to set `unicode`, which is not a line but a field the
+    // emitter reads — so the two rows below are the whole of it.
     todo(
         "Target",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
+        "says `cpu` and `unicode` in one word, and both are attributes already",
     ),
     attribute("CPU", "cpu", Setting::Enum),
     attribute("Unicode", "unicode", Setting::Handled("boolean")),
@@ -1507,20 +1522,19 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "PEAddResource",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
+        "takes four arguments and a flag and repeats, and a setting is one value per line in `Setting`",
     ),
     todo(
         "PERemoveResource",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
+        "takes three arguments and a flag, and a setting is one value per line in `Setting`",
     ),
     todo(
         "PEDllCharacteristics",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
+        "takes two arguments, and a setting is one value per line in `Setting`",
     ),
-    todo(
-        "PESubsysVer",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
-    ),
+    // `major.minor`, which is a string and not a number: `5.1` as a Lua number
+    // would round-trip through a float and arrive as `5.1` only by luck.
+    attribute("PESubsysVer", "peSubsysVer", STR),
     todo(
         "XPStyle",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
@@ -1532,36 +1546,25 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "ManifestAppendCustomString",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
+        "takes two arguments and repeats, and a setting is one value per line in `Setting`",
     ),
-    todo(
-        "ManifestDPIAware",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
-    ),
-    todo(
-        "ManifestDPIAwareness",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
-    ),
-    todo(
-        "ManifestLongPathAware",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
-    ),
+    attribute("ManifestDPIAware", "manifestDpiAware", TRUEFALSE),
+    // A comma-separated list in one string, which NSIS parses and this compiler
+    // does not: `"PerMonitorV2,system"` is one argument to both.
+    attribute("ManifestDPIAwareness", "manifestDpiAwareness", STR),
+    attribute("ManifestLongPathAware", "manifestLongPathAware", TRUEFALSE),
     todo(
         "ManifestSupportedOS",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
+        "takes a list of keywords rather than one, and a repeating setting has no spelling in `Setting` yet",
     ),
-    todo(
-        "ManifestMaxVersionTested",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
-    ),
-    todo(
+    // `maj.min.bld.rev`, a string for the same reason as `PESubsysVer`.
+    attribute("ManifestMaxVersionTested", "manifestMaxVersionTested", STR),
+    attribute(
         "ManifestDisableWindowFiltering",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
+        "manifestDisableWindowFiltering",
+        NOTSET,
     ),
-    todo(
-        "ManifestGdiScaling",
-        "a script-wide setting, not an instruction: it needs a home in `attributes {}` before it needs a row",
-    ),
+    attribute("ManifestGdiScaling", "manifestGdiScaling", NOTSET),
     directive("!packhdr"),
     directive("!finalize"),
     directive("!uninstfinalize"),

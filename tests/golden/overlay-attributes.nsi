@@ -16,7 +16,14 @@ ShowUninstDetails hide
 SilentInstall normal
 SilentUnInstall normal
 CPU x86
+PESubsysVer "5.1"
 RequestExecutionLevel none
+ManifestDPIAware true
+ManifestDPIAwareness "manifestDpiAwareness"
+ManifestLongPathAware true
+ManifestMaxVersionTested "10.0.19041.0"
+ManifestDisableWindowFiltering true
+ManifestGdiScaling true
 AllowSkipFiles on
 
 Section "Core"

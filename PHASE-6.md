@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
 **Status: the alphabetical grind is done, and every surface gap behind it is closed.
-25 → 80 exposed, 14 → 23 attributes, 167 → 103 todo.**
+25 → 80 exposed, 14 → 29 attributes, 167 → 97 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -771,21 +771,76 @@ it belongs there rather than on a row: `WriteUninstaller`'s requirement is a fac
 whole script, so no per-command example can carry it. That is the general shape of what
 tier 3 catches and tier 2 cannot.
 
+## Batch 11 — the manifest, and a tri-state that was never one
+
+**23 → 29 attributes, 103 → 97 todo, no new machinery.**
+
+Twelve `Manifest*` and `PE*` rows carried the reason *"a script-wide setting, not an
+instruction: it needs a home in `attributes {}` before it needs a row"*. Batch 10 built
+that home, so this batch is what those twelve turned out to cost once it existed: seven
+are one overlay line each, four want a `Setting` shape that does not exist yet, and one
+is a list.
+
+| NSIS | Installua |
+| --- | --- |
+| `ManifestDPIAware`, `ManifestLongPathAware` | `manifestDpiAware = true` → `true|false` |
+| `ManifestDisableWindowFiltering`, `ManifestGdiScaling` | same, but the off-word is `notset` |
+| `ManifestDPIAwareness` | `"PerMonitorV2,system"` — NSIS parses the commas, this does not |
+| `ManifestMaxVersionTested`, `PESubsysVer` | `"10.0.19041.0"`, `"5.1"` |
+
+### The tri-state dissolved on contact
+
+"Still open" has said since batch 10 that `notset|true|false` needs a spelling `Setting`
+does not have, because `notset` means *emit no line* and Lua's `nil` is not a value a
+table field can hold. Writing the rows dissolved it: **absence is not a value and does not
+need to be one.** A field the user did not write emits nothing already, so `notset` is
+never something the compiler has to *store* — it only has to be a word, and only for the
+two settings whose syntax line has no `false` in it:
+
+```
+ManifestGdiScaling notset|true
+```
+
+`makensis` accepts the literal `notset` there, so `Bool { on: "true", off: "notset" }`
+spells that field exactly, and eight rows needed nothing built. The item was a design
+question invented from a syntax line rather than found in one — worth remembering the
+next time a "Still open" bullet describes a problem nobody has hit yet.
+
+### What stayed behind, with better reasons
+
+`PEAddResource` (four arguments, repeats), `PERemoveResource` (three), `PEDllCharacteristics`
+(two) and `ManifestAppendCustomString` (two, repeats) are the whole of the multi-argument
+setting problem, and `ManifestSupportedOS` is the whole of the repeating one. Their reasons
+now name that instead of pointing at a block that exists.
+
+`Target` was in the same group and is not blocked on anything: `Target x86-unicode` is
+`cpu` and `unicode` hyphenated together and both are rows already. A third spelling would
+be a second way to set `unicode`, which is not a line but a field the emitter reads first.
+
+### `Setting::Str` says less than the syntax line does
+
+`PESubsysVer` takes `major.minor` and `ManifestMaxVersionTested` takes `maj.min.bld.rev`.
+Both are `Str`, and `Str` means *a string* — so `peSubsysVer = "hello"` compiles here and
+is rejected by `makensis`. That is a real narrowing the table cannot state, and the two
+shaped values live in [`attribute_program()`](tests/overlay.rs) rather than on the rows,
+because a row is not an example. The derived-example test found both the first time it
+ran, which is twice now that it has caught a row nobody could have checked by reading.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 103 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
-  surface and pages (14), the `Manifest*`/`PE*` remainder (12) and a handful of one-offs.
-  Every one of those is a design question rather than data entry, which is what the grind
-  was for.
-- **A block field that is a tri-state has no spelling.** Every `Manifest*` setting is
-  `notset|true|false`, where `notset` is *"emit no line"* — `nil` in Lua, which is not a
-  value a table field can hold and be read back. `Setting::Enum` can spell the three words
-  but not the absence, and eight rows want it. It arrives with `manifest {}`.
-- **A setting with more than one argument has no spelling either.** `InstallDirRegKey` is
-  three, `PEAddResource` is four and repeats, `FileErrorText` is two optional strings.
-  `Setting` assumes one value per line, which was true of every row batch 10 landed.
+  left in the 97 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
+  surface and pages (14), and a handful of one-offs. Every one of those is a design
+  question rather than data entry, which is what the grind was for.
+- **A setting with more than one argument has no spelling.** `InstallDirRegKey` is three,
+  `PEAddResource` is four and repeats, `PEDllCharacteristics` is two,
+  `ManifestAppendCustomString` is two and repeats, `FileErrorText` is two optional strings.
+  `Setting` assumes one value per line, which was true of every row batches 10 and 11
+  landed — the five rows above are the whole of what wants it, and they are enough to
+  design it from.
+- **A setting that repeats a keyword has no spelling either.** `ManifestSupportedOS` takes
+  a list of them and is the only row that does, which is why nothing was built for it.
 - **A flag that takes one value and does not repeat has no spelling.** `Offer::List`
   covers `File`'s `/x` because it repeats; `SendMessage`'s `/TIMEOUT=n` and the three
   other single-valued flags are all on `todo` rows, and the variant that spells them

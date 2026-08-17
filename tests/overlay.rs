@@ -99,6 +99,16 @@ fn attribute_program() -> String {
             table::Setting::Str { path: true } if field == "license" => {
                 "\"assets/license.txt\"".to_string()
             }
+            // Two settings take a *shaped* string — `major.minor` and
+            // `maj.min.bld.rev` — and [`table::Setting::Str`] says only "a
+            // string". The narrowing is real and the table cannot state it, so
+            // the compiler does not check it either: `peSubsysVer = "hello"`
+            // reaches `makensis` and is rejected there. The values are here
+            // rather than in the row because a row is not an example.
+            table::Setting::Str { path: false } if field == "peSubsysVer" => "\"5.1\"".to_string(),
+            table::Setting::Str { path: false } if field == "manifestMaxVersionTested" => {
+                "\"10.0.19041.0\"".to_string()
+            }
             table::Setting::Str { path: true } => format!("\"{field}.out\""),
             table::Setting::Str { path: false } => format!("\"{field}\""),
             table::Setting::Bool { .. } => "true".to_string(),
