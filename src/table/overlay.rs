@@ -717,9 +717,15 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Path)],
         "flushIni(INSTDIR .. \"/app.ini\")",
     ),
+    // The last of what was once the "file surface beyond `file`/`delete`/
+    // `fileOpen`" group, and the only one of the four that was ever blocked.
+    // `[/nonfatal] [/r] [/x …] file [file…] | [/nonfatal] /plugin file.dll` is
+    // an alternation, and the second half is a plugin DLL — so it is
+    // `BGGradient`'s problem and §11's problem at once, not a missing row.
     todo(
         "ReserveFile",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "`file…` and `/plugin file.dll` are two alternatives in one line, and the second is a \
+         plugin DLL (§11)",
     ),
     exposed(
         "FileClose",
@@ -774,9 +780,16 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Handle, Kind::Value), ann(Ty::nonneg(), Kind::Value)],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal b = f:readByte()\ndetailPrint(\"byte \" .. b)\nf:close()",
     ),
-    todo(
+    // The write half of the row above, and the group reason said so: *"one
+    // overlay row each"* is a statement about cost, not about a missing design.
+    // `f:readByte` has been exposed since the read pass, and this is the same
+    // two positions with the direction reversed — `handle_input` in,
+    // `bytevalue` in — so there was never a second thing to decide.
+    exposed(
         "FileWriteByte",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "f:writeByte",
+        &[ann(Ty::Handle, Kind::Value), ann(Ty::nonneg(), Kind::Value)],
+        "local f = fileOpen(INSTDIR .. \"/log.txt\", \"w\")\nf:writeByte(65)\nf:close()",
     ),
     // The output is in the *middle* here, which is why "outputs lead" and
     // "outputs trail" were never the two cases.
@@ -790,9 +803,20 @@ pub const ROWS: &[Row] = &[
         ],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal line = f:readUtf16Le()\ndetailPrint(line)\nf:close()",
     ),
-    todo(
-        "FileWriteUTF16LE",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+    // `text` rather than a number, so `Ty::Str` — and unlike its reader there
+    // is no `maxLen`, because a write knows how much it is writing. `/BOM` sits
+    // at `after: 0`, before the handle, which is the same position `/SHORT`
+    // taught `Opt::after` to carry: the caller writes `{ bom = true }` and the
+    // emitter decides where the word goes. Only the first write to a file wants
+    // it, so it is a decision and therefore `named`, not `always`.
+    flagged(
+        exposed(
+            "FileWriteUTF16LE",
+            "f:writeUtf16Le",
+            &[ann(Ty::Handle, Kind::Value), ann(Ty::Str, Kind::Value)],
+            "local f = fileOpen(INSTDIR .. \"/log.txt\", \"w\")\nf:writeUtf16Le(\"done\", { bom = true })\nf:close()",
+        ),
+        &[named("bom")],
     ),
     exposed(
         "FileReadWord",
@@ -800,9 +824,11 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Handle, Kind::Value), ann(Ty::nonneg(), Kind::Value)],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"r\")\nlocal w = f:readWord()\ndetailPrint(\"word \" .. w)\nf:close()",
     ),
-    todo(
+    exposed(
         "FileWriteWord",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "f:writeWord",
+        &[ann(Ty::Handle, Kind::Value), ann(Ty::nonneg(), Kind::Value)],
+        "local f = fileOpen(INSTDIR .. \"/log.txt\", \"w\")\nf:writeWord(1024)\nf:close()",
     ),
     // The row that needed `fill`. `mode` is optional and sits *before* the
     // output, and `FileSeek $1 0 $0` is not the answer — NSIS reads `$0` as the

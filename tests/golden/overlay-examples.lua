@@ -103,16 +103,31 @@ installer {
 		detailPrint("byte " .. b)
 		f:close()
 	end),
+	section("FileWriteByte", function()
+		local f = fileOpen(INSTDIR .. "/log.txt", "w")
+		f:writeByte(65)
+		f:close()
+	end),
 	section("FileReadUTF16LE", function()
 		local f = fileOpen(INSTDIR .. "/log.txt", "r")
 		local line = f:readUtf16Le()
 		detailPrint(line)
 		f:close()
 	end),
+	section("FileWriteUTF16LE", function()
+		local f = fileOpen(INSTDIR .. "/log.txt", "w")
+		f:writeUtf16Le("done", { bom = true })
+		f:close()
+	end),
 	section("FileReadWord", function()
 		local f = fileOpen(INSTDIR .. "/log.txt", "r")
 		local w = f:readWord()
 		detailPrint("word " .. w)
+		f:close()
+	end),
+	section("FileWriteWord", function()
+		local f = fileOpen(INSTDIR .. "/log.txt", "w")
+		f:writeWord(1024)
 		f:close()
 	end),
 	section("FileSeek", function()

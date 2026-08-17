@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           80
+  exposed           83
   attribute         52
   lowering-target   18
   language          12
   directive         37
   rejected          12
-  todo              65
+  todo              62
 
 todo:
   AutoCloseWindow         addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
@@ -26,10 +26,7 @@ todo:
   FindClose               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindNext                runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
-  ReserveFile             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileWriteByte           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileWriteUTF16LE        file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileWriteWord           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
+  ReserveFile             `file…` and `/plugin file.dll` are two alternatives in one line, and the second is a plugin DLL (§11)
   GetDlgItem              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   InstallColors           MUI2 emits this line itself from `MUI_INSTFILESPAGE_COLORS`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   InstProgressFlags       MUI2 emits this line itself from `MUI_INSTFILESPAGE_PROGRESSBAR`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled

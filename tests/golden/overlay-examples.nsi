@@ -137,6 +137,12 @@ Section "FileReadByte"
   FileClose $0
 SectionEnd
 
+Section "FileWriteByte"
+  FileOpen $0 "$INSTDIR\log.txt" "w"
+  FileWriteByte $0 65
+  FileClose $0
+SectionEnd
+
 Section "FileReadUTF16LE"
   FileOpen $0 "$INSTDIR\log.txt" "r"
   FileReadUTF16LE $0 $1
@@ -144,10 +150,22 @@ Section "FileReadUTF16LE"
   FileClose $0
 SectionEnd
 
+Section "FileWriteUTF16LE"
+  FileOpen $0 "$INSTDIR\log.txt" "w"
+  FileWriteUTF16LE /BOM $0 "done"
+  FileClose $0
+SectionEnd
+
 Section "FileReadWord"
   FileOpen $0 "$INSTDIR\log.txt" "r"
   FileReadWord $0 $1
   DetailPrint "word $1"
+  FileClose $0
+SectionEnd
+
+Section "FileWriteWord"
+  FileOpen $0 "$INSTDIR\log.txt" "w"
+  FileWriteWord $0 1024
   FileClose $0
 SectionEnd
 

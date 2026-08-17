@@ -1419,18 +1419,60 @@ and by line, and no `Setting` can say "meaningful only when a sibling holds one 
 That is the third cross-field constraint in two batches, after `AddBrandingImage`'s unit
 agreement and `SetCompressor`'s ordering.
 
+## Batch 18 — the same re-reading, one group later
+
+Batch 17 ended by saying every remaining group deserves re-reading before the design work
+it claims to need. The next group down the list was *file surface beyond
+`file`/`delete`/`fileOpen`: one overlay row each*, four rows, and the reason turns out not
+to be a reason. "One overlay row each" is a statement about **cost**. It names no missing
+design, no unruled spelling, no shape the table cannot hold — it says only that four rows
+would take four rows.
+
+Three of the four are the write halves of reads that had already landed:
+
+| NSIS | installua | shape |
+| --- | --- | --- |
+| `FileWriteByte` | `f:writeByte` | handle in, number in — `f:readByte` reversed |
+| `FileWriteWord` | `f:writeWord` | handle in, number in — `f:readWord` reversed |
+| `FileWriteUTF16LE` | `f:writeUtf16Le` | handle in, string in — `f:readUtf16Le` without `maxLen` |
+
+There was never a second thing to decide about any of them. The reader of each pair went in
+during the read pass and the writer stayed behind on a note about how many rows the group
+had, which is the same failure batch 17 found and not a different one.
+
+`FileWriteUTF16LE` carries `/BOM` at `after: 0`, before the handle — the position
+`Opt::after` exists for, first needed by `GetFullPathName`'s `/SHORT`. Only the first write
+to a file wants a byte-order mark, so it is a decision and gets `named("bom")` rather than
+`always()`; the caller writes `f:writeUtf16Le("done", { bom = true })` and the emitter
+decides where the word goes. The golden confirms it: `FileWriteUTF16LE /BOM $0 "done"`.
+
+### The fourth was blocked, and its reason now says so
+
+`ReserveFile` stays `todo`, but with an honest reason instead of an inherited one:
+
+```
+ReserveFile [/nonfatal] [/r] [/x filespec [...]] file [file...] | [/nonfatal] /plugin file.dll
+```
+
+That is an alternation — `BGGradient`'s problem — and the second alternative is a plugin
+DLL, which is §11's. Two open questions, neither of them "one overlay row". A group reason
+that lumps a genuinely blocked row in with three unblocked ones hides both facts at once.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could. Batch 16
-  emptied the two *classic UI* groups and batch 17 the *compile time and positional* one.
-  Of the 65 left, the `hwnd` surface and pages is 16 (after two rows moved there),
-  addressing a section at install time is 12, the nine remaining MUI defines are the
-  largest single block, and the rest are one-offs.
+  emptied the two *classic UI* groups, batch 17 the *compile time and positional* one, and
+  batch 18 the *file surface* one. Of the 62 left, the `hwnd` surface and pages is 16
+  (after two rows moved there), addressing a section at install time is 12, the nine
+  remaining MUI defines are the largest single block, and the rest are one-offs.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
-  sixteen batches because the reason was true of the shape they were rejected as. Every
-  remaining group deserves the same re-reading before the design work it claims to need.
+  sixteen batches because the reason was true of the shape they were rejected as. Batch 18
+  found the next group down was worse: *"one overlay row each"* states a cost and no
+  blocker at all, and three of its four rows were the write halves of reads already
+  exposed. Two groups re-read, two groups emptied. The remaining ones should be re-read
+  before the design work they claim to need, not after.
 - **A `Setting` cannot say "meaningful only when a sibling holds one value".**
   `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.
