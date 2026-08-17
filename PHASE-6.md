@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
 **Status: the alphabetical grind is done, and every surface gap behind it is closed.
-25 → 80 exposed, 14 → 36 attributes, 167 → 90 todo.**
+25 → 80 exposed, 14 → 36 attributes, 167 → 84 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -1070,13 +1070,132 @@ blocker was never the notation: a classic-UI caption needs a home in `installer 
 `page {}`, and that home does not exist yet. The parser fix moved them from *unparseable*
 to *undesigned*, which is worth having and is not a row.
 
+## Batch 15 — the components tree, and a name for a number
+
+**90 → 84 todo.** Six rows, none of them `Exposed`: five are language constructs and one is
+a second name for another command. The bucket they came from was the biggest one left, and
+this is its compile-time half.
+
+### The binding §13 asked for
+
+`SectionIn` takes a number. So does `SectionSetText`, and `InstTypeSetText`, and the other
+dozen — that is what "addresses a section by index" meant, and it is why eighteen rows sat
+in one `todo` reason since batch 1. The numbers are *positions in a declaration list*, so
+they are a name binding wearing a number's clothes, and the question was never how to pass
+an integer.
+
+The answer at this end is that the list is written once and the number is never written at
+all:
+
+```lua
+installer {
+  installTypes = { "Full", "Minimal" },
+
+  section("Core", { installTypes = { "Full", "Minimal" }, required = true, size = 120 }, function()
+    detailPrint("core")
+  end),
+
+  group("Tools", { expanded = true }, {
+    section("Profiler", { installTypes = { "Full" } }, function() … end),
+    section("Debugger", { installTypes = { "Full" }, optional = true, size = 4096 }, function() … end),
+  }),
+}
+```
+
+```
+InstType "Full"
+InstType "Minimal"
+
+Section "Core"
+  SectionIn 1 2 RO
+  AddSize 120
+  DetailPrint "core"
+SectionEnd
+
+SectionGroup /e "Tools"
+  Section "Profiler"
+    SectionIn 1
+  …
+```
+
+`an_install_type_is_named_and_never_numbered` is the test that says what this bought:
+insert `"Custom"` at the front of the block's list and `SectionIn 2` becomes `SectionIn 3`
+without a character of the sections changing. A raw `.nsi` renumbers by hand, and the way
+that fails is silent — the wrong sections are ticked, and nothing anywhere is a syntax
+error.
+
+The numbering lives in exactly one function, `section_in`, and reaches nothing downstream:
+`ir::Section` holds positions, because positions are what NSIS reads.
+
+### Two indexings for one object, and neither is the other
+
+NSIS numbers install types **one**-based for `SectionIn` — `SectionIn 0 out of range 1..32`
+— and **zero**-based for the `[index_output]` define that `InstType "Full" it_full` writes.
+The same object, counted two ways, in two commands that sit four lines apart. The compiler
+that owns both numbers is the only party that can be trusted to keep them straight, which
+is a second argument for the surface having none.
+
+### Four things a section is besides a name and a body
+
+| option | NSIS | what it means |
+| --- | --- | --- |
+| `optional` | `Section /o` | the box starts unticked |
+| `required` | `SectionIn RO` | there is no box |
+| `installTypes` | `SectionIn 1 2` | which presets tick it |
+| `size` | `AddSize 120` | kilobytes beyond the files |
+
+The first two look like opposites and are not, which is the whole reason both exist: one is
+about the box's initial state and the other about whether there is a box. Written together
+they say a section starts unticked and can never be unticked, NSIS resolves it silently in
+favour of `RO`, and `a_section_is_not_both_optional_and_required` says which of the two
+words the author wrote is doing nothing.
+
+`size = 0` is emitted rather than skipped. Leaving the option out says nobody measured;
+writing zero says somebody did.
+
+### A group is not a scope
+
+```lua
+group("Tools", { expanded = true }, { section(…), section(…) })
+```
+
+The sections are a **list argument** and not the positional entries of a block, because
+nothing runs in a group: it has no body, and the only thing between `SectionGroup` and
+`SectionGroupEnd` is other sections. A block would promise a scope that is not there.
+
+One level. NSIS accepts nesting and MUI2's tree draws it, but a nested heading means
+nothing to anything except the drawing, so the second level is a `todo` at the point of
+use rather than a silent acceptance. An empty group is an error: two NSIS lines that draw
+nothing are not worth emitting quietly.
+
+### `SectionInstType`, which is `SectionIn`
+
+Undocumented, absent from the NSIS docs, and byte-for-byte the same command — same
+arguments, same "not valid outside Section" error, same effect. It is the batch's only
+`rejected` row, and the reason text names `SectionIn` rather than explaining anything: a
+second spelling of a command that already has a surface is not a gap.
+
+### What is left of the eighteen
+
+Twelve, all of them the *install-time* half: `SectionSetFlags`, `SectionGetText`,
+`GetCurInstType` and the rest read and write a section's state while the installer runs.
+They want the other end of the same binding — `Section "Core" sec_core` writing a define
+that install-time code can reach — and the surface for that is a separate question from
+this one, because it is about how a **running** program names a section rather than how a
+declaration does.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 90 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
-  surface and pages (14), and a handful of one-offs. Every one of those is a design
+  left in the 84 is the classic UI (30), the `hwnd` surface and pages (14), addressing a
+  section at install time (12), and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
+- **A running program cannot name a section.** The twelve rows above. `Section [/o] name
+  [section index output]` is the mechanism NSIS offers and the compiler already owns every
+  section's position, so the data is there; what is missing is the spelling. A field on a
+  handle the block never returns, an addressing function that takes the section's title, or
+  a `sections.core` table — three answers, and the batch that lands the first row picks one.
 - **A metavariable with no marker is still a keyword.** `PERemoveResource restype resname
   reslang|ALL` reads `reslang` as a member beside `ALL`, and unlike `{GUID}` there is
   nothing in the notation that says it is a placeholder — not a brace, not a case, not a

@@ -3,14 +3,13 @@ installua coverage -- makensis v3.12, 276 commands
   exposed           80
   attribute         36
   lowering-target   18
-  language           6
+  language          11
   directive         37
-  rejected           9
-  todo              90
+  rejected          10
+  todo              84
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  AddSize                 addresses a section by index: a real compile-time to install-time name binding (§13)
   AutoCloseWindow         addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   BGFont                  the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   BGGradient              the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -39,7 +38,6 @@ todo:
   GetDlgItem              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   InstallColors           the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   InstProgressFlags       the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  InstType                addresses a section by index: a real compile-time to install-time name binding (§13)
   IsWindow                addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   LangString              §15.26's locale tables are designed and unimplemented
   LicenseForceSelection   a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
@@ -53,10 +51,6 @@ todo:
   PageCallbacks           a page construct; custom pages need a design (nsDialogs) that does not exist yet
   PageEx                  a page construct; custom pages need a design (nsDialogs) that does not exist yet
   PageExEnd               a page construct; custom pages need a design (nsDialogs) that does not exist yet
-  SectionInstType         addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionIn               addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionGroup            addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionGroupEnd         addresses a section by index: a real compile-time to install-time name binding (§13)
   SectionSetFlags         addresses a section by index: a real compile-time to install-time name binding (§13)
   SectionGetFlags         addresses a section by index: a real compile-time to install-time name binding (§13)
   SectionSetInstTypes     addresses a section by index: a real compile-time to install-time name binding (§13)

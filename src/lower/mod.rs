@@ -54,7 +54,20 @@ fn attribute_names() -> Vec<&'static str> {
 }
 
 /// The frozen v1 `installer {}` / `uninstaller {}` field surface.
-const V1_INSTALLER_FIELDS: &[&str] = &["installDir", "icon", "license", "pages", "text", "caption"];
+const V1_INSTALLER_FIELDS: &[&str] = &[
+    "installDir",
+    "icon",
+    "installTypes",
+    "license",
+    "pages",
+    "text",
+    "caption",
+];
+
+/// NSIS numbers install types one to thirty-two and rejects anything else
+/// outright — `SectionIn 0 out of range 1..32` — so the ceiling is the format's
+/// and not a policy of this compiler's.
+const MAX_INST_TYPES: usize = 32;
 
 /// Which of the two halves a declaration belongs to (§15.3).
 ///
@@ -1139,6 +1152,7 @@ impl Lowerer<'_, '_> {
                     }
                 }
                 "license" => license = self.constant_arg(value, "license").map(ir::Arg::into_path),
+                "installTypes" => self.install_types(value, half),
                 "pages" => {}
                 other if V1_INSTALLER_FIELDS.contains(&other) => {
                     self.todo(name.span, &format!("the `{other}` field"));
@@ -1169,6 +1183,71 @@ impl Lowerer<'_, '_> {
                 continue;
             };
             self.body_entry(value, half);
+        }
+    }
+
+    /// `installTypes = { "Full", "Minimal" }` — the presets the components page
+    /// offers, in the order it offers them.
+    ///
+    /// The order is the whole of §13's binding at this end. A section says which
+    /// types it belongs to *by name*, NSIS reads only a one-based position, and
+    /// this list is what turns one into the other — so the numbering exists in
+    /// exactly one place and a user never writes a number that could go stale
+    /// when a type is inserted in front of it.
+    ///
+    /// The two halves are two lists because NSIS numbers them separately: an
+    /// `InstType un.` belongs to the uninstaller's components page and the
+    /// installer's first type is still `1`.
+    fn install_types(&mut self, value: &Expr, half: Half) {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                "installTypes",
+                "a list",
+                "write `installTypes = { \"Full\", \"Minimal\" }`",
+            );
+            return;
+        };
+
+        let mut names: Vec<String> = Vec::new();
+        for field in fields {
+            let TableField::Positional { value } = field else {
+                self.todo(value.span(), "a named entry in `installTypes`");
+                continue;
+            };
+            let Some(name) = self.constant_string(value, "installTypes") else {
+                continue;
+            };
+            if names.contains(&name) {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        value.span(),
+                        format!("`{name}` is already an install type"),
+                    )
+                    .note(
+                        "a section names one of these, so two with one name cannot be told apart",
+                    ),
+                );
+                continue;
+            }
+            if names.len() == MAX_INST_TYPES {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        value.span(),
+                        format!("more than {MAX_INST_TYPES} install types"),
+                    )
+                    .note("NSIS numbers them 1 to 32 and rejects the rest"),
+                );
+                break;
+            }
+            names.push(name);
+        }
+
+        match half {
+            Half::Installer => self.module.inst_types = names,
+            Half::Uninstaller => self.module.uninst_types = names,
         }
     }
 
@@ -1272,6 +1351,7 @@ impl Lowerer<'_, '_> {
                     self.module.sections.push(ir::SectionItem::Section(section));
                 }
             }
+            "group" => self.group(value, half),
             "onInit" => self.callback(value, half, "onInit"),
             other => self.todo(value.span(), &format!("`{other}` here")),
         }
@@ -1324,6 +1404,115 @@ impl Lowerer<'_, '_> {
         self.module.functions.push(ir::Function { name, body });
     }
 
+    /// `group("Tools", { expanded = true }, { section(…), section(…) })` — a
+    /// heading in the components tree, and `SectionGroup`/`SectionGroupEnd`.
+    ///
+    /// The sections are a **list argument** rather than the positional entries
+    /// of a block, because a group is not a scope: it has no body, nothing runs
+    /// in it, and the only thing between the two NSIS lines is other sections.
+    /// A block would promise otherwise.
+    ///
+    /// One level deep. NSIS accepts nesting and MUI2's tree draws it, but a
+    /// nested group has no separate meaning to anything else — it is still a
+    /// flat run of sections with a heading — so the surface offers the level
+    /// that pays for itself and says so.
+    fn group(&mut self, value: &Expr, half: Half) {
+        let Expr::Call { args, .. } = value else {
+            self.todo(value.span(), "this entry");
+            return;
+        };
+        // Two tables, told apart by how many there are, the way `section` tells
+        // its options from its body.
+        let (name, options, members) = match args.as_slice() {
+            [name, members @ Expr::Table { .. }] => (name, None, members),
+            [
+                name,
+                Expr::Table { fields, .. },
+                members @ Expr::Table { .. },
+            ] => (name, Some(fields), members),
+            _ => {
+                self.todo(value.span(), "this `group` form");
+                return;
+            }
+        };
+        let Expr::Table {
+            fields: members, ..
+        } = members
+        else {
+            unreachable!("matched above")
+        };
+
+        let Some(name) = self.constant_string(name, "group") else {
+            return;
+        };
+        let mut expanded = false;
+        for field in options.into_iter().flatten() {
+            let TableField::Named { name, value } = field else {
+                self.todo(value.span(), "a positional entry in a `group`'s options");
+                continue;
+            };
+            match name.text.as_str() {
+                "expanded" => match self.constant(value) {
+                    Some(ConstValue::Bool(flag)) => expanded = flag,
+                    _ => self.bad_value(
+                        value.span(),
+                        "expanded",
+                        "a `bool`",
+                        "it becomes `SectionGroup /e`, which opens the heading in the components tree",
+                    ),
+                },
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not a `group` option"),
+                        )
+                        .note("the options are `expanded`"),
+                    );
+                }
+            }
+        }
+
+        let mut sections = Vec::new();
+        for member in members {
+            let TableField::Positional { value } = member else {
+                self.todo(value.span(), "a named entry in a `group`'s sections");
+                continue;
+            };
+            if value.callee_name() == Some("group") {
+                self.todo(value.span(), "a `group` inside a `group`");
+                continue;
+            }
+            if let Some(section) = self.section(value, half) {
+                sections.push(section);
+            }
+        }
+
+        // An empty group compiles to a heading with nothing under it, which is
+        // a run of two NSIS lines that does nothing at all. Saying so is worth
+        // more than emitting it.
+        if sections.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    value.span(),
+                    format!("`{name}` is a `group` with no sections"),
+                )
+                .note("a heading with nothing under it is not drawn"),
+            );
+            return;
+        }
+
+        self.module
+            .sections
+            .push(ir::SectionItem::Group(ir::SectionGroup {
+                name: format!("{}{name}", half.prefix()),
+                expanded,
+                sections,
+            }));
+    }
+
     fn section(&mut self, value: &Expr, half: Half) -> Option<ir::Section> {
         let Expr::Call { callee, args, .. } = value else {
             self.todo(value.span(), "this entry");
@@ -1357,6 +1546,10 @@ impl Lowerer<'_, '_> {
 
         let name = self.constant_string(name, "section")?;
         let mut optional = false;
+        let mut required = false;
+        let mut optional_span = None;
+        let mut inst_types = Vec::new();
+        let mut size = None;
         for field in options.into_iter().flatten() {
             let TableField::Named { name, value } = field else {
                 self.todo(value.span(), "a positional entry in a `section`'s options");
@@ -1364,7 +1557,10 @@ impl Lowerer<'_, '_> {
             };
             match name.text.as_str() {
                 "optional" => match self.constant(value) {
-                    Some(ConstValue::Bool(flag)) => optional = flag,
+                    Some(ConstValue::Bool(flag)) => {
+                        optional = flag;
+                        optional_span = flag.then_some(name.span);
+                    }
                     _ => self.bad_value(
                         value.span(),
                         "optional",
@@ -1372,6 +1568,30 @@ impl Lowerer<'_, '_> {
                         "it becomes `Section /o`, which starts unselected in the components tree",
                     ),
                 },
+                "required" => match self.constant(value) {
+                    Some(ConstValue::Bool(flag)) => {
+                        required = flag;
+                    }
+                    _ => self.bad_value(
+                        value.span(),
+                        "required",
+                        "a `bool`",
+                        "it becomes `SectionIn RO`, which greys the box out and always installs it",
+                    ),
+                },
+                "size" => match self.constant(value) {
+                    // NSIS reads `AddSize` as kilobytes and has no use for a
+                    // negative one: a section cannot give space back.
+                    Some(ConstValue::Int(kb)) if kb >= 0 => size = Some(kb as u32),
+                    _ => self.bad_value(
+                        value.span(),
+                        "size",
+                        "a whole number of kilobytes",
+                        "it becomes `AddSize`, which is added to the space this section is shown \
+                         as needing",
+                    ),
+                },
+                "installTypes" => inst_types = self.section_in(value, half),
                 other => {
                     self.diags.push(
                         Diagnostic::error(
@@ -1379,10 +1599,26 @@ impl Lowerer<'_, '_> {
                             name.span,
                             format!("`{other}` is not a `section` option"),
                         )
-                        .note("the options are `optional`"),
+                        .note("the options are `optional`, `required`, `installTypes` and `size`"),
                     );
                 }
             }
+        }
+
+        // `optional` and `required` are not opposites — one says what the box
+        // starts as, the other that there is no box — but together they say the
+        // section starts unticked and can never be unticked, and NSIS resolves
+        // that silently in favour of `RO`. Whichever the author meant, one of
+        // the two words is doing nothing.
+        if let Some(here) = optional_span.filter(|_| required) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    here,
+                    format!("`{name}` is both `optional` and `required`"),
+                )
+                .note("`optional` starts the box unticked; `required` removes the box"),
+            );
         }
 
         Some(ir::Section {
@@ -1391,8 +1627,87 @@ impl Lowerer<'_, '_> {
             // is that this prefix has no spelling.
             name: format!("{}{name}", half.prefix()),
             optional,
+            inst_types,
+            required,
+            size,
             body: self.body(block, &[], *span, None),
         })
+    }
+
+    /// A section's `installTypes = { "Full" }`, resolved to the one-based
+    /// positions `SectionIn` reads.
+    ///
+    /// This is the §13 binding, and it is a *compile-time* one: the name a user
+    /// writes is the name they declared on the block, and the number NSIS wants
+    /// never appears in the source. That the numbering exists in one place is
+    /// what makes inserting an install type at the front safe — every section
+    /// renumbers, and none of them says a number.
+    ///
+    /// The declaration list is already lowered by the time any section is,
+    /// because `installer {}` reads its named fields before its positional
+    /// entries. Ordering matters here and only here, so the two loops stay two.
+    fn section_in(&mut self, value: &Expr, half: Half) -> Vec<usize> {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                "installTypes",
+                "a list",
+                "write `installTypes = { \"Full\" }`, naming types the block declares",
+            );
+            return Vec::new();
+        };
+
+        let declared = match half {
+            Half::Installer => self.module.inst_types.clone(),
+            Half::Uninstaller => self.module.uninst_types.clone(),
+        };
+        let mut chosen: Vec<usize> = Vec::new();
+        for field in fields {
+            let TableField::Positional { value } = field else {
+                self.todo(
+                    value.span(),
+                    "a named entry in a `section`'s `installTypes`",
+                );
+                continue;
+            };
+            let Some(name) = self.constant_string(value, "installTypes") else {
+                continue;
+            };
+            let Some(index) = declared.iter().position(|known| *known == name) else {
+                let note = if declared.is_empty() {
+                    format!(
+                        "the `{half}` block declares no install types; write `installTypes = \
+                         {{ \"{name}\" }}` beside its sections"
+                    )
+                } else {
+                    format!(
+                        "the install types are {}",
+                        list(&declared.iter().map(String::as_str).collect::<Vec<_>>())
+                    )
+                };
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        value.span(),
+                        format!("`{name}` is not an install type"),
+                    )
+                    .note(note),
+                );
+                continue;
+            };
+            // NSIS accepts `SectionIn 1 1` and means it once. Writing it twice
+            // is a mistake either way, so the duplicate is dropped and said.
+            if chosen.contains(&(index + 1)) {
+                self.diags.push(Diagnostic::error(
+                    Code::BadFieldValue,
+                    value.span(),
+                    format!("`{name}` is listed twice"),
+                ));
+                continue;
+            }
+            chosen.push(index + 1);
+        }
+        chosen
     }
 
     fn function(&mut self, keyword: &str, call: &Expr) {

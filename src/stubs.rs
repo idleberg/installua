@@ -197,6 +197,7 @@ fn blocks() -> String {
          ---@field license? string\n\
          ---@field caption? string\n\
          ---@field text? string\n\
+         ---@field installTypes? string[]\n\
          ---@field pages? table\n\n\
          ---@param options installua.Attributes\n\
          function attributes(options) end\n\n\
@@ -291,9 +292,25 @@ fn declarations() -> String {
          -- Declarations (§15.10). These are language constructs rather than\n\
          -- instructions, so they are written here rather than generated.\n\
          --------------------------------------------------------------------------------\n\n\
+         ---@class (exact) installua.SectionOptions\n\
+         ---@field optional? boolean Starts unticked in the components tree.\n\
+         ---@field required? boolean Always installed, with no box to untick.\n\
+         ---@field installTypes? string[] Which of the block's `installTypes` this belongs to.\n\
+         ---@field size? integer Extra kilobytes to charge, beyond the files installed.\n\
+         local SectionOptions = {}\n\n\
          ---@param name string\n\
+         ---@param options installua.SectionOptions\n\
          ---@param body fun()\n\
-         function section(name, body) end\n\n\
+         ---@overload fun(name: string, body: fun())\n\
+         function section(name, options, body) end\n\n\
+         ---@class (exact) installua.GroupOptions\n\
+         ---@field expanded? boolean Opens the heading in the components tree.\n\
+         local GroupOptions = {}\n\n\
+         ---@param name string\n\
+         ---@param options installua.GroupOptions\n\
+         ---@param sections table\n\
+         ---@overload fun(name: string, sections: table)\n\
+         function group(name, options, sections) end\n\n\
          ---@param name string\n\
          ---@param body function\n\
          function func(name, body) end\n\n\

@@ -108,7 +108,24 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
         out.line("FunctionEnd", Origin::Emitted("FunctionEnd"));
     }
 
-    // 9. Sections, in source order — section order is install order, and it is
+    // 9. Install types, in the order they were declared. That order is their
+    //    identity — a `SectionIn` names one by position — so like the pages and
+    //    unlike the attributes these are never reordered.
+    out.section(
+        "installTypes",
+        module
+            .inst_types
+            .iter()
+            .map(|name| format!("InstType {}", argument(&ir::Arg::str(name.clone()))))
+            .chain(
+                module
+                    .uninst_types
+                    .iter()
+                    .map(|name| format!("InstType un.{}", argument(&ir::Arg::str(name.clone())))),
+            ),
+    );
+
+    // 10. Sections, in source order — section order is install order, and it is
     //    user-visible, so unlike attributes these are never reordered.
     for item in &module.sections {
         out.blank();
@@ -143,6 +160,26 @@ fn section_block(out: &mut Out, section: &ir::Section, depth: usize) {
         format!("{indent}Section{flag} {name}"),
         Origin::Emitted("Section"),
     );
+    // `SectionIn` and `AddSize` are declarations that NSIS spells as
+    // instructions: they read as the first two lines of the body and are not
+    // executed, which is why they are options on the surface and are emitted
+    // here rather than lowered into the CFG.
+    if !section.inst_types.is_empty() || section.required {
+        let mut words: Vec<String> = section.inst_types.iter().map(usize::to_string).collect();
+        if section.required {
+            words.push("RO".to_string());
+        }
+        out.line(
+            format!("{indent}{INDENT}SectionIn {}", words.join(" ")),
+            Origin::Emitted("SectionIn"),
+        );
+    }
+    if let Some(size) = section.size {
+        out.line(
+            format!("{indent}{INDENT}AddSize {size}"),
+            Origin::Emitted("AddSize"),
+        );
+    }
     body(out, &section.body, depth + 1);
     out.line(format!("{indent}SectionEnd"), Origin::Emitted("SectionEnd"));
 }

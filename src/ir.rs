@@ -53,6 +53,12 @@ pub struct Module {
     /// emitted before the first body that touches them (§12).
     pub vars: Vec<String>,
     pub functions: Vec<Function>,
+    /// `InstType` lines, in the order they were written — which is the whole of
+    /// what an install type *is* to NSIS, since a section names one by its
+    /// one-based position and by nothing else (§13). The uninstaller's are the
+    /// same list under an `un.` prefix, and NSIS numbers the two separately.
+    pub inst_types: Vec<String>,
+    pub uninst_types: Vec<String>,
     pub sections: Vec<SectionItem>,
 }
 
@@ -141,6 +147,21 @@ pub struct Section {
     pub name: String,
     /// `Section /o` — unselected by default.
     pub optional: bool,
+    /// The one-based positions of [`Module::inst_types`] this section belongs
+    /// to, plus `RO` when [`Self::required`]: together they are the `SectionIn`
+    /// line, and an empty list with no `RO` writes none at all.
+    ///
+    /// Positions rather than names because that is what NSIS reads, and the
+    /// translation happens once, in the lowering, where the declaration list is
+    /// in scope. Nothing downstream ever sees the name.
+    pub inst_types: Vec<usize>,
+    /// `SectionIn RO` — always installed, and greyed out in the components
+    /// tree. Not the opposite of [`Self::optional`], which only says what the
+    /// box starts as.
+    pub required: bool,
+    /// `AddSize` — extra kilobytes to charge this section beyond the files it
+    /// installs, for the space estimate.
+    pub size: Option<u32>,
     pub body: cfg::Body,
 }
 

@@ -19,7 +19,11 @@ use installua::diag::{Code, Diagnostics};
 /// missing one fails too. `returns` is recursive, and §15.11's depth-cliff lint
 /// firing on it is the point rather than a nuisance: it is the only tier-2 test
 /// of a warning whose subject compiles perfectly well.
-const GOLDENS: &[(&str, &[Code])] = &[("control-flow", &[]), ("returns", &[Code::DeepRecursion])];
+const GOLDENS: &[(&str, &[Code])] = &[
+    ("components", &[]),
+    ("control-flow", &[]),
+    ("returns", &[Code::DeepRecursion]),
+];
 
 fn golden() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden")

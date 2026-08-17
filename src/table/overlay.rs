@@ -303,10 +303,7 @@ pub const ROWS: &[Row] = &[
         "AddBrandingImage",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
     ),
-    todo(
-        "AddSize",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
-    ),
+    language("AddSize", "a `section`'s `size` option"),
     todo(
         "AutoCloseWindow",
         "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
@@ -916,10 +913,7 @@ pub const ROWS: &[Row] = &[
         "InstProgressFlags",
         "the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled",
     ),
-    todo(
-        "InstType",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
-    ),
+    language("InstType", "an `installer`'s `installTypes` field"),
     lowering("IntOp", "the arithmetic operators: `a + b`"),
     lowering(
         "IntPtrOp",
@@ -1129,30 +1123,24 @@ pub const ROWS: &[Row] = &[
     ),
     language("Section", "`section`"),
     language("SectionEnd", "the end of a `section` body"),
-    todo(
+    rejected(
         "SectionInstType",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "an undocumented second name for `SectionIn`, which takes the same arguments in the same places: write a `section`'s `installTypes`",
     ),
-    todo(
+    language(
         "SectionIn",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "a `section`'s `installTypes` and `required` options",
     ),
     rejected(
         "SubSection",
         "deprecated by NSIS itself; `sectionGroup` is the spelling",
     ),
-    todo(
-        "SectionGroup",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
-    ),
+    language("SectionGroup", "`group`"),
     rejected(
         "SubSectionEnd",
         "deprecated by NSIS itself; `sectionGroup` is the spelling",
     ),
-    todo(
-        "SectionGroupEnd",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
-    ),
+    language("SectionGroupEnd", "the end of a `group`'s section list"),
     // The input is a bare file name rather than a path — `SearchPath` is what
     // walks `%PATH%` — so §5's `/`-to-`\` rule has nothing to convert and
     // `Kind::Value` is the honest annotation. The *result* is a full path, and
