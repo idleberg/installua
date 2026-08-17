@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
 **Status: the alphabetical grind is done, and every surface gap behind it is closed.
-25 → 80 exposed, 14 → 29 attributes, 167 → 97 todo.**
+25 → 80 exposed, 14 → 31 attributes, 167 → 95 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -826,21 +826,96 @@ shaped values live in [`attribute_program()`](tests/overlay.rs) rather than on t
 because a row is not an example. The derived-example test found both the first time it
 ran, which is twice now that it has caught a row nobody could have checked by reading.
 
+## Batch 12 — a setting that is more than one word
+
+**29 → 31 attributes, 97 → 95 todo.**
+
+`Setting` assumed one value per line, which was true of every row batches 10 and 11
+landed and false of five they left behind. It is now `Setting::Table`, a list of
+[`Part`](src/table/mod.rs)s that each name a Lua key and stand against one position of the
+snapshot:
+
+```lua
+attributes {
+  installDirRegKey = { root = HKLM, key = "Software/Example/App", name = "InstallDir" },
+  peDllCharacteristics = { add = 64, remove = 0 },
+}
+```
+```
+InstallDirRegKey HKLM "Software\Example\App" "InstallDir"
+PEDllCharacteristics 64 0
+```
+
+A **table** rather than a list, because the keys are the only thing that tells three
+strings apart, and because §12 already says a Lua table has no order — a language that
+cannot promise order cannot be asked to supply meaning by counting.
+
+The part carries only its key and its [`Setting`]. Whether the position is required and
+which keywords it accepts are the snapshot's, exactly as they are for a top-level enum, so
+a row cannot claim a set of registry roots that `-CMDHELP` does not print.
+
+### One function, called twice
+
+The four one-value arms moved out of `setting()` into `value_arg()`, which
+[`table_setting()`](src/lower/mod.rs) calls once per part. That is the point of the shape
+rather than a tidy-up: a `bool` written on its own line and a `bool` written as a part are
+now the same six lines of code, so they cannot come to disagree about what `true` means or
+whether a path gets §5's slash conversion. `installDirRegKey.key` is a `PATH` for exactly
+that reason — `readRegStr`'s subkey already is one, and a registry path written with `/`
+here has to arrive with `\` no matter which row reached it.
+
+### A registry root is `HKLM`, not `"HKLM"`
+
+`readRegStr(HKLM, …)` spells a root as a bare constant, so `root = "HKLM"` would have been
+a second spelling of one idea. `Setting::Enum` now accepts a bare name when it is one of
+the **sigil-less** constants, which is precisely the registry roots — there is no constant
+named `lzma`, so `compressor = lzma` still fails and nothing else moved. The derived
+example test derives the spelling from the same two tables, so both paths are compiled
+rather than one.
+
+### `FileErrorText` is not blocked on this, and never was
+
+It was on the multi-argument list, and it is the one row `Setting::Table` cannot reach.
+`-CMDHELP` prints:
+
+```
+FileErrorText [text (can contain $0)] [text without ignore (can contain $0)]
+```
+
+and the snapshot parser reads the parenthesised prose as positions — `text`, `can`,
+`contain`, `$0`, and again — so the row has **four** optional positions where NSIS has two.
+Parts stand against positions, so its parts would stand against sentence fragments. The fix
+is in the parser and its reason now says so. Nothing else in the table has prose in its
+parameter list; this is one row and one line of `-CMDHELP`.
+
+The other three stayed for a reason that is the same reason three times: `PEAddResource`,
+`PERemoveResource` and `ManifestAppendCustomString` all **repeat** to do their job, and a
+table field is written once. That is a different gap from the one this batch closed.
+
+### The error paths have their own test
+
+The golden shows a table field written right, and both tiers only ever compile programs
+that pass — so a missing part silently emitting a short line, which `makensis` would take
+and misread, would have shown up nowhere. `a_table_setting_wants_every_part` writes it
+three ways wrong: not a table, a part that is not one, and a part left out.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 97 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
+  left in the 95 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
   surface and pages (14), and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
-- **A setting with more than one argument has no spelling.** `InstallDirRegKey` is three,
-  `PEAddResource` is four and repeats, `PEDllCharacteristics` is two,
-  `ManifestAppendCustomString` is two and repeats, `FileErrorText` is two optional strings.
-  `Setting` assumes one value per line, which was true of every row batches 10 and 11
-  landed — the five rows above are the whole of what wants it, and they are enough to
-  design it from.
-- **A setting that repeats a keyword has no spelling either.** `ManifestSupportedOS` takes
-  a list of them and is the only row that does, which is why nothing was built for it.
+- **A setting that repeats has no spelling.** `PEAddResource` and `PERemoveResource` are
+  written once per resource, `ManifestAppendCustomString` once per string, and
+  `ManifestSupportedOS` takes a repeated *keyword* rather than a repeated line. A table
+  field is written once, so all four want the same thing: a part, or a field, that holds a
+  sequence. Four rows, which is enough to design it from — and the shape of the answer is
+  probably `Part` again, with `Rep` read off the snapshot the way `req` already is.
+- **The snapshot parser reads prose as parameters.** `FileErrorText [text (can contain
+  $0)]` becomes four positions instead of one, which is why that row is the one
+  `Setting::Table` cannot reach. It is the only line in `-CMDHELP` shaped this way, so the
+  fix is bounded: parentheses in a parameter list are commentary, not positions.
 - **A flag that takes one value and does not repeat has no spelling.** `Offer::List`
   covers `File`'s `/x` because it repeats; `SendMessage`'s `/TIMEOUT=n` and the three
   other single-valued flags are all on `todo` rows, and the variant that spells them

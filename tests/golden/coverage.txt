@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed           80
-  attribute         29
+  attribute         31
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo              97
+  todo              95
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -33,12 +33,11 @@ todo:
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindNext                runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   ReserveFile             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  FileErrorText           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
+  FileErrorText           its snapshot line has prose in the parameter list, so its positions are mis-parsed
   FileWriteByte           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileWriteUTF16LE        file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   FileWriteWord           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
   GetDlgItem              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  InstallDirRegKey        registry surface beyond `readReg`/`writeReg`: one overlay row each
   InstallColors           the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   InstProgressFlags       the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   InstType                addresses a section by index: a real compile-time to install-time name binding (§13)
@@ -90,11 +89,10 @@ todo:
   UninstallText           a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallSubCaption     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   WindowIcon              the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  PEAddResource           takes four arguments and a flag and repeats, and a setting is one value per line in `Setting`
-  PERemoveResource        takes three arguments and a flag, and a setting is one value per line in `Setting`
-  PEDllCharacteristics    takes two arguments, and a setting is one value per line in `Setting`
+  PEAddResource           repeats to add more than one resource, and a table field is written once
+  PERemoveResource        repeats to remove more than one resource, and a table field is written once
   XPStyle                 the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  ManifestAppendCustomStringtakes two arguments and repeats, and a setting is one value per line in `Setting`
+  ManifestAppendCustomStringrepeats to append more than one string, and a table field is written once
   ManifestSupportedOS     takes a list of keywords rather than one, and a repeating setting has no spelling in `Setting` yet
   MiscButtonText          a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   DetailsButtonText       a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first

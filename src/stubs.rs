@@ -91,6 +91,11 @@ fn alias_table() -> Vec<(String, Vec<&'static str>)> {
             // NSIS spellings would complete the two words this language does not
             // accept.
             Class::Attribute(table::Setting::Enum) => entry.installua,
+            // A table's enum parts are named after the *parameter* instead:
+            // `installDirRegKey.root` is a registry root, which the `Reg*`
+            // instructions already have an alias for, and a second alias with
+            // identical members is what this function exists to avoid.
+            Class::Attribute(table::Setting::Table(_)) => None,
             Class::Attribute(_) => continue,
             _ => continue,
         };
@@ -205,25 +210,50 @@ fn attribute_fields() -> Vec<(&'static str, String)> {
     table::table()
         .iter()
         .filter_map(|entry| match entry.class {
-            Class::Attribute(holds) => Some((entry.installua?, holds)),
+            Class::Attribute(holds) => Some((entry, entry.installua?, holds)),
             _ => None,
         })
-        .filter(|(field, _)| !field.contains('.'))
-        .map(|(field, holds)| {
-            // The Lua type is the row's `Setting` and nothing else. An enum
-            // becomes the alias generated above, which is what makes its members
-            // complete rather than merely legal.
-            let ty = match holds {
-                table::Setting::Bool { .. } => "boolean".to_string(),
-                table::Setting::Int => "integer".to_string(),
-                table::Setting::Enum => alias_of(field),
-                table::Setting::Str { .. } => "string".to_string(),
-                table::Setting::Handled(ty) => ty.to_string(),
-            };
-            (field, ty)
-        })
+        .filter(|(_, field, _)| !field.contains('.'))
+        .map(|(entry, field, holds)| (field, setting_type(entry, field, holds)))
         .chain([("versionInfo", "installua.VersionInfo".to_string())])
         .collect()
+}
+
+/// The Lua type of one attribute, which is the row's [`table::Setting`] and
+/// nothing else. An enum becomes the alias generated above, which is what makes
+/// its members complete rather than merely legal.
+///
+/// A [`table::Setting::Table`] becomes an inline table type rather than a named
+/// class: the parts are the field's own and are named nowhere else, so a class
+/// would be a name the user has to learn in order to write a literal they were
+/// going to write anyway. Its enum parts are keyed on the *parameter*, matching
+/// the alias [`alias_table`] emits for them.
+fn setting_type(entry: &table::Instruction, field: &str, holds: table::Setting) -> String {
+    match holds {
+        table::Setting::Bool { .. } => "boolean".to_string(),
+        table::Setting::Int => "integer".to_string(),
+        table::Setting::Enum => alias_of(field),
+        table::Setting::Str { .. } => "string".to_string(),
+        table::Setting::Handled(ty) => ty.to_string(),
+        table::Setting::Table(parts) => {
+            let parts: Vec<String> = parts
+                .iter()
+                .enumerate()
+                .map(|(index, part)| {
+                    let ty = match part.holds {
+                        table::Setting::Enum => entry
+                            .params
+                            .get(index)
+                            .map(|param| alias_of(param.shape.name))
+                            .unwrap_or_else(|| "string".to_string()),
+                        other => setting_type(entry, part.field, other),
+                    };
+                    format!("{}: {ty}", part.field)
+                })
+                .collect();
+            format!("{{ {} }}", parts.join(", "))
+        }
+    }
 }
 
 fn declarations() -> String {

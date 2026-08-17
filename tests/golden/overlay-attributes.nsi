@@ -5,6 +5,7 @@ CRCCheck on
 AllowRootDirInstall true
 FileBufSize 1
 Icon "assets\icon.ico"
+InstallDirRegKey HKCR "key.out" "name"
 InstallDir "installDir.out"
 LicenseData "assets\license.txt"
 Name "name"
@@ -16,6 +17,7 @@ ShowUninstDetails hide
 SilentInstall normal
 SilentUnInstall normal
 CPU x86
+PEDllCharacteristics 1 1
 PESubsysVer "5.1"
 RequestExecutionLevel none
 ManifestDPIAware true

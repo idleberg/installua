@@ -22,7 +22,7 @@
 //! retired row there, which is not a contradiction: the emitter needs its
 //! shape and the user needs the replacement.
 
-use super::{Class, Field, Kind, Offer, Setting};
+use super::{Class, Field, Kind, Offer, Part, Setting};
 use crate::types::Ty;
 
 /// The hand-written half of one parameter, positional against the skeleton's
@@ -222,6 +222,13 @@ const fn predicate(
 /// expression in a table and not an argument list.
 const fn attribute(nsis: &'static str, field: &'static str, holds: Setting) -> Row {
     row(nsis, Some(field), Class::Attribute(holds))
+}
+
+/// One position of a [`Setting::Table`], under the Lua key a caller writes it
+/// with. The parts stand against the snapshot's positions in order, so the
+/// count is checked by the census rather than by reading.
+const fn part(field: &'static str, holds: Setting) -> Part {
+    Part { field, holds }
 }
 
 /// The two commonest [`Setting`]s, spelled short because the rows are a column.
@@ -680,9 +687,14 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Handle, Kind::Value)],
         "local f = fileOpen(INSTDIR .. \"/log.txt\", \"w\")\nf:close()",
     ),
+    // The one row a `Setting::Table` cannot reach, and not for a reason in this
+    // file: `-CMDHELP` prints `[text (can contain $0)] [text without ignore …]`,
+    // and the parenthesised prose is parsed as four positions rather than two.
+    // A part stands against a position, so the parts would stand against
+    // sentence fragments. The snapshot parser is the fix, not the overlay.
     todo(
         "FileErrorText",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "its snapshot line has prose in the parameter list, so its positions are mis-parsed",
     ),
     exposed(
         "FileOpen",
@@ -877,9 +889,22 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
         "if rtlLanguage() then detailPrint(\"right to left\") end",
     ),
-    todo(
+    // Not a registry call but a *setting*: it names where the installer looks
+    // for a previous install directory, and NSIS falls back to `installDir`
+    // when the key is missing. Which is why the two are siblings in
+    // `attributes {}` rather than one being an instruction.
+    //
+    // `key` is a [`PATH`] for the same reason `readRegStr`'s subkey is: a
+    // registry path is written with `/` here and emitted with `\` (§5), so the
+    // one shape is not spelled two ways depending on which row reaches it.
+    attribute(
         "InstallDirRegKey",
-        "registry surface beyond `readReg`/`writeReg`: one overlay row each",
+        "installDirRegKey",
+        Setting::Table(&[
+            part("root", Setting::Enum),
+            part("key", PATH),
+            part("name", STR),
+        ]),
     ),
     todo(
         "InstallColors",
@@ -1522,15 +1547,19 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "PEAddResource",
-        "takes four arguments and a flag and repeats, and a setting is one value per line in `Setting`",
+        "repeats to add more than one resource, and a table field is written once",
     ),
     todo(
         "PERemoveResource",
-        "takes three arguments and a flag, and a setting is one value per line in `Setting`",
+        "repeats to remove more than one resource, and a table field is written once",
     ),
-    todo(
+    // Two bit masks on one line. They are one field rather than two attributes
+    // because NSIS takes them together — writing only the bits to add still
+    // has to say that nothing is removed — and a table makes that one write.
+    attribute(
         "PEDllCharacteristics",
-        "takes two arguments, and a setting is one value per line in `Setting`",
+        "peDllCharacteristics",
+        Setting::Table(&[part("add", Setting::Int), part("remove", Setting::Int)]),
     ),
     // `major.minor`, which is a string and not a number: `5.1` as a Lua number
     // would round-trip through a float and arrive as `5.1` only by luck.
@@ -1546,7 +1575,7 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "ManifestAppendCustomString",
-        "takes two arguments and repeats, and a setting is one value per line in `Setting`",
+        "repeats to append more than one string, and a table field is written once",
     ),
     attribute("ManifestDPIAware", "manifestDpiAware", TRUEFALSE),
     // A comma-separated list in one string, which NSIS parses and this compiler

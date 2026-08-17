@@ -582,65 +582,191 @@ impl Lowerer<'_, '_> {
         };
 
         match holds {
-            table::Setting::Str { path } => {
-                let Some(arg) = self.constant_arg(value, field) else {
-                    return;
-                };
-                let arg = if path { arg.into_path() } else { arg };
-                self.module
-                    .attributes
-                    .push(ir::Instruction::new(entry.nsis, vec![arg]));
-            }
-            table::Setting::Bool { on, off } => match self.constant(value) {
-                Some(ConstValue::Bool(flag)) => {
-                    let word = if flag { on } else { off };
-                    self.module
-                        .attributes
-                        .push(ir::Instruction::new(entry.nsis, vec![ir::Arg::raw(word)]));
-                }
-                _ => self.bad_value(
-                    value.span(),
-                    field,
-                    "a `bool`",
-                    &format!("it becomes `{} {on}` or `{} {off}`", entry.nsis, entry.nsis),
-                ),
-            },
-            table::Setting::Enum => {
-                let Some(text) = self.constant_string(value, field) else {
-                    return;
-                };
-                // The members come from the snapshot rather than from a list
-                // here: `-CMDHELP` already prints them (§15.23).
-                let allowed = entry
-                    .params
-                    .first()
-                    .map(table::Param::members)
-                    .unwrap_or_default();
-                self.enumerated(field, &text, allowed, value.span(), |text| {
-                    ir::Instruction::new(entry.nsis, vec![ir::Arg::raw(text)])
-                });
-            }
-            table::Setting::Int => match self.constant(value) {
-                Some(ConstValue::Int(number)) => self.module.attributes.push(ir::Instruction::new(
-                    entry.nsis,
-                    vec![ir::Arg::raw(number.to_string())],
-                )),
-                _ => self.bad_value(
-                    value.span(),
-                    field,
-                    "an `int`",
-                    &format!(
-                        "it becomes `{} <n>`, with the number written bare",
-                        entry.nsis
-                    ),
-                ),
-            },
+            table::Setting::Table(parts) => self.table_setting(entry, field, value, parts),
             // Only reachable if a row grew a `Handled` setting without the arm
             // above that is supposed to shape it.
             table::Setting::Handled(_) => {
                 self.todo(value.span(), &format!("the `{field}` attribute"));
             }
+            // Every other shape is one value on one line, which is
+            // [`Self::value_arg`] — the same function a *part* of a table goes
+            // through, so the two cannot drift apart.
+            one => {
+                if let Some(arg) =
+                    self.value_arg(one, entry.params.first(), field, entry.nsis, value)
+                {
+                    self.module
+                        .attributes
+                        .push(ir::Instruction::new(entry.nsis, vec![arg]));
+                }
+            }
         }
+    }
+
+    /// One value, read from the [`table::Setting`] that says what it holds.
+    ///
+    /// This is the function that has to grow when a *shape* is new, and the
+    /// reason a setting written on its own line and a part of a
+    /// [`table::Setting::Table`] cannot disagree about what a `bool` or a path
+    /// is: they are this function called twice.
+    ///
+    /// `param` is the position the value stands against and is read only for an
+    /// enum's members, which are the snapshot's and never a list here (§15.23).
+    /// `line` is the NSIS command, which the notes name because that is what
+    /// the field becomes.
+    fn value_arg(
+        &mut self,
+        holds: table::Setting,
+        param: Option<&table::Param>,
+        field: &str,
+        line: &str,
+        value: &Expr,
+    ) -> Option<ir::Arg> {
+        match holds {
+            table::Setting::Str { path } => {
+                let arg = self.constant_arg(value, field)?;
+                Some(if path { arg.into_path() } else { arg })
+            }
+            table::Setting::Bool { on, off } => match self.constant(value) {
+                Some(ConstValue::Bool(flag)) => Some(ir::Arg::raw(if flag { on } else { off })),
+                _ => {
+                    self.bad_value(
+                        value.span(),
+                        field,
+                        "a `bool`",
+                        &format!("it becomes `{line} {on}` or `{line} {off}`"),
+                    );
+                    None
+                }
+            },
+            table::Setting::Enum => {
+                let text = self.keyword(value, field)?;
+                let allowed = param.map(table::Param::members).unwrap_or_default();
+                self.enumerated(field, &text, allowed, value.span())
+                    .then(|| ir::Arg::raw(text))
+            }
+            table::Setting::Int => match self.constant(value) {
+                Some(ConstValue::Int(number)) => Some(ir::Arg::raw(number.to_string())),
+                _ => {
+                    self.bad_value(
+                        value.span(),
+                        field,
+                        "an `int`",
+                        &format!("it becomes `{line} <n>`, with the number written bare"),
+                    );
+                    None
+                }
+            },
+            // Both are shapes rather than values: a table is more than one of
+            // these, and `Handled` is not lowered here at all.
+            table::Setting::Table(_) | table::Setting::Handled(_) => {
+                self.todo(value.span(), &format!("`{field}` in this position"));
+                None
+            }
+        }
+    }
+
+    /// The keyword an enum-valued field was written with.
+    ///
+    /// Almost always a string — `compressor = "lzma"` — but a registry root is
+    /// a **bare** name, because `readRegStr(HKLM, …)` already spells it that way
+    /// and one idea with two spellings is worse than either of them (§15.1).
+    /// The names this accepts are exactly the sigil-less constants, so no other
+    /// field changes: there is no constant called `lzma` for `compressor = lzma`
+    /// to find, and an unknown bare name still fails as a value.
+    fn keyword(&mut self, value: &Expr, field: &str) -> Option<String> {
+        if let Expr::Name(name) = value
+            && let Some(constant) = crate::builtins::constant_named(&name.text)
+            && !constant.sigil
+        {
+            return Some(constant.nsis.to_string());
+        }
+        self.constant_string(value, field)
+    }
+
+    /// `installDirRegKey = { root = HKLM, key = "Software/App", name = "Path" }`:
+    /// one NSIS line built out of a Lua table, one key per position, emitted in
+    /// the *table's* order rather than the source's — a Lua table has no order
+    /// to preserve and NSIS counts arguments (§12).
+    ///
+    /// Every part is required, because every position of every row that has
+    /// parts is. `FileErrorText` is the row that will want an optional part and
+    /// it is not waiting on this function: its snapshot line is mis-parsed, so
+    /// it has no positions for parts to stand against.
+    fn table_setting(
+        &mut self,
+        entry: &'static table::Instruction,
+        field: &str,
+        value: &Expr,
+        parts: &'static [table::Part],
+    ) {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                field,
+                "a table",
+                &format!("write `{field} = {{ {} }}`", shape(parts)),
+            );
+            return;
+        };
+
+        let mut written: Vec<(&str, &Expr)> = Vec::new();
+        for given in fields {
+            let TableField::Named { name, value: part } = given else {
+                self.todo(value.span(), &format!("a positional entry in `{field}`"));
+                continue;
+            };
+            if !parts.iter().any(|known| known.field == name.text) {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        name.span,
+                        format!("`{}` is not part of `{field}`", name.text),
+                    )
+                    .note(format!(
+                        "the parts are {}",
+                        list(&parts.iter().map(|part| part.field).collect::<Vec<_>>())
+                    )),
+                );
+                continue;
+            }
+            written.push((name.text.as_str(), part));
+        }
+
+        let mut args = Vec::new();
+        for (index, part) in parts.iter().enumerate() {
+            // Last one wins, which is what Lua does with a repeated key.
+            let Some((_, given)) = written.iter().rev().find(|(key, _)| *key == part.field) else {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        value.span(),
+                        format!("`{field}` has no `{}`", part.field),
+                    )
+                    .note(format!("write `{field} = {{ {} }}`", shape(parts)))
+                    .note(format!(
+                        "`{}` takes every position, so leaving one out is not a shorter line",
+                        entry.nsis
+                    )),
+                );
+                return;
+            };
+            let arg = match self.value_arg(
+                part.holds,
+                entry.params.get(index),
+                part.field,
+                entry.nsis,
+                given,
+            ) {
+                Some(arg) => arg,
+                None => return,
+            };
+            args.push(arg);
+        }
+
+        self.module
+            .attributes
+            .push(ir::Instruction::new(entry.nsis, args));
     }
 
     /// `Name "${APP}"` and its seven siblings: one attribute, one argument.
@@ -654,19 +780,12 @@ impl Lowerer<'_, '_> {
             .push(ir::Instruction::new(nsis, vec![arg]));
     }
 
-    /// An attribute whose value is one of a closed set of bare keywords.
+    /// Whether a keyword is one of the closed set the position accepts.
     ///
     /// NSIS accepts an unknown keyword here and *ignores* it — `SetCompressor
     /// lmza` is not an error — so the closed set is checked here or not at all
     /// (§13).
-    fn enumerated(
-        &mut self,
-        field: &str,
-        text: &str,
-        allowed: &[&str],
-        span: Span,
-        build: impl Fn(&str) -> ir::Instruction,
-    ) {
+    fn enumerated(&mut self, field: &str, text: &str, allowed: &[&str], span: Span) -> bool {
         if !allowed.contains(&text) {
             self.diags.push(
                 Diagnostic::error(
@@ -677,9 +796,9 @@ impl Lowerer<'_, '_> {
                 .note(format!("the values are {}", list(allowed)))
                 .note("NSIS ignores a keyword it does not know here rather than objecting (§13)"),
             );
-            return;
+            return false;
         }
-        self.module.attributes.push(build(text));
+        true
     }
 
     // There is no `flag_attribute` helper any more, nor an `int_` or `enum_`
@@ -2239,6 +2358,18 @@ pub fn check_required(module: &ir::Module, diags: &mut Diagnostics) {
             .note("`makensis` has no default for it, and fails without one"),
         );
     }
+}
+
+/// The Lua a [`table::Setting::Table`] wants, written out: `root = …, key = …`.
+/// Every diagnostic about one of these ends by showing the shape, because the
+/// keys are the whole of what a caller has to know and naming the missing one
+/// without the rest sends them back to the documentation.
+fn shape(parts: &[table::Part]) -> String {
+    parts
+        .iter()
+        .map(|part| format!("{} = …", part.field))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn list(names: &[&str]) -> String {

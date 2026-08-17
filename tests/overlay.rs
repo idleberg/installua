@@ -90,42 +90,10 @@ fn attribute_program() -> String {
             continue;
         }
 
-        let value = match holds {
-            // `Icon` and `LicenseData` open the file at compile time, so these
-            // two want a real one — see tests/fixtures/README.md.
-            table::Setting::Str { path: true } if field == "icon" => {
-                "\"assets/icon.ico\"".to_string()
-            }
-            table::Setting::Str { path: true } if field == "license" => {
-                "\"assets/license.txt\"".to_string()
-            }
-            // Two settings take a *shaped* string — `major.minor` and
-            // `maj.min.bld.rev` — and [`table::Setting::Str`] says only "a
-            // string". The narrowing is real and the table cannot state it, so
-            // the compiler does not check it either: `peSubsysVer = "hello"`
-            // reaches `makensis` and is rejected there. The values are here
-            // rather than in the row because a row is not an example.
-            table::Setting::Str { path: false } if field == "peSubsysVer" => "\"5.1\"".to_string(),
-            table::Setting::Str { path: false } if field == "manifestMaxVersionTested" => {
-                "\"10.0.19041.0\"".to_string()
-            }
-            table::Setting::Str { path: true } => format!("\"{field}.out\""),
-            table::Setting::Str { path: false } => format!("\"{field}\""),
-            table::Setting::Bool { .. } => "true".to_string(),
-            table::Setting::Int => "1".to_string(),
-            // The first keyword the snapshot lists — a value chosen by the
-            // table rather than by whoever wrote this test.
-            table::Setting::Enum => format!(
-                "\"{}\"",
-                entry
-                    .params
-                    .first()
-                    .and_then(|param| param.members().first())
-                    .unwrap_or_else(|| panic!("`{field}` is an enum with no members"))
-            ),
-            table::Setting::Handled(_) => unreachable!("filtered above"),
-        };
-        source.push_str(&format!("\t{field} = {value},\n"));
+        source.push_str(&format!(
+            "\t{field} = {},\n",
+            derived(entry, 0, field, holds)
+        ));
     }
 
     source.push_str(
@@ -133,6 +101,67 @@ fn attribute_program() -> String {
          \t\tdetailPrint(\"installing\")\n\tend),\n}\n",
     );
     source
+}
+
+/// The Lua a field of this shape can be written with, derived from the shape.
+///
+/// `index` is the position the value stands against, which only an enum reads:
+/// a part of a table is the same question one position along, which is why this
+/// is one recursive function and not a second copy for parts.
+fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::Setting) -> String {
+    match holds {
+        // `Icon` and `LicenseData` open the file at compile time, so these
+        // two want a real one — see tests/fixtures/README.md.
+        table::Setting::Str { path: true } if field == "icon" => "\"assets/icon.ico\"".to_string(),
+        table::Setting::Str { path: true } if field == "license" => {
+            "\"assets/license.txt\"".to_string()
+        }
+        // Two settings take a *shaped* string — `major.minor` and
+        // `maj.min.bld.rev` — and [`table::Setting::Str`] says only "a
+        // string". The narrowing is real and the table cannot state it, so
+        // the compiler does not check it either: `peSubsysVer = "hello"`
+        // reaches `makensis` and is rejected there. The values are here
+        // rather than in the row because a row is not an example.
+        table::Setting::Str { path: false } if field == "peSubsysVer" => "\"5.1\"".to_string(),
+        table::Setting::Str { path: false } if field == "manifestMaxVersionTested" => {
+            "\"10.0.19041.0\"".to_string()
+        }
+        table::Setting::Str { path: true } => format!("\"{field}.out\""),
+        table::Setting::Str { path: false } => format!("\"{field}\""),
+        table::Setting::Bool { .. } => "true".to_string(),
+        table::Setting::Int => "1".to_string(),
+        // The first keyword the snapshot lists — a value chosen by the table
+        // rather than by whoever wrote this test. Written *bare* when that
+        // keyword is also a sigil-less constant, because a registry root is
+        // `HKCR` and not `"HKCR"` (§15.1), and derived from the same two tables
+        // so that both spellings are compiled here rather than one.
+        table::Setting::Enum => {
+            let member = entry
+                .params
+                .get(index)
+                .and_then(|param| param.members().first())
+                .unwrap_or_else(|| panic!("`{field}` is an enum with no members"));
+            match installua::builtins::constant_named(member) {
+                Some(constant) if !constant.sigil => (*member).to_string(),
+                _ => format!("\"{member}\""),
+            }
+        }
+        table::Setting::Table(parts) => {
+            let parts: Vec<String> = parts
+                .iter()
+                .enumerate()
+                .map(|(offset, part)| {
+                    format!(
+                        "{} = {}",
+                        part.field,
+                        derived(entry, index + offset, part.field, part.holds)
+                    )
+                })
+                .collect();
+            format!("{{ {} }}", parts.join(", "))
+        }
+        table::Setting::Handled(_) => unreachable!("filtered above"),
+    }
 }
 
 #[test]
@@ -145,6 +174,36 @@ fn every_attribute_row_emits() {
         "{}",
         diags.render("overlay-attributes.lua")
     );
+}
+
+/// The three ways a [`table::Setting::Table`] can be written wrong.
+///
+/// The golden above only shows a table field written *right*, and the tiers
+/// behind it only ever compile programs that pass — so a missing part silently
+/// emitting a short line, which `makensis` would take and misread, would not
+/// show up anywhere else.
+#[test]
+fn a_table_setting_wants_every_part() {
+    const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
+
+    for (what, written) in [
+        ("not a table at all", "installDirRegKey = \"HKLM\""),
+        (
+            "a part that is not one",
+            "installDirRegKey = { root = HKLM, subkey = \"S\", name = \"P\" }",
+        ),
+        ("a part left out", "installDirRegKey = { root = HKLM }"),
+    ] {
+        let source = format!("{PRELUDE}{written} }}");
+        let mut diags = Diagnostics::new();
+        let _ = installua::build(&source, &mut diags);
+
+        assert!(
+            diags.has_errors(),
+            "`{what}` compiled: {}",
+            diags.render("table-setting.lua")
+        );
+    }
 }
 
 #[test]

@@ -244,12 +244,33 @@ pub enum Setting {
     Enum,
     /// A whole number, emitted bare.
     Int,
+    /// `InstallDirRegKey HKLM "Software\App" "Path"`: one line built out of a
+    /// Lua table, one key per position, emitted in the order the parts are
+    /// written here.
+    ///
+    /// A *table* and not a list because the keys are the only thing that tells
+    /// three strings apart, and because a language whose tables have no order
+    /// (§12) cannot be asked to supply one by counting.
+    Table(&'static [Part]),
     /// Shaped by the block's own lowering instead: `unicode` sets a field of
     /// the module rather than emitting a line, and `versionInfo` is a nested
     /// table. The analogue of [`Offer::Handled`] one level up, and it carries
     /// the Lua type for the same reason — the stub generator has to describe a
     /// field it does not lower.
     Handled(&'static str),
+}
+
+/// One position of a [`Setting::Table`], and the Lua key it takes.
+///
+/// The key is the only thing written by hand, for the reason [`overlay::opt`]
+/// names an optional position: `-CMDHELP` calls these `root_key` and `addbits`,
+/// which are NSIS's names for them and not this language's. Everything else —
+/// whether the position is required, which keywords it accepts — is the
+/// snapshot's, because one `Part` stands against one [`Param`] in order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Part {
+    pub field: &'static str,
+    pub holds: Setting,
 }
 
 /// §14's census bucket. There is exactly one enum, because the buckets and the
