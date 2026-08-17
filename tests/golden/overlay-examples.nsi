@@ -79,6 +79,15 @@ Section "EnumRegValue"
   DetailPrint $0
 SectionEnd
 
+Section "Exec"
+  Exec "$INSTDIR/app.exe /S"
+SectionEnd
+
+Section "ExecWait"
+  ExecWait "$INSTDIR/app.exe /S" $0
+  DetailPrint "exit $0"
+SectionEnd
+
 Section "ExecShell"
   ExecShell "open" "https://example.invalid" "" "SW_HIDE"
 SectionEnd

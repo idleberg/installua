@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           83
+  exposed           85
   attribute         52
   lowering-target   18
   language          12
   directive         37
   rejected          12
-  todo              62
+  todo              60
 
 todo:
   AutoCloseWindow         addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
@@ -20,8 +20,6 @@ todo:
   DirVerify               only valid inside `PageEx`, and the page surface has no design yet
   CheckBitmap             MUI2 emits this line itself from `MUI_COMPONENTSPAGE_CHECKBITMAP`, so a raw one assembles clean under `-WX` and then loses: it has to lower to the define, and where MUI settings live is unruled
   EnableWindow            addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
-  Exec                    one argument that is part path and part switches; §5's `/`-to-`\` rule cannot apply to half a string
-  ExecWait                one argument that is part path and part switches; §5's `/`-to-`\` rule cannot apply to half a string
   FindWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   FindClose               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)

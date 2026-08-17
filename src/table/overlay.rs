@@ -618,19 +618,32 @@ pub const ROWS: &[Row] = &[
         "Exch",
         "nothing: arguments and returns are the calling convention (§15.11)",
     ),
-    // A command line is neither a path nor a value: `Kind::Path` turns the `/S`
-    // in `setup.exe /S` into `\S`, and `Kind::Value` ships the forward slashes
-    // of `INSTDIR .. "/app.exe"` to a program that will not find it. §5 gives
-    // the surface one rule — write `/`, get `\` — and a position that is *part*
-    // path has no way to obey it, so these wait for a spelling that separates
-    // the program from its arguments.
-    todo(
+    // The old reason said a command line is *part* path and so could obey
+    // neither `Kind::Path` nor `Kind::Value`, and the half of that which is true
+    // — `Kind::Path` would turn the `/S` in `setup.exe /S` into `\S` — never
+    // implied the other half. §15.2 normalises `/` where **NSIS** demands a
+    // backslash, not where Windows does: Windows accepts forward slashes at the
+    // API level, and `Exec` hands its string to `CreateProcess`, which resolves
+    // the program through that same parser. So the forward slashes go out
+    // unchanged and the program is found.
+    //
+    // This is exactly the ruling `ExecShell`'s `file` position already carries
+    // two rows down, for the same reason and in the same words. It was written
+    // there while these two sat on a `todo` that contradicted it.
+    exposed(
         "Exec",
-        "one argument that is part path and part switches; §5's `/`-to-`\\` rule cannot apply to half a string",
+        "exec",
+        &[ann(Ty::Str, Kind::Value)],
+        "exec(INSTDIR .. \"/app.exe /S\")",
     ),
-    todo(
+    // `ExecWait command_line [$(user_var: return value)]` — the exit code is an
+    // optional trailing output, so `FileSeek`'s rule applies: it is emitted only
+    // when something reads it, and `execWait(cmd)` alone still writes two words.
+    exposed(
         "ExecWait",
-        "one argument that is part path and part switches; §5's `/`-to-`\\` rule cannot apply to half a string",
+        "execWait",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::int(), Kind::Value)],
+        "local code = execWait(INSTDIR .. \"/app.exe /S\")\ndetailPrint(\"exit \" .. code)",
     ),
     // `ExecShell [flags] verb file [parameters [showmode]]`. The optional
     // position is *first*, which is what the options table settles: `verb` and

@@ -1458,21 +1458,56 @@ That is an alternation — `BGGradient`'s problem — and the second alternative
 DLL, which is §11's. Two open questions, neither of them "one overlay row". A group reason
 that lumps a genuinely blocked row in with three unblocked ones hides both facts at once.
 
+## Batch 19 — the reason the row below it already answered
+
+`Exec` and `ExecWait` were `todo` for *"one argument that is part path and part switches;
+§5's `/`-to-`\` rule cannot apply to half a string"*. Half of that is true and the other
+half does not follow from it.
+
+The true half: `Kind::Path` would turn the `/S` in `setup.exe /S` into `\S`, so the path
+kind is wrong. The half that was assumed rather than checked: that `Kind::Value` is
+therefore wrong too. §15.2 normalises `/` where **NSIS** demands a backslash — registry
+subkeys, `File`, `SetOutPath` — not where Windows does, because *"Windows accepts forward
+slashes at the API level"*. `Exec` hands its string to `CreateProcess`, which resolves the
+program through that same Win32 parser. Forward slashes go out unchanged and the program
+is found.
+
+| installua | emits |
+| --- | --- |
+| `exec(INSTDIR .. "/app.exe /S")` | `Exec "$INSTDIR/app.exe /S"` |
+| `local code = execWait(INSTDIR .. "/app.exe /S")` | `ExecWait "$INSTDIR/app.exe /S" $0` |
+
+`ExecWait`'s exit code is an optional trailing output, which is `FileSeek`'s rule
+unchanged: it is emitted only when something reads it, so `execWait(cmd)` alone still
+writes two words.
+
+### The ruling was already in the file, two rows down
+
+`ExecShell`'s `file` position is `Kind::Value`, and its comment says why in almost these
+words — a shell target may be a URL, Win32 takes `/` as a separator, and §15.2 applied
+there would produce `https:\\…`. That comment was written while these two rows sat on a
+`todo` that contradicted it. Three batches in a row now, the blocker was a sentence
+nobody had read against the rest of the file.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could. Batch 16
-  emptied the two *classic UI* groups, batch 17 the *compile time and positional* one, and
-  batch 18 the *file surface* one. Of the 62 left, the `hwnd` surface and pages is 16
-  (after two rows moved there), addressing a section at install time is 12, the nine
-  remaining MUI defines are the largest single block, and the rest are one-offs.
+  emptied the two *classic UI* groups, batch 17 the *compile time and positional* one,
+  batch 18 the *file surface* one and batch 19 the *part path and part switches* pair. Of
+  the 60 left, the `hwnd` surface and pages is 16 (after two rows moved there), addressing
+  a section at install time is 12, the nine remaining MUI defines are the largest single
+  block, and the rest are one-offs.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
   sixteen batches because the reason was true of the shape they were rejected as. Batch 18
   found the next group down was worse: *"one overlay row each"* states a cost and no
   blocker at all, and three of its four rows were the write halves of reads already
-  exposed. Two groups re-read, two groups emptied. The remaining ones should be re-read
-  before the design work they claim to need, not after.
+  exposed. Batch 19's pair was contradicted by the comment on the row two below it. Three
+  groups re-read, three groups emptied, and each reason failed differently: true of the
+  wrong shape, a cost mistaken for a blocker, a half-truth whose second half was assumed.
+  The remaining ones should be re-read before the design work they claim to need, not
+  after.
 - **A `Setting` cannot say "meaningful only when a sibling holds one value".**
   `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.

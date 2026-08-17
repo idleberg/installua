@@ -63,6 +63,13 @@ installer {
 		local entry = enumRegValue(HKLM, "Software/Example", 0)
 		detailPrint(entry)
 	end),
+	section("Exec", function()
+		exec(INSTDIR .. "/app.exe /S")
+	end),
+	section("ExecWait", function()
+		local code = execWait(INSTDIR .. "/app.exe /S")
+		detailPrint("exit " .. code)
+	end),
 	section("ExecShell", function()
 		execShell("open", "https://example.invalid", { showMode = "SW_HIDE" })
 	end),
