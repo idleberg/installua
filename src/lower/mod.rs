@@ -582,11 +582,37 @@ impl Lowerer<'_, '_> {
         };
 
         match holds {
+            // The only shape that is more than one line, and so the only one
+            // that loops. Everything below emits exactly once.
+            table::Setting::Each(one) => self.each_setting(entry, field, value, *one),
+            other => self.setting_line(entry, field, other, value),
+        }
+    }
+
+    /// One NSIS line, from the shape one entry of the field has.
+    ///
+    /// Called once for a plain setting and once *per element* for a
+    /// [`table::Setting::Each`], which is why the two cannot come to disagree
+    /// about what a line of this row looks like.
+    fn setting_line(
+        &mut self,
+        entry: &'static table::Instruction,
+        field: &str,
+        holds: table::Setting,
+        value: &Expr,
+    ) {
+        match holds {
             table::Setting::Table(parts) => self.table_setting(entry, field, value, parts),
             // Only reachable if a row grew a `Handled` setting without the arm
             // above that is supposed to shape it.
             table::Setting::Handled(_) => {
                 self.todo(value.span(), &format!("the `{field}` attribute"));
+            }
+            // A list of lists has no meaning: the elements of an `Each` are
+            // whatever one line of the row takes, and one line is never itself
+            // a sequence.
+            table::Setting::Each(_) => {
+                self.todo(value.span(), &format!("`{field}` nested in itself"));
             }
             // Every other shape is one value on one line, which is
             // [`Self::value_arg`] — the same function a *part* of a table goes
@@ -657,9 +683,9 @@ impl Lowerer<'_, '_> {
                     None
                 }
             },
-            // Both are shapes rather than values: a table is more than one of
-            // these, and `Handled` is not lowered here at all.
-            table::Setting::Table(_) | table::Setting::Handled(_) => {
+            // All three are shapes rather than values: a table and an `Each` are
+            // more than one of these, and `Handled` is not lowered here at all.
+            table::Setting::Table(_) | table::Setting::Each(_) | table::Setting::Handled(_) => {
                 self.todo(value.span(), &format!("`{field}` in this position"));
                 None
             }
@@ -684,15 +710,86 @@ impl Lowerer<'_, '_> {
         self.constant_string(value, field)
     }
 
+    /// `peAddResource = { { file = …, … }, { … } }`: one whole NSIS line per
+    /// element, in the order they were written.
+    ///
+    /// The elements are **positional** where the parts of a
+    /// [`table::Setting::Table`] are named, and for the same reason in reverse:
+    /// three strings on one line can only be told apart by a key, and two
+    /// resources can only be told apart by their order. A Lua table keeps that
+    /// order and no other (§12), which is the order NSIS adds them in.
+    fn each_setting(
+        &mut self,
+        entry: &'static table::Instruction,
+        field: &str,
+        value: &Expr,
+        each: table::Setting,
+    ) {
+        let entry_shape = match each {
+            table::Setting::Table(parts) => format!("{{ {} }}", shape(parts)),
+            _ => "…".to_string(),
+        };
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                field,
+                "a list",
+                &format!(
+                    "write `{field} = {{ {entry_shape} }}`, with one entry per `{}` line",
+                    entry.nsis
+                ),
+            );
+            return;
+        };
+
+        for given in fields {
+            let TableField::Positional { value: element } = given else {
+                let TableField::Named { name, .. } = given else {
+                    unreachable!("a table field is one or the other");
+                };
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        name.span,
+                        format!("`{field}` takes a list, so `{}` names nothing", name.text),
+                    )
+                    .note(format!(
+                        "write `{field} = {{ {entry_shape} }}`, with one entry per `{}` line",
+                        entry.nsis
+                    )),
+                );
+                continue;
+            };
+            // An element of the wrong shape is reported here and not in
+            // [`Self::table_setting`], whose note says `field = { … }` — true of
+            // a setting written on its own line and wrong inside a list, where
+            // what belongs is one *entry*.
+            if matches!(each, table::Setting::Table(_)) && !matches!(element, Expr::Table { .. }) {
+                self.bad_value(
+                    element.span(),
+                    field,
+                    "a table for every entry",
+                    &format!(
+                        "write `{field} = {{ {entry_shape} }}`, with one entry per `{}` line",
+                        entry.nsis
+                    ),
+                );
+                continue;
+            }
+            self.setting_line(entry, field, each, element);
+        }
+    }
+
     /// `installDirRegKey = { root = HKLM, key = "Software/App", name = "Path" }`:
     /// one NSIS line built out of a Lua table, one key per position, emitted in
     /// the *table's* order rather than the source's — a Lua table has no order
     /// to preserve and NSIS counts arguments (§12).
     ///
-    /// Every part is required, because every position of every row that has
-    /// parts is. `FileErrorText` is the row that will want an optional part and
-    /// it is not waiting on this function: its snapshot line is mis-parsed, so
-    /// it has no positions for parts to stand against.
+    /// A part may be left out when its position is optional *and* nothing after
+    /// it was written — `peAddResource`'s `reslang` is the one that is. Which
+    /// positions those are is the snapshot's answer and not a part's, so a gap
+    /// in the middle is the same error as a part nobody wrote: NSIS counts
+    /// arguments, and a short line means a different thing rather than less.
     fn table_setting(
         &mut self,
         entry: &'static table::Instruction,
@@ -733,22 +830,38 @@ impl Lowerer<'_, '_> {
             written.push((name.text.as_str(), part));
         }
 
+        // The last part anybody wrote. Everything up to it has to be there, and
+        // an optional position after it is simply not emitted.
+        let last = parts
+            .iter()
+            .rposition(|part| written.iter().any(|(key, _)| *key == part.field));
+
         let mut args = Vec::new();
         for (index, part) in parts.iter().enumerate() {
+            let optional = entry
+                .params
+                .get(index)
+                .is_some_and(|param| !param.required());
+            if optional && last.is_none_or(|last| index > last) {
+                continue;
+            }
             // Last one wins, which is what Lua does with a repeated key.
             let Some((_, given)) = written.iter().rev().find(|(key, _)| *key == part.field) else {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::BadFieldValue,
-                        value.span(),
-                        format!("`{field}` has no `{}`", part.field),
-                    )
-                    .note(format!("write `{field} = {{ {} }}`", shape(parts)))
-                    .note(format!(
-                        "`{}` takes every position, so leaving one out is not a shorter line",
-                        entry.nsis
-                    )),
-                );
+                let mut diag = Diagnostic::error(
+                    Code::BadFieldValue,
+                    value.span(),
+                    format!("`{field}` has no `{}`", part.field),
+                )
+                .note(format!("write `{field} = {{ {} }}`", shape(parts)))
+                .note(format!(
+                    "`{}` counts its arguments, so nothing before a position you wrote can be left out",
+                    entry.nsis
+                ));
+                let spare = optional_parts(entry, parts);
+                if !spare.is_empty() {
+                    diag = diag.note(format!("only {} may be left out", list(&spare)));
+                }
+                self.diags.push(diag);
                 return;
             };
             let arg = match self.value_arg(
@@ -2370,6 +2483,23 @@ fn shape(parts: &[table::Part]) -> String {
         .map(|part| format!("{} = …", part.field))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The parts a caller may leave out, which is the snapshot's answer about their
+/// positions and never the row's. Empty for most rows, so the note that names
+/// them is only printed when there is something to name.
+fn optional_parts(entry: &table::Instruction, parts: &[table::Part]) -> Vec<&'static str> {
+    parts
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| {
+            entry
+                .params
+                .get(*index)
+                .is_some_and(|param| !param.required())
+        })
+        .map(|(_, part)| part.field)
+        .collect()
 }
 
 fn list(names: &[&str]) -> String {

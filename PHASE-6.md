@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
 **Status: the alphabetical grind is done, and every surface gap behind it is closed.
-25 → 80 exposed, 14 → 31 attributes, 167 → 95 todo.**
+25 → 80 exposed, 14 → 34 attributes, 167 → 92 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -899,23 +899,99 @@ that pass — so a missing part silently emitting a short line, which `makensis`
 and misread, would have shown up nowhere. `a_table_setting_wants_every_part` writes it
 three ways wrong: not a table, a part that is not one, and a part left out.
 
+## Batch 13 — a setting that is written more than once
+
+**31 → 34 attributes, 95 → 92 todo.**
+
+`Setting::Table` gave a field more than one word. It still gave it one *line*, and three
+rows are written once per resource or once per string:
+
+```lua
+attributes {
+  peAddResource = {
+    { file = "banner.bmp", restype = "#2", resname = "#200" },
+    { file = "logo.ico",   restype = "#3", resname = "#201", reslang = "1033" },
+  },
+  manifestAppendCustomString = { { path = "/assembly", string = "<x/>" } },
+}
+```
+
+[`Setting::Each`](src/table/mod.rs) is the field holding a Lua **array**, one whole line
+per element. Its elements are *positional* where the parts of a `Table` are named, and for
+the mirrored reason: three strings on one line can only be told apart by a key, and two
+resources can only be told apart by their order — which is the one order a Lua table keeps
+(§12), and the order NSIS adds them in.
+
+A line that repeats is not a position that repeats. `Rep::Many` is the snapshot's word for
+*many values on one line*; that a **line** repeats is said only in NSIS's prose, so it is a
+variant in the overlay rather than a bit read off the skeleton.
+
+### The elements go through the same function as everything else
+
+`setting()` now dispatches `Each` and hands every element to `setting_line()`, which is the
+body it used to have. So the third call in the chain — plain setting, part of a table,
+element of a list — is still [`value_arg()`](src/lower/mod.rs), and a `bool` cannot mean
+one thing on a line and another inside a list.
+
+### An optional part, at last
+
+`PEAddResource`'s `reslang` is the first optional position a `Part` has stood against, and
+the rule is the snapshot's rather than the row's: a part may be left out when its position
+is optional *and* nothing after it was written. A gap before something you wrote is the
+same error as a part nobody wrote, because NSIS counts arguments and a short line means a
+different thing rather than less. The message now ends by naming which parts may be left
+out, and the stub types them `reslang?: string`.
+
+### Three narrowings that belong in the example, not the row
+
+`Setting::Str` says "a string" and NSIS means less: `restype` and `resname` are `#N` or a
+name it knows, `PEAddResource` opens its file at compile time, `PERemoveResource` names a
+resource that must already be in the stub, and `ManifestAppendCustomString`'s path is an
+XPath rooted at `/`. All four were found by handing derived values to `makensis` and being
+refused. They live in `REAL` in [tests/overlay.rs](tests/overlay.rs) for the reason
+`peSubsysVer`'s `"5.1"` does: a row is not an example.
+
+The XPath is the one worth remembering, because the wrong answer type-checks: `path` reads
+like a path and is emphatically not one. As `PATH` it would collect §5's `/`-to-`\`
+conversion and NSIS would reject the line the compiler built.
+
+### `ManifestSupportedOS` was on this list and is not blocked on it
+
+It takes a repeated *keyword* — `Rep::Many`, one line — and that half is real. What stops
+it is the same class of bug `FileErrorText` has: `-CMDHELP` prints
+`none|all|…|{GUID} [...]`, and the parser records `GUID` as a member. It is a placeholder,
+and `makensis` rejects it as a keyword, so the row would complete to a word that cannot
+work. `PERemoveResource` has the same wart in `reslang|ALL`, which is why its language part
+is a `STR` and gets no alias: offering `reslang` is worse than offering nothing.
+
+### What the stub cannot say, the compiler does
+
+`{ path: string, string: string }[]` is checked by lua-language-server — `file = 1` is
+caught there. Writing the *parts of one entry* where the entries go is not: LuaLS accepts
+`peAddResource = { file = … }` silently. `a_repeating_setting_wants_a_list` is where that
+is refused, along with a non-list and an element that is not a table;
+`a_repeating_setting_repeats` is the only place that two entries become two lines, in
+order, is checked at all.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could: what is
-  left in the 95 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
+  left in the 92 is section-index binding (§13, 18 rows), the classic UI (30), the `hwnd`
   surface and pages (14), and a handful of one-offs. Every one of those is a design
   question rather than data entry, which is what the grind was for.
-- **A setting that repeats has no spelling.** `PEAddResource` and `PERemoveResource` are
-  written once per resource, `ManifestAppendCustomString` once per string, and
-  `ManifestSupportedOS` takes a repeated *keyword* rather than a repeated line. A table
-  field is written once, so all four want the same thing: a part, or a field, that holds a
-  sequence. Four rows, which is enough to design it from — and the shape of the answer is
-  probably `Part` again, with `Rep` read off the snapshot the way `req` already is.
-- **The snapshot parser reads prose as parameters.** `FileErrorText [text (can contain
-  $0)]` becomes four positions instead of one, which is why that row is the one
-  `Setting::Table` cannot reach. It is the only line in `-CMDHELP` shaped this way, so the
-  fix is bounded: parentheses in a parameter list are commentary, not positions.
+- **The snapshot parser reads notation as parameters**, in two shapes, and it is the last
+  thing standing between the table and three rows. `FileErrorText [text (can contain $0)]`
+  becomes four positions instead of one, so no `Part` can stand against them.
+  `ManifestSupportedOS`'s `{GUID}` and `PERemoveResource`'s `reslang|ALL` become *members*
+  named `GUID` and `reslang`, which are placeholders `makensis` rejects as keywords — so
+  the first row cannot be written at all and the second gives up its completion. Both
+  fixes are bounded and local: parentheses in a parameter list are commentary, and a
+  metavariable in an alternation is not a keyword.
+- **A position that repeats has no spelling.** `Setting::Each` repeats the *line*;
+  `Rep::Many` repeats a *position* within one, and `ManifestSupportedOS` is the only
+  attribute that wants it. It is blocked on the bullet above rather than on this one, so
+  the spelling should arrive with the row rather than before it.
 - **A flag that takes one value and does not repeat has no spelling.** `Offer::List`
   covers `File`'s `/x` because it repeats; `SendMessage`'s `/TIMEOUT=n` and the three
   other single-valued flags are all on `todo` rows, and the variant that spells them

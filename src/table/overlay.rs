@@ -1545,13 +1545,36 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Path)],
         "writeUninstaller(INSTDIR .. \"/uninstall.exe\")",
     ),
-    todo(
+    // The first two settings NSIS writes more than once, so the field is a
+    // *list* of tables and each entry is one line.
+    //
+    // `restype` and `resname` are `#N` or a type NSIS knows by name, never an
+    // arbitrary word, and `Setting::Str` says only "a string". That narrowing is
+    // NSIS's rather than this language's, so it lives in the example the way
+    // `peSubsysVer`'s does and not on the row.
+    attribute(
         "PEAddResource",
-        "repeats to add more than one resource, and a table field is written once",
+        "peAddResource",
+        Setting::Each(&Setting::Table(&[
+            part("file", PATH),
+            part("restype", STR),
+            part("resname", STR),
+            // Optional, and the snapshot is what says so.
+            part("reslang", STR),
+        ])),
     ),
-    todo(
+    // The language is `STR` and not `Setting::Enum` although the snapshot lists
+    // members for it: `-CMDHELP` prints `reslang|ALL`, and `reslang` there is a
+    // placeholder rather than a keyword. Offering it would complete to a word
+    // `makensis` rejects, which is worse than offering nothing.
+    attribute(
         "PERemoveResource",
-        "repeats to remove more than one resource, and a table field is written once",
+        "peRemoveResource",
+        Setting::Each(&Setting::Table(&[
+            part("restype", STR),
+            part("resname", STR),
+            part("reslang", STR),
+        ])),
     ),
     // Two bit masks on one line. They are one field rather than two attributes
     // because NSIS takes them together — writing only the bits to add still
@@ -1573,9 +1596,13 @@ pub const ROWS: &[Row] = &[
         "requestExecutionLevel",
         Setting::Enum,
     ),
-    todo(
+    // `path` is an XPath into the manifest — `/assembly` — and not a file path,
+    // so it is `STR` and must never be `PATH`: §5 would turn its `/` into `\`
+    // and NSIS would reject the line the compiler built.
+    attribute(
         "ManifestAppendCustomString",
-        "repeats to append more than one string, and a table field is written once",
+        "manifestAppendCustomString",
+        Setting::Each(&Setting::Table(&[part("path", STR), part("string", STR)])),
     ),
     attribute("ManifestDPIAware", "manifestDpiAware", TRUEFALSE),
     // A comma-separated list in one string, which NSIS parses and this compiler
@@ -1584,7 +1611,7 @@ pub const ROWS: &[Row] = &[
     attribute("ManifestLongPathAware", "manifestLongPathAware", TRUEFALSE),
     todo(
         "ManifestSupportedOS",
-        "takes a list of keywords rather than one, and a repeating setting has no spelling in `Setting` yet",
+        "its snapshot members include `GUID`, which is a placeholder `makensis` rejects as a keyword",
     ),
     // `maj.min.bld.rev`, a string for the same reason as `PESubsysVer`.
     attribute("ManifestMaxVersionTested", "manifestMaxVersionTested", STR),

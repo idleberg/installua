@@ -109,6 +109,13 @@ fn attribute_program() -> String {
 /// a part of a table is the same question one position along, which is why this
 /// is one recursive function and not a second copy for parts.
 fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::Setting) -> String {
+    if let Some((_, _, real)) = REAL
+        .iter()
+        .find(|(nsis, part, _)| *nsis == entry.nsis && *part == field)
+    {
+        return (*real).to_string();
+    }
+
     match holds {
         // `Icon` and `LicenseData` open the file at compile time, so these
         // two want a real one — see tests/fixtures/README.md.
@@ -160,9 +167,36 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
                 .collect();
             format!("{{ {} }}", parts.join(", "))
         }
+        // One element, because the point of the golden is that the shape emits
+        // and not that it emits twice — and because two `PERemoveResource`
+        // lines naming the same resource is an error the second time. That a
+        // list of two becomes two lines is [`a_repeating_setting_repeats`].
+        table::Setting::Each(one) => format!("{{ {} }}", derived(entry, index, field, *one)),
         table::Setting::Handled(_) => unreachable!("filtered above"),
     }
 }
+
+/// The parts whose value has to be a real one, and the only hand-written data in
+/// this file.
+///
+/// [`table::Setting::Str`] says "a string" and NSIS means less than that here: a
+/// resource type is `#N` or a name it knows, `PEAddResource` opens the file at
+/// compile time, `PERemoveResource` names a resource that must already be in the
+/// stub, and a manifest path is an XPath rooted at `/`. Every one of those is a
+/// narrowing the table cannot state, which is why they are examples rather than
+/// rows — the same reason `peSubsysVer`'s `"5.1"` is below.
+const REAL: &[(&str, &str, &str)] = &[
+    ("PEAddResource", "file", "\"assets/icon.ico\""),
+    ("PEAddResource", "restype", "\"#100\""),
+    ("PEAddResource", "resname", "\"#1\""),
+    ("PEAddResource", "reslang", "\"1033\""),
+    // `#5` is `RT_DIALOG` and `#105` one of the stub's own, which is the only
+    // resource this test can be sure exists.
+    ("PERemoveResource", "restype", "\"#5\""),
+    ("PERemoveResource", "resname", "\"#105\""),
+    ("PERemoveResource", "reslang", "\"ALL\""),
+    ("ManifestAppendCustomString", "path", "\"/assembly\""),
+];
 
 #[test]
 fn every_attribute_row_emits() {
@@ -202,6 +236,75 @@ fn a_table_setting_wants_every_part() {
             diags.has_errors(),
             "`{what}` compiled: {}",
             diags.render("table-setting.lua")
+        );
+    }
+}
+
+/// Two entries become two lines, in the order they were written.
+///
+/// The golden above writes one, so the whole of what
+/// [`table::Setting::Each`] adds — that a *line* repeats at all — is checked
+/// here or nowhere. Order is asserted rather than only the count, because a
+/// resource list that comes out shuffled still has the right number of lines.
+#[test]
+fn a_repeating_setting_repeats() {
+    let source = "attributes {\n\
+        \toutFile = \"a.exe\",\n\
+        \tname = \"a\",\n\
+        \tmanifestAppendCustomString = {\n\
+        \t\t{ path = \"/assembly\", string = \"<first/>\" },\n\
+        \t\t{ path = \"/assembly\", string = \"<second/>\" },\n\
+        \t},\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags).unwrap_or_default();
+    assert!(!diags.has_errors(), "{}", diags.render("each.lua"));
+
+    let lines: Vec<&str> = built
+        .lines()
+        .filter(|line| line.starts_with("ManifestAppendCustomString"))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "ManifestAppendCustomString \"/assembly\" \"<first/>\"",
+            "ManifestAppendCustomString \"/assembly\" \"<second/>\"",
+        ],
+        "in:\n{built}"
+    );
+}
+
+/// The two ways a [`table::Setting::Each`] can be written wrong, neither of
+/// which the golden reaches: a list is the one shape whose *elements* can be
+/// wrong, and a named entry in one is a caller writing the parts of a line
+/// where the lines go.
+#[test]
+fn a_repeating_setting_wants_a_list() {
+    const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
+
+    for (what, written) in [
+        (
+            "not a list at all",
+            "manifestAppendCustomString = \"/assembly\"",
+        ),
+        (
+            "the parts of one line where the lines go",
+            "manifestAppendCustomString = { path = \"/assembly\", string = \"<x/>\" }",
+        ),
+        (
+            "an element that is not a table",
+            "manifestAppendCustomString = { \"/assembly\" }",
+        ),
+    ] {
+        let source = format!("{PRELUDE}{written} }}");
+        let mut diags = Diagnostics::new();
+        let _ = installua::build(&source, &mut diags);
+
+        assert!(
+            diags.has_errors(),
+            "`{what}` compiled: {}",
+            diags.render("each.lua")
         );
     }
 }

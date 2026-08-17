@@ -17,9 +17,12 @@ ShowUninstDetails hide
 SilentInstall normal
 SilentUnInstall normal
 CPU x86
+PEAddResource "assets\icon.ico" "#100" "#1" 1033
+PERemoveResource "#5" "#105" "ALL"
 PEDllCharacteristics 1 1
 PESubsysVer "5.1"
 RequestExecutionLevel none
+ManifestAppendCustomString "/assembly" "string"
 ManifestDPIAware true
 ManifestDPIAwareness "manifestDpiAwareness"
 ManifestLongPathAware true

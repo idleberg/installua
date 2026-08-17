@@ -248,11 +248,19 @@ fn setting_type(entry: &table::Instruction, field: &str, holds: table::Setting) 
                             .unwrap_or_else(|| "string".to_string()),
                         other => setting_type(entry, part.field, other),
                     };
-                    format!("{}: {ty}", part.field)
+                    let optional = entry
+                        .params
+                        .get(index)
+                        .is_some_and(|param| !param.required());
+                    format!("{}{}: {ty}", part.field, if optional { "?" } else { "" })
                 })
                 .collect();
             format!("{{ {} }}", parts.join(", "))
         }
+        // A list of whatever one line takes. The brackets go on the outside
+        // because the repetition is of the *line*, which is the whole of what
+        // the inner type describes.
+        table::Setting::Each(one) => format!("{}[]", setting_type(entry, field, *one)),
     }
 }
 

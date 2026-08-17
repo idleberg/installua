@@ -252,6 +252,15 @@ pub enum Setting {
     /// three strings apart, and because a language whose tables have no order
     /// (§12) cannot be asked to supply one by counting.
     Table(&'static [Part]),
+    /// `PEAddResource f t n` written once per resource: the field holds a Lua
+    /// **array**, and the whole line is emitted once per element, in the order
+    /// the elements were written — the one order a Lua table does have (§12).
+    ///
+    /// Not the repetition a *position* has. `Rep::Many` puts many values on one
+    /// line and is the snapshot's to say; that a **line** repeats is said only
+    /// in NSIS's prose, so it is a variant here rather than a bit read off the
+    /// skeleton.
+    Each(&'static Setting),
     /// Shaped by the block's own lowering instead: `unicode` sets a field of
     /// the module rather than emitting a line, and `versionInfo` is a nested
     /// table. The analogue of [`Offer::Handled`] one level up, and it carries

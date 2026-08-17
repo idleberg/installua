@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed           80
-  attribute         31
+  attribute         34
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo              95
+  todo              92
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -89,11 +89,8 @@ todo:
   UninstallText           a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallSubCaption     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   WindowIcon              the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  PEAddResource           repeats to add more than one resource, and a table field is written once
-  PERemoveResource        repeats to remove more than one resource, and a table field is written once
   XPStyle                 the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
-  ManifestAppendCustomStringrepeats to append more than one string, and a table field is written once
-  ManifestSupportedOS     takes a list of keywords rather than one, and a repeating setting has no spelling in `Setting` yet
+  ManifestSupportedOS     its snapshot members include `GUID`, which is a placeholder `makensis` rejects as a keyword
   MiscButtonText          a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   DetailsButtonText       a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
   UninstallButtonText     a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
