@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           74
+  exposed           77
   attribute         14
   lowering-target   18
   language           6
   directive         37
   rejected           9
-  todo             118
+  todo             115
 
 todo:
   AddBrandingImage        the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
@@ -18,10 +18,7 @@ todo:
   BringToFront            addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   ChangeUI                the classic UI's appearance; MUI supersedes it, and §15.7's sequential-`!define` hazard is unruled
   ComponentText           a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first
-  GetDLLVersion           file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  GetDLLVersionLocal      file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  GetFileTime             file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
-  GetFileTimeLocal        file surface beyond `file`/`delete`/`fileOpen`: one overlay row each
+  GetDLLVersionLocal      its example reads the build machine at compile time, and no fixture yet carries a version resource
   CreateFont              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   SetDatablockOptimize    compile time and positional: it changes the `file` calls after it rather than executing, so a call inside an `if` would be a lie
   DirText                 a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first

@@ -148,6 +148,75 @@ fn an_optional_position_is_written_only_when_something_after_it_is() {
     );
 }
 
+/// A row that writes two registers, called by someone who wants one or none.
+///
+/// The example on the row binds both, because that is the shape worth showing.
+/// What it cannot show is that `GetFileTime` has no one-register spelling: the
+/// second output is written whatever Lua asked for, so the only question is
+/// whether it lands in a name or a temporary.
+#[test]
+fn every_required_output_is_written_even_when_nothing_binds_it() {
+    let build = |body: &str| {
+        let mut diags = Diagnostics::new();
+        let source = format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n\
+             {body}\n\
+             end), }}"
+        );
+        installua::build(&source, &mut diags)
+            .unwrap_or_else(|| panic!("{}", diags.render("<test>")))
+    };
+
+    let both = build(
+        "local high, low = getFileTime(INSTDIR .. \"/app.exe\")\n\
+         detailPrint(high .. \" \" .. low)",
+    );
+    assert!(
+        both.contains("GetFileTime \"$INSTDIR\\app.exe\" $0 $1\n"),
+        "two names, two registers:\n{both}"
+    );
+
+    // One name. Lua adjusts the call to one value and NSIS does not adjust
+    // anything, so the dropped half still needs somewhere to land.
+    let one = build(
+        "local high = getFileTime(INSTDIR .. \"/app.exe\")\n\
+         detailPrint(\"stamp \" .. high)",
+    );
+    assert!(
+        one.contains("GetFileTime \"$INSTDIR\\app.exe\" $0 $1\n"),
+        "an unbound required output should still take a register:\n{one}"
+    );
+
+    // No names at all: the call is a statement, and both halves are temporary.
+    let none = build("getFileTime(INSTDIR .. \"/app.exe\")");
+    assert!(
+        none.contains("GetFileTime \"$INSTDIR\\app.exe\" $0 $1\n"),
+        "statement position writes the same two registers:\n{none}"
+    );
+}
+
+/// Binding more names than the row has outputs. There is no `nil` to pad with
+/// (§3), so this is an arity error rather than a shorter tuple.
+#[test]
+fn binding_more_names_than_a_row_writes_is_an_error() {
+    let mut diags = Diagnostics::new();
+    let built = installua::build(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local high, low, extra = getFileTime(INSTDIR .. \"/app.exe\")\n\
+         end), }",
+        &mut diags,
+    );
+
+    assert!(built.is_none() || diags.has_errors());
+    let rendered = diags.render("<test>");
+    assert!(
+        rendered.contains("writes 2 register(s), and 3 are being bound"),
+        "{rendered}"
+    );
+}
+
 /// Tier 3, with an empty warning allowlist (§14).
 ///
 /// The golden above answers *"did the output change?"*. Only `makensis`

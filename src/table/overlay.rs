@@ -224,21 +224,57 @@ pub const ROWS: &[Row] = &[
         "ComponentText",
         "a classic-UI caption or button label; each needs a home in `installer {}` or `page {}` first",
     ),
-    todo(
+    // The four rows that write *two* registers. A 64-bit value split across a
+    // high and a low half is one number in every language that has one, and
+    // Installua does not: §3 has no 64-bit type, so the halves stay halves and
+    // the call binds both. `/ProductVersion` is not reachable — no row emits an
+    // option yet — but it is optional, so the row is honest without it.
+    exposed(
         "GetDLLVersion",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "getDllVersion",
+        &[
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::nonneg(), Kind::Value),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local high, low = getDllVersion(INSTDIR .. \"/shell.dll\")\ndetailPrint(high .. \".\" .. low)",
     ),
+    // The lowering is the same as `GetDLLVersion`'s and the row is not the
+    // problem: the `Local` twin reads the *build* machine at compile time, so
+    // its example needs a real PE carrying a version resource sitting in
+    // `tests/fixtures`, and neither an `.ico` nor a shipped NSIS plugin has one
+    // (both give *"error reading version info"*). A fixture that is not what it
+    // claims to be is what that directory's README exists to forbid.
     todo(
         "GetDLLVersionLocal",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "its example reads the build machine at compile time, and no fixture yet carries a \
+         version resource",
     ),
-    todo(
+    exposed(
         "GetFileTime",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "getFileTime",
+        &[
+            ann(Ty::Str, Kind::Path),
+            ann(Ty::nonneg(), Kind::Value),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local high, low = getFileTime(INSTDIR .. \"/app.exe\")\ndetailPrint(high .. \" \" .. low)",
     ),
-    todo(
+    // `Kind::Value` rather than `Kind::Path`, and the difference is which
+    // machine reads the string. §5 turns `/` into `\` because that is what
+    // *Windows* wants at install time; this path is opened by `makensis` at
+    // compile time, on whatever host is building, and a `\` there is a
+    // filename character rather than a separator. `assets\icon.ico` is
+    // *"error reading date"* on macOS and `assets/icon.ico` is fine on both.
+    exposed(
         "GetFileTimeLocal",
-        "file surface beyond `file`/`delete`/`fileOpen`: one overlay row each",
+        "getFileTimeLocal",
+        &[
+            ann(Ty::Str, Kind::Value),
+            ann(Ty::nonneg(), Kind::Value),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local high, low = getFileTimeLocal(\"assets/icon.ico\")\ndetailPrint(high .. \" \" .. low)",
     ),
     exposed(
         "CopyFiles",

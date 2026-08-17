@@ -13,6 +13,21 @@ Section "ClearErrors"
   ClearErrors
 SectionEnd
 
+Section "GetDLLVersion"
+  GetDLLVersion "$INSTDIR\shell.dll" $0 $1
+  DetailPrint "$0.$1"
+SectionEnd
+
+Section "GetFileTime"
+  GetFileTime "$INSTDIR\app.exe" $0 $1
+  DetailPrint "$0 $1"
+SectionEnd
+
+Section "GetFileTimeLocal"
+  GetFileTimeLocal "assets/icon.ico" $0 $1
+  DetailPrint "$0 $1"
+SectionEnd
+
 Section "CopyFiles"
   CopyFiles "$INSTDIR\data" "$INSTDIR\backup"
 SectionEnd

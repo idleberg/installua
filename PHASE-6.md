@@ -1,7 +1,7 @@
 # Phase 6 — the coverage grind
 
-**Status: the alphabetical grind is done and the first design item after it has landed.
-25 → 74 exposed, 167 → 118 todo.**
+**Status: the alphabetical grind is done and the output work behind it is finished.
+25 → 77 exposed, 167 → 115 todo.**
 
 PLAN describes Phase 6 as *"parallelisable, mechanical … each command is one overlay row
 plus its mandatory example pair"*. Before that was true, two things were not: adding a
@@ -20,7 +20,7 @@ in `-CMDHELP` order either way.
 | The fixtures they need | [`tests/fixtures/`](tests/fixtures/) | one real `.ico`, and a README saying when to add more |
 
 ```
-cargo test          # 86 tests
+cargo test          # 88 tests
 ```
 
 ---
@@ -311,6 +311,65 @@ of its two blockers. The `GetDLLVersion` and `GetFileTime` families need the plu
 work as well. The rest of the non-leading-output commands are behind §13, the `hwnd`
 surface, the classic UI or §15.19.
 
+## Batch 6 — an instruction's outputs are its values
+
+`GetDLLVersion`, `GetFileTime` and their `*Local` twins write **two** registers: a 64-bit
+number split across a high and a low half. §3 has no 64-bit type, so the halves stay
+halves, and §15.23 already said what that means at the call site — *the output count is
+the Lua arity*.
+
+```lua
+local high, low = getFileTime(INSTDIR .. "/app.exe")   -- GetFileTime "…" $0 $1
+```
+
+Batch 5 taught `place()` **where** the registers go. Nothing taught the lowerer that there
+could be more than one of them: `Instruction::returns` reads the first `Dir::Out` and
+stops, and `call_multi` — the path a `local a, b = …` takes — knew about `func`s and
+namespaces and answered *"binding several values from this call"* for everything else. So
+the plural case was never a row. Three rows now exist; one does not, for a reason that is
+neither.
+
+### The three questions were already answered, in the wrong place
+
+Two of the emission arms in `call()` differed only in where the destination came from, and
+the same pair was copied into `method()` — four arms deciding one thing. They collapse
+into [`destinations`](src/lower/expr.rs), which answers it once:
+
+- a **bound** output writes the caller's slot;
+- an **unbound required** output writes a temporary, because `GetFileTime` has no
+  one-register spelling and Lua adjusting the call to one value does not adjust NSIS;
+- an **unbound optional** output is not written at all — batch 5's `fileSeek` rule,
+  unchanged.
+
+So `local high = getFileTime(p)` still emits `GetFileTime "…" $0 $1`, and so does
+`getFileTime(p)` in statement position. That is the thing an example cannot show, because
+an example is one call site, and it is [pinned in `tests/overlay.rs`](tests/overlay.rs)
+across all three.
+
+The argument walk and the arity check came out of `call()` at the same time and are now
+`positional` and `builtin_arity`, which is what let `call_multi` reuse the whole check
+rather than a copy of it. Binding more names than a row writes is a `wrong-arity` error
+naming the register count: there is no `nil` to pad with (§3).
+
+### `GetDLLVersionLocal` is a fixture, not a design
+
+The row is written and correct and still `todo`, which has not happened before. The
+`*Local` twins read the **build** machine at compile time, so their examples touch this
+disk — and `GetDLLVersionLocal` needs a real PE carrying a version resource. Neither the
+`.ico` in `tests/fixtures` nor any DLL shipped with NSIS has one; both give *"error
+reading version info from …"* under tier 3. `tests/fixtures/README.md` forbids a
+placeholder that is not what it claims to be, which is exactly the trap this would be, so
+the reason on the row now names the fixture instead of the design.
+
+### §5 is about the target machine
+
+`GetFileTimeLocal` opens its path with `makensis`, not with Windows. Annotated
+`Kind::Path` it emitted `assets\icon.ico`, and on macOS a `\` is a filename character:
+*"error reading date"*. The same string as `assets/icon.ico` compiles on both hosts. So a
+compile-time path is `Kind::Value` — §5's `/`-to-`\` rewrite exists because *Windows*
+wants `\` at install time, and this string never reaches Windows. `SearchPath`'s
+annotation is the same conclusion from a different direction.
+
 ## What the join replaced
 
 `builtins.rs` held a parameter table the lowerer read, written before the `-CMDHELP` join
@@ -385,11 +444,10 @@ tier 3 catches and tier 2 cannot.
 - **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
   `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
   pass a call that is simply dead.
-- **Multiple outputs are still one output.** `Instruction::returns` takes the first
-  `Dir::Out` parameter, which is every exposed row today. `GetDLLVersion`, `GetFileTime`
-  and their `*Local` twins write two, and §15.23 says the count *is* the Lua arity, so the
-  plural case is a lowering change rather than a row. Batch 5 placed outputs by position,
-  which is half of it; the other half is the multi-`dest` binding path.
+- **No fixture carries a version resource.** `GetDLLVersionLocal` is the only row whose
+  blocker is a file rather than a design: its example reads the build machine at compile
+  time, and neither the `.ico` in `tests/fixtures` nor any NSIS-shipped DLL has version
+  info. A real PE with one, committed there, is the whole task.
 
 ### Optionals should be named, not counted
 

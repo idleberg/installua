@@ -551,28 +551,105 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
 
+        let name = builtin.installua.unwrap_or(builtin.nsis);
+        self.builtin_arity(builtin, name, args.len(), span)?;
+        let lowered = self.positional(builtin, name, args)?;
+
+        match builtin.predicate {
+            true => match dest {
+                Some(dest) => self.materialise(call, dest, span),
+                None => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::NotYetImplemented,
+                            span,
+                            format!("`{name}` answers a question that nothing reads"),
+                        )
+                        .note(format!(
+                            "write `local answer = {name}(…)`, or use it directly in an `if`"
+                        ))
+                        .note(
+                            "it is never optimised away — `IfErrors` clears the flag it reads, \
+                             so the call is the side effect (§15.20)",
+                        ),
+                    );
+                    None
+                }
+            },
+
+            false => match (builtin.returns(), dest) {
+                // One name for a row that may write several registers: Lua
+                // adjusts the call to one value, so the rest still have to be
+                // written and [`Self::destinations`] finds them somewhere.
+                (Some(ty), dest) => {
+                    let bound: &[Slot] = match dest {
+                        Some(dest) => std::slice::from_ref(dest),
+                        None => &[],
+                    };
+                    let dests = self.destinations(builtin, bound, span);
+                    let all = place(builtin, lowered, dests);
+                    self.emit(ir::Instruction::new(builtin.nsis, all));
+                    Some(ty)
+                }
+                (None, Some(_)) => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::TypeMismatch,
+                            span,
+                            format!("`{name}` produces no value"),
+                        )
+                        .note(format!("`{}` writes to no register (§15.23)", builtin.nsis)),
+                    );
+                    None
+                }
+                (None, None) => {
+                    let all = place(builtin, lowered, Vec::new());
+                    self.emit(ir::Instruction::new(builtin.nsis, all));
+                    None
+                }
+            },
+        }
+    }
+
+    /// The count check, said in the reader's units: `-CMDHELP` brackets are
+    /// genuine optionality, so a row can take two arguments or seven.
+    fn builtin_arity(
+        &mut self,
+        builtin: &table::Instruction,
+        name: &str,
+        given: usize,
+        span: Span,
+    ) -> Option<()> {
+        let arity = builtin.arity();
+        if arity.contains(&given) {
+            return Some(());
+        }
+        self.diags.push(
+            Diagnostic::error(
+                Code::WrongArity,
+                span,
+                format!(
+                    "`{name}` takes {}, and {given} were given",
+                    arguments(&arity)
+                ),
+            )
+            .note(format!("it becomes `{}` (§6)", builtin.nsis)),
+        );
+        None
+    }
+
+    /// The arguments a caller wrote, checked and converted against the surface
+    /// positions they land in.
+    fn positional(
+        &mut self,
+        builtin: &table::Instruction,
+        name: &str,
+        args: &[Expr],
+    ) -> Option<Vec<ir::Arg>> {
         // The user-facing positions: the inputs, minus the ones the compiler
         // fills. `fileExists(p)` takes one argument where `IfFileExists` takes
         // three, and that difference is §15.20's whole point.
         let params: Vec<&table::Param> = builtin.surface().collect();
-        let name = builtin.installua.unwrap_or(builtin.nsis);
-        let arity = builtin.arity();
-        if !arity.contains(&args.len()) {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::WrongArity,
-                    span,
-                    format!(
-                        "`{name}` takes {}, and {} were given",
-                        arguments(&arity),
-                        args.len()
-                    ),
-                )
-                .note(format!("it becomes `{}` (§6)", builtin.nsis)),
-            );
-            return None;
-        }
-
         let mut lowered = Vec::with_capacity(args.len());
         for (index, argument) in args.iter().enumerate() {
             // A repeated trailing position — `File a b c` — annotates every
@@ -615,65 +692,77 @@ impl BodyLowerer<'_, '_> {
                 value.arg
             });
         }
+        Some(lowered)
+    }
 
-        match builtin.predicate {
-            true => match dest {
-                Some(dest) => self.materialise(call, dest, span),
-                None => {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::NotYetImplemented,
-                            span,
-                            format!("`{name}` answers a question that nothing reads"),
-                        )
-                        .note(format!(
-                            "write `local answer = {name}(…)`, or use it directly in an `if`"
-                        ))
-                        .note(
-                            "it is never optimised away — `IfErrors` clears the flag it reads, \
-                             so the call is the side effect (§15.20)",
-                        ),
-                    );
-                    None
-                }
-            },
-
-            false => match (builtin.returns(), dest) {
-                (Some(ty), Some(dest)) => {
-                    let all = place(builtin, lowered, Some(ir::Arg::dest(dest.clone())));
-                    self.emit(ir::Instruction::new(builtin.nsis, all));
-                    Some(ty)
-                }
-                (Some(ty), None) => {
-                    // A *required* output register exists whether or not anybody
-                    // wanted one, so it gets a temporary rather than a guess at
-                    // which register is spare. An *optional* one is simply not
-                    // written: `fileSeek(f, 0, "END")` in statement position is
-                    // `FileSeek $1 0 END`, and a register nobody reads would
-                    // still enter the clobber set and cost a caller a save.
-                    let wanted = builtin.outputs().next().is_some_and(|out| out.required());
-                    let slot = wanted.then(|| ir::Arg::dest(self.claim_temp(span)));
-                    let all = place(builtin, lowered, slot);
-                    self.emit(ir::Instruction::new(builtin.nsis, all));
-                    Some(ty)
-                }
-                (None, Some(_)) => {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::TypeMismatch,
-                            span,
-                            format!("`{name}` produces no value"),
-                        )
-                        .note(format!("`{}` writes to no register (§15.23)", builtin.nsis)),
-                    );
-                    None
-                }
-                (None, None) => {
-                    self.emit(ir::Instruction::new(builtin.nsis, lowered));
-                    None
-                }
-            },
+    /// The registers the instruction writes, given the ones a caller asked to
+    /// bind. The two are not the same list: NSIS writes every *required* output
+    /// whether or not Lua reads it — `GetFileTime` has no one-register spelling
+    /// — so an unbound required output takes a temporary rather than a guess at
+    /// which register is spare. A trailing *optional* output nobody reads is
+    /// not written at all, because a register nobody wanted would still enter
+    /// the clobber set and cost a caller a save.
+    fn destinations(
+        &mut self,
+        builtin: &table::Instruction,
+        bound: &[Slot],
+        span: Span,
+    ) -> Vec<ir::Arg> {
+        let mut dests = Vec::new();
+        for (index, output) in builtin.outputs().enumerate() {
+            match bound.get(index) {
+                Some(slot) => dests.push(ir::Arg::dest(slot.clone())),
+                None if output.required() => dests.push(ir::Arg::dest(self.claim_temp(span))),
+                None => break,
+            }
         }
+        dests
+    }
+
+    /// `local high, low = getFileTime(p)`. One call, several outputs.
+    ///
+    /// The plural is the table's, not the language's: an instruction's output
+    /// *count* is its Lua arity (§15.23), so nothing here decides anything a
+    /// row has not already said.
+    fn builtin_multi(
+        &mut self,
+        builtin: &'static table::Instruction,
+        args: &[Expr],
+        dests: &[Slot],
+        span: Span,
+    ) -> Option<Vec<Ty>> {
+        let name = builtin.installua.unwrap_or(builtin.nsis);
+        let outputs: Vec<Ty> = match builtin.predicate {
+            // A predicate's `bool` comes from its branch rather than from a
+            // register, so there is no second value to bind.
+            true => Vec::new(),
+            false => builtin.outputs().map(|param| param.ty).collect(),
+        };
+        if dests.len() > outputs.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{name}` writes {} register(s), and {} are being bound",
+                        outputs.len(),
+                        dests.len()
+                    ),
+                )
+                .note(format!(
+                    "`{}` is what it becomes, and its outputs are its values (§15.23)",
+                    builtin.nsis
+                )),
+            );
+            return None;
+        }
+
+        self.builtin_arity(builtin, name, args.len(), span)?;
+        let lowered = self.positional(builtin, name, args)?;
+        let placed = self.destinations(builtin, dests, span);
+        let all = place(builtin, lowered, placed);
+        self.emit(ir::Instruction::new(builtin.nsis, all));
+        Some(outputs[..dests.len()].to_vec())
     }
 
     /// `f:close()` — a method on a handle.
@@ -741,15 +830,13 @@ impl BodyLowerer<'_, '_> {
         }
 
         match (builtin.returns(), dest) {
-            (Some(ty), Some(dest)) => {
-                let all = place(builtin, lowered, Some(ir::Arg::dest(dest.clone())));
-                self.emit(ir::Instruction::new(builtin.nsis, all));
-                Some(ty)
-            }
-            (Some(ty), None) => {
-                let wanted = builtin.outputs().next().is_some_and(|out| out.required());
-                let slot = wanted.then(|| ir::Arg::dest(self.claim_temp(span)));
-                let all = place(builtin, lowered, slot);
+            (Some(ty), dest) => {
+                let bound: &[Slot] = match dest {
+                    Some(dest) => std::slice::from_ref(dest),
+                    None => &[],
+                };
+                let dests = self.destinations(builtin, bound, span);
+                let all = place(builtin, lowered, dests);
                 self.emit(ir::Instruction::new(builtin.nsis, all));
                 Some(ty)
             }
@@ -765,7 +852,7 @@ impl BodyLowerer<'_, '_> {
                 None
             }
             (None, None) => {
-                let all = place(builtin, lowered, None);
+                let all = place(builtin, lowered, Vec::new());
                 self.emit(ir::Instruction::new(builtin.nsis, all));
                 None
             }
@@ -1527,6 +1614,12 @@ impl BodyLowerer<'_, '_> {
             return self.namespaced(&base, &method, args, dests, *span);
         }
         if !self.resolved.functions.contains_key(&name) {
+            // An instruction's outputs are its values, and `GetFileTime` has
+            // two of them. This is the only path that can bind both: the
+            // single-value one drops everything past the first (§15.23).
+            if let Some(builtin) = builtins::lookup(&name) {
+                return self.builtin_multi(builtin, args, dests, *span);
+            }
             self.todo(*span, "binding several values from this call");
             return None;
         }
@@ -1949,15 +2042,11 @@ fn methods() -> String {
 /// means writing a mode the author never named. Pending-until-needed keeps
 /// `fileSeek(f, 0)` at `FileSeek $1 0` and makes `local p = fileSeek(f, 0)`
 /// into `FileSeek $1 0 SET $0`, from one table field and no special case.
-fn place(
-    builtin: &table::Instruction,
-    inputs: Vec<ir::Arg>,
-    dest: Option<ir::Arg>,
-) -> Vec<ir::Arg> {
+fn place(builtin: &table::Instruction, inputs: Vec<ir::Arg>, dests: Vec<ir::Arg>) -> Vec<ir::Arg> {
     let mut emitted = Vec::with_capacity(builtin.params.len());
     let mut pending: Vec<ir::Arg> = Vec::new();
     let mut inputs = inputs.into_iter().peekable();
-    let mut dests = dest.into_iter();
+    let mut dests = dests.into_iter();
 
     for param in &builtin.params {
         let argument = match param.dir() {

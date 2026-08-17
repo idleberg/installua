@@ -12,6 +12,18 @@ installer {
 	section("ClearErrors", function()
 		clearErrors()
 	end),
+	section("GetDLLVersion", function()
+		local high, low = getDllVersion(INSTDIR .. "/shell.dll")
+		detailPrint(high .. "." .. low)
+	end),
+	section("GetFileTime", function()
+		local high, low = getFileTime(INSTDIR .. "/app.exe")
+		detailPrint(high .. " " .. low)
+	end),
+	section("GetFileTimeLocal", function()
+		local high, low = getFileTimeLocal("assets/icon.ico")
+		detailPrint(high .. " " .. low)
+	end),
 	section("CopyFiles", function()
 		copyFiles(INSTDIR .. "/data", INSTDIR .. "/backup")
 	end),
