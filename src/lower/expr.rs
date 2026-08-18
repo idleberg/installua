@@ -253,6 +253,20 @@ impl BodyLowerer<'_, '_> {
                 }
             },
 
+            // `core.selected`. A field is a *handle's* field or nothing: the
+            // other two dotted things in the surface — a header's macro and a
+            // plugin's method — are only ever callees, and `lang.greeting` is
+            // §15.26's, which is not built yet.
+            Expr::Field { base, name, span } => {
+                if base.name().is_none_or(|base| {
+                    !self.resolved.deferred.contains_key(base) || self.claims.get(base).is_none()
+                }) {
+                    self.todo(*span, "this expression");
+                    return None;
+                }
+                self.handle_read(base, name, dest)
+            }
+
             // A bare name that `simple` could not resolve is not a shape this
             // version lacks — it is a name that exists nowhere in the file,
             // which resolution being order-free is what makes worth saying.
@@ -507,7 +521,7 @@ impl BodyLowerer<'_, '_> {
         Some(Ty::int())
     }
 
-    fn require_int(&mut self, value: &Typed, span: Span) -> Option<()> {
+    pub(super) fn require_int(&mut self, value: &Typed, span: Span) -> Option<()> {
         if value.ty.is_int() {
             return Some(());
         }

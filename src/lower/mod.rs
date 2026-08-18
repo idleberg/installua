@@ -16,6 +16,7 @@
 //! collapsing them is how a `todo` count stops predicting anything.
 
 mod expr;
+mod handle;
 mod sig;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -151,6 +152,118 @@ fn index_name(local: &str, half: Half) -> String {
     match half {
         Half::Installer => format!("SEC_{local}"),
         Half::Uninstaller => format!("UNSEC_{local}"),
+    }
+}
+
+/// A field of a section handle, and the instruction pair behind it.
+///
+/// Seven fields and four pairs, because `Sections.nsh` names seven bits and NSIS
+/// exposes all of them through one `SectionGetFlags`/`SectionSetFlags` — handing
+/// a user that integer means handing them `IntOp` and `${SECTION_OFF}`, so the
+/// bit is the compiler's and the field is the surface (ruling 6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HandleField {
+    /// One bit of the flags word. `shift` is `bit.trailing_zeros()`, kept beside
+    /// it because a read normalises to `0`/`1` and a write has to put the value
+    /// back where it came from.
+    Flag {
+        bit: u32,
+        shift: u32,
+        on: Where,
+    },
+    Text,
+    Size,
+    InstallTypes,
+}
+
+/// Which handles a field is on. `expanded` is a heading's, and `size` and
+/// `installTypes` are a section's — a group has neither, since what it holds is
+/// sections and each of those answers for itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Where {
+    Both,
+    Sections,
+    Groups,
+}
+
+impl Where {
+    fn accepts(self, kind: DeferredKind) -> bool {
+        match self {
+            Where::Both => true,
+            Where::Sections => kind == DeferredKind::Section,
+            Where::Groups => kind == DeferredKind::Group,
+        }
+    }
+}
+
+/// The seven fields, by the name a program writes.
+///
+/// `SF_SECGRP` and `SF_SECGRPEND` are absent because they say what an index *is*
+/// rather than what a user may change, and `SF_PSELECTED`, `SF_TOGGLED` and
+/// `SF_NAMECHG` because `Sections.nsh` marks them internal.
+fn handle_field(name: &str) -> Option<HandleField> {
+    Some(match name {
+        // SF_SELECTED
+        "selected" => HandleField::Flag {
+            bit: 1,
+            shift: 0,
+            on: Where::Both,
+        },
+        // SF_BOLD
+        "bold" => HandleField::Flag {
+            bit: 8,
+            shift: 3,
+            on: Where::Both,
+        },
+        // SF_RO
+        "readOnly" => HandleField::Flag {
+            bit: 16,
+            shift: 4,
+            on: Where::Both,
+        },
+        // SF_EXPAND
+        "expanded" => HandleField::Flag {
+            bit: 32,
+            shift: 5,
+            on: Where::Groups,
+        },
+        "text" => HandleField::Text,
+        "size" => HandleField::Size,
+        "installTypes" => HandleField::InstallTypes,
+        _ => return None,
+    })
+}
+
+/// The field names, for the error that has to list them.
+const HANDLE_FIELDS: &[&str] = &[
+    "selected",
+    "bold",
+    "readOnly",
+    "expanded",
+    "text",
+    "size",
+    "installTypes",
+];
+
+/// A `group`'s member list, in either of §15.23's two forms and without judging
+/// the call. The shape errors belong to [`Lowerer::group`], which reports them
+/// once where the group is lowered; this is the claim pass looking for the bare
+/// names inside.
+fn group_members(value: &Expr) -> Option<&[TableField]> {
+    let Expr::Call { args, .. } = value else {
+        return None;
+    };
+    let members = match args.as_slice() {
+        [_, members @ Expr::Table { .. }] => members,
+        [Expr::Table { fields, .. }] => fields.iter().find_map(|field| match field {
+            TableField::Named { name, value } if name.text == "sections" => Some(value),
+            _ => None,
+        })?,
+        _ => return None,
+    };
+    match members {
+        Expr::Table { fields, .. } => Some(fields),
+        _ => None,
     }
 }
 
@@ -598,6 +711,13 @@ impl<'p> Lowerer<'_, 'p> {
             .cloned()
             .collect();
 
+        // Which block listed which declaration, decided before anything is
+        // lowered. A body can address a section the block lists *after* it —
+        // `installer { onInit(…), core }` is ordinary — and the claim is what
+        // says which half a handle names, so the map has to be complete before
+        // the first body is walked (§15.6).
+        self.claim_pass(program);
+
         for stmt in &program.block {
             self.top_level(stmt);
         }
@@ -633,7 +753,7 @@ impl<'p> Lowerer<'_, 'p> {
         if !self.global_inits.is_empty() && !self.on_init {
             let inits = std::mem::take(&mut self.global_inits);
             let span = inits.first().map(Stmt::span).unwrap_or_default();
-            let body = self.body(&inits, &[], span, None);
+            let body = self.body(&inits, &[], span, None, Some(Half::Installer));
             self.module.functions.push(ir::Function {
                 name: ".onInit".to_string(),
                 body,
@@ -1902,7 +2022,7 @@ impl<'p> Lowerer<'_, 'p> {
             nth += 1;
         }
 
-        let body = self.body(block, &[], *span, None);
+        let body = self.body(block, &[], *span, None, Some(half));
         self.module.functions.push(ir::Function {
             name: name.clone(),
             body,
@@ -1951,7 +2071,7 @@ impl<'p> Lowerer<'_, 'p> {
     /// decides nothing — which is the one thing a reader has to learn that they
     /// did not before, and the price of a section being addressable at all.
     fn claimed(&mut self, name: &Name, half: Half) {
-        let Some((value, kind, index)) = self.claim(name, half) else {
+        let Some((value, kind, index)) = self.listed(name) else {
             return;
         };
         match kind {
@@ -1965,11 +2085,71 @@ impl<'p> Lowerer<'_, 'p> {
         }
     }
 
-    /// Records that this block lists this declaration, and hands back the call
-    /// to lower. `None` when the name is not one, or when it has been listed
-    /// already — claim rules 2 and 3.
-    fn claim(&mut self, name: &Name, half: Half) -> Option<(&'p Expr, DeferredKind, String)> {
-        let Some(deferred) = self.resolved.deferred.get(&name.text) else {
+    /// The declaration this entry lists, when this entry is the one that
+    /// claimed it. A second listing lowers nothing: [`Self::claim_pass`] already
+    /// said so, and emitting the body twice under two indices is the thing the
+    /// rule exists to prevent.
+    fn listed(&self, name: &Name) -> Option<(&'p Expr, DeferredKind, String)> {
+        let claim = self.claims.get(&name.text)?;
+        if claim.span != name.span {
+            return None;
+        }
+        let deferred = self.resolved.deferred.get(&name.text)?;
+        Some((
+            deferred.value,
+            deferred.kind,
+            index_name(&name.text, claim.half),
+        ))
+    }
+
+    /// Every bare name among the two blocks' entries, recorded as a claim.
+    ///
+    /// Syntactic, and deliberately: it reads the shape of `installer { … }` and
+    /// `group { … }` without lowering either, because the shape errors belong to
+    /// [`Self::installer`] and [`Self::group`] and reporting them from two
+    /// places would report them twice.
+    fn claim_pass(&mut self, program: &Program) {
+        for stmt in &program.block {
+            let Stmt::Call(call) = stmt else {
+                continue;
+            };
+            let half = match call.callee_name() {
+                Some("installer") => Half::Installer,
+                Some("uninstaller") => Half::Uninstaller,
+                _ => continue,
+            };
+            let Expr::Call { args, .. } = call else {
+                continue;
+            };
+            let [Expr::Table { fields, .. }] = args.as_slice() else {
+                continue;
+            };
+            for field in fields {
+                let TableField::Positional { value } = field else {
+                    continue;
+                };
+                if let Expr::Name(name) = value {
+                    self.claim(name, half);
+                    continue;
+                }
+                // A group lists declarations too, and its members are an
+                // argument rather than entries of a block.
+                if value.callee_name() == Some("group") {
+                    self.claim_members(value, half);
+                }
+            }
+        }
+    }
+
+    /// Records that this block lists this declaration. Claim rules 2 and 3, and
+    /// the collision between the define this earns and the author's `<const>`s.
+    fn claim(&mut self, name: &Name, half: Half) {
+        let Some(deferred) = self
+            .resolved
+            .deferred
+            .get(&name.text)
+            .map(|d| (d.kind, d.value))
+        else {
             self.diags.push(
                 Diagnostic::error(
                     Code::UnknownField,
@@ -1981,9 +2161,8 @@ impl<'p> Lowerer<'_, 'p> {
                      `local x = section { … }` (§13)",
                 ),
             );
-            return None;
+            return;
         };
-        let (value, kind) = (deferred.value, deferred.kind);
 
         // One declaration, one place in the tree. Listing it twice in a block
         // would emit its body twice under two indices, and listing it in both
@@ -2007,7 +2186,7 @@ impl<'p> Lowerer<'_, 'p> {
                          address it by its name from either half's code",
                     ),
             );
-            return None;
+            return;
         }
 
         // The define is the compiler's, but it lands in a namespace shared with
@@ -2026,7 +2205,7 @@ impl<'p> Lowerer<'_, 'p> {
                     name.text
                 )),
             );
-            return None;
+            return;
         }
 
         self.claims.insert(
@@ -2036,7 +2215,27 @@ impl<'p> Lowerer<'_, 'p> {
                 span: name.span,
             },
         );
-        Some((value, kind, index))
+
+        // A group's members are claimed by the block that claims the group: the
+        // heading is what carries the half down to them, and a section under a
+        // group is not listed anywhere else.
+        let (kind, value) = deferred;
+        if kind == DeferredKind::Group {
+            self.claim_members(value, half);
+        }
+    }
+
+    /// The bare names among a `group`'s sections, claimed for the half that
+    /// claimed the group.
+    fn claim_members(&mut self, group: &Expr, half: Half) {
+        for member in group_members(group).unwrap_or_default() {
+            if let TableField::Positional {
+                value: Expr::Name(name),
+            } = member
+            {
+                self.claim(name, half);
+            }
+        }
     }
 
     /// `onInit(function() … end)`. The leading `.` is emitted, never written
@@ -2082,7 +2281,7 @@ impl<'p> Lowerer<'_, 'p> {
         } else {
             block.clone()
         };
-        let body = self.body(&block, &[], *span, None);
+        let body = self.body(&block, &[], *span, None, Some(half));
         self.module.functions.push(ir::Function { name, body });
     }
 
@@ -2174,7 +2373,7 @@ impl<'p> Lowerer<'_, 'p> {
             // A bare name: the group is listing a declaration, exactly as a
             // block does, and the claim rules are the same ones.
             if let Expr::Name(member) = value {
-                let Some((declared, kind, index)) = self.claim(member, half) else {
+                let Some((declared, kind, index)) = self.listed(member) else {
                     continue;
                 };
                 if kind == DeferredKind::Group {
@@ -2353,7 +2552,7 @@ impl<'p> Lowerer<'_, 'p> {
             // section written inline in the block is addressed by nothing, so
             // NSIS is asked to define nothing.
             index_name: None,
-            body: self.body(block, &[], *span, None),
+            body: self.body(block, &[], *span, None, Some(half)),
         })
     }
 
@@ -2526,7 +2725,7 @@ impl<'p> Lowerer<'_, 'p> {
         };
         let _ = keyword;
 
-        let body = self.body(block, params, *span, Some(&name.value));
+        let body = self.body(block, params, *span, Some(&name.value), None);
         self.module.functions.push(ir::Function {
             name: name.value.clone(),
             body,
@@ -2536,11 +2735,26 @@ impl<'p> Lowerer<'_, 'p> {
     /// One body, one CFG, one register file. Everything about a body is local
     /// to it — the label counter resets (§15.25) and NSIS `Goto` cannot cross
     /// the boundary anyway (§8).
-    fn body(&mut self, block: &Block, params: &[Name], span: Span, owner: Option<&str>) -> Body {
+    fn body(
+        &mut self,
+        block: &Block,
+        params: &[Name],
+        span: Span,
+        owner: Option<&str>,
+        half: Option<Half>,
+    ) -> Body {
         let signature = owner
             .and_then(|name| self.known.signature(name))
             .cloned()
             .unwrap_or_default();
+
+        // The install types the block declared, for a `handle.installTypes`
+        // write. Copied rather than borrowed because a `func` belongs to no half
+        // and the two lists are the block's, not the body's.
+        let inst_types = match half {
+            Some(Half::Uninstaller) => self.module.uninst_types.clone(),
+            _ => self.module.inst_types.clone(),
+        };
 
         let mut lowerer = BodyLowerer {
             diags: self.diags,
@@ -2550,6 +2764,9 @@ impl<'p> Lowerer<'_, 'p> {
             learned: &mut self.learned,
             globals: &mut self.globals,
             requires: &mut self.requires,
+            claims: &self.claims,
+            half,
+            inst_types,
             body: Body::new(span),
             scopes: vec![Vec::new()],
             loops: Vec::new(),
@@ -2733,6 +2950,18 @@ struct BodyLowerer<'a, 'p> {
     /// Headers and `StrFunc` declarations, shared with every other body: the
     /// collect half of §15.21's collect-then-emit.
     requires: &'a mut Requirements,
+    /// Which block listed which section, so that `core.selected` knows the
+    /// define it reads and whether this half is the one that has a `core` at all
+    /// (claim rule 4).
+    claims: &'a BTreeMap<String, Claim>,
+    /// The half this body runs in. `None` for a `func`, which either half may
+    /// call: there is no wrong half to name a section from, so rule 4 has
+    /// nothing to compare against and does not run.
+    half: Option<Half>,
+    /// The install types the block declared, in order — the name → position
+    /// binding a `handle.installTypes = { … }` write resolves against, and the
+    /// same one `SectionIn` uses at compile time (§13).
+    inst_types: Vec<String>,
     body: Body,
     scopes: Vec<Vec<(String, Binding)>>,
     loops: Vec<LoopTargets>,
@@ -3003,6 +3232,17 @@ impl BodyLowerer<'_, '_> {
         }
 
         for (target, value) in targets.iter().zip(values) {
+            // `docs.text = ""` — a section's field, which is a `Section*Set` and
+            // not a register at all.
+            if let Expr::Field { base, name, .. } = target
+                && base
+                    .name()
+                    .is_some_and(|base| self.resolved.deferred.contains_key(base))
+            {
+                self.handle_write(base, name, value);
+                continue;
+            }
+
             let Expr::Name(name) = target else {
                 self.todo(target.span(), "this assignment target");
                 continue;

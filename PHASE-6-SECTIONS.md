@@ -236,16 +236,19 @@ to a function defined further down, so nothing else moves.
    for a section nothing addresses, so an unaddressed program's output does not change.
 2. **Swap slots 8 and 10** *(done)* in `ir::Module` and `emit.rs`, and update the slot list in
    `Module`'s doc comment. A golden diff of all five examples is the check.
-3. **Deferred sections in the lowerer.** *(done, except claim rule 4, which is about a
-   *use* and lands with the field access in step 4.)* `section(…)` and `group(…)` at top level record
+3. **Deferred sections in the lowerer.** *(done)* `section(…)` and `group(…)` at top level record
    the AST against the local's binding rather than lowering it; `body_entry`
    (`lower/mod.rs:1846`) grows a case for a bare `Expr::Name` that resolves to one, and
    lowers it there with the block's `half` in hand. The four claim rules are checked when
    the last block closes.
-4. **Handle fields.** A field read or write on a section binding lowers to its
-   instruction pair; the boolean fields go through the read-modify-write above. This is
-   the one part that touches `resolve.rs`, which needs a compile-time-only binding kind —
-   not a `ConstValue` variant, since a handle has no runtime representation.
+4. **Handle fields.** *(done, except reading `installTypes` — see Out of scope.)* A field
+   read or write on a section binding lowers to its instruction pair (`lower/handle.rs`);
+   the boolean fields go through the read-modify-write above. `resolve.rs` needed no new
+   binding kind after all: step 3's `Deferred` **is** the compile-time-only one, and what
+   a body reads it through is the claim, since the claim is what says which half — and so
+   which define — a handle names. Claiming therefore moved to a pass of its own, before
+   any body is lowered, because `installer { onInit(…), core }` is ordinary and a body
+   cannot wait for an entry written below it (§15.6). Claim rule 4 lands here.
 5. **`currentInstType` and `instTypes`**, reusing `section_in`'s name → position lookup and
    its diagnostic.
 6. **Table rows, stubs, golden, docs.** Twelve `todo` → `Exposed`; `installua.Section` and
@@ -271,3 +274,16 @@ to a function defined further down, so nothing else moves.
   rather than possible.
 - **The flags integer.** No surface exposes it, so a program that wants a bit
   `Sections.nsh` calls internal writes `raw`.
+- **Reading `handle.installTypes`.** The write lands in step 4 as a compile-time bit
+  field, which is what `SectionSetInstTypes` reads. The *read* has nowhere to go: the
+  field's type is `string[]` and there is no list value in this language, so
+  `SectionGetInstTypes` waits for one rather than handing back the raw bit field the
+  surface never promised.
+- **`description = "…"` on a section.** The MUI components-page description is
+  `!insertmacro MUI_DESCRIPTION_TEXT ${SEC_core} $(DESC_core)`, inside the
+  `MUI_FUNCTION_DESCRIPTION_BEGIN`/`END` pair that builds `Function .onMouseOverSection`.
+  It takes a section index, so this plan makes it *possible* — and step 2's
+  sections-before-functions move is what makes `${SEC_core}` exist by the time that
+  preprocessor comparison expands. It is not in scope because it needs `LangString`,
+  which is §15.26's locale tables and unimplemented: without them the description would
+  be a literal rather than `$(DESC_core)`, which is the one thing the feature is for.
