@@ -22,15 +22,6 @@ InstallDir "$PROGRAMFILES64\${APP}"
 
 !insertmacro MUI_LANGUAGE "English"
 
-Function majorOf
-  Pop $0
-  ${StrLoc} $1 $0 "." ">"
-  IntOp $1 $1 + 1
-  IntOp $1 $1 - 1
-  StrCpy $0 $0 $1 0
-  Push $0
-FunctionEnd
-
 Section "Core"
   SetOutPath $INSTDIR
   ReadRegStr $0 HKLM "Software\Example5" "DisplayVersion"
@@ -75,3 +66,12 @@ __GENERATED_div_5_done:
   DetailPrint "$2 blocks, $0 MiB over"
   DetailPrint "free: $1 GiB"
 SectionEnd
+
+Function majorOf
+  Pop $0
+  ${StrLoc} $1 $0 "." ">"
+  IntOp $1 $1 + 1
+  IntOp $1 $1 - 1
+  StrCpy $0 $0 $1 0
+  Push $0
+FunctionEnd

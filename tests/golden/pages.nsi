@@ -47,6 +47,14 @@ Var dataDir
 
 !insertmacro MUI_LANGUAGE "English"
 
+Section "Core"
+  WriteUninstaller "$INSTDIR\un.exe"
+SectionEnd
+
+Section "un.Core"
+  Delete "$INSTDIR\un.exe"
+SectionEnd
+
 Function mui.welcome.pre
   DetailPrint "about to greet"
 FunctionEnd
@@ -58,11 +66,3 @@ FunctionEnd
 Function .onInit
   StrCpy $dataDir ""
 FunctionEnd
-
-Section "Core"
-  WriteUninstaller "$INSTDIR\un.exe"
-SectionEnd
-
-Section "un.Core"
-  Delete "$INSTDIR\un.exe"
-SectionEnd

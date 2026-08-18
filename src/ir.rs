@@ -21,10 +21,15 @@
 //!      *page-scoped* define is not in the first list at all: it belongs to the
 //!      [`Page`] it configures, which is what keeps two Directory pages with
 //!      different text expressible
-//!   8. functions
+//!   8. `InstType` lines, in declaration order — that order is their identity,
+//!      because a `SectionIn` names one by position (§13)
 //!   9. sections, in source order — a sequence, never reordered
+//!  10. functions, last — because `Section "Core" SEC_core` is what `!define`s
+//!      `${SEC_core}`, and the preprocessor is textual, so an `.onInit` that
+//!      names a section has to come after the section. NSIS hoists calls, so
+//!      nothing else about where the functions sit matters
 //!
-//! Phase 1 filled 1, 5 and 9; Phase 2 adds 6 and 8. The rest exist empty,
+//! Phase 1 filled 1, 5 and 9; Phase 2 adds 6 and 10. The rest exist empty,
 //! because a widening is a smaller change than a reordering.
 
 use crate::cfg;
@@ -62,7 +67,6 @@ pub struct Module {
     pub unpages: Vec<Page>,
     /// `!insertmacro MUI_LANGUAGE`, which has to come after every page.
     pub languages: Vec<Instruction>,
-    pub functions: Vec<Function>,
     /// `InstType` lines, in the order they were written — which is the whole of
     /// what an install type *is* to NSIS, since a section names one by its
     /// one-based position and by nothing else (§13). The uninstaller's are the
@@ -70,6 +74,7 @@ pub struct Module {
     pub inst_types: Vec<String>,
     pub uninst_types: Vec<String>,
     pub sections: Vec<SectionItem>,
+    pub functions: Vec<Function>,
 }
 
 impl Module {
@@ -175,6 +180,9 @@ pub struct SectionGroup {
     pub name: String,
     /// `SectionGroup /e` — expanded in the components tree.
     pub expanded: bool,
+    /// See [`Section::index_name`]; a group is addressable for the same reason
+    /// and by the same third word.
+    pub index_name: Option<String>,
     pub sections: Vec<Section>,
 }
 
@@ -198,6 +206,17 @@ pub struct Section {
     /// `AddSize` — extra kilobytes to charge this section beyond the files it
     /// installs, for the space estimate.
     pub size: Option<u32>,
+    /// The third word of the `Section` line: a name NSIS `!define`s to this
+    /// section's index, which is the only way a running program can name it.
+    /// The index itself is NSIS's — it counts sections in emission order — so
+    /// this is §13's binding again, a compile-time name for a number the
+    /// compiler does not own.
+    ///
+    /// `None` when nothing addresses the section, and then no third word is
+    /// written: an unaddressed program pays nothing for the feature, and the
+    /// `!define` NSIS would make is one more name in a namespace shared with
+    /// the author's.
+    pub index_name: Option<String>,
     pub body: cfg::Body,
 }
 

@@ -7,10 +7,6 @@ OutFile "control-flow-setup.exe"
 
 Var state
 
-Function report
-  DetailPrint "state is $state"
-FunctionEnd
-
 Section "Core"
   StrCpy $0 "$INSTDIR/app.exe"
   IfFileExists $0 0 __GENERATED_false_0
@@ -51,3 +47,7 @@ __GENERATED_for_6_end:
   StrCpy $state "installed"
   Call report
 SectionEnd
+
+Function report
+  DetailPrint "state is $state"
+FunctionEnd

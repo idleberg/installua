@@ -1102,6 +1102,11 @@ installer {
 }
 ```
 
+> **Superseded spelling.** The binding above is unchanged, but the call shape is not: a
+> section or group that carries options now takes §15.23's table form —
+> `section { "Core", required = true, body = … }` — and the middle-table form shown here
+> was deleted. See `PHASE-6-SECTIONS.md` ruling 5.
+
 ```
 InstType "Full"
 InstType "Minimal"

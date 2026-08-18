@@ -39,13 +39,13 @@ fn program(installer: &str) -> String {
 fn an_install_type_is_named_and_never_numbered() {
     let before = build(&program(
         "installTypes = { \"Full\", \"Minimal\" },\n\
-         section(\"Core\", { installTypes = { \"Minimal\" } }, function() end),",
+         section { \"Core\", installTypes = { \"Minimal\" }, body = function() end },",
     ));
     assert!(before.contains("\n  SectionIn 2\n"), "{before}");
 
     let after = build(&program(
         "installTypes = { \"Custom\", \"Full\", \"Minimal\" },\n\
-         section(\"Core\", { installTypes = { \"Minimal\" } }, function() end),",
+         section { \"Core\", installTypes = { \"Minimal\" }, body = function() end },",
     ));
     assert!(after.contains("\n  SectionIn 3\n"), "{after}");
 }
@@ -59,13 +59,13 @@ fn each_half_numbers_its_own_install_types() {
         "attributes { outFile = \"a.exe\", name = \"a\" }\n\
          installer {\n\
          installTypes = { \"Full\" },\n\
-         section(\"Core\", { installTypes = { \"Full\" } }, function()\n\
+         section { \"Core\", installTypes = { \"Full\" }, body = function()\n\
          writeUninstaller(INSTDIR .. \"/un.exe\")\n\
-         end),\n\
+         end },\n\
          }\n\
          uninstaller {\n\
          installTypes = { \"Everything\" },\n\
-         section(\"Remove\", { installTypes = { \"Everything\" } }, function() end),\n\
+         section { \"Remove\", installTypes = { \"Everything\" }, body = function() end },\n\
          }\n",
     );
     assert!(output.contains("InstType \"Full\"\n"), "{output}");
@@ -80,7 +80,7 @@ fn each_half_numbers_its_own_install_types() {
 #[test]
 fn a_section_is_not_both_optional_and_required() {
     let raised = errors(&program(
-        "section(\"Core\", { optional = true, required = true }, function() end),",
+        "section { \"Core\", optional = true, required = true, body = function() end },",
     ));
     assert!(
         raised
@@ -92,8 +92,8 @@ fn a_section_is_not_both_optional_and_required() {
 
     // Either alone is fine, and they emit in two different places.
     let output = build(&program(
-        "section(\"A\", { optional = true }, function() end),\n\
-         section(\"B\", { required = true }, function() end),",
+        "section { \"A\", optional = true, body = function() end },\n\
+         section { \"B\", required = true, body = function() end },",
     ));
     assert!(output.contains("Section /o \"A\""), "{output}");
     assert!(output.contains("  SectionIn RO\n"), "{output}");
@@ -106,7 +106,7 @@ fn a_section_is_not_both_optional_and_required() {
 fn an_unknown_install_type_names_the_declared_ones() {
     let raised = errors(&program(
         "installTypes = { \"Full\", \"Minimal\" },\n\
-         section(\"Core\", { installTypes = { \"Typical\" } }, function() end),",
+         section { \"Core\", installTypes = { \"Typical\" }, body = function() end },",
     ));
     assert_eq!(raised.len(), 1, "{raised:?}");
     assert_eq!(raised[0].0, Code::UnknownField);
@@ -115,7 +115,7 @@ fn an_unknown_install_type_names_the_declared_ones() {
     // With nothing declared at all the note has to say so rather than print an
     // empty list, because the fix is a different one.
     let raised = errors(&program(
-        "section(\"Core\", { installTypes = { \"Full\" } }, function() end),",
+        "section { \"Core\", installTypes = { \"Full\" }, body = function() end },",
     ));
     assert_eq!(raised.len(), 1, "{raised:?}");
 }
@@ -127,7 +127,7 @@ fn an_install_type_is_named_once() {
     for written in [
         "installTypes = { \"Full\", \"Full\" }, section(\"C\", function() end),",
         "installTypes = { \"Full\" },\n\
-         section(\"C\", { installTypes = { \"Full\", \"Full\" } }, function() end),",
+         section { \"C\", installTypes = { \"Full\", \"Full\" }, body = function() end },",
     ] {
         let raised = errors(&program(written));
         assert_eq!(raised.len(), 1, "{written}: {raised:?}");
@@ -159,8 +159,8 @@ fn a_group_holds_at_least_one_section_and_no_group() {
 #[test]
 fn a_size_is_a_whole_number_of_kilobytes() {
     let output = build(&program(
-        "section(\"C\", { size = 0 }, function() end),\n\
-         section(\"D\", { size = 4096 }, function() end),",
+        "section { \"C\", size = 0, body = function() end },\n\
+         section { \"D\", size = 4096, body = function() end },",
     ));
     // Zero is still written: it says the author measured and got nothing,
     // where leaving the option out says they did not measure.
@@ -169,7 +169,7 @@ fn a_size_is_a_whole_number_of_kilobytes() {
 
     for bad in ["size = -1", "size = \"4096\""] {
         let raised = errors(&program(&format!(
-            "section(\"C\", {{ {bad} }}, function() end),"
+            "section {{ \"C\", {bad}, body = function() end }},"
         )));
         assert!(
             raised.iter().any(|(code, _)| *code == Code::BadFieldValue),
@@ -186,7 +186,88 @@ fn a_section_in_no_install_type_writes_no_line() {
     let output = build(&program(
         "installTypes = { \"Full\" },\n\
          section(\"Core\", function() end),\n\
-         section(\"Extra\", { installTypes = {} }, function() end),",
+         section { \"Extra\", installTypes = {}, body = function() end },",
     ));
     assert!(!output.contains("SectionIn"), "{output}");
+}
+
+/// §15.23's pair is a short form and a long form, not two spellings of one
+/// thing: the moment a section carries an option it takes the table, and the
+/// name stays positional there because it is the parameter NSIS is passed.
+#[test]
+fn a_section_with_options_takes_the_table_form() {
+    let short = build(&program(
+        "section(\"Core\", function() detailPrint(\"x\") end),",
+    ));
+    let table = build(&program(
+        "section { \"Core\", body = function() detailPrint(\"x\") end },",
+    ));
+    assert_eq!(short, table);
+
+    // The middle-table form was the surface's only options-between-parameters
+    // call, and it is gone rather than kept beside the pair.
+    let raised = errors(&program(
+        "section(\"Core\", { optional = true }, function() end),",
+    ));
+    assert!(
+        raised
+            .iter()
+            .any(|(code, _)| *code == Code::NotYetImplemented),
+        "{raised:?}"
+    );
+}
+
+/// The two halves of the table are the two halves of the NSIS command line, so
+/// the name is the array part and everything else is a switch. Each way of
+/// getting that wrong is caught where it is written.
+#[test]
+fn a_table_declaration_has_one_name_and_says_what_it_holds() {
+    let raised = errors(&program(
+        "section { optional = true, body = function() end },",
+    ));
+    assert!(
+        raised
+            .iter()
+            .any(|(code, text)| *code == Code::MissingAttribute && text.contains("has no name")),
+        "{raised:?}"
+    );
+
+    let raised = errors(&program("section { \"Core\", optional = true },"));
+    assert!(
+        raised
+            .iter()
+            .any(|(code, text)| *code == Code::MissingAttribute && text.contains("has no `body`")),
+        "{raised:?}"
+    );
+
+    // A second unnamed entry is the mistake the shape invites: a body written
+    // positionally, the way the deleted middle-table form took it.
+    let raised = errors(&program(
+        "section { \"Core\", function() end, optional = true },",
+    ));
+    assert!(
+        raised
+            .iter()
+            .any(|(code, text)| *code == Code::BadFieldValue && text.contains("takes one name")),
+        "{raised:?}"
+    );
+}
+
+/// A group holds sections rather than running anything, so its contents key is
+/// `sections` and the same three rules apply to it.
+#[test]
+fn a_group_takes_the_same_table_form() {
+    let output = build(&program(
+        "group { \"Tools\", expanded = true, sections = { section(\"C\", function() end) } },",
+    ));
+    assert!(output.contains("SectionGroup /e \"Tools\""), "{output}");
+
+    let raised = errors(&program("group { \"Tools\", expanded = true },"));
+    assert!(
+        raised
+            .iter()
+            .any(|(code, text)| *code == Code::MissingAttribute
+                && text.contains("has no `sections`")),
+        "{raised:?}"
+    );
 }

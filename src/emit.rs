@@ -112,19 +112,7 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     }
     out.section("language", module.languages.iter().map(line));
 
-    // 8. Functions. NSIS hoists calls, so these could go anywhere; before the
-    //    sections is a readability choice, and that is a sufficient one (§9-6).
-    for function in &module.functions {
-        out.blank();
-        out.line(
-            format!("Function {}", function.name),
-            Origin::Emitted("Function"),
-        );
-        body(&mut out, &function.body, 1);
-        out.line("FunctionEnd", Origin::Emitted("FunctionEnd"));
-    }
-
-    // 9. Install types, in the order they were declared. That order is their
+    // 8. Install types, in the order they were declared. That order is their
     //    identity — a `SectionIn` names one by position — so like the pages and
     //    unlike the attributes these are never reordered.
     out.section(
@@ -141,8 +129,13 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
             ),
     );
 
-    // 10. Sections, in source order — section order is install order, and it is
+    // 9. Sections, in source order — section order is install order, and it is
     //    user-visible, so unlike attributes these are never reordered.
+    //
+    //    Ahead of the functions, because a `Section "Core" SEC_core` line is
+    //    what `!define`s `${SEC_core}`, and the preprocessor is textual: an
+    //    `.onInit` that reads one has to be emitted after it. NSIS hoists
+    //    calls, so nothing else about this order matters.
     for item in &module.sections {
         out.blank();
         match item {
@@ -150,8 +143,9 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
             ir::SectionItem::Group(group) => {
                 let flag = if group.expanded { " /e" } else { "" };
                 let name = argument(&ir::Arg::str(group.name.clone()));
+                let index = index_word(group.index_name.as_deref());
                 out.line(
-                    format!("SectionGroup{flag} {name}"),
+                    format!("SectionGroup{flag} {name}{index}"),
                     Origin::Emitted("SectionGroup"),
                 );
                 for (index, section) in group.sections.iter().enumerate() {
@@ -165,15 +159,38 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
         }
     }
 
+    // 10. Functions, last: see the note above the sections.
+    for function in &module.functions {
+        out.blank();
+        out.line(
+            format!("Function {}", function.name),
+            Origin::Emitted("Function"),
+        );
+        body(&mut out, &function.body, 1);
+        out.line("FunctionEnd", Origin::Emitted("FunctionEnd"));
+    }
+
     (out.text, out.map)
+}
+
+/// The optional third word of a `Section` or `SectionGroup` line, with the
+/// space that separates it from the name — or nothing at all when the section
+/// is not addressed.
+///
+/// Bare rather than quoted: it is the name of a `!define`, not a string, and
+/// the compiler is the only thing that ever spells one, so it has no spaces to
+/// protect.
+fn index_word(index_name: Option<&str>) -> String {
+    index_name.map_or_else(String::new, |name| format!(" {name}"))
 }
 
 fn section_block(out: &mut Out, section: &ir::Section, depth: usize) {
     let indent = INDENT.repeat(depth);
     let flag = if section.optional { " /o" } else { "" };
     let name = argument(&ir::Arg::str(section.name.clone()));
+    let index = index_word(section.index_name.as_deref());
     out.line(
-        format!("{indent}Section{flag} {name}"),
+        format!("{indent}Section{flag} {name}{index}"),
         Origin::Emitted("Section"),
     );
     // `SectionIn` and `AddSize` are declarations that NSIS spells as

@@ -16,16 +16,6 @@ Var gitDescribe
 
 !insertmacro MUI_LANGUAGE "English"
 
-Function .onInit
-  StrCpy $gitDescribe ""
-  UserInfo::GetAccountType
-  Pop $0
-  StrCmpS $0 "Admin" __GENERATED_endif_0 0
-  MessageBox MB_OK|MB_ICONSTOP "Administrator rights are required."
-  Quit
-__GENERATED_endif_0:
-FunctionEnd
-
 Section "Core"
   SetOutPath $INSTDIR
   File "assets\tool.exe"
@@ -59,3 +49,13 @@ __GENERATED_endif_0:
   Pop $1
   DetailPrint "built from $gitDescribe, $1"
 SectionEnd
+
+Function .onInit
+  StrCpy $gitDescribe ""
+  UserInfo::GetAccountType
+  Pop $0
+  StrCmpS $0 "Admin" __GENERATED_endif_0 0
+  MessageBox MB_OK|MB_ICONSTOP "Administrator rights are required."
+  Quit
+__GENERATED_endif_0:
+FunctionEnd

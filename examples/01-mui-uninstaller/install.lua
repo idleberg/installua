@@ -60,10 +60,15 @@ installer {
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
 	end),
 
-	section("Start menu shortcut", { optional = true }, function()
-		createDirectory(SMPROGRAMS .. "/" .. APP)
-		createShortcut(SMPROGRAMS .. "/" .. APP .. "/" .. APP .. ".lnk", INSTDIR .. "/Example1.exe")
-	end),
+	-- An option, so the table form (§15.23): the name stays first and unlabelled
+	-- because it is the parameter, and the switch beside it is named.
+	section { "Start menu shortcut",
+		optional = true,
+		body = function()
+			createDirectory(SMPROGRAMS .. "/" .. APP)
+			createShortcut(SMPROGRAMS .. "/" .. APP .. "/" .. APP .. ".lnk", INSTDIR .. "/Example1.exe")
+		end,
+	},
 }
 
 -- One block, and the `un.` prefix has no spelling at all (§15.3).

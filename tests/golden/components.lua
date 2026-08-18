@@ -15,24 +15,45 @@ attributes {
 installer {
 	installTypes = { "Full", "Minimal" },
 
+	-- Anything with options takes the table form (§15.23): the name is the first
+	-- entry and unlabelled, because it is the parameter NSIS passes, and every
+	-- switch beside it is named.
+	--
 	-- `required` is `SectionIn RO`: no box to untick, so it is in every install
 	-- type it names and in the custom one too.
-	section("Core", { installTypes = { "Full", "Minimal" }, required = true, size = 120 }, function()
-		detailPrint("core")
-	end),
+	section { "Core",
+		installTypes = { "Full", "Minimal" },
+		required = true,
+		size = 120,
+		body = function()
+			detailPrint("core")
+		end,
+	},
 
-	group("Tools", { expanded = true }, {
-		section("Profiler", { installTypes = { "Full" } }, function()
-			detailPrint("profiler")
-		end),
-		-- `optional` is `Section /o`, which is not the opposite of `required`:
-		-- the box is there, it just starts unticked.
-		section("Debugger", { installTypes = { "Full" }, optional = true, size = 4096 }, function()
-			detailPrint("debugger")
-		end),
-	}),
+	group { "Tools",
+		expanded = true,
+		sections = {
+			section { "Profiler",
+				installTypes = { "Full" },
+				body = function()
+					detailPrint("profiler")
+				end,
+			},
+			-- `optional` is `Section /o`, which is not the opposite of
+			-- `required`: the box is there, it just starts unticked.
+			section { "Debugger",
+				installTypes = { "Full" },
+				optional = true,
+				size = 4096,
+				body = function()
+					detailPrint("debugger")
+				end,
+			},
+		},
+	},
 
-	-- A group with no options is a heading and nothing else.
+	-- A group with no options is a heading and nothing else, so it keeps the
+	-- short form.
 	group("Docs", {
 		-- A section that names no install type belongs to none of them, which
 		-- is what writing no `SectionIn` line means to NSIS.

@@ -14,6 +14,23 @@ InstallDir "$PROGRAMFILES64\${APP}"
 
 !insertmacro MUI_LANGUAGE "English"
 
+Section "Core"
+  SetOutPath $INSTDIR
+  File "assets\payload.bin"
+  Push $INSTDIR
+  Call budget
+  Pop $0
+  Pop $1
+  Push $0
+  Push $1
+  Push 4
+  Call countdown
+  Pop $2
+  Pop $1
+  Pop $0
+  DetailPrint "payload: $1 files, $0 KiB, check $2"
+SectionEnd
+
 Function measure
   Pop $0
   ${GetSize} $0 "" $1 $2 $3
@@ -47,20 +64,3 @@ __GENERATED_endif_0:
   IntOp $0 $1 + $0
   Push $0
 FunctionEnd
-
-Section "Core"
-  SetOutPath $INSTDIR
-  File "assets\payload.bin"
-  Push $INSTDIR
-  Call budget
-  Pop $0
-  Pop $1
-  Push $0
-  Push $1
-  Push 4
-  Call countdown
-  Pop $2
-  Pop $1
-  Pop $0
-  DetailPrint "payload: $1 files, $0 KiB, check $2"
-SectionEnd

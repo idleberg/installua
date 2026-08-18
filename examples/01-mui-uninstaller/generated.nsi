@@ -33,25 +33,6 @@ InstallDir "$PROGRAMFILES64\${APP}"
 
 !insertmacro MUI_LANGUAGE "English"
 
-Function .onInit
-  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "InstallLocation"
-  StrCmpS $0 "" __GENERATED_endif_0 0
-  StrCpy $INSTDIR $0
-__GENERATED_endif_0:
-FunctionEnd
-
-Function un.onInit
-  MessageBox MB_YESNO|MB_ICONQUESTION "Remove ${APP} and all of its files?" IDNO __GENERATED_mb_0_no
-  StrCpy $0 "YES"
-  Goto __GENERATED_mb_0_end
-__GENERATED_mb_0_no:
-  StrCpy $0 "NO"
-__GENERATED_mb_0_end:
-  StrCmpS $0 "NO" 0 __GENERATED_endif_1
-  Quit
-__GENERATED_endif_1:
-FunctionEnd
-
 Section "Core"
   SetOutPath $INSTDIR
   File "assets\Example1.exe"
@@ -78,3 +59,22 @@ Section "un.Core"
   RMDir $INSTDIR
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1"
 SectionEnd
+
+Function .onInit
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "InstallLocation"
+  StrCmpS $0 "" __GENERATED_endif_0 0
+  StrCpy $INSTDIR $0
+__GENERATED_endif_0:
+FunctionEnd
+
+Function un.onInit
+  MessageBox MB_YESNO|MB_ICONQUESTION "Remove ${APP} and all of its files?" IDNO __GENERATED_mb_0_no
+  StrCpy $0 "YES"
+  Goto __GENERATED_mb_0_end
+__GENERATED_mb_0_no:
+  StrCpy $0 "NO"
+__GENERATED_mb_0_end:
+  StrCmpS $0 "NO" 0 __GENERATED_endif_1
+  Quit
+__GENERATED_endif_1:
+FunctionEnd

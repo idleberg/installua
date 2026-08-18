@@ -355,25 +355,31 @@ fn declarations() -> String {
          -- Declarations (§15.10). These are language constructs rather than\n\
          -- instructions, so they are written here rather than generated.\n\
          --------------------------------------------------------------------------------\n\n\
+         -- §15.23's pair: a short form when there is nothing to configure, and a\n\
+         -- table form when there is. The table's array part is the parameters and\n\
+         -- its hash part the options, as `file { \"docs/\", recursive = true }` is\n\
+         -- `File /r \"docs\\\"`.\n\n\
          ---@class (exact) installua.SectionOptions\n\
+         ---@field [1] string The section's name, written first and without a key.\n\
+         ---@field body fun() What the section installs.\n\
          ---@field optional? boolean Starts unticked in the components tree.\n\
          ---@field required? boolean Always installed, with no box to untick.\n\
          ---@field installTypes? string[] Which of the block's `installTypes` this belongs to.\n\
          ---@field size? integer Extra kilobytes to charge, beyond the files installed.\n\
          local SectionOptions = {}\n\n\
          ---@param name string\n\
-         ---@param options installua.SectionOptions\n\
          ---@param body fun()\n\
-         ---@overload fun(name: string, body: fun())\n\
-         function section(name, options, body) end\n\n\
+         ---@overload fun(options: installua.SectionOptions)\n\
+         function section(name, body) end\n\n\
          ---@class (exact) installua.GroupOptions\n\
+         ---@field [1] string The group's heading, written first and without a key.\n\
+         ---@field sections table The sections it holds.\n\
          ---@field expanded? boolean Opens the heading in the components tree.\n\
          local GroupOptions = {}\n\n\
          ---@param name string\n\
-         ---@param options installua.GroupOptions\n\
          ---@param sections table\n\
-         ---@overload fun(name: string, sections: table)\n\
-         function group(name, options, sections) end\n\n\
+         ---@overload fun(options: installua.GroupOptions)\n\
+         function group(name, sections) end\n\n\
          ---@param name string\n\
          ---@param body function\n\
          function func(name, body) end\n\n\

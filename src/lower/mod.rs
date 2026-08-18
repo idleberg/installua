@@ -283,6 +283,18 @@ const CONFIRM_FIELDS: &[PageField] = &[
 
 /// One MUI2 page, and the settings that belong to it rather than to the block.
 ///
+/// A declaration written in §15.23's table form, taken apart: the array part is
+/// the parameters and the hash part the options, so what comes out is one name,
+/// the thing the construct encloses, and the switches beside them.
+struct Declaration<'e> {
+    /// The one positional entry.
+    name: &'e Expr,
+    /// A section's `body`, a group's `sections` — named, because NSIS does not
+    /// pass it either.
+    holds: &'e Expr,
+    options: Vec<(&'e Name, &'e Expr)>,
+}
+
 /// Which of the two a setting is is MUI2's own source to say and not a
 /// judgement: a setting written inside the generated `PageEx` and `!undef`'d
 /// after is page-scoped, and one written inside an `!ifndef`-guarded
@@ -1933,15 +1945,17 @@ impl Lowerer<'_, '_> {
             self.todo(value.span(), "this entry");
             return;
         };
-        // Two tables, told apart by how many there are, the way `section` tells
-        // its options from its body.
+        // §15.23's pair, the same as `section`'s: a short form for a group with
+        // nothing to configure, and a table form whose array part is the name
+        // and whose hash part is `expanded` and the sections it holds.
         let (name, options, members) = match args.as_slice() {
-            [name, members @ Expr::Table { .. }] => (name, None, members),
-            [
-                name,
-                Expr::Table { fields, .. },
-                members @ Expr::Table { .. },
-            ] => (name, Some(fields), members),
+            [name, members @ Expr::Table { .. }] => (name, Vec::new(), members),
+            [Expr::Table { fields, span }] => {
+                let Some(declared) = self.declaration(fields, *span, "group", "sections") else {
+                    return;
+                };
+                (declared.name, declared.options, declared.holds)
+            }
             _ => {
                 self.todo(value.span(), "this `group` form");
                 return;
@@ -1951,18 +1965,21 @@ impl Lowerer<'_, '_> {
             fields: members, ..
         } = members
         else {
-            unreachable!("matched above")
+            self.bad_value(
+                members.span(),
+                "sections",
+                "a list of sections",
+                "a group holds sections and nothing else: there is no body between \
+                 `SectionGroup` and `SectionGroupEnd`",
+            );
+            return;
         };
 
         let Some(name) = self.constant_string(name, "group") else {
             return;
         };
         let mut expanded = false;
-        for field in options.into_iter().flatten() {
-            let TableField::Named { name, value } = field else {
-                self.todo(value.span(), "a positional entry in a `group`'s options");
-                continue;
-            };
+        for (name, value) in options {
             match name.text.as_str() {
                 "expanded" => match self.constant(value) {
                     Some(ConstValue::Bool(flag)) => expanded = flag,
@@ -2021,6 +2038,9 @@ impl Lowerer<'_, '_> {
             .push(ir::SectionItem::Group(ir::SectionGroup {
                 name: format!("{}{name}", half.prefix()),
                 expanded,
+                // Nothing addresses a group yet: the handle a `group(…)` call
+                // returns is what fills this in, and that is not written.
+                index_name: None,
                 sections,
             }));
     }
@@ -2039,21 +2059,37 @@ impl Lowerer<'_, '_> {
             return None;
         }
 
-        // `section(name, body)` and `section(name, { optional = true }, body)`.
+        // §15.23's pair: `section("Core", fn)` when there is nothing to
+        // configure, and `section { "Core", required = true, body = fn }` when
+        // there is. Two forms and not three — the middle-table
+        // `section(name, options, body)` was the one shape in the surface that
+        // put options between two parameters, and it is gone.
+        //
+        // In the table the array part is the parameters and the hash part the
+        // options, exactly as `file { "docs/", recursive = true }` mirrors
+        // `File /r "docs\"`. `body` is a named key rather than a second
+        // positional because NSIS does not pass it either: it is what sits
+        // between `Section` and `SectionEnd`.
         let (name, options, body) = match args.as_slice() {
-            [name, body @ Expr::Function { .. }] => (name, None, body),
-            [
-                name,
-                Expr::Table { fields, .. },
-                body @ Expr::Function { .. },
-            ] => (name, Some(fields), body),
+            [name, body @ Expr::Function { .. }] => (name, Vec::new(), body),
+            [Expr::Table { fields, span }] => {
+                let declared = self.declaration(fields, *span, "section", "body")?;
+                (declared.name, declared.options, declared.holds)
+            }
             _ => {
                 self.todo(value.span(), "this `section` form");
                 return None;
             }
         };
         let Expr::Function { block, span, .. } = body else {
-            unreachable!("matched above")
+            self.bad_value(
+                body.span(),
+                "body",
+                "a function",
+                "it becomes the section's body, which is what NSIS writes between `Section` \
+                 and `SectionEnd`",
+            );
+            return None;
         };
 
         let name = self.constant_string(name, "section")?;
@@ -2062,11 +2098,7 @@ impl Lowerer<'_, '_> {
         let mut optional_span = None;
         let mut inst_types = Vec::new();
         let mut size = None;
-        for field in options.into_iter().flatten() {
-            let TableField::Named { name, value } = field else {
-                self.todo(value.span(), "a positional entry in a `section`'s options");
-                continue;
-            };
+        for (name, value) in options {
             match name.text.as_str() {
                 "optional" => match self.constant(value) {
                     Some(ConstValue::Bool(flag)) => {
@@ -2142,7 +2174,84 @@ impl Lowerer<'_, '_> {
             inst_types,
             required,
             size,
+            // Filled in once a section can be claimed by a Lua local; until
+            // then no section is addressed and no third word is written.
+            index_name: None,
             body: self.body(block, &[], *span, None),
+        })
+    }
+
+    /// §15.23's table form, split into the three parts a declaration is made
+    /// of: the one positional parameter that is its name, the named key holding
+    /// what it encloses, and the options beside them.
+    ///
+    /// The array part is the parameters and the hash part the options — the
+    /// division `file { "docs/", recursive = true }` makes against
+    /// `File /r "docs\"`. The contents key is in the hash part because NSIS does
+    /// not pass it either: a section's body is what sits between `Section` and
+    /// `SectionEnd`, not an argument to it.
+    fn declaration<'e>(
+        &mut self,
+        fields: &'e [TableField],
+        span: Span,
+        what: &str,
+        contents: &str,
+    ) -> Option<Declaration<'e>> {
+        let mut name = None;
+        let mut held = None;
+        let mut options = Vec::new();
+        for field in fields {
+            match field {
+                TableField::Positional { value } if name.is_none() => name = Some(value),
+                // A second unnamed entry is the mistake this shape invites:
+                // everything past the name is a switch, and a switch has one.
+                TableField::Positional { value } => self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        value.span(),
+                        format!("a `{what}` takes one name"),
+                    )
+                    .note(format!(
+                        "the name is the first entry and everything else is named; what this \
+                         `{what}` holds goes in `{contents} = …`"
+                    )),
+                ),
+                TableField::Named { name: key, value } if key.text == contents => {
+                    held = Some(value)
+                }
+                TableField::Named { name: key, value } => options.push((key, value)),
+            }
+        }
+
+        let Some(name) = name else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    span,
+                    format!("this `{what}` has no name"),
+                )
+                .note("the name is the first entry, written without a key"),
+            );
+            return None;
+        };
+        let Some(held) = held else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    span,
+                    format!("this `{what}` has no `{contents}`"),
+                )
+                .note(format!(
+                    "write `{contents} = …`; the table form names everything except the `{what}`'s \
+                     own name"
+                )),
+            );
+            return None;
+        };
+        Some(Declaration {
+            name,
+            holds: held,
+            options,
         })
     }
 
