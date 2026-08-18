@@ -400,49 +400,15 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
 
-        let declared = self.inst_types.clone();
         let mut mask = 0i64;
         for field in fields {
             let TableField::Positional { value } = field else {
                 self.todo(value.span(), "a named entry in `installTypes`");
                 continue;
             };
-            let Some(ConstValue::Str(name)) = self.constant(value) else {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::BadFieldValue,
-                        value.span(),
-                        "`installTypes` wants a name the block declared",
-                    )
-                    .note(
-                        "the position is resolved at compile time, so the name has to be one \
-                           too (§13)",
-                    ),
-                );
-                continue;
-            };
-            let Some(position) = declared.iter().position(|known| *known == name) else {
-                let note = if declared.is_empty() {
-                    "this block declares no install types; write `installTypes = { … }` beside \
-                     its sections"
-                        .to_string()
-                } else {
-                    format!(
-                        "the install types are {}",
-                        list(&declared.iter().map(String::as_str).collect::<Vec<_>>())
-                    )
-                };
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::UnknownField,
-                        value.span(),
-                        format!("`{name}` is not an install type"),
-                    )
-                    .note(note),
-                );
-                continue;
-            };
-            mask |= 1 << position;
+            if let Some(position) = self.inst_type_position(value, "installTypes") {
+                mask |= 1 << position;
+            }
         }
         Some(mask)
     }

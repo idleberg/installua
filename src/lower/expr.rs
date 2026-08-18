@@ -267,6 +267,10 @@ impl BodyLowerer<'_, '_> {
                 self.handle_read(base, name, dest)
             }
 
+            // `local chosen = currentInstType` — a read that is an instruction
+            // and, for the position it answers with, a chain (§13).
+            Expr::Name(name) if builtins::owned(&name.text) => self.owned_read(name, dest),
+
             // A bare name that `simple` could not resolve is not a shape this
             // version lacks — it is a name that exists nowhere in the file,
             // which resolution being order-free is what makes worth saying.
@@ -563,6 +567,12 @@ impl BodyLowerer<'_, '_> {
             "raw" => return self.raw(args, dest, span),
             "string.sub" | "string.find" | "string.lower" | "string.upper" | "string.format" => {
                 return self.string_adapter(&name, args, dest, span);
+            }
+            // The one table in the surface addressed by string rather than by
+            // handle: an install type is a line in a block's field, so there is
+            // nothing for a `local` to bind (§13, ruling 4).
+            "instTypes.getText" | "instTypes.setText" => {
+                return self.inst_types_call(&name, args, dest, span);
             }
             _ => {}
         }

@@ -17,6 +17,7 @@
 
 mod expr;
 mod handle;
+mod insttype;
 mod sig;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -3247,6 +3248,13 @@ impl BodyLowerer<'_, '_> {
                 self.todo(target.span(), "this assignment target");
                 continue;
             };
+
+            // `currentInstType = "Minimal"` — a name the compiler owns, whose
+            // write is an instruction rather than a register (§13).
+            if crate::builtins::owned(&name.text) {
+                self.owned_write(name, value);
+                continue;
+            }
 
             let (slot, declared) = match self.lookup(&name.text).cloned() {
                 Some(Binding::Local { slot, ty }) => (slot, Some(ty)),

@@ -78,7 +78,7 @@ build, not what to choose.
 | `SectionGetSize` / `SectionSetSize` | `section_index size` | `handle.size` |
 | `SectionGetInstTypes` / `SectionSetInstTypes` | `section_index inst_types` | `handle.installTypes` |
 | `GetCurInstType` / `SetCurInstType` | `inst_type_idx` | `currentInstType` |
-| `InstTypeGetText` / `InstTypeSetText` | `insttype_index text` | `instTypes.text(name)` |
+| `InstTypeGetText` / `InstTypeSetText` | `insttype_index text` | `instTypes.getText(name)` |
 
 Eight are section-indexed and reached through a handle. Four are install-type-indexed and
 reached by the name the block declared.
@@ -177,14 +177,15 @@ currentInstType = "Minimal"          -- SetCurInstType, name → position
 local chosen = currentInstType       -- GetCurInstType, position → name
 
 instTypes.setText("Full", "Everything")   -- InstTypeSetText
-local label = instTypes.text("Full")      -- InstTypeGetText
+local label = instTypes.getText("Full")      -- InstTypeGetText
 ```
 
 `currentInstType` reads and writes a **name**, not a number, which is the whole of §13
 applied a second time: the position exists in one place, and inserting a type at the front
 of the block's list renumbers every use silently and correctly. Reading it when the user
-has picked the custom type yields `nil` — NSIS returns a position past the end, and there
-is no name for it.
+has picked the custom type yields `""` — NSIS returns a position past the end, and there
+is no name for it. Not `nil`: this language has no such value, and `""` is the nothing a
+`Var` can hold.
 
 `instTypes` is a compiler-owned table addressed by string, per ruling 4. It is the one
 place in this plan that takes a name rather than a handle, because there is nothing to
@@ -249,8 +250,15 @@ to a function defined further down, so nothing else moves.
    which define — a handle names. Claiming therefore moved to a pass of its own, before
    any body is lowered, because `installer { onInit(…), core }` is ordinary and a body
    cannot wait for an entry written below it (§15.6). Claim rule 4 lands here.
-5. **`currentInstType` and `instTypes`**, reusing `section_in`'s name → position lookup and
-   its diagnostic.
+5. **`currentInstType` and `instTypes`.** *(done)* `lower/insttype.rs`. The name → position
+   lookup is shared rather than reused: `handle.installTypes` now folds through the same
+   `inst_type_position`, so all four writings raise one diagnostic with one wording. Both
+   names are `builtins::owned` — not constants, because there is no `$CURINSTTYPE` to
+   expand, and not globals, because an unbound assignment target otherwise becomes a `Var`
+   and swallows `instTypes = 3` silently. Reading `currentInstType` maps the position back
+   through a compile-time comparison chain rather than `InstTypeGetText`, because
+   `instTypes.setText` exists and `currentInstType == "Full"` has to survive it; past the
+   end of the list is the custom type, which answers `""`.
 6. **Table rows, stubs, golden, docs.** Twelve `todo` → `Exposed`; `installua.Section` and
    `installua.Group` classes in `stubs.rs`; a `sections` golden through tier 3; PREPLAN
    §13 amendment; `PHASE-6.md` batch entry.

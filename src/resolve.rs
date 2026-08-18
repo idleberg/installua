@@ -466,6 +466,9 @@ fn scan_stmt(
                     && !bound(scopes, &name.text)
                     && !found.iter().any(|g| g.name == name.text)
                     && builtins::constant_named(&name.text).is_none()
+                    // `currentInstType = "Minimal"` is `SetCurInstType`, not a
+                    // slot to allocate.
+                    && !builtins::owned(&name.text)
                     && !resolved.consts.contains_key(&name.text)
                 {
                     found.push(Global {

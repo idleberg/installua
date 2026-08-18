@@ -112,6 +112,15 @@ pub const CONSTANTS: &[Constant] = &[
     root("SHCTX"),
 ];
 
+/// A name the compiler owns: neither a constant nor a register, because its
+/// read and its write are *instructions*. `currentInstType` is `GetCurInstType`
+/// and `SetCurInstType`, and `instTypes` is a table addressed by string — so
+/// neither may become a `Var`, which is what an unbound assignment target
+/// otherwise does (§13).
+pub fn owned(name: &str) -> bool {
+    matches!(name, "currentInstType" | "instTypes")
+}
+
 pub fn constant_named(name: &str) -> Option<&'static Constant> {
     CONSTANTS.iter().find(|c| c.installua == name)
 }
