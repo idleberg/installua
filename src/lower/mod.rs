@@ -346,6 +346,13 @@ struct Created {
     /// `ADDSTRING`s that fill a list, and the `LoadAndSetImage` that gives a
     /// `bitmap` its picture.
     post: Vec<Post>,
+    /// The callbacks this control was declared with, as the plugin method that
+    /// registers each and the generated function it points at.
+    ///
+    /// Separate from [`Created::post`] because registering one is not a single
+    /// instruction: the address has to be taken into a register first, and the
+    /// plugin call that takes it is an opaque site.
+    events: Vec<(&'static str, String)>,
     span: Span,
 }
 
@@ -2136,7 +2143,7 @@ impl<'p> Lowerer<'_, 'p> {
         // `Lowerer` in hand — constants, diagnostics, the claim map — and what
         // comes back is instructions the creator threads together.
         let controls = match written("controls") {
-            Some(value) => self.controls(value),
+            Some(value) => self.controls(value, half),
             None => Vec::new(),
         };
 
@@ -2216,6 +2223,26 @@ impl<'p> Lowerer<'_, 'p> {
                     args.extend(post.after.iter().cloned());
                     lowerer.emit(ir::Instruction::new(post.nsis, args));
                 }
+
+                // The callbacks. `GetFunctionAddress` is a `todo` row and stays
+                // one: §3's reason — *`Call`-by-address has no Lua shape* — is
+                // still true of the **surface**, and the compiler emitting it is
+                // the same move as emitting `SectionGetFlags`. The address of a
+                // generated function exists in exactly one place, which is what
+                // makes writing it here safe and writing it by hand not.
+                for (nsis, function) in &control.events {
+                    let address = lowerer.body.vreg(control.span);
+                    lowerer.emit(ir::Instruction::new(
+                        "GetFunctionAddress",
+                        vec![ir::Arg::dest(address.clone()), ir::Arg::raw(function)],
+                    ));
+                    lowerer.generated_plugin_call(
+                        nsis,
+                        vec![ir::Arg::slot(handle.clone()), ir::Arg::slot(address)],
+                        Vec::new(),
+                        control.span,
+                    );
+                }
             }
 
             if let Some((block, _)) = show {
@@ -2274,7 +2301,7 @@ impl<'p> Lowerer<'_, 'p> {
     /// the control's name again later: a bare name is a declaration this page is
     /// claiming, and anything else is a declaration written where it is used.
     /// Neither is a different control (ruling 3).
-    fn controls(&mut self, value: &Expr) -> Vec<Created> {
+    fn controls(&mut self, value: &Expr, half: Half) -> Vec<Created> {
         let Expr::Table { fields, .. } = value else {
             self.bad_value(
                 value.span(),
@@ -2318,7 +2345,7 @@ impl<'p> Lowerer<'_, 'p> {
                 let DeferredKind::Control(control) = kind else {
                     continue;
                 };
-                created.extend(self.control(declared, control, Some(var)));
+                created.extend(self.control(declared, control, Some(var), half, Some(&name.text)));
                 continue;
             }
 
@@ -2337,7 +2364,7 @@ impl<'p> Lowerer<'_, 'p> {
                 );
                 continue;
             };
-            created.extend(self.control(value, control, None));
+            created.extend(self.control(value, control, None, half, None));
         }
         created
     }
@@ -2355,6 +2382,8 @@ impl<'p> Lowerer<'_, 'p> {
         value: &Expr,
         control: &'static control::Control,
         var: Option<String>,
+        half: Half,
+        local: Option<&str>,
     ) -> Option<Created> {
         let what = control.installua;
         let Expr::Call { args, .. } = value else {
@@ -2370,6 +2399,8 @@ impl<'p> Lowerer<'_, 'p> {
         let mut text = None;
         let mut geometry: [Option<String>; 4] = [None, None, None, None];
         let mut post = Vec::new();
+        let mut events = Vec::new();
+        let mut url = None;
         for field in fields {
             match field {
                 TableField::Positional { value } if text.is_none() && control.text.is_some() => {
@@ -2449,12 +2480,63 @@ impl<'p> Lowerer<'_, 'p> {
                         }
                         continue;
                     }
+                    // The two events, which are options rather than fields
+                    // because the address of a function is a build-time fact:
+                    // there is no moment at install time when a callback could
+                    // be *assigned* that is not already inside the callback
+                    // this compiler generates (ruling 8).
+                    if let Some(event) = control::event(&name.text) {
+                        if !event.on(control) {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    Code::UnknownField,
+                                    name.span,
+                                    format!("a `{what}` has no `{}`", event.option()),
+                                )
+                                .note(format!("{} does", event.kinds())),
+                            );
+                            continue;
+                        }
+                        if let Some(function) = self.control_callback(value, half, local, event) {
+                            events.push((event.nsis(), function));
+                        }
+                        continue;
+                    }
+                    // A link's address, which is the click it would otherwise
+                    // have to be written as. `url` and `onClick` are the same
+                    // slot, so a control that writes both is asking for two
+                    // things to happen and getting one.
+                    if name.text == "url" {
+                        if !control.clicks() {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    Code::UnknownField,
+                                    name.span,
+                                    format!("a `{what}` opens nothing"),
+                                )
+                                .note(
+                                    "`url` is what a click opens, so it is on the kinds that are \
+                                     clicked; a `link` is the one drawn as one",
+                                ),
+                            );
+                            continue;
+                        }
+                        url = self.constant_arg(value, "url").map(|arg| (arg, name.span));
+                        continue;
+                    }
                     let mut options = vec!["x", "y", "width", "height"];
                     if control.takes_items() {
                         options.push("items");
                     }
                     if control.imageable() {
                         options.push("image");
+                    }
+                    if control.clicks() {
+                        options.push("onClick");
+                        options.push("url");
+                    }
+                    if control.changes() {
+                        options.push("onChange");
                     }
                     self.diags.push(
                         Diagnostic::error(
@@ -2464,6 +2546,41 @@ impl<'p> Lowerer<'_, 'p> {
                         )
                         .note(format!("the options are {}", list(&options))),
                     );
+                }
+            }
+        }
+
+        // The address, as the click it would otherwise have to be written as.
+        // Resolved after the loop, because `url` and `onClick` register the same
+        // callback and the table they are written in has no order.
+        if let Some((address, span)) = url {
+            let taken = events
+                .iter()
+                .any(|(nsis, _)| *nsis == control::Event::Click.nsis());
+            match taken {
+                true => self.diags.push(
+                    Diagnostic::error(
+                        Code::DuplicateBlock,
+                        span,
+                        format!("this `{what}` has both a `url` and an `onClick`"),
+                    )
+                    .note(
+                        "a `url` is an `onClick` this compiler writes: one control has one click, \
+                         and the two would be one silently replacing the other",
+                    )
+                    .note("write the `execShell` yourself, inside the `onClick`"),
+                ),
+                false => {
+                    let function = self.callback_function(half, local, "url", span, |lowerer| {
+                        // `ExecShell "open"` is what a shortcut to a URL
+                        // does, which is the behaviour a user expects of a
+                        // link: their browser, not one this installer picks.
+                        lowerer.emit(ir::Instruction::new(
+                            "ExecShell",
+                            vec![ir::Arg::str("open"), address],
+                        ));
+                    });
+                    events.push((control::Event::Click.nsis(), function));
                 }
             }
         }
@@ -2511,6 +2628,7 @@ impl<'p> Lowerer<'_, 'p> {
             create,
             var,
             post,
+            events,
             span,
         })
     }
@@ -2726,6 +2844,61 @@ impl<'p> Lowerer<'_, 'p> {
             body,
         });
         Some(name)
+    }
+
+    /// `onClick = function() … end`, as the function nsDialogs will call.
+    fn control_callback(
+        &mut self,
+        value: &Expr,
+        half: Half,
+        local: Option<&str>,
+        event: control::Event,
+    ) -> Option<String> {
+        let (block, span) = self.callback_body(value, event.option())?;
+        Some(
+            self.callback_function(half, local, event.word(), span, |lowerer| {
+                lowerer.block(block);
+            }),
+        )
+    }
+
+    /// A function nsDialogs calls, with the one line of protocol it owes.
+    ///
+    /// **The handle has to be popped.** nsDialogs pushes the control's `HWND`
+    /// before calling, and a callback that leaves it there corrupts the stack
+    /// for everything after — which shows up as a wrong string in an unrelated
+    /// instruction rather than as a crash. The program has no use for it: it
+    /// already knows which control this is, because it wrote the callback on
+    /// that control's declaration.
+    fn callback_function(
+        &mut self,
+        half: Half,
+        local: Option<&str>,
+        which: &str,
+        span: Span,
+        build: impl FnOnce(&mut BodyLowerer),
+    ) -> String {
+        let stem = match local {
+            Some(local) => format!("{}mui.control.{local}.{which}", half.prefix()),
+            None => format!("{}mui.control.{which}", half.prefix()),
+        };
+        let mut name = stem.clone();
+        let mut nth = 2;
+        while self.module.functions.iter().any(|f| f.name == name) {
+            name = format!("{stem}.{nth}");
+            nth += 1;
+        }
+
+        let (body, _) = self.body_with(span, Some(half), |lowerer| {
+            let pushed = lowerer.body.vreg(span);
+            lowerer.emit(ir::Instruction::new("Pop", vec![ir::Arg::dest(pushed)]));
+            build(lowerer);
+        });
+        self.module.functions.push(ir::Function {
+            name: name.clone(),
+            body,
+        });
+        name
     }
 
     /// The block behind `pre = function() … end`, checked.

@@ -1921,6 +1921,68 @@ everything else here is reached through a field and moves with the rest in step 
 `todo` 28 → **27**, `exposed` 100 → **101**. Claim rule 4's control half is no longer
 shadowed — `serial.value` from the uninstaller says so by name.
 
+## Batch 31 — an event is an option, and its callback is a generated function
+
+`PHASE-6-DIALOGS.md` step 5, and the last of the surface. `onClick` and `onChange` are
+written on the declaration rather than assigned at install time, because the address of a
+function is a build-time fact: there is no install-time moment at which one could be
+assigned that is not already inside a callback.
+
+```lua
+local proceed = button { "Check", x = 0, y = 140, width = 60, height = 14,
+  onClick = function() detailPrint("checking") end,
+}
+
+link { "Terms and conditions", url = "https://example.invalid/terms", y = 160, height = 12 },
+```
+
+```nsi
+Function mui.control.proceed.click
+  Pop $0
+  DetailPrint "checking"
+FunctionEnd
+
+Function mui.control.url
+  Pop $0
+  ExecShell "open" "https://example.invalid/terms"
+FunctionEnd
+
+  …
+  GetFunctionAddress $0 mui.control.proceed.click
+  nsDialogs::OnClick $__GENERATED_ctl_proceed $0
+```
+
+### The `Pop` is the whole protocol
+
+nsDialogs pushes the control's `HWND` before calling, and a callback that leaves it there
+corrupts the stack for everything after — which surfaces as a wrong string in an unrelated
+instruction rather than as a crash. It is the exact class of bug ruling 4 put the creator's
+four steps in the compiler's hands for, so the `Pop` is written here too. The program has
+no use for the value: it wrote the callback *on* the control it belongs to.
+
+Three decisions:
+
+- **`url` is an `onClick` the compiler writes.** A `link` is an owner-drawn button that
+  looks like one and opens nothing at all, so the URL has to become a click either way.
+  `ExecShell "open"` is what a shortcut to an address does, which means the browser is the
+  user's rather than one this installer picks. Writing both `url` and `onClick` is an
+  error rather than a silent replacement: one control has one click.
+- **Which kinds have which event is a table, and nsDialogs drew the line.** *"There is
+  nothing to notify about label changes, only clicks."* `onClick` is on the six kinds that
+  are clicked, `onChange` on the seven a user edits, and `hLine` and `groupBox` have
+  neither — a `groupBox` is a frame, and a click on it lands on whatever is inside.
+- **`GetFunctionAddress` stays `todo` while being emitted.** Same move as `SendMessage` in
+  batch 29 and `SectionGetFlags` before it: §3's *"`Call`-by-address has no Lua shape"* is
+  true of the **surface**, and what makes emitting it safe is that the address of a
+  generated function exists in exactly one place.
+
+### What landed
+
+No rows moved. `link` is the fifteenth control kind, `tests/golden/dialog.lua` grew a
+button and a link through tier 3, and `installua.ControlOptions` gained the three options.
+What is left of the plan is step 6: the six rows the fields reach, `SendMessage`,
+`GetFunctionAddress`, and §15.32 written up as a section rather than a plan.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.

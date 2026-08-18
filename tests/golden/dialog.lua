@@ -27,6 +27,16 @@ local reason = text { "", y = 20, height = 12 }
 -- is also an option.
 local badge = bitmap { image = "check.bmp", y = 90, height = 20 }
 
+-- An event is an option and not a field, because the address of a function is a
+-- build-time fact: there is no install-time moment at which one could be
+-- assigned that is not already inside a callback. nsDialogs pushes the control's
+-- handle before calling, and the `Pop` that clears it is the compiler's.
+local proceed = button { "Check", x = 0, y = 140, width = 60, height = 14,
+	onClick = function()
+		detailPrint("checking")
+	end,
+}
+
 installer {
 	page.welcome {},
 
@@ -47,6 +57,11 @@ installer {
 			-- that would make every position depend on the order of the list.
 			hLine { y = 120, height = 2 },
 			badge,
+			proceed,
+			-- A `url` is an `onClick` the compiler writes: `ExecShell "open"`,
+			-- which is what a shortcut to an address does, so the browser is
+			-- the user's rather than one this installer picks.
+			link { "Terms and conditions", url = "https://example.invalid/terms", y = 160, height = 12 },
 		},
 
 		pre = function()

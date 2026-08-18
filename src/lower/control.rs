@@ -41,6 +41,7 @@ const SS_SUNKEN: u32 = 0x0000_1000;
 const BS_AUTOCHECKBOX: u32 = 0x0000_0003;
 const BS_GROUPBOX: u32 = 0x0000_0007;
 const BS_AUTORADIOBUTTON: u32 = 0x0000_0009;
+const BS_OWNERDRAW: u32 = 0x0000_000B;
 const BS_VCENTER: u32 = 0x0000_0C00;
 const BS_MULTILINE: u32 = 0x0000_2000;
 
@@ -129,15 +130,40 @@ impl Control {
     pub fn imageable(&self) -> bool {
         matches!(self.installua, "bitmap")
     }
+
+    /// Whether clicking the kind means anything.
+    ///
+    /// A `BUTTON` notifies by class and a `STATIC` only with `SS_NOTIFY`, which
+    /// the styles above give to the three statics that are worth clicking and
+    /// withhold from `hLine`, which is a rule drawn on the page. `groupBox` is a
+    /// `BUTTON` and is not one of these: what it draws is a frame around other
+    /// controls, and a click lands on whatever is inside it.
+    pub fn clicks(&self) -> bool {
+        matches!(
+            self.installua,
+            "label" | "button" | "checkbox" | "radioButton" | "bitmap" | "link"
+        )
+    }
+
+    /// Whether the kind has something that changes.
+    ///
+    /// nsDialogs' own documentation draws this line: *"there is nothing to
+    /// notify about label changes, only clicks"*. An edit box notifies on every
+    /// keystroke and a list on every selection; everything else has no state a
+    /// user edits.
+    pub fn changes(&self) -> bool {
+        matches!(
+            self.installua,
+            "text" | "password" | "number" | "fileRequest" | "dirRequest" | "dropList" | "listBox"
+        )
+    }
 }
 
 /// The kinds, by the name a program writes.
 ///
-/// Fourteen, and the boundary is what a control needs beyond a
-/// `CreateControl`: `link` is the one that does not work as a declaration alone,
-/// since what it is *for* is the click that opens the address, so it lands with
-/// the event rather than as a control that draws nothing. `bitmap` arrived with
-/// `image`, which is the field that gives it something to draw.
+/// Fifteen, and each arrived with whatever made it mean something: `bitmap` with
+/// `image`, which is the field that gives it a picture, and `link` with the
+/// events, because a link that opens nothing is a blue label.
 pub const CONTROLS: &[Control] = &[
     Control {
         installua: "label",
@@ -276,6 +302,19 @@ pub const CONTROLS: &[Control] = &[
         text: None,
         add_item: None,
     },
+    // `LINK` is a class nsDialogs registers itself, which is why this needs no
+    // header and no manifest: the plugin is already loaded by the time any
+    // control is made. What it does *not* do is open anything — a link is an
+    // owner-drawn button that looks like one — so the click is where the URL
+    // lives (§15.32).
+    Control {
+        installua: "link",
+        class: "LINK",
+        style: DEFAULT_STYLES | WS_TABSTOP | BS_OWNERDRAW,
+        exstyle: 0,
+        text: Some("what the link says"),
+        add_item: None,
+    },
 ];
 
 /// A field of a control handle: `serial.value`, `agree.checked = true`.
@@ -367,6 +406,74 @@ impl ControlField {
             }
             _ => "a control drawn with no text has nothing for this to be",
         }
+    }
+}
+
+/// A callback nsDialogs will make: `onClick = function() … end`.
+///
+/// Two, and they are **options** rather than fields, because the address of a
+/// function is a build-time fact: there is no install-time moment at which a
+/// program could assign one that is not already inside a callback (ruling 8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Event {
+    Click,
+    Change,
+}
+
+impl Event {
+    /// The plugin call that registers it. Both take the control's handle and the
+    /// address of a function, and both push nothing.
+    pub fn nsis(self) -> &'static str {
+        match self {
+            Event::Click => "nsDialogs::OnClick",
+            Event::Change => "nsDialogs::OnChange",
+        }
+    }
+
+    /// The name a program writes.
+    pub fn option(self) -> &'static str {
+        match self {
+            Event::Click => "onClick",
+            Event::Change => "onChange",
+        }
+    }
+
+    /// The word that goes in the generated function's name.
+    pub fn word(self) -> &'static str {
+        match self {
+            Event::Click => "click",
+            Event::Change => "change",
+        }
+    }
+
+    pub fn on(self, control: &Control) -> bool {
+        match self {
+            Event::Click => control.clicks(),
+            Event::Change => control.changes(),
+        }
+    }
+
+    /// What does have it, for the error that has to say why this does not.
+    pub fn kinds(self) -> &'static str {
+        match self {
+            Event::Click => {
+                "a `button`, a `checkbox`, a `radioButton`, a `label`, a `bitmap` \
+                            or a `link`"
+            }
+            Event::Change => {
+                "a control a user edits: the three edit boxes, the two requests, \
+                              and the two lists"
+            }
+        }
+    }
+}
+
+/// The event this option name declares, or `None` for a name that is not one.
+pub fn event(name: &str) -> Option<Event> {
+    match name {
+        "onClick" => Some(Event::Click),
+        "onChange" => Some(Event::Change),
+        _ => None,
     }
 }
 

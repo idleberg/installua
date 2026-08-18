@@ -10,6 +10,7 @@ Var __GENERATED_ctl_agree
 Var __GENERATED_ctl_flavour
 Var __GENERATED_unctl_reason
 Var __GENERATED_ctl_badge
+Var __GENERATED_ctl_proceed
 
 !insertmacro MUI_PAGE_WELCOME
 Page custom mui.custom.create mui.custom.leave "Registration"
@@ -28,6 +29,16 @@ SectionEnd
 Section "un.Core"
   DetailPrint "uninstalling"
 SectionEnd
+
+Function mui.control.proceed.click
+  Pop $0
+  DetailPrint "checking"
+FunctionEnd
+
+Function mui.control.url
+  Pop $0
+  ExecShell "open" "https://example.invalid/terms"
+FunctionEnd
 
 Function mui.custom.leave
   System::Call "user32::GetWindowText(p$__GENERATED_ctl_serial,t.s,i${NSIS_MAX_STRLEN})"
@@ -60,6 +71,14 @@ Function mui.custom.create
   nsDialogs::CreateControl STATIC 0x5400010E 0x00000000 0 90u 100% 20u ""
   Pop $__GENERATED_ctl_badge
   LoadAndSetImage /STRINGID $__GENERATED_ctl_badge 0 0x0010 "check.bmp"
+  nsDialogs::CreateControl BUTTON 0x54010000 0x00000000 0u 140u 60u 14u "Check"
+  Pop $__GENERATED_ctl_proceed
+  GetFunctionAddress $0 mui.control.proceed.click
+  nsDialogs::OnClick $__GENERATED_ctl_proceed $0
+  nsDialogs::CreateControl LINK 0x5401000B 0x00000000 0 160u 100% 12u "Terms and conditions"
+  Pop $0
+  GetFunctionAddress $1 mui.control.url
+  nsDialogs::OnClick $0 $1
   CreateFont $0 "Tahoma" 8 700
   SendMessage $__GENERATED_ctl_serial 0x0030 $0 1
   SetCtlColors $__GENERATED_ctl_serial 800000 transparent

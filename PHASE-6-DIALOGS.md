@@ -312,9 +312,30 @@ one:
    `GetDlgItem` moved `todo` → exposed here rather than in step 6, because it is the one
    window row a program calls rather than reaches. Claim rule 4's control half is no longer
    shadowed.
-5. **Events.** `onClick` and `onChange` as declaration options, lowering to
-   `GetFunctionAddress` + `nsDialogs::OnClick`, with the callback emitted as an ordinary
-   generated function.
+5. **Events.** *(done)* `onClick` and `onChange` as declaration options, lowering to
+   `GetFunctionAddress` + `nsDialogs::OnClick`/`OnChange` beside the control's
+   `CreateControl`, with the callback emitted as an ordinary generated function named
+   `mui.control.<local>.<event>`. `link` landed here, which is what step 3 deferred it for.
+
+   Three things decided here:
+
+   - **The callback pops, and the program never sees what it popped.** nsDialogs pushes the
+     control's `HWND` before calling, and a callback that leaves it there corrupts the
+     stack for everything after — a wrong string in an unrelated instruction rather than a
+     crash. The compiler writes the `Pop`; the program has no use for the value, because it
+     wrote the callback *on* the control it belongs to.
+   - **`url` is an `onClick` the compiler writes.** A `link` is an owner-drawn button that
+     looks like one and opens nothing, so `link { "Terms", url = "…" }` generates a
+     callback whose body is `ExecShell "open"` — a shortcut's behaviour, so the browser is
+     the user's. Writing both `url` and `onClick` is an error: one control has one click.
+   - **Which kinds have which event is a table, from nsDialogs' own line.** *"There is
+     nothing to notify about label changes, only clicks"*: `onClick` is on the six that are
+     clicked and `onChange` on the seven a user edits, and `hLine` and `groupBox` have
+     neither.
+
+   `GetFunctionAddress` stays `todo` while being emitted, for the reason `SendMessage` did
+   in step 3: §3's *"`Call`-by-address has no Lua shape"* is a statement about the surface,
+   and the address of a generated function exists in exactly one place.
 6. **Table rows, stubs, golden, docs.** Twelve rows move; `installua.Control` and
    `tests/golden/dialog.lua` landed early, in step 3, because a construct with no golden
    is a construct nothing assembles. What is left here is the rows, the fields on
@@ -337,7 +358,9 @@ Steps 0 and 1 are five of those: `todo` 35 → **30**, `exposed` 96 → **100**,
 `language` 12 → **14**. Step 3 moves none: the twelve remaining rows are reached through
 control *fields*, and what it landed is the construct they hang off. Step 4 moves one —
 `GetDlgItem`, the only window row a program *calls* — leaving the six it reaches through
-fields, plus `SendMessage`, for step 6: `todo` 28 → **27**, `exposed` 100 → **101**.
+fields, plus `SendMessage`, for step 6: `todo` 28 → **27**, `exposed` 100 → **101**. Step 5
+moves none, and adds one to step 6's list: `GetFunctionAddress`, which the events emit and
+the surface still has no spelling for.
 
 That leaves one grouped reason in the backlog — §15.26's five locale-table rows — and
 sixteen one-offs.

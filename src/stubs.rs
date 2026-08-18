@@ -451,7 +451,7 @@ fn declarations() -> String {
 /// The control declarations, from the same table that lowers them (§15.32).
 ///
 /// Generated rather than written out, so that a kind added to the table is a
-/// kind the editor completes: fourteen near-identical stubs are exactly the
+/// kind the editor completes: fifteen near-identical stubs are exactly the
 /// thing a list should produce.
 fn controls() -> String {
     let mut out = String::from(
@@ -467,6 +467,9 @@ fn controls() -> String {
          ---@field height? integer|string Required, for the same reason as `y`.\n\
          ---@field items? string[] The rows of a `dropList` or a `listBox`.\n\
          ---@field image? string The `.bmp` a `bitmap` draws.\n\
+         ---@field onClick? fun() Called when it is clicked.\n\
+         ---@field onChange? fun() Called when what it holds changes.\n\
+         ---@field url? string An `onClick` that opens an address.\n\
          local ControlOptions = {}\n\n\
          -- A colour is six hexadecimal digits, in the order Windows writes them.\n\
          -- Both are named because `SetCtlColors` writes both in one instruction.\n\

@@ -531,3 +531,132 @@ fn a_control_of_the_other_half_is_not_addressable() {
         "{raised:?}"
     );
 }
+
+// -- events ---------------------------------------------------------------
+
+/// An event is an option and not a field: the address of a function is a
+/// build-time fact, so there is no install-time moment at which one could be
+/// assigned that is not already inside a callback.
+///
+/// `GetFunctionAddress` stays a `todo` row while the compiler emits it, for the
+/// same reason `SectionGetFlags` did — §3's *"`Call`-by-address has no Lua
+/// shape"* is a statement about the surface, and the address of a generated
+/// function exists in exactly one place.
+#[test]
+fn a_callback_is_registered_where_the_control_is_made() {
+    let output = build(&program(
+        "local proceed = button { \"Check\", y = 0, height = 14,\n\
+         onClick = function() detailPrint(\"checked\") end }",
+        "proceed,",
+    ));
+
+    assert!(
+        output.contains("GetFunctionAddress $0 mui.control.proceed.click"),
+        "{output}"
+    );
+    assert!(
+        output.contains("nsDialogs::OnClick $__GENERATED_ctl_proceed $0"),
+        "{output}"
+    );
+}
+
+/// The one line of protocol a callback owes: nsDialogs pushes the control's
+/// handle before calling, and a callback that leaves it there corrupts the stack
+/// for everything after — which shows up as a wrong string somewhere unrelated
+/// rather than as a crash.
+#[test]
+fn a_callback_pops_the_handle_nsdialogs_pushed() {
+    let output = build(&program(
+        "local proceed = button { \"Check\", y = 0, height = 14,\n\
+         onClick = function() detailPrint(\"checked\") end }",
+        "proceed,",
+    ));
+
+    let body = output
+        .split("Function mui.control.proceed.click")
+        .nth(1)
+        .expect("the callback");
+    let popped = body.find("Pop $").expect("the pop");
+    let first = body.find("DetailPrint").expect("the body");
+    assert!(popped < first, "{output}");
+}
+
+/// Not every control supports both, and nsDialogs' own documentation is where
+/// the line is drawn: *"there is nothing to notify about label changes, only
+/// clicks"*. Registering one anyway is a callback that never runs.
+#[test]
+fn an_event_is_on_the_kinds_that_have_it() {
+    let raised = errors(&program(
+        "",
+        "label { \"Hi\", y = 0, height = 12, onChange = function() abort() end },",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::UnknownField);
+    assert!(raised[0].1.contains("`onChange`"), "{raised:?}");
+
+    // And a `hLine` is a rule drawn on the page: it has neither.
+    let rule = errors(&program(
+        "",
+        "hLine { y = 0, height = 2, onClick = function() abort() end },",
+    ));
+    assert_eq!(rule.len(), 1, "{rule:?}");
+    assert_eq!(rule[0].0, Code::UnknownField);
+}
+
+/// A `link` is an owner-drawn button that looks like one and opens nothing, so
+/// `url` is the click written for you — and writing both is asking for two
+/// things to happen on one click.
+#[test]
+fn a_url_is_the_click_the_compiler_writes() {
+    let output = build(&program(
+        "",
+        "link { \"Terms\", url = \"https://example.invalid\", y = 0, height = 12 },",
+    ));
+    assert!(
+        output.contains("nsDialogs::CreateControl LINK 0x5401000B"),
+        "{output}"
+    );
+    assert!(
+        output.contains("ExecShell \"open\" \"https://example.invalid\""),
+        "{output}"
+    );
+    assert!(output.contains("nsDialogs::OnClick $0 $1"), "{output}");
+
+    let both = errors(&program(
+        "",
+        "link { \"Terms\", url = \"https://example.invalid\", y = 0, height = 12,\n\
+         onClick = function() abort() end },",
+    ));
+    assert_eq!(both.len(), 1, "{both:?}");
+    assert_eq!(both[0].0, Code::DuplicateBlock);
+}
+
+/// A callback belongs to the half whose page drew the control, and NSIS says so
+/// with a prefix: an uninstaller function is `un.`-something, and calling one
+/// from the installer is not possible rather than merely wrong.
+#[test]
+fn a_callback_carries_the_half_that_owns_it() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local bye = button { \"Bye\", y = 0, height = 14,\n\
+         onClick = function() detailPrint(\"bye\") end }\n\
+         installer {\n\
+         page.instFiles {},\n\
+         section(\"Core\", function() writeUninstaller(INSTDIR .. \"/un.exe\") end),\n\
+         }\n\
+         uninstaller {\n\
+         page.custom { controls = { bye } },\n\
+         page.instFiles {},\n\
+         section(\"Core\", function() detailPrint(\"x\") end),\n\
+         }\n",
+    );
+
+    assert!(
+        output.contains("Function un.mui.control.bye.click"),
+        "{output}"
+    );
+    assert!(
+        output.contains("GetFunctionAddress $0 un.mui.control.bye.click"),
+        "{output}"
+    );
+}
