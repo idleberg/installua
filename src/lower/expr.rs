@@ -257,15 +257,7 @@ impl BodyLowerer<'_, '_> {
             // other two dotted things in the surface — a header's macro and a
             // plugin's method — are only ever callees, and `lang.greeting` is
             // §15.26's, which is not built yet.
-            Expr::Field { base, name, span } => {
-                if base.name().is_none_or(|base| {
-                    !self.resolved.deferred.contains_key(base) || self.claims.get(base).is_none()
-                }) {
-                    self.todo(*span, "this expression");
-                    return None;
-                }
-                self.handle_read(base, name, dest)
-            }
+            Expr::Field { base, name, .. } => self.field_read(base, name, dest),
 
             // `local chosen = currentInstType` — a read that is an instruction
             // and, for the position it answers with, a chain (§13).

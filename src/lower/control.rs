@@ -53,12 +53,41 @@ const LBS_HASSTRINGS: u32 = 0x0000_0040;
 const LBS_NOINTEGRALHEIGHT: u32 = 0x0000_0100;
 const LBS_DISABLENOSCROLL: u32 = 0x0000_1000;
 
+const SS_BITMAP: u32 = 0x0000_000E;
+
 /// The message that appends one string, for the two controls that hold a list.
 /// A combo box and a list box are different classes with different message
 /// numbers for the same idea, which is why this sits on the control rather than
 /// on the `items` option.
 const CB_ADDSTRING: u32 = 0x0143;
 const LB_ADDSTRING: u32 = 0x0180;
+
+/// The messages a field is, where the field is one.
+///
+/// There is no `WM_GETTEXT` here, and its absence is the one asymmetry in the
+/// field surface: NSIS's `SendMessage` has no way to be handed a buffer, so a
+/// control's text is *read* by `System::Call user32::GetWindowText` — which is
+/// what `nsDialogs.nsh` does too, and which needs no header because the plugin
+/// is `System` and the length is makensis' own `${NSIS_MAX_STRLEN}`.
+pub const WM_SETTEXT: u32 = 0x000C;
+pub const WM_SETFONT: u32 = 0x0030;
+pub const BM_GETCHECK: u32 = 0x00F0;
+pub const BM_SETCHECK: u32 = 0x00F1;
+
+/// `ShowWindow`'s two states. Named rather than `!define`d, on ruling 5.
+pub const SW_HIDE: u32 = 0;
+pub const SW_SHOW: u32 = 5;
+
+/// `LoadAndSetImage`'s two constants: what kind of image, and where it comes
+/// from. A `.bmp` beside the installer at run time, loaded by name.
+pub const IMAGE_BITMAP: u32 = 0;
+pub const LR_LOADFROMFILE: u32 = 0x0010;
+
+/// The weight `CreateFont` wants for `bold = true`, and the one it wants for
+/// `bold = false`. Windows' scale runs 0–1000 and names nine points on it; these
+/// are the two anything reads back.
+pub const FW_NORMAL: u32 = 400;
+pub const FW_BOLD: u32 = 700;
 
 /// One control kind: what a program writes, and what NSIS is told.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,15 +112,32 @@ impl Control {
     pub fn takes_items(&self) -> bool {
         self.add_item.is_some()
     }
+
+    /// Whether the kind holds a tick.
+    ///
+    /// It is the `BS_AUTOCHECKBOX`/`BS_AUTORADIOBUTTON` style that makes one so,
+    /// and this names the kinds rather than masking for it: the low bits of a
+    /// `BS_` style are a small enum and not flags — `BS_GROUPBOX` is 7 and
+    /// `BS_AUTOCHECKBOX` is 3 — so `style & BS_AUTOCHECKBOX` is true of a group
+    /// box, and a mask here would be a bug that reads like an optimisation.
+    pub fn checkable(&self) -> bool {
+        matches!(self.installua, "checkbox" | "radioButton")
+    }
+
+    /// Whether the kind draws a picture rather than text, and so is the one
+    /// that answers to `image`.
+    pub fn imageable(&self) -> bool {
+        matches!(self.installua, "bitmap")
+    }
 }
 
 /// The kinds, by the name a program writes.
 ///
-/// Thirteen, and the boundary is what a control needs beyond a
-/// `CreateControl`: `bitmap` and `link` are the two that do not work as
-/// declarations alone — one needs `LoadAndSetImage` and the other needs the
-/// click that opens the address — so they land with the field and the event
-/// that make them real rather than as controls that draw nothing.
+/// Fourteen, and the boundary is what a control needs beyond a
+/// `CreateControl`: `link` is the one that does not work as a declaration alone,
+/// since what it is *for* is the click that opens the address, so it lands with
+/// the event rather than as a control that draws nothing. `bitmap` arrived with
+/// `image`, which is the field that gives it something to draw.
 pub const CONTROLS: &[Control] = &[
     Control {
         installua: "label",
@@ -219,6 +265,128 @@ pub const CONTROLS: &[Control] = &[
         text: Some("the path the box starts with"),
         add_item: None,
     },
+    // A `STATIC` that holds a picture instead of a caption, which is why it has
+    // no text: `CreateControl`'s last argument is ignored by a `SS_BITMAP`
+    // window, and what it draws arrives afterwards through `image`.
+    Control {
+        installua: "bitmap",
+        class: "STATIC",
+        style: DEFAULT_STYLES | SS_BITMAP | SS_NOTIFY,
+        exstyle: 0,
+        text: None,
+        add_item: None,
+    },
+];
+
+/// A field of a control handle: `serial.value`, `agree.checked = true`.
+///
+/// Seven, against a section's seven, and the shape is different in one way that
+/// matters: a section's flags are a word that has to be read, edited and written
+/// back, and a control's field is one instruction each. Nothing here is a
+/// read-modify-write, so nothing here needs a temporary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlField {
+    /// The window's text. `System::Call user32::GetWindowText` to read,
+    /// `SendMessage WM_SETTEXT` to write.
+    Value,
+    /// The tick. `SendMessage BM_GETCHECK` / `BM_SETCHECK`.
+    Checked,
+    /// `EnableWindow`, and Windows offers no instruction to ask.
+    Enabled,
+    /// `ShowWindow`, likewise.
+    Visible,
+    /// `SetCtlColors`, which sets a window's text colour and its background in
+    /// **one** instruction — which is why this is one field holding two and not
+    /// the `textColor`/`backColor` pair the plan sketched.
+    Colors,
+    /// `CreateFont` and `WM_SETFONT`.
+    Font,
+    /// `LoadAndSetImage`, on a `bitmap`.
+    Image,
+}
+
+impl ControlField {
+    /// Whether Windows will say what this field currently is.
+    ///
+    /// Five of the seven it will not, and each has the same reason: the setter
+    /// is a one-way instruction rather than half of a pair. `EnableWindow` has
+    /// `IsWindowEnabled` behind it in the API and no NSIS instruction reaches
+    /// it, and guessing a `SendMessage` number for the rest would be inventing a
+    /// read that returns whatever the control does with an unknown message.
+    pub fn readable(self) -> bool {
+        matches!(self, ControlField::Value | ControlField::Checked)
+    }
+
+    /// Whether `control` has this field.
+    ///
+    /// `None` is a window this compiler did not create — `getDlgItem(HWNDPARENT,
+    /// 2)` is MUI2's Cancel button — and it gets the fields that are true of
+    /// every window. The two that depend on how the window was drawn need a
+    /// declaration, because a tick on something that is not a checkbox is a
+    /// question Windows answers with 0 rather than an error.
+    pub fn on(self, control: Option<&Control>) -> bool {
+        match (self, control) {
+            (ControlField::Checked, control) => control.is_some_and(Control::checkable),
+            (ControlField::Image, control) => control.is_some_and(Control::imageable),
+            (ControlField::Value, Some(control)) => control.text.is_some(),
+            _ => true,
+        }
+    }
+
+    /// The instruction the write is, for the two errors that have to name it.
+    pub fn setter(self) -> &'static str {
+        match self {
+            ControlField::Value => "SendMessage WM_SETTEXT",
+            ControlField::Checked => "SendMessage BM_SETCHECK",
+            ControlField::Enabled => "EnableWindow",
+            ControlField::Visible => "ShowWindow",
+            ControlField::Colors => "SetCtlColors",
+            ControlField::Font => "CreateFont",
+            ControlField::Image => "LoadAndSetImage",
+        }
+    }
+
+    /// What has this field, for the error that has to say why this one does not.
+    pub fn needs(self) -> &'static str {
+        match self {
+            ControlField::Checked => "a `checkbox` or a `radioButton`",
+            ControlField::Image => "a `bitmap`",
+            ControlField::Value => "a control drawn with text",
+            _ => "any window",
+        }
+    }
+
+    /// What the wrong kind would do, which is the half of that error worth
+    /// reading: none of the three is refused by Windows, and a control that
+    /// quietly ignores an instruction is what this diagnostic is instead of.
+    pub fn why(self) -> &'static str {
+        match self {
+            ControlField::Checked => "Windows answers this one with 0 rather than an error",
+            ControlField::Image => {
+                "`LoadAndSetImage` on a window drawn with text replaces nothing and says nothing"
+            }
+            _ => "a control drawn with no text has nothing for this to be",
+        }
+    }
+}
+
+/// The field this name reads, or `None` for a name that is not one.
+pub fn control_field(name: &str) -> Option<ControlField> {
+    Some(match name {
+        "value" => ControlField::Value,
+        "checked" => ControlField::Checked,
+        "enabled" => ControlField::Enabled,
+        "visible" => ControlField::Visible,
+        "colors" => ControlField::Colors,
+        "font" => ControlField::Font,
+        "image" => ControlField::Image,
+        _ => return None,
+    })
+}
+
+/// The field names, for the error that has to list them.
+pub const CONTROL_FIELDS: &[&str] = &[
+    "value", "checked", "enabled", "visible", "colors", "font", "image",
 ];
 
 /// The kind this name declares, or `None` for a name that declares no control.

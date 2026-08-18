@@ -906,9 +906,20 @@ pub const ROWS: &[Row] = &[
     ),
     language("Function", "`func`"),
     language("FunctionEnd", "the end of a `func` body"),
-    todo(
+    // The one window row a program calls rather than reaches: every other
+    // control instruction is behind a field, and this is what produces a control
+    // the compiler did not draw. The ids are Microsoft's and MUI2's — 1 is OK, 2
+    // is Cancel, 3 is Back — so they are numbers here rather than names this
+    // compiler invented for someone else's dialog (§15.32).
+    exposed(
         "GetDlgItem",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "getDlgItem",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::nonneg(), Kind::Value),
+        ],
+        "local cancel = getDlgItem(HWNDPARENT, 2)\ncancel.enabled = false",
     ),
     // The flag goes before the *output* register — `GetFullPathName /SHORT $0
     // path` — which is the clearest case for `Opt::after` being a position in

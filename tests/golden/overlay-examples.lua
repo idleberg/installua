@@ -159,6 +159,10 @@ installer {
 		detailPrint("size " .. size)
 		f:close()
 	end),
+	section("GetDlgItem", function()
+		local cancel = getDlgItem(HWNDPARENT, 2)
+		cancel.enabled = false
+	end),
 	section("GetFullPathName", function()
 		local full = getFullPathName(INSTDIR .. "/app.exe")
 		detailPrint(full)

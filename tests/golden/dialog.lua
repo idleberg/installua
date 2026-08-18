@@ -22,6 +22,11 @@ local flavour = dropList { y = 56, height = 60, items = { "Full", "Minimal" } }
 -- they are compiled from.
 local reason = text { "", y = 20, height = 12 }
 
+-- A picture, and the one control whose declaration says what it draws: a
+-- `bitmap` with no `image` is an empty rectangle, so the field that gives it one
+-- is also an option.
+local badge = bitmap { image = "check.bmp", y = 90, height = 20 }
+
 installer {
 	page.welcome {},
 
@@ -41,14 +46,36 @@ installer {
 			-- the only one they could have is *under the last control* — and
 			-- that would make every position depend on the order of the list.
 			hLine { y = 120, height = 2 },
+			badge,
 		},
 
 		pre = function()
 			detailPrint("about to build the dialog")
 		end,
 
+		-- Fields, which are the controls made addressable (§15.32). Each is one
+		-- instruction: a control has no flags word to read, edit and write back
+		-- the way a section does.
+		show = function()
+			serial.font = { face = "Tahoma", size = 8, bold = true }
+			serial.colors = { text = "800000", back = "transparent" }
+			agree.checked = true
+
+			-- MUI2's own Cancel button, addressed the only way Windows offers.
+			-- The kind of window this is cannot be read back, so it answers to
+			-- the fields every window has and not to `checked`.
+			local cancel = getDlgItem(HWNDPARENT, 2)
+			cancel.enabled = false
+		end,
+
 		leave = function()
-			detailPrint("leaving the dialog")
+			-- The one read that is not a `SendMessage`: NSIS cannot be handed a
+			-- buffer, so the text comes back through `System::Call`.
+			if serial.value == "" then
+				detailPrint("no serial")
+			end
+			agree.enabled = false
+			badge.visible = false
 		end,
 	},
 

@@ -342,11 +342,25 @@ struct Created {
     /// The `Var` the handle is popped into, or `None` for a control the program
     /// never names.
     var: Option<String>,
-    /// The `ADDSTRING` message for this control's class, where it has one.
-    add_item: Option<u32>,
-    /// One `"STR:…"` per item, already in the form `SendMessage` wants.
-    items: Vec<ir::Arg>,
+    /// What the creator runs against the control once it exists: the
+    /// `ADDSTRING`s that fill a list, and the `LoadAndSetImage` that gives a
+    /// `bitmap` its picture.
+    post: Vec<Post>,
     span: Span,
+}
+
+/// One instruction addressed to a control that has just been made.
+///
+/// The handle is a hole rather than an argument, because it is not known until
+/// the creator runs — a claimed control's is its `Var` and an unclaimed one's is
+/// whatever register the allocator gives it — and the two instructions here do
+/// not put it in the same place.
+struct Post {
+    nsis: &'static str,
+    /// Arguments before the handle: `LoadAndSetImage`'s `/STRINGID`, and
+    /// nothing at all for a `SendMessage`.
+    before: Vec<ir::Arg>,
+    after: Vec<ir::Arg>,
 }
 
 /// A `group`'s member list, in either of §15.23's two forms and without judging
@@ -2196,16 +2210,11 @@ impl<'p> Lowerer<'_, 'p> {
                     vec![handle.clone()],
                     control.span,
                 );
-                for item in &control.items {
-                    lowerer.emit(ir::Instruction::new(
-                        "SendMessage",
-                        vec![
-                            ir::Arg::slot(handle.clone()),
-                            ir::Arg::raw(format!("0x{:04X}", control.add_item.unwrap_or(0))),
-                            ir::Arg::int(0),
-                            item.clone(),
-                        ],
-                    ));
+                for post in &control.post {
+                    let mut args = post.before.clone();
+                    args.push(ir::Arg::slot(handle.clone()));
+                    args.extend(post.after.iter().cloned());
+                    lowerer.emit(ir::Instruction::new(post.nsis, args));
                 }
             }
 
@@ -2360,7 +2369,7 @@ impl<'p> Lowerer<'_, 'p> {
 
         let mut text = None;
         let mut geometry: [Option<String>; 4] = [None, None, None, None];
-        let mut items = None;
+        let mut post = Vec::new();
         for field in fields {
             match field {
                 TableField::Positional { value } if text.is_none() && control.text.is_some() => {
@@ -2405,12 +2414,47 @@ impl<'p> Lowerer<'_, 'p> {
                             );
                             continue;
                         }
-                        items = Some(self.items(value));
+                        let message = handle::message(control.add_item.unwrap_or_default());
+                        post.extend(self.items(value).into_iter().map(|item| Post {
+                            nsis: "SendMessage",
+                            before: Vec::new(),
+                            after: vec![message.clone(), ir::Arg::int(0), item],
+                        }));
+                        continue;
+                    }
+                    // A `bitmap` with no picture is an empty rectangle, so the
+                    // field that gives it one is also an option: a control that
+                    // has to be claimed and written to in a callback before it
+                    // draws anything is a declaration that does not declare.
+                    if name.text == "image" {
+                        if !control.imageable() {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    Code::UnknownField,
+                                    name.span,
+                                    format!("a `{what}` draws no image"),
+                                )
+                                .note("`image` is a `bitmap`'s, which is the kind that is one"),
+                            );
+                            continue;
+                        }
+                        if let Some(path) = self.constant_arg(value, "image") {
+                            let mut args = handle::image_args(path);
+                            let before = vec![args.remove(0)];
+                            post.push(Post {
+                                nsis: "LoadAndSetImage",
+                                before,
+                                after: args,
+                            });
+                        }
                         continue;
                     }
                     let mut options = vec!["x", "y", "width", "height"];
                     if control.takes_items() {
                         options.push("items");
+                    }
+                    if control.imageable() {
+                        options.push("image");
                     }
                     self.diags.push(
                         Diagnostic::error(
@@ -2466,8 +2510,7 @@ impl<'p> Lowerer<'_, 'p> {
         Some(Created {
             create,
             var,
-            add_item: control.add_item,
-            items: items.unwrap_or_default(),
+            post,
             span,
         })
     }
@@ -4040,14 +4083,24 @@ impl BodyLowerer<'_, '_> {
         }
 
         for (target, value) in targets.iter().zip(values) {
-            // `docs.text = ""` — a section's field, which is a `Section*Set` and
-            // not a register at all.
+            // `docs.text = ""` — a handle's field, which is an instruction and
+            // not a register at all. A control's `serial.value = "…"` is the
+            // same shape over a window, and a local holding one is not a
+            // declaration, so the test is what the base *resolves to* rather
+            // than whether it was declared.
             if let Expr::Field { base, name, .. } = target
-                && base
-                    .name()
-                    .is_some_and(|base| self.resolved.deferred.contains_key(base))
+                && base.name().is_some_and(|base| {
+                    self.resolved.deferred.contains_key(base)
+                        || matches!(
+                            self.lookup(base),
+                            Some(Binding::Local {
+                                ty: Ty::Handle | Ty::Unknown,
+                                ..
+                            })
+                        )
+                })
             {
-                self.handle_write(base, name, value);
+                self.field_write(base, name, value);
                 continue;
             }
 
@@ -4593,6 +4646,20 @@ impl BodyLowerer<'_, '_> {
                 None => resolved.consts.get(name).map(|c| c.value.clone()),
             }
         })
+    }
+
+    /// The twin of [`Lowerer::bad_value`], for the fields a *body* writes:
+    /// a control's `colors` and `font` are tables checked here rather than at
+    /// the top level, since the write is a statement (§15.32).
+    pub(super) fn bad_value(&mut self, span: Span, what: &str, wanted: &str, note: &str) {
+        self.diags.push(
+            Diagnostic::error(
+                Code::BadFieldValue,
+                span,
+                format!("`{what}` wants {wanted}"),
+            )
+            .note(note),
+        );
     }
 
     fn undefined(&mut self, name: &Name) {

@@ -451,7 +451,7 @@ fn declarations() -> String {
 /// The control declarations, from the same table that lowers them (§15.32).
 ///
 /// Generated rather than written out, so that a kind added to the table is a
-/// kind the editor completes: thirteen near-identical stubs are exactly the
+/// kind the editor completes: fourteen near-identical stubs are exactly the
 /// thing a list should produce.
 fn controls() -> String {
     let mut out = String::from(
@@ -466,10 +466,33 @@ fn controls() -> String {
          ---@field width? integer|string Defaults to the width of the dialog.\n\
          ---@field height? integer|string Required, for the same reason as `y`.\n\
          ---@field items? string[] The rows of a `dropList` or a `listBox`.\n\
+         ---@field image? string The `.bmp` a `bitmap` draws.\n\
          local ControlOptions = {}\n\n\
+         -- A colour is six hexadecimal digits, in the order Windows writes them.\n\
+         -- Both are named because `SetCtlColors` writes both in one instruction.\n\
+         ---@class (exact) installua.Colors\n\
+         ---@field text string\n\
+         ---@field back string Or `\"transparent\"`, to leave it unpainted.\n\
+         local Colors = {}\n\n\
+         ---@class (exact) installua.Font\n\
+         ---@field face string A typeface name; Windows substitutes if it has none.\n\
+         ---@field size integer In points, as a word processor would say it.\n\
+         ---@field bold? boolean\n\
+         local Font = {}\n\n\
          -- What a bound control is at install time. The window handle NSIS reads\n\
          -- is the compiler's: it appears in no Installua source.\n\
+         --\n\
+         -- Five of the seven fields are write-only, because Windows offers no\n\
+         -- instruction that reports them: NSIS can set a control's colours and\n\
+         -- cannot ask what they are.\n\
          ---@class (exact) installua.Control\n\
+         ---@field value string Its text.\n\
+         ---@field checked boolean A `checkbox`'s or a `radioButton`'s tick.\n\
+         ---@field enabled boolean Write-only.\n\
+         ---@field visible boolean Write-only.\n\
+         ---@field colors installua.Colors Write-only.\n\
+         ---@field font installua.Font Write-only.\n\
+         ---@field image string Write-only; a `bitmap`'s picture.\n\
          local Control = {}\n\n",
     );
     for control in control::CONTROLS {

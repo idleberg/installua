@@ -6,6 +6,11 @@
 //! writings that are refused, and the three places the generated form is not the
 //! obvious one — a claimed control's `Var`, an unclaimed one's `Pop`, and the
 //! style word folded at compile time so that nothing has to be `!include`d.
+//!
+//! The second half of the file is the *fields* — `serial.value`,
+//! `agree.checked` — which are to a control what [`tests/handles.rs`](handles.rs)
+//! covers for a section, and differ from it in one way worth testing: none of
+//! them is a read-modify-write, and two of them cannot be read at all.
 
 use installua::diag::{Code, Diagnostics};
 
@@ -264,4 +269,265 @@ fn each_half_names_its_own_controls() {
 
     assert!(output.contains("Var __GENERATED_ctl_before"), "{output}");
     assert!(output.contains("Var __GENERATED_unctl_after"), "{output}");
+}
+
+// -- fields ---------------------------------------------------------------
+
+/// A program whose custom page runs `body` in its `leave` callback.
+fn page(declarations: &str, controls: &str, body: &str) -> String {
+    format!(
+        "attributes {{ outFile = \"a.exe\", name = \"a\" }}\n\
+         {declarations}\n\
+         installer {{\n\
+         page.custom {{ controls = {{ {controls} }},\n\
+         leave = function()\n{body}\nend }},\n\
+         page.instFiles {{}},\n\
+         section(\"Core\", function() detailPrint(\"x\") end),\n\
+         }}\n"
+    )
+}
+
+/// The one field whose read is not its write with a different message number.
+///
+/// `SendMessage` in NSIS has nowhere to put a string it is handed back, so
+/// `WM_GETTEXT` cannot be written at all — which is why `nsDialogs.nsh` reads
+/// text through `GetWindowText` and why this does too. Ruling 5 survives it:
+/// `System` is a plugin and `${NSIS_MAX_STRLEN}` is makensis' own define.
+#[test]
+fn text_is_read_by_a_call_and_written_by_a_message() {
+    let output = build(&page(
+        "local serial = text { \"\", y = 0, height = 12 }",
+        "serial,",
+        "if serial.value == \"\" then detailPrint(\"empty\") end\n\
+         serial.value = \"filled\"",
+    ));
+
+    assert!(
+        output.contains(
+            "System::Call \"user32::GetWindowText(p$__GENERATED_ctl_serial,t.s,i\
+             ${NSIS_MAX_STRLEN})\""
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains("SendMessage $__GENERATED_ctl_serial 0x000C 0 \"STR:filled\""),
+        "{output}"
+    );
+    assert!(!output.contains("nsDialogs.nsh"), "{output}");
+}
+
+/// Five of the seven fields have a setter and no getter, and the diagnostic says
+/// which instruction the setter is rather than inventing a message number whose
+/// answer would be whatever the control does with a message it does not know.
+#[test]
+fn a_field_windows_will_not_report_is_a_write_only() {
+    let raised = errors(&page(
+        "local agree = checkbox { \"ok\", y = 0, height = 12 }",
+        "agree,",
+        "local on = agree.enabled",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::UnknownField);
+    assert!(raised[0].1.contains("written and not read"), "{raised:?}");
+
+    // And the two that Windows does report, do.
+    let output = build(&page(
+        "local agree = checkbox { \"ok\", y = 0, height = 12 }",
+        "agree,",
+        "if agree.checked then detailPrint(\"ticked\") end",
+    ));
+    assert!(
+        output.contains("SendMessage $__GENERATED_ctl_agree 0x00F0 0 0 $"),
+        "{output}"
+    );
+}
+
+/// `checked` and `image` depend on how the window was drawn, and the two are the
+/// only fields that do. A tick on a label is not refused by Windows — it answers
+/// 0 — which is what makes this worth a compile-time error.
+#[test]
+fn a_field_that_needs_a_kind_needs_a_declaration() {
+    let raised = errors(&page(
+        "local tag = label { \"hi\", y = 0, height = 12 }",
+        "tag,",
+        "tag.checked = true",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::UnknownField);
+    assert!(raised[0].1.contains("a `checkbox`"), "{raised:?}");
+
+    let on_a_found_window = errors(&page(
+        "",
+        "label { \"hi\", y = 0, height = 12 },",
+        "local cancel = getDlgItem(HWNDPARENT, 2)\ncancel.image = \"a.bmp\"",
+    ));
+    assert_eq!(on_a_found_window.len(), 1, "{on_a_found_window:?}");
+    assert!(
+        on_a_found_window[0].1.contains("a `bitmap`"),
+        "{on_a_found_window:?}"
+    );
+}
+
+/// The other half of that rule: a window this compiler did not draw still
+/// answers to the fields every window has, which is what makes `getDlgItem` a
+/// way to reach MUI2's own buttons rather than a handle with nothing to do.
+#[test]
+fn a_window_the_program_did_not_draw_has_the_fields_every_window_has() {
+    let output = build(&page(
+        "",
+        "label { \"hi\", y = 0, height = 12 },",
+        "local cancel = getDlgItem(HWNDPARENT, 2)\ncancel.enabled = false",
+    ));
+
+    assert!(output.contains("GetDlgItem $0 $HWNDPARENT 2"), "{output}");
+    assert!(output.contains("EnableWindow $0 0"), "{output}");
+}
+
+/// `ShowWindow`'s two states are 0 and 5, not 0 and 1, so a literal picks one
+/// and anything else is multiplied — which is exact, because a `bool` in this
+/// language is 0 or 1 and nothing else (§15.20).
+#[test]
+fn visible_is_hide_and_show_rather_than_false_and_true() {
+    let literal = build(&page(
+        "local agree = checkbox { \"ok\", y = 0, height = 12 }",
+        "agree,",
+        "agree.visible = false",
+    ));
+    assert!(
+        literal.contains("ShowWindow $__GENERATED_ctl_agree 0"),
+        "{literal}"
+    );
+
+    let computed = build(&page(
+        "local agree = checkbox { \"ok\", y = 0, height = 12 }",
+        "agree,",
+        "agree.visible = agree.checked",
+    ));
+    assert!(computed.contains("IntOp $0 $0 * 5"), "{computed}");
+    assert!(
+        computed.contains("ShowWindow $__GENERATED_ctl_agree $0"),
+        "{computed}"
+    );
+}
+
+/// One instruction sets both colours, so one field holds both. `textColor` and
+/// `backColor` as a pair would mean a write to either replacing the other with
+/// something this compiler chose, and the evidence would be on the screen rather
+/// than in the output.
+#[test]
+fn colours_are_one_field_because_they_are_one_instruction() {
+    let output = build(&page(
+        "local tag = label { \"hi\", y = 0, height = 12 }",
+        "tag,",
+        "tag.colors = { text = \"FF0000\", back = \"transparent\" }",
+    ));
+    assert!(
+        output.contains("SetCtlColors $__GENERATED_ctl_tag FF0000 transparent"),
+        "{output}"
+    );
+
+    let half = errors(&page(
+        "local tag = label { \"hi\", y = 0, height = 12 }",
+        "tag,",
+        "tag.colors = { text = \"FF0000\" }",
+    ));
+    assert_eq!(half.len(), 1, "{half:?}");
+    assert_eq!(half[0].0, Code::MissingAttribute);
+
+    // `SetCtlColors` reads anything it does not understand as black, so a colour
+    // that is not one is an error rather than a label that disappears.
+    let named = errors(&page(
+        "local tag = label { \"hi\", y = 0, height = 12 }",
+        "tag,",
+        "tag.colors = { text = \"red\", back = \"transparent\" }",
+    ));
+    assert!(
+        named.iter().any(|(code, _)| *code == Code::BadFieldValue),
+        "{named:?}"
+    );
+}
+
+/// A font is two instructions and one temporary: `CreateFont` makes the object
+/// and `WM_SETFONT` hands it over. `bold` is a weight rather than a flag,
+/// because that is what `CreateFont` takes.
+#[test]
+fn a_font_is_a_face_and_a_size() {
+    let output = build(&page(
+        "local tag = label { \"hi\", y = 0, height = 12 }",
+        "tag,",
+        "tag.font = { face = \"Tahoma\", size = 10, bold = true }",
+    ));
+    assert!(
+        output.contains("CreateFont $0 \"Tahoma\" 10 700"),
+        "{output}"
+    );
+    assert!(
+        output.contains("SendMessage $__GENERATED_ctl_tag 0x0030 $0 1"),
+        "{output}"
+    );
+
+    let plain = build(&page(
+        "local tag = label { \"hi\", y = 0, height = 12 }",
+        "tag,",
+        "tag.font = { face = \"Tahoma\", size = 10 }",
+    ));
+    assert!(plain.contains("CreateFont $0 \"Tahoma\" 10 400"), "{plain}");
+
+    let sizeless = errors(&page(
+        "local tag = label { \"hi\", y = 0, height = 12 }",
+        "tag,",
+        "tag.font = { face = \"Tahoma\" }",
+    ));
+    assert_eq!(sizeless.len(), 1, "{sizeless:?}");
+    assert_eq!(sizeless[0].0, Code::MissingAttribute);
+}
+
+/// `image` is the one field that is also an option, because a `bitmap` whose
+/// picture arrives only from a callback is a declaration that declares an empty
+/// rectangle.
+#[test]
+fn a_bitmap_says_what_it_draws_where_it_is_declared() {
+    let output = build(&program(
+        "",
+        "bitmap { image = \"check.bmp\", y = 0, height = 20 },",
+    ));
+    assert!(
+        output.contains("LoadAndSetImage /STRINGID $0 0 0x0010 \"check.bmp\""),
+        "{output}"
+    );
+
+    let elsewhere = errors(&program(
+        "",
+        "label { \"hi\", y = 0, height = 12, image = \"check.bmp\" },",
+    ));
+    assert_eq!(elsewhere.len(), 1, "{elsewhere:?}");
+    assert_eq!(elsewhere[0].0, Code::UnknownField);
+}
+
+/// Claim rule 4, restored for controls: the `Var` exists in the file either way,
+/// it is empty in the half that did not draw the dialog, and `SendMessage 0` is
+/// a silent no-op rather than a crash.
+#[test]
+fn a_control_of_the_other_half_is_not_addressable() {
+    let raised = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local serial = text { \"\", y = 0, height = 12 }\n\
+         installer {\n\
+         page.custom { controls = { serial } },\n\
+         page.instFiles {},\n\
+         section(\"Core\", function() writeUninstaller(INSTDIR .. \"/un.exe\") end),\n\
+         }\n\
+         uninstaller {\n\
+         page.instFiles {},\n\
+         section(\"Core\", function() detailPrint(serial.value) end),\n\
+         }\n",
+    );
+
+    assert!(
+        raised
+            .iter()
+            .any(|(code, message)| *code == Code::UnknownField
+                && message.contains("`serial` is a `text` of the `installer`")),
+        "{raised:?}"
+    );
 }

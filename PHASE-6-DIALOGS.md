@@ -156,7 +156,7 @@ text, where the control has one), hash part is the options.
 | `groupBox`, `hLine` | `${NSD_CreateGroupBox}`, `…HLine` | caption, or none |
 | `dropList`, `listBox` | `${NSD_CreateDropList}` | none; `items = { … }` |
 | `fileRequest`, `dirRequest` | `${NSD_CreateFileRequest}` | initial path |
-| `bitmap`, `link` | `${NSD_CreateBitmap}`, `…Link` | path, or URL |
+| `bitmap`, `link` | `${NSD_CreateBitmap}`, `…Link` | none; `image = …`, or URL |
 
 The rest of nsDialogs' list — rich edit, owner-draw, the timer — is data entry against
 this shape rather than more design, and is out of scope below.
@@ -165,17 +165,22 @@ this shape rather than more design, and is out of scope below.
 
 | field | type | NSIS |
 | --- | --- | --- |
-| `value` | `string` | `SendMessage WM_GETTEXT` / `WM_SETTEXT` |
+| `value` | `string` | `System::Call user32::GetWindowText` / `SendMessage WM_SETTEXT` |
 | `checked` | `boolean` | `SendMessage BM_GETCHECK` / `BM_SETCHECK` |
 | `enabled` | `boolean` | `EnableWindow`, **write-only** |
 | `visible` | `boolean` | `ShowWindow`, **write-only** |
-| `textColor`, `backColor` | `string` | `SetCtlColors` |
-| `font` | table | `CreateFont` + `WM_SETFONT` |
-| `image` | `string` | `LoadAndSetImage` |
+| `colors` | table | `SetCtlColors`, **write-only** |
+| `font` | table | `CreateFont` + `WM_SETFONT`, **write-only** |
+| `image` | `string` | `LoadAndSetImage`, **write-only** |
 
-Two of the seven have no read instruction in NSIS, so reading them is an error naming the
-asymmetry rather than a `SendMessage WM_ENABLE` guess. `checked` on a `label` is an error
-the same way `expanded` on a section is: the handle knows which kind it is.
+*Amended in step 4.* `value`'s read was written here as `WM_GETTEXT` and is not one: NSIS's
+`SendMessage` cannot be handed a buffer. And `textColor`/`backColor` were written as two
+fields and are one, because `SetCtlColors` is one instruction that writes both.
+
+Five of the seven have no read instruction in NSIS, so reading them is an error naming the
+setter rather than a `SendMessage WM_ENABLE` guess. `checked` on a `label` is an error the
+same way `expanded` on a section is: the handle knows which kind it is — unless it came
+from `getDlgItem`, in which case nothing does, and the two kind-dependent fields say so.
 
 ## Emission
 
@@ -280,9 +285,33 @@ one:
    One thing is deliberately still wrong until step 4: a control handle read anywhere at
    all is `NotYetImplemented`, which shadows claim rule 4's cross-half message. The rule is
    checked for sections and its control half returns with the fields.
-4. **Control fields.** `lower/handle.rs` grows the control side beside the section side:
-   the read-modify-write shape is gone (a control field is one `SendMessage` each), and
-   the write-only pair gets its own diagnostic.
+4. **Control fields.** *(done)* `lower/handle.rs` grew the control side beside the section
+   side: `addressed()` decides once what the base of `a.b` is, and the two halves never ask
+   each other. The read-modify-write shape is gone — a control field is one instruction —
+   and the write-only *five* get a diagnostic naming their setter.
+
+   Four things the table above got wrong or left open, decided here:
+
+   - **`value` is not `SendMessage WM_GETTEXT`.** NSIS's `SendMessage` has nowhere to put
+     a string it is handed back, so the read is `System::Call user32::GetWindowText`,
+     which is what `nsDialogs.nsh` does. Ruling 5 holds: `System` is a plugin and
+     `${NSIS_MAX_STRLEN}` is makensis' own define, so the output still includes nothing.
+   - **`textColor` and `backColor` became one `colors` field.** `SetCtlColors` writes both
+     in one instruction, so a pair of fields would mean a write to either replacing the
+     other with a colour this compiler invented. Both halves required; `back =
+     "transparent"` leaves the background unpainted.
+   - **A window from `getDlgItem` has the fields every window has.** `checked` and `image`
+     need a declaration, because the class behind an `HWND` is not readable from NSIS;
+     the other five are true of any window. §15.14's single `handle` type means this
+     accepts a `fileOpen` handle too, which a fifth type — not a check — would fix.
+   - **`image` is an option as well as a field, and `bitmap` landed with it.** A `bitmap`
+     that draws nothing until a callback runs is a declaration that declares an empty
+     rectangle. `Created`'s `items` generalised into `post`: the instructions a creator
+     runs against a control it has just made.
+
+   `GetDlgItem` moved `todo` → exposed here rather than in step 6, because it is the one
+   window row a program calls rather than reaches. Claim rule 4's control half is no longer
+   shadowed.
 5. **Events.** `onClick` and `onChange` as declaration options, lowering to
    `GetFunctionAddress` + `nsDialogs::OnClick`, with the callback emitted as an ordinary
    generated function.
@@ -306,7 +335,9 @@ one:
 Steps 0 and 1 are five of those: `todo` 35 → **30**, `exposed` 96 → **100**,
 `attribute` 63 → **64**. Step 2 is the two `language` rows: `todo` 30 → **28**,
 `language` 12 → **14**. Step 3 moves none: the twelve remaining rows are reached through
-control *fields*, and what it landed is the construct they hang off.
+control *fields*, and what it landed is the construct they hang off. Step 4 moves one —
+`GetDlgItem`, the only window row a program *calls* — leaving the six it reaches through
+fields, plus `SendMessage`, for step 6: `todo` 28 → **27**, `exposed` 100 → **101**.
 
 That leaves one grouped reason in the backlog — §15.26's five locale-table rows — and
 sixteen one-offs.

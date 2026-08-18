@@ -204,6 +204,11 @@ Section "FileSeek"
   FileClose $0
 SectionEnd
 
+Section "GetDlgItem"
+  GetDlgItem $0 $HWNDPARENT 2
+  EnableWindow $0 0
+SectionEnd
+
 Section "GetFullPathName"
   GetFullPathName $0 "$INSTDIR\app.exe"
   DetailPrint $0

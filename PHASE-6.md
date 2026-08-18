@@ -1843,6 +1843,84 @@ No rows moved: the twelve `hwnd` rows are reached through control *fields*, whic
 4. What landed is the construct they will be reached through, `tests/golden/dialog.lua`
 through tier 3, and `installua.Control` in the stubs.
 
+## Batch 30 — a control's fields, which are one instruction each
+
+`PHASE-6-DIALOGS.md` step 4. A section's seven fields are seven bits of one word, so every
+write is a read-modify-write; a control's seven are seven separate instructions, so none of
+them is. That is the whole difference, and it is why this batch is short despite adding the
+same number of fields.
+
+```lua
+local serial = text     { "", y = 20, height = 12 }
+local agree  = checkbox { "I have read the terms", y = 36, height = 12 }
+
+page.custom { "Registration",
+  controls = { serial, agree },
+  show = function()
+    serial.font   = { face = "Tahoma", size = 8, bold = true }
+    serial.colors = { text = "800000", back = "transparent" }
+    agree.checked = true
+
+    local cancel = getDlgItem(HWNDPARENT, 2)
+    cancel.enabled = false
+  end,
+  leave = function()
+    if serial.value == "" then detailPrint("no serial") end
+  end,
+}
+```
+
+```nsi
+  CreateFont $0 "Tahoma" 8 700
+  SendMessage $__GENERATED_ctl_serial 0x0030 $0 1
+  SetCtlColors $__GENERATED_ctl_serial 800000 transparent
+  SendMessage $__GENERATED_ctl_agree 0x00F1 1 0
+  GetDlgItem $0 $HWNDPARENT 2
+  EnableWindow $0 0
+  …
+  System::Call "user32::GetWindowText(p$__GENERATED_ctl_serial,t.s,i${NSIS_MAX_STRLEN})"
+  Pop $0
+```
+
+### The one asymmetry, and why it is not an oversight
+
+`value` is written with `SendMessage WM_SETTEXT` and **not read** with `WM_GETTEXT`, because
+NSIS's `SendMessage` has nowhere to put a string it is handed back. `nsDialogs.nsh` reads
+text through `System::Call user32::GetWindowText` and so does this. Ruling 5 survives it
+intact: `System` is a plugin rather than a header, and `${NSIS_MAX_STRLEN}` is makensis'
+own define — the output still includes nothing.
+
+Five of the seven fields are write-only for the mirror-image reason: `EnableWindow` sets a
+state that no NSIS instruction reports. A read is an error naming the setter rather than a
+guessed message number, whose answer would be whatever the control does with a message it
+does not implement.
+
+Three decisions the plan did not make:
+
+- **`colors` is one field, not the `textColor`/`backColor` pair the plan sketched.**
+  `SetCtlColors` writes the text colour and the background in **one** instruction, so two
+  fields would mean a write to either silently replacing the other with a colour this
+  compiler chose. One field maps onto the instruction, and both halves are required —
+  `back = "transparent"` is how the background is left alone.
+- **A window `getDlgItem` found has the fields every window has, and not the two that
+  depend on how it was drawn.** `checked` and `image` need a declaration; `value`,
+  `enabled`, `visible`, `colors` and `font` do not. The cost is honest: §15.14's lattice
+  has one `handle` type covering files, registry roots and windows, so a `fileOpen` handle
+  has an `enabled` here too. Narrowing that is a fifth type rather than a check.
+- **`image` is a field *and* an option, and `bitmap` landed with it.** A `bitmap` whose
+  picture arrives only from a callback is a declaration that declares an empty rectangle,
+  so `bitmap { image = "check.bmp", … }` emits the `LoadAndSetImage` straight after the
+  `CreateControl`. That generalised `Created`'s `items` into a `post` list — the
+  instructions a creator runs against a control it has just made, with the handle a hole
+  rather than an argument.
+
+### What landed
+
+`GetDlgItem` moved `todo` → exposed, because it is the one window row a program *calls*:
+everything else here is reached through a field and moves with the rest in step 6.
+`todo` 28 → **27**, `exposed` 100 → **101**. Claim rule 4's control half is no longer
+shadowed — `serial.value` from the uninstaller says so by name.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
