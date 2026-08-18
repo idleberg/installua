@@ -87,6 +87,39 @@ impl Namespace {
     }
 }
 
+/// What `local core = section { … }` and `local tools = group { … }` bind.
+///
+/// Not a value either, for the same reason a namespace is not: there is nothing
+/// at run time for `core` to be. NSIS spells a section as an *index*, and the
+/// local is how the author addresses one without ever saying the number — §13's
+/// binding, and the reason the set of sections is never enumerated by the
+/// compiler (`PHASE-6-SECTIONS.md` ruling 1).
+///
+/// The call is held rather than lowered, because lowering it needs the half it
+/// belongs to and the install types the block declared, and neither is in scope
+/// above the block (ruling 2).
+#[derive(Clone, Debug)]
+pub struct Deferred<'a> {
+    pub kind: DeferredKind,
+    pub value: &'a Expr,
+    pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeferredKind {
+    Section,
+    Group,
+}
+
+impl DeferredKind {
+    pub fn word(self) -> &'static str {
+        match self {
+            DeferredKind::Section => "section",
+            DeferredKind::Group => "group",
+        }
+    }
+}
+
 /// A `func("name", function(…) … end)` declaration.
 #[derive(Clone, Debug)]
 pub struct Func<'a> {
@@ -114,6 +147,12 @@ pub struct Resolved<'a> {
     pub const_order: Vec<String>,
     /// Header and plugin namespaces, by the local name they were bound to.
     pub namespaces: BTreeMap<String, Namespace>,
+    /// Sections and groups waiting for the block that lists them, by the local
+    /// name they were bound to.
+    pub deferred: BTreeMap<String, Deferred<'a>>,
+    /// Those names in source order, so that "never claimed" is reported where it
+    /// was written rather than alphabetically (§14).
+    pub deferred_order: Vec<String>,
     pub functions: BTreeMap<String, Func<'a>>,
     /// In first-seen order, because `Var` declarations are emitted in it and
     /// §14 diffs goldens.
@@ -189,7 +228,7 @@ fn top_level<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut 
 
 /// Pass 1b: top-level `<const>`s, folded to a fixpoint so that one may refer to
 /// another regardless of the order they were written in.
-fn consts(program: &Program, resolved: &mut Resolved<'_>, diags: &mut Diagnostics) {
+fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Diagnostics) {
     let mut pending: Vec<(&Name, &Expr)> = Vec::new();
 
     for stmt in &program.block {
@@ -214,6 +253,40 @@ fn consts(program: &Program, resolved: &mut Resolved<'_>, diags: &mut Diagnostic
             continue;
         }
 
+        // `local core = section { … }` names a section so that install-time code
+        // can address it. Held here and lowered by the block that lists it,
+        // which is the only place its half is known (§15.6).
+        if !is_const
+            && let ([name], [value]) = (names.as_slice(), values.as_slice())
+            && let Some(kind) = deferred_kind(value)
+        {
+            if let Some(previous) = resolved.deferred.get(&name.text) {
+                diags.push(
+                    Diagnostic::error(
+                        Code::DuplicateBlock,
+                        *span,
+                        format!("`{}` is declared more than once", name.text),
+                    )
+                    .note(format!(
+                        "the first one is at line {}",
+                        previous.span.start_line
+                    ))
+                    .note("resolution is order-free, so there is no later one that wins (§15.6)"),
+                );
+                continue;
+            }
+            resolved.deferred_order.push(name.text.clone());
+            resolved.deferred.insert(
+                name.text.clone(),
+                Deferred {
+                    kind,
+                    value,
+                    span: name.span,
+                },
+            );
+            continue;
+        }
+
         if !is_const {
             diags.push(
                 Diagnostic::error(
@@ -228,6 +301,10 @@ fn consts(program: &Program, resolved: &mut Resolved<'_>, diags: &mut Diagnostic
                 .note(
                     "write `local X <const> = …` for a build-time value, or assign to a bare \
                      name for a global (§15.24)",
+                )
+                .note(
+                    "`local x = section { … }` is the other one: it names a section for a block \
+                     to list and for install-time code to address",
                 ),
             );
             continue;
@@ -288,6 +365,19 @@ fn consts(program: &Program, resolved: &mut Resolved<'_>, diags: &mut Diagnostic
                  from other `<const>`s (§7-1)",
             ),
         );
+    }
+}
+
+/// `section { … }` / `group { … }`, as the kind of declaration it defers.
+///
+/// The shape of the call is not checked here: that is `fn section`'s work, and
+/// it happens where the call is lowered so that one wrong `section` reports once
+/// rather than once per pass.
+fn deferred_kind(value: &Expr) -> Option<DeferredKind> {
+    match value.callee_name()? {
+        "section" => Some(DeferredKind::Section),
+        "group" => Some(DeferredKind::Group),
+        _ => None,
     }
 }
 

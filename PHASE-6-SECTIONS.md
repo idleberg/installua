@@ -236,7 +236,8 @@ to a function defined further down, so nothing else moves.
    for a section nothing addresses, so an unaddressed program's output does not change.
 2. **Swap slots 8 and 10** *(done)* in `ir::Module` and `emit.rs`, and update the slot list in
    `Module`'s doc comment. A golden diff of all five examples is the check.
-3. **Deferred sections in the lowerer.** `section(…)` and `group(…)` at top level record
+3. **Deferred sections in the lowerer.** *(done, except claim rule 4, which is about a
+   *use* and lands with the field access in step 4.)* `section(…)` and `group(…)` at top level record
    the AST against the local's binding rather than lowering it; `body_entry`
    (`lower/mod.rs:1846`) grows a case for a bare `Expr::Name` that resolves to one, and
    lowers it there with the block's `half` in hand. The four claim rules are checked when

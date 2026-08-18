@@ -27,7 +27,7 @@ use crate::cfg::{self, BlockId, Body, Terminator};
 use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 use crate::ir;
 use crate::regs::Slot;
-use crate::resolve::{ConstValue, Resolved};
+use crate::resolve::{ConstValue, DeferredKind, Resolved};
 use crate::table;
 use crate::types::Ty;
 
@@ -127,6 +127,30 @@ impl std::fmt::Display for Half {
             Half::Installer => f.write_str("installer"),
             Half::Uninstaller => f.write_str("uninstaller"),
         }
+    }
+}
+
+/// A deferred section or group, and the block that listed it.
+#[derive(Clone, Debug)]
+struct Claim {
+    /// Which executable it ended up in. A handle read from the other half names
+    /// a section that does not exist there, and this is what catches it.
+    half: Half,
+    /// Where it was listed, so a second claim can point at the first.
+    span: Span,
+}
+
+/// The define a claimed section is addressed through.
+///
+/// Derived from the *local's* name rather than the section's, because the local
+/// is the name that is unique: two sections may both be called `"Core"`, and one
+/// of them is the uninstaller's. `UN` leads that half's for the same reason NSIS
+/// puts `un.` on the section itself — one `.nsi` holds both, and one `!define`
+/// twice is a redefinition warning and an error under `-WX`.
+fn index_name(local: &str, half: Half) -> String {
+    match half {
+        Half::Installer => format!("SEC_{local}"),
+        Half::Uninstaller => format!("UNSEC_{local}"),
     }
 }
 
@@ -465,6 +489,7 @@ fn lower_once(
         uninstaller_span: None,
         mui: false,
         global_inits: Vec::new(),
+        claims: BTreeMap::new(),
         on_init: false,
         requires: Requirements::default(),
     };
@@ -496,6 +521,11 @@ struct Lowerer<'a, 'p> {
     mui: bool,
     /// Top-level assignments, waiting for the `.onInit` they belong in.
     global_inits: Vec<Stmt>,
+    /// Deferred sections and groups that a block has listed, by the local name
+    /// they were bound to. A claim records which half listed it and where; the
+    /// define it is addressed through is [`index_name`] of the two, and so is
+    /// not stored beside them.
+    claims: BTreeMap<String, Claim>,
     /// Whether an `.onInit` was written, so that one is not invented twice.
     on_init: bool,
     /// What the program needs included and initialised. Collected during
@@ -527,7 +557,7 @@ impl Requirements {
     }
 }
 
-impl Lowerer<'_, '_> {
+impl<'p> Lowerer<'_, 'p> {
     fn program(&mut self, program: &Program) {
         // A top-level `<const>` is a `!define` (§7-1): build-time, folded in
         // every expression, and `${NAME}` in the output. Emitted in source
@@ -570,6 +600,32 @@ impl Lowerer<'_, '_> {
 
         for stmt in &program.block {
             self.top_level(stmt);
+        }
+
+        // Claim rule 1: a declaration no block listed. This is the
+        // `installer { license = … }` bug batch 20 removed — data written at one
+        // level that evaporates if nothing reads it — and the answer is the same
+        // one: say so rather than emit nothing.
+        let resolved = self.resolved;
+        for local in &resolved.deferred_order {
+            if self.claims.contains_key(local) {
+                continue;
+            }
+            let Some(deferred) = resolved.deferred.get(local) else {
+                continue;
+            };
+            let what = deferred.kind.word();
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    deferred.span,
+                    format!("`{local}` is a `{what}` no block lists"),
+                )
+                .note(format!(
+                    "write `{local},` among the entries of `installer {{}}` or `uninstaller {{}}`"
+                ))
+                .note("the block's order is the install order; the declaration's is nothing (§13)"),
+            );
         }
 
         // Nothing declared an `.onInit`, and there are globals to initialise:
@@ -1866,6 +1922,11 @@ impl Lowerer<'_, '_> {
                 self.page(value, which, half);
                 return;
             }
+            // A bare name is a declaration this block is listing.
+            if let Expr::Name(name) = value {
+                self.claimed(name, half);
+                return;
+            }
             self.todo(value.span(), "this entry");
             return;
         };
@@ -1875,10 +1936,107 @@ impl Lowerer<'_, '_> {
                     self.module.sections.push(ir::SectionItem::Section(section));
                 }
             }
-            "group" => self.group(value, half),
+            "group" => self.group(value, half, None),
             "onInit" => self.callback(value, half, "onInit"),
             other => self.todo(value.span(), &format!("`{other}` here")),
         }
+    }
+
+    /// A bare name among a block's entries: the section or group that
+    /// `local core = section { … }` bound, lowered here rather than where it was
+    /// written because here is where its half and its block's install types are
+    /// known (`PHASE-6-SECTIONS.md` ruling 2).
+    ///
+    /// The position in the block is what decides install order, and the `local`
+    /// decides nothing — which is the one thing a reader has to learn that they
+    /// did not before, and the price of a section being addressable at all.
+    fn claimed(&mut self, name: &Name, half: Half) {
+        let Some((value, kind, index)) = self.claim(name, half) else {
+            return;
+        };
+        match kind {
+            DeferredKind::Section => {
+                if let Some(mut section) = self.section(value, half) {
+                    section.index_name = Some(index);
+                    self.module.sections.push(ir::SectionItem::Section(section));
+                }
+            }
+            DeferredKind::Group => self.group(value, half, Some(index)),
+        }
+    }
+
+    /// Records that this block lists this declaration, and hands back the call
+    /// to lower. `None` when the name is not one, or when it has been listed
+    /// already — claim rules 2 and 3.
+    fn claim(&mut self, name: &Name, half: Half) -> Option<(&'p Expr, DeferredKind, String)> {
+        let Some(deferred) = self.resolved.deferred.get(&name.text) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    name.span,
+                    format!("`{}` is not a section or a group", name.text),
+                )
+                .note(
+                    "a bare name here lists a declaration: bind one with \
+                     `local x = section { … }` (§13)",
+                ),
+            );
+            return None;
+        };
+        let (value, kind) = (deferred.value, deferred.kind);
+
+        // One declaration, one place in the tree. Listing it twice in a block
+        // would emit its body twice under two indices, and listing it in both
+        // would emit it once with `un.` and once without — two sections sharing
+        // a name, and a handle that means neither.
+        if let Some(previous) = self.claims.get(&name.text) {
+            let previous_line = previous.span.start_line;
+            let message = if previous.half == half {
+                format!("`{}` is listed twice in `{half} {{}}`", name.text)
+            } else {
+                format!(
+                    "`{}` is listed in both `{}` and `{half}`",
+                    name.text, previous.half
+                )
+            };
+            self.diags.push(
+                Diagnostic::error(Code::DuplicateBlock, name.span, message)
+                    .note(format!("the first one is at line {previous_line}"))
+                    .note(
+                        "a declaration is one section, in one place in the tree: list it once and \
+                         address it by its name from either half's code",
+                    ),
+            );
+            return None;
+        }
+
+        // The define is the compiler's, but it lands in a namespace shared with
+        // the author's `<const>`s, and NSIS reads a second `!define` of one name
+        // as a warning it then ships (§12).
+        let index = index_name(&name.text, half);
+        if self.resolved.consts.contains_key(&index) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::DuplicateBlock,
+                    name.span,
+                    format!("`{index}` is already a `<const>`"),
+                )
+                .note(format!(
+                    "listing `{}` defines `{index}` for its index, and NSIS holds one name once",
+                    name.text
+                )),
+            );
+            return None;
+        }
+
+        self.claims.insert(
+            name.text.clone(),
+            Claim {
+                half,
+                span: name.span,
+            },
+        );
+        Some((value, kind, index))
     }
 
     /// `onInit(function() … end)`. The leading `.` is emitted, never written
@@ -1940,7 +2098,7 @@ impl Lowerer<'_, '_> {
     /// nested group has no separate meaning to anything else — it is still a
     /// flat run of sections with a heading — so the surface offers the level
     /// that pays for itself and says so.
-    fn group(&mut self, value: &Expr, half: Half) {
+    fn group(&mut self, value: &Expr, half: Half, index: Option<String>) {
         let Expr::Call { args, .. } = value else {
             self.todo(value.span(), "this entry");
             return;
@@ -2013,6 +2171,22 @@ impl Lowerer<'_, '_> {
                 self.todo(value.span(), "a `group` inside a `group`");
                 continue;
             }
+            // A bare name: the group is listing a declaration, exactly as a
+            // block does, and the claim rules are the same ones.
+            if let Expr::Name(member) = value {
+                let Some((declared, kind, index)) = self.claim(member, half) else {
+                    continue;
+                };
+                if kind == DeferredKind::Group {
+                    self.todo(value.span(), "a `group` inside a `group`");
+                    continue;
+                }
+                if let Some(mut section) = self.section(declared, half) {
+                    section.index_name = Some(index);
+                    sections.push(section);
+                }
+                continue;
+            }
             if let Some(section) = self.section(value, half) {
                 sections.push(section);
             }
@@ -2038,9 +2212,10 @@ impl Lowerer<'_, '_> {
             .push(ir::SectionItem::Group(ir::SectionGroup {
                 name: format!("{}{name}", half.prefix()),
                 expanded,
-                // Nothing addresses a group yet: the handle a `group(…)` call
-                // returns is what fills this in, and that is not written.
-                index_name: None,
+                // Set when the group was listed by name; a `group { … }` written
+                // inline in the block is addressed by nothing, so NSIS is asked
+                // to define nothing.
+                index_name: index,
                 sections,
             }));
     }
@@ -2174,8 +2349,9 @@ impl Lowerer<'_, '_> {
             inst_types,
             required,
             size,
-            // Filled in once a section can be claimed by a Lua local; until
-            // then no section is addressed and no third word is written.
+            // Filled in by the caller when this section was listed by name: a
+            // section written inline in the block is addressed by nothing, so
+            // NSIS is asked to define nothing.
             index_name: None,
             body: self.body(block, &[], *span, None),
         })

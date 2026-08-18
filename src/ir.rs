@@ -212,10 +212,11 @@ pub struct Section {
     /// this is §13's binding again, a compile-time name for a number the
     /// compiler does not own.
     ///
-    /// `None` when nothing addresses the section, and then no third word is
-    /// written: an unaddressed program pays nothing for the feature, and the
-    /// `!define` NSIS would make is one more name in a namespace shared with
-    /// the author's.
+    /// `Some` exactly when the section was bound to a Lua local and listed by
+    /// that name, which is the one way a program says it wants to address one.
+    /// `None` for a section written inline in its block: no third word, and an
+    /// unaddressed program pays nothing for the feature — the `!define` NSIS
+    /// would make is one more name in a namespace shared with the author's.
     pub index_name: Option<String>,
     pub body: cfg::Body,
 }
