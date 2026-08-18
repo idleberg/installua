@@ -517,6 +517,7 @@ fn flag_type(flag: &table::Flag) -> Option<&'static str> {
     match flag.offer {
         table::Offer::Named(_) => Some("boolean"),
         table::Offer::List { .. } => Some("string[]"),
+        table::Offer::Valued { ty, .. } => Some(lua_name(ty)),
         table::Offer::Handled(_) | table::Offer::Always | table::Offer::Unoffered(_) => None,
     }
 }

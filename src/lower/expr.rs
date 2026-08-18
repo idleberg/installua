@@ -841,9 +841,16 @@ impl BodyLowerer<'_, '_> {
                                 );
                                 return None;
                             };
-                            let element = self.flag_value(kind, &key.text, value)?;
+                            let element = self.flag_value(kind, Ty::Str, &key.text, value)?;
                             flags[flag].push(Some(element));
                         }
+                    }
+                    // One value, and the emitter glues it to the flag. The
+                    // field holds the value itself rather than a `bool`,
+                    // because there is nothing else `/IMGID=` could mean.
+                    table::Offer::Valued { ty, kind, .. } => {
+                        let element = self.flag_value(kind, ty, &key.text, value)?;
+                        flags[flag].push(Some(element));
                     }
                     // Only reachable if a row grew a `Handled` flag without the
                     // hand-shaped lowering that is supposed to write it —
@@ -957,17 +964,24 @@ impl BodyLowerer<'_, '_> {
     /// the flag it follows.
     ///
     /// Not [`Self::coerce`], because a flag is not a position and has no
-    /// [`table::Param`] to check against: the kind is the whole of what the
-    /// table says about the value, and the type is `str` because every flag
-    /// NSIS spells with a value takes text.
-    fn flag_value(&mut self, kind: table::Kind, name: &str, argument: &Expr) -> Option<ir::Arg> {
+    /// [`table::Param`] to check against: the kind and the type are the whole
+    /// of what the table says about the value. A repeated flag's elements are
+    /// always `str`; a [`table::Offer::Valued`] carries its own type, because
+    /// `/IMGID=` and `/TIMEOUT=` take a number.
+    fn flag_value(
+        &mut self,
+        kind: table::Kind,
+        ty: Ty,
+        name: &str,
+        argument: &Expr,
+    ) -> Option<ir::Arg> {
         let value = self.value(argument)?;
-        if value.ty != Ty::Unknown && value.ty.join(Ty::Str) != Ty::Str {
+        if value.ty != Ty::Unknown && value.ty.join(ty) != ty {
             self.diags.push(
                 Diagnostic::error(
                     Code::TypeMismatch,
                     argument.span(),
-                    format!("`{name}` wants a str, and this is a {}", value.ty),
+                    format!("`{name}` wants a {ty}, and this is a {}", value.ty),
                 )
                 .note("types come from the instruction table, never from an annotation (§15.14)"),
             );
@@ -2371,8 +2385,25 @@ fn place(builtin: &table::Instruction, written: Written, dests: Vec<ir::Arg>) ->
                 // A flag is an emitted token like any other, so anything pending
                 // in front of it is no longer optional.
                 emitted.append(pending);
-                emitted.push(ir::Arg::raw(flag.opt.nsis));
-                emitted.extend(value.clone());
+                match (flag.offer, value) {
+                    // `/IMGID=1032` is one token, not two. A literal is glued
+                    // as text so the output reads the way a hand-written
+                    // script does; anything holding a register keeps its
+                    // pieces, because `Arg::Raw` reads nothing and hiding a
+                    // register from liveness is not a formatting decision.
+                    (table::Offer::Valued { .. }, Some(value)) => {
+                        emitted.push(match value.as_text() {
+                            Some(text) => ir::Arg::raw(format!("{}={text}", flag.opt.nsis)),
+                            None => {
+                                ir::Arg::str(format!("{}=", flag.opt.nsis)).concat(value.clone())
+                            }
+                        });
+                    }
+                    _ => {
+                        emitted.push(ir::Arg::raw(flag.opt.nsis));
+                        emitted.extend(value.clone());
+                    }
+                }
             }
         }
     };

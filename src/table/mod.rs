@@ -132,6 +132,23 @@ pub enum Offer {
         /// filespec is a path and §5 turns `/` into `\`.
         kind: Kind,
     },
+    /// A named field holding **one** value, written glued to the flag with an
+    /// `=`: `setBrandingImage(p, { imgId = 1032 })` becomes `SetBrandingImage
+    /// /IMGID=1032 p`.
+    ///
+    /// The `=` is the whole reason this is not [`Offer::List`] with a count of
+    /// one. `-CMDHELP` prints `/IMGID=image_item_id_in_dialog` and `/x
+    /// filespec`, and the snapshot keeps neither the `=` nor the space — it
+    /// records `nsis: "/IMGID"` and `value: true` for both — so which of the
+    /// two shapes a flag takes is judgement, and judgement lives here.
+    Valued {
+        name: &'static str,
+        /// What the value is, which no other `Offer` needs: a flag value is
+        /// checked against `str` everywhere else, and `/IMGID=` and
+        /// `/TIMEOUT=` are the first that take a number.
+        ty: Ty,
+        kind: Kind,
+    },
     /// A named field of a *hand-shaped* row's own table, written by the
     /// lowering that shapes it rather than by [`Instruction::flags`].
     /// `MessageBox`'s `/SD` is the one: the answer it names has to be legal for
@@ -157,7 +174,10 @@ impl Flag {
     /// differs.
     pub fn name(&self) -> Option<&'static str> {
         match self.offer {
-            Offer::Named(name) | Offer::List { name, .. } | Offer::Handled(name) => Some(name),
+            Offer::Named(name)
+            | Offer::List { name, .. }
+            | Offer::Valued { name, .. }
+            | Offer::Handled(name) => Some(name),
             Offer::Always | Offer::Unoffered(_) => None,
         }
     }

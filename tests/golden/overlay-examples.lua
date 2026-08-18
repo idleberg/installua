@@ -3,6 +3,7 @@ attributes {
 	name = "Overlay examples",
 	outFile = "examples.exe",
 	unicode = true,
+	brandingImage = { edge = "top", size = "20u" },
 }
 
 local handle = section("Addressed", function()
@@ -14,6 +15,9 @@ installer {
 	handle,
 	section("Abort", function()
 		abort("stopped")
+	end),
+	section("BringToFront", function()
+		bringToFront()
 	end),
 	section("ClearErrors", function()
 		clearErrors()
@@ -85,6 +89,12 @@ installer {
 	section("ExpandEnvStrings", function()
 		local temp = expandEnvStrings("%TEMP%")
 		detailPrint(temp)
+	end),
+	section("FindWindow", function()
+		local window = findWindow("Notepad")
+		if isWindow(window) then
+			detailPrint("already running")
+		end
 	end),
 	section("File", function()
 		file("assets/icon.ico", { exclude = { "*.tmp", "*.log" } })
@@ -190,6 +200,12 @@ installer {
 	section("IfRtlLanguage", function()
 		if rtlLanguage() then detailPrint("right to left") end
 	end),
+	section("IsWindow", function()
+		local window = findWindow("Notepad")
+		if isWindow(window) then
+			detailPrint("still open")
+		end
+	end),
 	section("MessageBox", function()
 		messageBox { text = "Restart now?", buttons = "YESNO", silentAnswer = "NO" }
 	end),
@@ -269,6 +285,9 @@ installer {
 	end),
 	section("SetAutoClose", function()
 		setAutoClose("true")
+	end),
+	section("SetBrandingImage", function()
+		setBrandingImage("assets/icon.ico", { imgId = 1032, resizeToFit = true })
 	end),
 	section("SetDetailsView", function()
 		setDetailsView("show")

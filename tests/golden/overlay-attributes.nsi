@@ -2,6 +2,7 @@ Unicode true
 
 SetCompressor lzma
 AddBrandingImage top "20u" "2u"
+AutoCloseWindow true
 BGFont "face" 1 1
 BrandingText "brandingText"
 Caption "caption"

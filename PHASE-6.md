@@ -1654,6 +1654,66 @@ and its read answers with the bit field, and this language has no list *value* t
 back — so the row keeps a `todo` whose reason is now about the missing shape rather than
 about addressing a section, which is no longer missing.
 
+## Batch 27 — five rows that were never blocked, and the flag shape the fifth needed
+
+`PHASE-6-DIALOGS.md` plans the last grouped reason — *"addresses a window by handle; the
+`hwnd` surface wants nsDialogs designed first"*, fourteen rows — and its first step was to
+re-read the group before designing anything for it. Five of the fourteen walked out.
+
+### The syntax line un-guessed five more members
+
+The comment at `overlay.rs:943` has said since batch 16 that *"a group reason is a guess
+about every member; the syntax line un-guesses it"*, written when `HideWindow` and
+`LockWindow` left the same group. Five more:
+
+| row | syntax | what it actually is |
+| --- | --- | --- |
+| `AutoCloseWindow` | `(false\|true)` | an attribute, and the compile-time twin of `SetAutoClose`, exposed since batch 16 |
+| `BringToFront` | *(no arguments)* | raises the installer's own window |
+| `FindWindow` | `$var class [title] …` | *produces* a handle; the reason had the direction backwards |
+| `IsWindow` | `hwnd jump jump` | a predicate §15.20 has known how to lower since batch 8 |
+| `SetBrandingImage` | `[/IMGID=…] bitmap.bmp` | its reason said page callbacks did not exist, and batch 20 built them |
+
+None needed new machinery. The generic call, predicate and attribute lowerings took all
+five as written, which is what *"not blocked"* turns out to mean in practice: the row was
+finished before it was filed.
+
+### A flag NSIS spells with `=` is not a list of one
+
+`SetBrandingImage` was the exception, and it caught on a rule rather than on a design:
+every flag on an `Exposed` row has to be reachable, and `/IMGID=` had no spelling. So
+`Offer::Valued { name, ty, kind }` landed with it — the shape the Still-open list has been
+deferring to *"the first of those rows"* since batch 9.
+
+The `=` is the whole of why it is not `Offer::List` with a count of one. `-CMDHELP` prints
+`/IMGID=image_item_id_in_dialog` and `/x filespec`, and the snapshot keeps neither the `=`
+nor the space: both record `nsis: "/IMGID"`, `value: true`. Which of the two shapes a flag
+takes is therefore judgement, and judgement lives in the overlay — the same split that put
+`Ann` beside `Shape`.
+
+It is also the first `Offer` to carry a `Ty`. Every other flag value is checked against
+`str`, on the note that *"every flag NSIS spells with a value takes text"*; a dialog
+control id is a number, and `imgId = 1032` would have been rejected by the rule that was
+written for `/x "*.tmp"`.
+
+Emission glues a literal into one `Arg::Raw` token — `SetBrandingImage /IMGID=1032` —
+and keeps the pieces of anything holding a register, because `Arg::Raw` reads nothing and
+hiding a register from liveness would be a formatting decision with a wrong answer.
+
+The overlay's example program grew a `brandingImage` attribute, for the third time in
+three batches that an example turned out to need something an example cannot carry:
+`makensis` rejects the whole script with *"no branding image found in chosen UI"* when a
+`SetBrandingImage` has no control to write into.
+
+### What landed
+
+| move | rows |
+| ---- | ---- |
+| `todo` → exposed | 4 |
+| `todo` → attribute | 1 |
+
+`todo` 35 → **30**; `exposed` 96 → **100**; `attribute` 63 → **64**.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -1661,9 +1721,11 @@ about addressing a section, which is no longer missing.
   emptied the two *classic UI* groups, batch 17 the *compile time and positional* one,
   batch 18 the *file surface* one, batch 19 the *part path and part switches* pair,
   batch 20 the *where MUI settings live is unruled* group, and batches 22–26 the
-  *addresses a section by index* one. Of the 35 left, the `hwnd` surface is 14, §15.26's
-  locale tables are 5, and the rest are one-offs. One group remains, and it is not a
-  reason nobody read: it names design that really is missing.
+  *addresses a section by index* one, and batch 27 took five rows out of the `hwnd` one
+  without designing anything for it. Of the 30 left, the `hwnd` surface is 9, §15.26's
+  locale tables are 5, and the rest are one-offs. One group remains, and what is left of
+  it does name design that is really missing — but it also named five rows that were
+  already finished, so re-reading it was worth more than designing for it would have been.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
   sixteen batches because the reason was true of the shape they were rejected as. Batch 18
@@ -1672,8 +1734,10 @@ about addressing a section, which is no longer missing.
   exposed. Batch 19's pair was contradicted by the comment on the row two below it. Three
   groups re-read, three groups emptied, and each reason failed differently: true of the
   wrong shape, a cost mistaken for a blocker, a half-truth whose second half was assumed.
-  The remaining ones should be re-read before the design work they claim to need, not
-  after.
+  Batch 27 is the fourth and the first to follow that advice deliberately — the plan's own
+  step 0 was *re-read the group* — and it found a fourth failure mode: a reason written
+  about the **hardest** member and then applied to every other. Four of its five rows take
+  no handle at all, and the fifth was waiting on a feature built seven batches earlier.
 - **A `Setting` cannot say "meaningful only when a sibling holds one value".**
   `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.
@@ -1704,10 +1768,10 @@ about addressing a section, which is no longer missing.
   trade and not a fix. What would fix it is a shape this table does not have: *one of these
   keywords, or any string*, which is `open` at the level of a value rather than of a set.
   One row wants it, so it should arrive with the second.
-- **A flag that takes one value and does not repeat has no spelling.** `Offer::List`
-  covers `File`'s `/x` because it repeats; `SendMessage`'s `/TIMEOUT=n` and the three
-  other single-valued flags are all on `todo` rows, and the variant that spells them
-  should arrive with the first of those rows rather than before it.
+- ~~**A flag that takes one value and does not repeat has no spelling.**~~ **Closed by
+  batch 27**, arriving with `SetBrandingImage`'s `/IMGID=` exactly as this bullet asked —
+  with the first of those rows rather than before it. `Offer::Valued` is waiting for
+  `SendMessage`'s `/TIMEOUT=` and two others when their rows land.
 - **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
   `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
   pass a call that is simply dead.

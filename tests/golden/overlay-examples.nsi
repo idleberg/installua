@@ -4,6 +4,7 @@ Unicode true
 
 Name "Overlay examples"
 OutFile "examples.exe"
+AddBrandingImage top "20u"
 
 InstType "Full"
 InstType "Minimal"
@@ -14,6 +15,10 @@ SectionEnd
 
 Section "Abort"
   Abort "stopped"
+SectionEnd
+
+Section "BringToFront"
+  BringToFront
 SectionEnd
 
 Section "ClearErrors"
@@ -106,6 +111,13 @@ SectionEnd
 Section "ExpandEnvStrings"
   ExpandEnvStrings $0 "%TEMP%"
   DetailPrint $0
+SectionEnd
+
+Section "FindWindow"
+  FindWindow $0 "Notepad"
+  IsWindow $0 0 __GENERATED_endif_0
+  DetailPrint "already running"
+__GENERATED_endif_0:
 SectionEnd
 
 Section "File"
@@ -260,6 +272,13 @@ Section "IfRtlLanguage"
 __GENERATED_endif_0:
 SectionEnd
 
+Section "IsWindow"
+  FindWindow $0 "Notepad"
+  IsWindow $0 0 __GENERATED_endif_0
+  DetailPrint "still open"
+__GENERATED_endif_0:
+SectionEnd
+
 Section "MessageBox"
   MessageBox MB_YESNO "Restart now?" /SD IDNO
 SectionEnd
@@ -376,6 +395,10 @@ SectionEnd
 
 Section "SetAutoClose"
   SetAutoClose "true"
+SectionEnd
+
+Section "SetBrandingImage"
+  SetBrandingImage /IMGID=1032 /RESIZETOFIT "assets\icon.ico"
 SectionEnd
 
 Section "SetDetailsView"

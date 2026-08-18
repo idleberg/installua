@@ -160,6 +160,12 @@ const fn list(name: &'static str, kind: Kind) -> Offer {
     Offer::List { name, kind }
 }
 
+/// A flag reached by this name and holding one value, glued to the flag with
+/// an `=`. See [`Offer::Valued`].
+const fn valued(name: &'static str, ty: Ty, kind: Kind) -> Offer {
+    Offer::Valued { name, ty, kind }
+}
+
 /// A flag a hand-shaped row writes itself. See [`Offer::Handled`].
 const fn handled(name: &'static str) -> Offer {
     Offer::Handled(name)
@@ -337,10 +343,12 @@ pub const ROWS: &[Row] = &[
         ]),
     ),
     language("AddSize", "a `section`'s `size` option"),
-    todo(
-        "AutoCloseWindow",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
-    ),
+    // Filed under "addresses a window by handle" and its syntax line is
+    // `(false|true)`: no handle, no window named, nothing to design. It is the
+    // compile-time twin of `SetAutoClose`, which has been exposed since batch 16
+    // — the two sat in different groups for the whole of Phase 6 because one
+    // reason was written about all fourteen rows at once.
+    attribute("AutoCloseWindow", "autoCloseWindow", TRUEFALSE),
     // The full-screen background is a *second window*, drawn behind the wizard
     // and unaffected by which page UI is in front of it. MUI2 never mentions
     // either row, so neither was ever a classic-UI question.
@@ -364,10 +372,10 @@ pub const ROWS: &[Row] = &[
     // `/TRIMLEFT`, `/TRIMRIGHT` and `/TRIMCENTER` are one fused flag with three
     // suffixes, which the options table cannot say and an attribute cannot hold.
     attribute("BrandingText", "brandingText", STR),
-    todo(
-        "BringToFront",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
-    ),
+    // The fourth row in that group to take no handle, after `HideWindow`,
+    // `LockWindow` and `SetAutoClose`: it raises the installer's own window and
+    // `-CMDHELP` prints it with no arguments at all.
+    exposed("BringToFront", "bringToFront", &[], "bringToFront()"),
     lowering("Call", "a call: `f(x)`"),
     rejected(
         "CallInstDLL",
@@ -713,9 +721,21 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
         "local temp = expandEnvStrings(\"%TEMP%\")\ndetailPrint(temp)",
     ),
-    todo(
+    // The group reason has the direction backwards: this row *produces* a
+    // handle rather than addressing one, and the window it finds belongs to
+    // another process. nsDialogs is about windows this installer creates, so
+    // nothing here waits on it.
+    exposed(
         "FindWindow",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "findWindow",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Value),
+            filled(Ty::Str, Kind::Value, "title", "\"\""),
+            filled(Ty::Handle, Kind::Value, "parent", "0"),
+            opt(Ty::Handle, Kind::Value, "childAfter"),
+        ],
+        "local window = findWindow(\"Notepad\")\nif isWindow(window) then\n\tdetailPrint(\"already running\")\nend",
     ),
     todo(
         "FindClose",
@@ -1049,9 +1069,18 @@ pub const ROWS: &[Row] = &[
         "Int64Fmt",
         "`string.format`: 64-bit width is a type attribute (§15.14)",
     ),
-    todo(
+    // A predicate over the handle `findWindow` returns, and §15.20 has known
+    // how to lower one of those since batch 8. The two positions after the
+    // handle are the compiler's labels, not the caller's arguments.
+    predicate(
         "IsWindow",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "isWindow",
+        &[
+            ann(Ty::Handle, Kind::Value),
+            ann(Ty::Str, Kind::Label),
+            ann(Ty::Str, Kind::Label),
+        ],
+        "local window = findWindow(\"Notepad\")\nif isWindow(window) then\n\tdetailPrint(\"still open\")\nend",
     ),
     lowering("Goto", "`if`, `while` and `break`"),
     todo(
@@ -1391,9 +1420,20 @@ pub const ROWS: &[Row] = &[
         "SetCtlColors",
         "addresses a control by handle; the `hwnd` surface wants nsDialogs designed first",
     ),
-    todo(
-        "SetBrandingImage",
-        "runs from a page callback, and there is no way to write one yet (nsDialogs)",
+    // Its reason said page callbacks did not exist, and batch 20 gave every
+    // page `pre`, `show` and `leave`. The control it writes into is the one
+    // `brandingImage` creates, which has been an attribute for as long.
+    flagged(
+        exposed(
+            "SetBrandingImage",
+            "setBrandingImage",
+            &[ann(Ty::Str, Kind::Path)],
+            "setBrandingImage(\"assets/icon.ico\", { imgId = 1032, resizeToFit = true })",
+        ),
+        &[
+            valued("imgId", Ty::nonneg(), Kind::Value),
+            named("resizeToFit"),
+        ],
     ),
     todo(
         "LoadAndSetImage",
