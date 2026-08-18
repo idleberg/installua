@@ -369,7 +369,8 @@ fn declarations() -> String {
          local SectionOptions = {}\n\n\
          ---@param name string\n\
          ---@param body fun()\n\
-         ---@overload fun(options: installua.SectionOptions)\n\
+         ---@return installua.Section\n\
+         ---@overload fun(options: installua.SectionOptions): installua.Section\n\
          function section(name, body) end\n\n\
          ---@class (exact) installua.GroupOptions\n\
          ---@field [1] string The group's heading, written first and without a key.\n\
@@ -378,8 +379,33 @@ fn declarations() -> String {
          local GroupOptions = {}\n\n\
          ---@param name string\n\
          ---@param sections table\n\
-         ---@overload fun(options: installua.GroupOptions)\n\
+         ---@return installua.Group\n\
+         ---@overload fun(options: installua.GroupOptions): installua.Group\n\
          function group(name, sections) end\n\n\
+         -- What a bound `section` is at install time: the handle §13's binding\n\
+         -- produces. Every field is readable and writable, and the section index\n\
+         -- NSIS reads is the compiler's — it appears in no Installua source.\n\
+         ---@class (exact) installua.Section\n\
+         ---@field selected boolean Ticked in the components tree (`SF_SELECTED`).\n\
+         ---@field readOnly boolean Installed with no box to untick (`SF_RO`).\n\
+         ---@field bold boolean Drawn bold in the components tree (`SF_BOLD`).\n\
+         ---@field text string The row the tree draws; `\"\"` draws none.\n\
+         ---@field size integer Kilobytes charged beyond the files installed.\n\
+         ---@field installTypes string[] Which of the block's `installTypes` it belongs to.\n\
+         local Section = {}\n\n\
+         -- A group is a section to NSIS — one index, one flags word — plus the\n\
+         -- one bit only a heading has.\n\
+         ---@class (exact) installua.Group : installua.Section\n\
+         ---@field expanded boolean Opens the heading in the components tree (`SF_EXPAND`).\n\
+         local Group = {}\n\n\
+         -- The install type the user picked, by the name the block declared, and\n\
+         -- `\"\"` for the custom one every list has and no list declares (§13).\n\
+         ---@type string\n\
+         currentInstType = nil\n\n\
+         -- The block's install types, addressed by name because an install type\n\
+         -- is a line in a block's field and there is nothing to bind (§13).\n\
+         ---@class installua.InstTypes\n\
+         instTypes = {}\n\n\
          ---@param name string\n\
          ---@param body function\n\
          function func(name, body) end\n\n\
@@ -427,10 +453,14 @@ fn instructions() -> String {
         let Some(name) = entry.installua else {
             continue;
         };
-        // A method (`f:read`) belongs to its class above, and a name that two
-        // NSIS rows share (`writeReg` is `WriteRegStr` and `WriteRegDWORD`) is
+        // A method (`f:read`) belongs to its class above, a field of a section
+        // handle (`handle.text`) and `currentInstType` belong to the classes
+        // beside it — a `Kind::Bound` position is what says a row is reached
+        // through a name rather than called (§13) — and a name that two NSIS
+        // rows share (`writeReg` is `WriteRegStr` and `WriteRegDWORD`) is
         // declared once.
-        if name.contains(':') || HAND_SHAPED.contains(&name) || !seen.insert(name) {
+        if name.contains(':') || entry.bound() || HAND_SHAPED.contains(&name) || !seen.insert(name)
+        {
             continue;
         }
 
@@ -681,7 +711,7 @@ pub fn selene_std() -> String {
         let Some(name) = entry.installua else {
             continue;
         };
-        if name.contains(':') {
+        if name.contains(':') || entry.bound() {
             continue;
         }
         let _ = writeln!(out, "  {name}:\n    args:");
@@ -698,6 +728,21 @@ pub fn selene_std() -> String {
         if entry.takes_options() {
             let _ = writeln!(out, "      - type: table\n        required: false");
         }
+    }
+
+    // A `Kind::Bound` row is reached through a name rather than called (§13).
+    // The dotted ones are fields of a handle and a `local`'s fields are
+    // selene's business anyway; `currentInstType` is a global, and one that is
+    // written as well as read — `SetCurInstType` is the assignment.
+    let mut named: BTreeSet<&str> = BTreeSet::new();
+    for entry in exposed().filter(|entry| entry.bound()) {
+        let Some(name) = entry.installua else {
+            continue;
+        };
+        if name.contains('.') || !named.insert(name) {
+            continue;
+        }
+        let _ = writeln!(out, "  {name}:\n    property: full-write");
     }
 
     for constant in builtins::CONSTANTS {

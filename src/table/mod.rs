@@ -201,6 +201,23 @@ pub enum Kind {
     /// `createShortcut` emits nine arguments, which assembles and puts the
     /// description in the keyboard shortcut.
     Fused,
+    /// A position the compiler resolves from a **name**, so the caller writes
+    /// neither an argument nor a value here: `SectionSetText ${SEC_core} "…"`
+    /// takes its index from the handle the field was written on, and
+    /// `SetCurInstType 1` takes its position from the block's `installTypes`
+    /// list (§13).
+    ///
+    /// Between [`Kind::Label`] and [`Kind::Fused`] and neither of them. A label
+    /// is a jump target the compiler *invents*; a fused position is not a
+    /// position at all. This one is emitted, is counted by NSIS, and holds a
+    /// number that exists in exactly one place — which is the whole reason it
+    /// cannot be an argument: an index the surface could write is a second
+    /// numbering to keep in step with the first.
+    ///
+    /// A row with one is reached through the name rather than called, which is
+    /// what [`crate::table::doc`] prints and what keeps `handle.text` out of the
+    /// generated function stubs.
+    Bound,
 }
 
 /// What an *optional* position is called.
@@ -422,10 +439,20 @@ impl Instruction {
     /// fills and the ones that are not really positions. A `Kind::Label` is an
     /// argument to NSIS and not to Installua, so `fileExists(p)` takes one
     /// argument where `IfFileExists` takes three (§15.20); a `Kind::Fused` is
-    /// not an argument to either.
+    /// not an argument to either, and a `Kind::Bound` is the compiler's too —
+    /// the index behind `handle.text` comes from the handle.
     pub fn surface(&self) -> impl Iterator<Item = &Param> {
-        self.inputs()
-            .filter(|param| param.kind != Kind::Label && param.kind != Kind::Fused)
+        self.inputs().filter(|param| {
+            param.kind != Kind::Label && param.kind != Kind::Fused && param.kind != Kind::Bound
+        })
+    }
+
+    /// Reached through a name the compiler resolves rather than called: a field
+    /// of a section handle, or `currentInstType` (§13). One [`Kind::Bound`]
+    /// position is what says so, and it is why these rows have an Installua
+    /// spelling that is not a function name.
+    pub fn bound(&self) -> bool {
+        self.params.iter().any(|param| param.kind == Kind::Bound)
     }
 
     /// The positions a caller writes as *arguments*, including the trailing

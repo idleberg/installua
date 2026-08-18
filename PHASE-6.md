@@ -1579,16 +1579,91 @@ configuring the UI but reimplementing MUI2 beside it. `Page` and `UninstPage` ke
 reason and stay `todo` — their signature is an alternation whose `custom` half is the
 nsDialogs insertion point, and MUI2 ships no `MUI_PAGE_CUSTOM` to reach it through.
 
+## Batches 22–26 — a section a running program can name
+
+Eleven rows and five batches, against the question batch 15 left open and stated in
+*Still open* as three candidate answers: *"a field on a handle the block never returns, an
+addressing function that takes the section's title, or a `sections.core` table"*. The
+design is [`PHASE-6-SECTIONS.md`](PHASE-6-SECTIONS.md); the answer is the first one with
+its premise removed. **The block returns the handle after all** — or rather `section(…)`
+does, and the block merely lists it:
+
+```lua
+local core = section { "Core", required = true, body = function() … end }
+local tools = group { "Tools", sections = { profiler } }
+
+installer {
+  installTypes = { "Full", "Minimal" },
+  core, tools,
+
+  onInit(function()
+    currentInstType = "Minimal"
+    core.text = ""
+    tools.expanded = profiler.selected
+    docs.size = 4096
+  end),
+}
+```
+
+The other two answers both invent a name: an addressing function has to be given the
+section's *title*, which is a string nothing checks and which `SectionSetText` can change
+out from under it, and a `sections.core` table is a second namespace keyed by a spelling
+the author already wrote as a `local`. The handle is a Lua local and nothing else, and
+`${SEC_core}` is derived from that local's name — so a misspelling is an undefined
+variable rather than an installer that ticks the wrong box.
+
+### Declaration order stopped being install order
+
+The cost, and the one thing a reader of an Installua program now has to learn: a
+`section(…)` at the top level is **deferred**, and the block's positional list decides
+where it goes. Four writings became possible that were not, and each has a diagnostic — a
+handle no block lists, one listed twice, one listed by both blocks, and one referenced
+from the other half.
+
+Sections also had to move ahead of functions in the emitted file, because `${SEC_core}` is
+a `!define` and NSIS expands it at *parse* time: a callback that addressed a section it
+was written above got the literal text and warning 6000.
+
+### A position the compiler resolves from a name is a fourth kind
+
+`Kind::Bound`, beside the label position §15.20 needed. `SectionSetText ${SEC_core} "…"`
+takes its index from the handle and `SetCurInstType 1` its position from the block's
+`installTypes` list, so neither is an argument — and the parameter model had no way to say
+that. Saying it is what keeps `handle.text(…)` out of the generated stubs and turns the
+`LANGUAGE.md` cell into `handle.text = …` rather than a function call. The stub declares
+the fields instead, as `installua.Section` and `installua.Group`.
+
+The same ruling twice over: the number NSIS reads exists in exactly one place. A section's
+index is its position in the block, an install type's is its position in the block's list,
+and an index the surface could write would be a second numbering to keep in step with the
+first. So `currentInstType` reads and writes a **name** — and reads it back through a
+comparison chain built at compile time rather than through `InstTypeGetText`, because the
+label is what `instTypes.setText` changes and `currentInstType == "Full"` has to survive
+it.
+
+### What landed
+
+| move | rows |
+| ---- | ---- |
+| `todo` → exposed | 11 |
+
+`todo` 46 → **35**; `exposed` 85 → 96.
+
+`SectionGetInstTypes` is the twelfth row and did not land. Its write takes a list of names
+and its read answers with the bit field, and this language has no list *value* to hand
+back — so the row keeps a `todo` whose reason is now about the missing shape rather than
+about addressing a section, which is no longer missing.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could. Batch 16
   emptied the two *classic UI* groups, batch 17 the *compile time and positional* one,
-  batch 18 the *file surface* one, batch 19 the *part path and part switches* pair, and
-  batch 20 the *where MUI settings live is unruled* group. Of the 46 left, the `hwnd`
-  surface is 14, addressing a section at install time is 12, §15.26's locale tables are 5,
-  and the rest are one-offs. Two groups remain, and neither is a reason nobody read: both
-  name design that really is missing.
+  batch 18 the *file surface* one, batch 19 the *part path and part switches* pair,
+  batch 20 the *where MUI settings live is unruled* group, and batches 22–26 the
+  *addresses a section by index* one. Of the 35 left, the `hwnd` surface is 14, §15.26's
+  locale tables are 5, and the rest are one-offs. One group remains, and it is not a
+  reason nobody read: it names design that really is missing.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
   sixteen batches because the reason was true of the shape they were rejected as. Batch 18
@@ -1617,11 +1692,11 @@ nsDialogs insertion point, and MUI2 ships no `MUI_PAGE_CUSTOM` to reach it throu
   `VIProductVersion` before `VIAddVersionKey`, `SetCompressor` before anything that touches
   the header — and both were found by a golden failing rather than by looking. A third would
   be found the same way, which is to say by luck.
-- **A running program cannot name a section.** The twelve rows above. `Section [/o] name
-  [section index output]` is the mechanism NSIS offers and the compiler already owns every
-  section's position, so the data is there; what is missing is the spelling. A field on a
-  handle the block never returns, an addressing function that takes the section's title, or
-  a `sections.core` table — three answers, and the batch that lands the first row picks one.
+- ~~**A running program cannot name a section.**~~ **Closed by batches 22–26**, with the
+  first of the three answers and its premise dropped: `section(…)` returns the handle, so
+  there is no name for the compiler to invent. What is left of the family is one row —
+  `SectionGetInstTypes`, which would have to answer with a list value this language does
+  not have.
 - **A metavariable with no marker is still a keyword.** `PERemoveResource restype resname
   reslang|ALL` reads `reslang` as a member beside `ALL`, and unlike `{GUID}` there is
   nothing in the notation that says it is a placeholder — not a brace, not a case, not a

@@ -1,12 +1,12 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed           85
+  exposed           96
   attribute         63
   lowering-target   18
   language          12
   directive         37
   rejected          15
-  todo              46
+  todo              35
 
 todo:
   AutoCloseWindow         addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
@@ -28,18 +28,7 @@ todo:
   LogSet                  the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
   LogText                 the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
   Page                    a page construct; custom pages need a design (nsDialogs) that does not exist yet
-  SectionSetFlags         addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionGetFlags         addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionSetInstTypes     addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionGetInstTypes     addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionGetText          addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionSetText          addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionGetSize          addresses a section by index: a real compile-time to install-time name binding (§13)
-  SectionSetSize          addresses a section by index: a real compile-time to install-time name binding (§13)
-  GetCurInstType          addresses a section by index: a real compile-time to install-time name binding (§13)
-  SetCurInstType          addresses a section by index: a real compile-time to install-time name binding (§13)
-  InstTypeSetText         addresses a section by index: a real compile-time to install-time name binding (§13)
-  InstTypeGetText         addresses a section by index: a real compile-time to install-time name binding (§13)
+  SectionGetInstTypes     reads back the bit field its write takes as a list of names, and there is no list value in this language to answer with (§13)
   SendMessage             addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   SetCtlColors            addresses a control by handle; the `hwnd` surface wants nsDialogs designed first
   SetBrandingImage        runs from a page callback, and there is no way to write one yet (nsDialogs)

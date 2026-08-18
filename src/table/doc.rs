@@ -117,6 +117,15 @@ fn syntax(snapshot: &str, nsis: &str) -> String {
 /// multi-line programs and this is one cell.
 fn installua(entry: &Instruction) -> String {
     match entry.class {
+        // A row with a `Kind::Bound` position is reached through a name rather
+        // than called (§13), so the cell is the assignment a user writes:
+        // `handle.text = …` where the value goes in, `x = handle.text` where it
+        // comes back.
+        Class::Exposed if entry.bound() => match entry.installua {
+            Some(name) if entry.outputs().next().is_some() => code(&format!("x = {name}")),
+            Some(name) => code(&format!("{name} = …")),
+            None => "—".to_string(),
+        },
         Class::Exposed => code(&call(entry)),
         Class::Attribute(_) => match entry.installua {
             Some(field) => code(&format!("{field} = …")),
@@ -175,6 +184,12 @@ fn call(entry: &Instruction) -> String {
 /// prints in full, so the name says what the position *is* instead: `mode`, or
 /// `enabled` where §15.17 made the two-valued enum a boolean.
 fn argument(param: &Param) -> String {
+    // An index position the *surface* writes as a `string` is the name the
+    // compiler resolves the index from, and printing `insttypeIndex` would say
+    // the opposite of §13. `instTypes.setText("Full", …)` takes a name.
+    if param.ty == Ty::Str && param.shape.name.ends_with("_index") {
+        return "name".to_string();
+    }
     let members = param.members();
     let listed = !members.is_empty() && param.shape.name == members.join("_or_").to_lowercase();
     if listed {

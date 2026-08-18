@@ -24,6 +24,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("control-flow", &[]),
     ("pages", &[]),
     ("returns", &[Code::DeepRecursion]),
+    ("sections", &[]),
 ];
 
 /// Files tier 3 needs on disk beside the script, because NSIS reads them at

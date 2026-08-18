@@ -75,12 +75,31 @@ fn every_exposed_row_reaches_the_stub() {
     // the warning-on-correct-code §1 exists to prevent.
     let meta = meta();
     for entry in table::table().iter().filter(|entry| {
-        entry.class == table::Class::Exposed && entry.installua.is_some_and(|n| !n.contains(':'))
+        entry.class == table::Class::Exposed
+            && entry.installua.is_some_and(|n| !n.contains(':'))
+            && !entry.bound()
     }) {
         let name = entry.installua.unwrap();
         assert!(
             meta.contains(&format!("function {name}(")),
             "`{name}` is exposed and the stub does not declare it"
+        );
+    }
+
+    // The same claim for the rows that are not functions. A `Kind::Bound`
+    // position means the row is reached through a name (§13): a field of the
+    // `installua.Section` class, or `currentInstType` itself. Dropping one of
+    // those from the stub is the same warning-on-correct-code failure, one
+    // shape over.
+    for entry in table::table().iter().filter(|entry| entry.bound()) {
+        let name = entry.installua.expect("a bound row has a spelling");
+        let declaration = match name.split_once('.') {
+            Some((_, field)) => format!("---@field {field} "),
+            None => format!("\n{name} = nil\n"),
+        };
+        assert!(
+            meta.contains(&declaration),
+            "`{name}` is reached through a name and the stub declares no `{declaration}`"
         );
     }
 }
@@ -214,7 +233,9 @@ fn the_selene_std_and_the_stub_agree_about_what_exists() {
     let meta = meta();
 
     for entry in table::table().iter().filter(|entry| {
-        entry.class == table::Class::Exposed && entry.installua.is_some_and(|n| !n.contains(':'))
+        entry.class == table::Class::Exposed
+            && entry.installua.is_some_and(|n| !n.contains(':'))
+            && !entry.bound()
     }) {
         let name = entry.installua.unwrap();
         assert!(
@@ -223,4 +244,11 @@ fn the_selene_std_and_the_stub_agree_about_what_exists() {
         );
         assert!(meta.contains(&format!("function {name}(")));
     }
+
+    // `currentInstType` is a global to selene as much as `$INSTDIR` is, and
+    // unlike `$INSTDIR` it is assigned to: `SetCurInstType` *is* the write.
+    assert!(
+        std.contains("\n  currentInstType:\n    property: full-write\n"),
+        "{std}"
+    );
 }

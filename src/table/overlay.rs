@@ -135,6 +135,13 @@ const fn fused(ty: Ty) -> Ann {
     ann(ty, Kind::Fused)
 }
 
+/// A position the compiler fills from a name — a section handle or an install
+/// type — rather than from an argument: see [`Kind::Bound`]. The `Ty` is what
+/// *NSIS* reads, because the surface has no position here to have a type.
+const fn bound(ty: Ty) -> Ann {
+    ann(ty, Kind::Bound)
+}
+
 /// A flag reached by this name in the trailing options table, holding a `bool`.
 /// The `/FLAG` itself stays in the table: `rmDir(dir, { recursive = true })`
 /// says what it does, where `/r` says what NSIS calls it.
@@ -1268,53 +1275,100 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
         "local found = searchPath(\"notepad.exe\")\ndetailPrint(found)",
     ),
-    todo(
+    // The eight section-indexed rows, reached through a handle rather than
+    // called. `${SEC_core}` is the index and the handle is the `local` a block
+    // listed, so every one of them carries a [`Kind::Bound`] position and none
+    // of them has an argument list at all: `handle.text = "…"` is a *field*, and
+    // the number NSIS reads appears nowhere in the source (§13).
+    //
+    // The flags pair is one row per direction and four fields per row —
+    // `selected`, `readOnly`, `bold`, `expanded` are bits of one word — so its
+    // spelling here is the commonest of them and the other three are the
+    // `installua.Section` class in `stubs.rs`. The word itself is `Bound` too:
+    // the surface writes a `bool` and the compiler does the mask, the shift and
+    // the read-modify-write.
+    exposed(
         "SectionSetFlags",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "handle.selected",
+        &[bound(Ty::Handle), bound(Ty::nonneg())],
+        "handle.selected = false",
     ),
-    todo(
+    exposed(
         "SectionGetFlags",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "handle.selected",
+        &[bound(Ty::Handle), bound(Ty::nonneg())],
+        "if handle.selected then\n\tdetailPrint(\"the addressed section is ticked\")\nend",
     ),
-    todo(
+    // The write is a bit field over the block's `installTypes` list, and the
+    // list is named rather than numbered on both sides.
+    exposed(
         "SectionSetInstTypes",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "handle.installTypes",
+        &[bound(Ty::Handle), bound(Ty::nonneg())],
+        "handle.installTypes = { \"Minimal\" }",
     ),
     todo(
         "SectionGetInstTypes",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "reads back the bit field its write takes as a list of names, and there is no list value in this language to answer with (§13)",
     ),
-    todo(
+    exposed(
         "SectionGetText",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "handle.text",
+        &[bound(Ty::Handle), ann(Ty::Str, Kind::Value)],
+        "local label = handle.text\ndetailPrint(label)",
     ),
-    todo(
+    exposed(
         "SectionSetText",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "handle.text",
+        &[bound(Ty::Handle), ann(Ty::Str, Kind::Value)],
+        "handle.text = \"Core files\"",
     ),
-    todo(
+    exposed(
         "SectionGetSize",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "handle.size",
+        &[bound(Ty::Handle), ann(Ty::nonneg(), Kind::Value)],
+        "local kilobytes = handle.size\ndetailPrint(\"charging \" .. kilobytes .. \" KB\")",
     ),
-    todo(
+    exposed(
         "SectionSetSize",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "handle.size",
+        &[bound(Ty::Handle), ann(Ty::nonneg(), Kind::Value)],
+        "handle.size = 4096",
     ),
-    todo(
+    // The four install-type rows, addressed by the name the block declared
+    // rather than by a handle: an install type is a line in a block's field and
+    // there is nothing for a `local` to bind (§13, ruling 4).
+    //
+    // `currentInstType` is a name the compiler owns — the read is one
+    // instruction and a comparison chain, the write is another — so it is
+    // `Bound` on both sides and is written like a variable rather than called.
+    exposed(
         "GetCurInstType",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "currentInstType",
+        &[bound(Ty::nonneg())],
+        "local chosen = currentInstType\ndetailPrint(\"installing \" .. chosen)",
     ),
-    todo(
+    exposed(
         "SetCurInstType",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "currentInstType",
+        &[bound(Ty::nonneg())],
+        "currentInstType = \"Minimal\"",
     ),
-    todo(
+    // The one table in the surface addressed by string. The position is `Bound`
+    // in NSIS's reading and a `string` in the caller's: what is written is the
+    // declared name, which is why these two are calls where the four above are
+    // not.
+    exposed(
         "InstTypeSetText",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "instTypes.setText",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
+        "instTypes.setText(\"Full\", \"Everything\")",
     ),
-    todo(
+    exposed(
         "InstTypeGetText",
-        "addresses a section by index: a real compile-time to install-time name binding (§13)",
+        "instTypes.getText",
+        &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
+        "local label = instTypes.getText(\"Full\")\ndetailPrint(label)",
     ),
     todo(
         "SendMessage",

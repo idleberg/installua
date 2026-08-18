@@ -5,6 +5,13 @@ Unicode true
 Name "Overlay examples"
 OutFile "examples.exe"
 
+InstType "Full"
+InstType "Minimal"
+
+Section "Addressed" SEC_handle
+  DetailPrint "the section the examples below address"
+SectionEnd
+
 Section "Abort"
   Abort "stopped"
 SectionEnd
@@ -299,6 +306,71 @@ SectionEnd
 
 Section "SearchPath"
   SearchPath $0 "notepad.exe"
+  DetailPrint $0
+SectionEnd
+
+Section "SectionSetFlags"
+  SectionGetFlags ${SEC_handle} $0
+  IntOp $1 1 ~
+  IntOp $0 $0 & $1
+  SectionSetFlags ${SEC_handle} $0
+SectionEnd
+
+Section "SectionGetFlags"
+  SectionGetFlags ${SEC_handle} $0
+  IntOp $0 $0 & 1
+  StrCmpS $0 1 0 __GENERATED_endif_0
+  DetailPrint "the addressed section is ticked"
+__GENERATED_endif_0:
+SectionEnd
+
+Section "SectionSetInstTypes"
+  SectionSetInstTypes ${SEC_handle} 2
+SectionEnd
+
+Section "SectionGetText"
+  SectionGetText ${SEC_handle} $0
+  DetailPrint $0
+SectionEnd
+
+Section "SectionSetText"
+  SectionSetText ${SEC_handle} "Core files"
+SectionEnd
+
+Section "SectionGetSize"
+  SectionGetSize ${SEC_handle} $0
+  DetailPrint "charging $0 KB"
+SectionEnd
+
+Section "SectionSetSize"
+  SectionSetSize ${SEC_handle} 4096
+SectionEnd
+
+Section "GetCurInstType"
+  GetCurInstType $0
+  IntCmpU $0 0 0 __GENERATED_insttype_0_0_next __GENERATED_insttype_0_0_next
+  StrCpy $0 "Full"
+  Goto __GENERATED_insttype_0_end
+__GENERATED_insttype_0_0_next:
+  IntCmpU $0 1 0 __GENERATED_insttype_0_1_next __GENERATED_insttype_0_1_next
+  StrCpy $0 "Minimal"
+  Goto __GENERATED_insttype_0_end
+__GENERATED_insttype_0_1_next:
+  StrCpy $0 ""
+__GENERATED_insttype_0_end:
+  DetailPrint "installing $0"
+SectionEnd
+
+Section "SetCurInstType"
+  SetCurInstType 1
+SectionEnd
+
+Section "InstTypeSetText"
+  InstTypeSetText 0 "Everything"
+SectionEnd
+
+Section "InstTypeGetText"
+  InstTypeGetText 0 $0
   DetailPrint $0
 SectionEnd
 

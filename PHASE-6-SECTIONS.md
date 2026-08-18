@@ -76,12 +76,13 @@ build, not what to choose.
 | `SectionGetFlags` / `SectionSetFlags` | `section_index [flags]` | `handle.selected`, `.readOnly`, `.bold`, `.expanded` |
 | `SectionGetText` / `SectionSetText` | `section_index text` | `handle.text` |
 | `SectionGetSize` / `SectionSetSize` | `section_index size` | `handle.size` |
-| `SectionGetInstTypes` / `SectionSetInstTypes` | `section_index inst_types` | `handle.installTypes` |
+| ~~`SectionGetInstTypes`~~ / `SectionSetInstTypes` | `section_index inst_types` | `handle.installTypes` |
 | `GetCurInstType` / `SetCurInstType` | `inst_type_idx` | `currentInstType` |
 | `InstTypeGetText` / `InstTypeSetText` | `insttype_index text` | `instTypes.getText(name)` |
 
 Eight are section-indexed and reached through a handle. Four are install-type-indexed and
-reached by the name the block declared.
+reached by the name the block declared. Eleven land: the read half of `installTypes` is out
+of scope below, so `SectionGetInstTypes` keeps a `todo` and gets a truer reason.
 
 ## The surface
 
@@ -259,17 +260,23 @@ to a function defined further down, so nothing else moves.
    through a compile-time comparison chain rather than `InstTypeGetText`, because
    `instTypes.setText` exists and `currentInstType == "Full"` has to survive it; past the
    end of the list is the custom type, which answers `""`.
-6. **Table rows, stubs, golden, docs.** Twelve `todo` → `Exposed`; `installua.Section` and
-   `installua.Group` classes in `stubs.rs`; a `sections` golden through tier 3; PREPLAN
-   §13 amendment; `PHASE-6.md` batch entry.
+6. **Table rows, stubs, golden, docs.** *(done)* Eleven `todo` → `Exposed`, and the twelfth
+   — `SectionGetInstTypes` — re-reasoned rather than moved. A row reached through a name
+   rather than called needed the parameter model to be able to say so, which is
+   `Kind::Bound`: it is what keeps `handle.text` out of the generated function stubs, what
+   turns its `LANGUAGE.md` cell into `handle.text = …`, and what `installua.Section` and
+   `installua.Group` in `stubs.rs` declare instead. The overlay's example program grew a
+   handle and an install-type list, because those two are what an example cannot carry —
+   they are not arguments. `tests/golden/sections.lua` is the install-time half of
+   `components.lua` and goes through tier 3.
 
 ## Census
 
 | move | rows |
 | ---- | ---- |
-| `todo` → exposed | 12 |
+| `todo` → exposed | 11 |
 
-`todo` 46 → **34**.
+`todo` 46 → **35**; `exposed` 85 → **96**.
 
 ## Out of scope
 

@@ -5,7 +5,13 @@ attributes {
 	unicode = true,
 }
 
+local handle = section("Addressed", function()
+	detailPrint("the section the examples below address")
+end)
+
 installer {
+	installTypes = { "Full", "Minimal" },
+	handle,
 	section("Abort", function()
 		abort("stopped")
 	end),
@@ -221,6 +227,45 @@ installer {
 	section("SearchPath", function()
 		local found = searchPath("notepad.exe")
 		detailPrint(found)
+	end),
+	section("SectionSetFlags", function()
+		handle.selected = false
+	end),
+	section("SectionGetFlags", function()
+		if handle.selected then
+			detailPrint("the addressed section is ticked")
+		end
+	end),
+	section("SectionSetInstTypes", function()
+		handle.installTypes = { "Minimal" }
+	end),
+	section("SectionGetText", function()
+		local label = handle.text
+		detailPrint(label)
+	end),
+	section("SectionSetText", function()
+		handle.text = "Core files"
+	end),
+	section("SectionGetSize", function()
+		local kilobytes = handle.size
+		detailPrint("charging " .. kilobytes .. " KB")
+	end),
+	section("SectionSetSize", function()
+		handle.size = 4096
+	end),
+	section("GetCurInstType", function()
+		local chosen = currentInstType
+		detailPrint("installing " .. chosen)
+	end),
+	section("SetCurInstType", function()
+		currentInstType = "Minimal"
+	end),
+	section("InstTypeSetText", function()
+		instTypes.setText("Full", "Everything")
+	end),
+	section("InstTypeGetText", function()
+		local label = instTypes.getText("Full")
+		detailPrint(label)
 	end),
 	section("SetAutoClose", function()
 		setAutoClose("true")
