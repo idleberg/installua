@@ -1983,6 +1983,50 @@ button and a link through tier 3, and `installua.ControlOptions` gained the thre
 What is left of the plan is step 6: the six rows the fields reach, `SendMessage`,
 `GetFunctionAddress`, and §15.32 written up as a section rather than a plan.
 
+## Batch 32 — the rows the compiler writes are retired, not missing
+
+The last of `PHASE-6-DIALOGS.md`. Seven `todo` rows moved, and the destination is the one
+the plan did not name: **`lowering-target`, not `exposed`.**
+
+`SendMessage`, `EnableWindow`, `ShowWindow`, `SetCtlColors`, `CreateFont`,
+`LoadAndSetImage` and `GetFunctionAddress` are what the fields and the events emit. Exposing
+them would mean a second spelling of every field — one with the kind unchecked, the register
+unspilled and a handle the surface has no other way to obtain, since every handle that
+exists belongs to a control this compiler drew. `lowering-target` is the bucket for exactly
+that: *the compiler writes it, and here is what you write.* So the move buys a diagnostic
+instead of a call.
+
+```
+error[nsis-retired]: `sendMessage` is not a function here
+  note: write a control's fields: `agree.checked = true`, `serial.value = ""` (§15.32)
+```
+
+Which is `src/retired.rs` doing what it already did for `StrCmp` and `IntOp`, with no new
+machinery: a retired row *is* a `LoweringTarget` row read through its own text, and
+`tests/retired.rs` tests every row generically, so the seven arrived already covered. The
+one test written by hand is the reverse direction — that the seven names a nsDialogs user
+would reach for each answer with the field to write.
+
+Two things did not move:
+
+- **`GetLabelAddress` and `GetCurrentAddress` keep the reason `GetFunctionAddress` shed.**
+  They shared its text and not its resolution: §8 owns labels, and there is nothing to take
+  the address of. A group's reason retiring for one member is not it retiring for all — the
+  correction batch 17 taught, applied without needing to be retaught.
+- **`System::Call` is not a row at all.** `value`'s read goes through it, and a plugin call
+  is §11's model rather than a census entry. The census counts NSIS instructions.
+
+### What landed
+
+`todo` 27 → **20**, `lowering-target` 18 → **25**, and Phase 6's dialog plan is finished.
+PREPLAN §15.7 gained its *"Amended in Phase 6"* block — the eighth page is a classic
+`Page custom` line written between MUI2's `!insertmacro`s, and it includes nothing — and
+§15.32 is written: the declaration and the list, the `Var` and the `Pop`, the seven fields
+as one instruction each, the events, `getDlgItem`, and why these seven rows are retired.
+
+Of the 20 rows left, fourteen are in six groups and six are one-offs. The `hwnd` group,
+which was 12 rows when Phase 6 opened, is empty.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -1991,10 +2035,13 @@ What is left of the plan is step 6: the six rows the fields reach, `SendMessage`
   batch 18 the *file surface* one, batch 19 the *part path and part switches* pair,
   batch 20 the *where MUI settings live is unruled* group, and batches 22–26 the
   *addresses a section by index* one, and batch 27 took five rows out of the `hwnd` one
-  without designing anything for it. Of the 28 left, the `hwnd` surface is 7, §15.26's
-  locale tables are 5, and the rest are one-offs. One group remains, and what is left of
-  it does name design that is really missing — but it also named five rows that were
-  already finished, so re-reading it was worth more than designing for it would have been.
+  without designing anything for it. Batch 32 emptied the `hwnd` group outright, by
+  designing the thing its reason asked for and then finding that six of its rows were not
+  callable at all. Of the 20 left, fourteen are in six groups — §15.26's three locale
+  tables, the three `Find*`, the two `Log*`, the two remaining address rows, the two
+  flattened alternations, the two `*SubCaption` — and six are one-offs. Every group that
+  named missing *design* is now gone; what remains names missing *shapes* in the table and
+  one build of `makensis` nobody has.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
   sixteen batches because the reason was true of the shape they were rejected as. Batch 18

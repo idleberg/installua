@@ -336,22 +336,43 @@ one:
    `GetFunctionAddress` stays `todo` while being emitted, for the reason `SendMessage` did
    in step 3: §3's *"`Call`-by-address has no Lua shape"* is a statement about the surface,
    and the address of a generated function exists in exactly one place.
-6. **Table rows, stubs, golden, docs.** Twelve rows move; `installua.Control` and
+6. **Table rows, stubs, golden, docs.** *(done)* `installua.Control` and
    `tests/golden/dialog.lua` landed early, in step 3, because a construct with no golden
-   is a construct nothing assembles. What is left here is the rows, the fields on
-   `installua.Control`, and
-   §15.7 gains an *"Amended in Phase 6"* block saying the eighth page is not MUI2's — plus
-   a new §15.32 for the control model, since it is a construct rather than an amendment.
+   is a construct nothing assembles, and the fields on `installua.Control` landed with
+   them in step 4. What was left is the rows and the two documents, and the rows moved
+   somewhere the plan did not name:
+
+   - **Seven rows became `lowering-target`, not `exposed`.** `SendMessage`,
+     `EnableWindow`, `ShowWindow`, `SetCtlColors`, `CreateFont` and `LoadAndSetImage`,
+     plus `GetFunctionAddress` from step 5. Every one of them needs a handle, and every
+     handle there is belongs to a control this compiler drew — so a call would be a
+     second spelling of a field, without the kind check or the spill. `lowering-target`
+     is the bucket that says *the compiler writes it and here is what you write*, so the
+     move buys a §5 diagnostic: `sendMessage(…)` now answers with `agree.checked = true`
+     rather than with the generic unknown-name error.
+   - **`GetLabelAddress` keeps its `todo`.** It shared `GetFunctionAddress`'s reason and
+     does not share its resolution: §8 owns labels, and there is nothing to take the
+     address of.
+
+   §15.7 gained its *"Amended in Phase 6"* block — the eighth page is a classic
+   `Page custom` line between MUI2's `!insertmacro`s, and it includes nothing — and
+   §15.32 is written as a construct rather than an amendment: the declaration, the `Var`
+   and the `Pop`, the seven fields as one instruction each, the events, `getDlgItem`, and
+   the census consequence above.
 
 ## Census
 
 | move | rows |
 | ---- | ---- |
-| `todo` → exposed | 11 |
+| `todo` → exposed | 5 |
+| `todo` → lowering-target | 7 |
 | `todo` → language | 2 |
 | `todo` → attribute | 1 |
 
-`todo` 35 → **21**; `exposed` 96 → **107**.
+`todo` 35 → **20**; `exposed` 96 → **101**; `lowering-target` 18 → **25**.
+
+The plan predicted eleven rows to `exposed` and got five, because the twelve it counted as
+callable turned out to be seven the compiler writes: see step 6.
 
 Steps 0 and 1 are five of those: `todo` 35 → **30**, `exposed` 96 → **100**,
 `attribute` 63 → **64**. Step 2 is the two `language` rows: `todo` 30 → **28**,
@@ -360,10 +381,12 @@ control *fields*, and what it landed is the construct they hang off. Step 4 move
 `GetDlgItem`, the only window row a program *calls* — leaving the six it reaches through
 fields, plus `SendMessage`, for step 6: `todo` 28 → **27**, `exposed` 100 → **101**. Step 5
 moves none, and adds one to step 6's list: `GetFunctionAddress`, which the events emit and
-the surface still has no spelling for.
+the surface still has no spelling for. Step 6 moves those seven to `lowering-target`:
+`todo` 27 → **20**, `lowering-target` 18 → **25**.
 
-That leaves one grouped reason in the backlog — §15.26's five locale-table rows — and
-sixteen one-offs.
+That leaves twenty rows: fourteen in six groups — §15.26's three locale-table rows, the
+three `Find*`, the two `Log*`, the two remaining address rows, the two flattened
+alternations and the two `*SubCaption` — and six one-offs.
 
 ## Out of scope
 

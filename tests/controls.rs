@@ -660,3 +660,44 @@ fn a_callback_carries_the_half_that_owns_it() {
         "{output}"
     );
 }
+
+/// The seven instructions the fields and the events write are `lowering-target`
+/// rows and not `todo` ones, which is §5's retired-instruction diagnostic
+/// rather than a census entry: a user who reaches for `SendMessage` is told the
+/// field to write, and gets it in the compiler rather than in `LANGUAGE.md`.
+///
+/// None of them could have been `exposed`. A call needs a handle, and every
+/// handle there is belongs to a control this compiler drew — so the field *is*
+/// the call, with the kind checked and the register spilled.
+#[test]
+fn the_instructions_behind_the_fields_are_retired_rather_than_missing() {
+    for (name, field) in [
+        ("sendMessage", "`agree.checked = true`"),
+        ("enableWindow", "`agree.enabled = false`"),
+        ("showWindow", "`badge.visible = false`"),
+        ("setCtlColors", "a control's `colors`"),
+        ("createFont", "a control's `font`"),
+        ("loadAndSetImage", "a `bitmap`'s `image`"),
+        ("getFunctionAddress", "an event"),
+    ] {
+        let mut diags = Diagnostics::new();
+        installua::build(
+            &format!(
+                "attributes {{ outFile = \"a.exe\", name = \"a\" }}\n\
+                 installer {{\n\
+                 page.instFiles {{}},\n\
+                 section(\"Core\", function() {name}(1) end),\n\
+                 }}\n"
+            ),
+            &mut diags,
+        );
+
+        assert!(
+            diags.iter().any(|d| d.code == Code::NsisRetired),
+            "{name}: {}",
+            diags.render("<test>")
+        );
+        let rendered = diags.render("<test>");
+        assert!(rendered.contains(field), "{name}: {rendered}");
+    }
+}

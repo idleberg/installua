@@ -483,9 +483,13 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Path)],
         "createDirectory(INSTDIR .. \"/logs\")",
     ),
-    todo(
+    // The first of the six the compiler writes behind a control's fields. None
+    // of them is `exposed`: a call would need a handle, and the only handles
+    // there are belong to controls this compiler drew — so the field *is* the
+    // call, with the kind checked and the register spilled (§15.32).
+    lowering(
         "CreateFont",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "a control's `font`: `serial.font = { face = \"Tahoma\", size = 8 }` (§15.32)",
     ),
     // The row the options table was designed for. Two required positions and
     // six named ones: setting the description used to mean writing all nine
@@ -620,9 +624,9 @@ pub const ROWS: &[Row] = &[
     // a block field, and the path says which block: `installer {}` and not
     // `attributes {}`, because a raw `CheckBitmap` line loses to MUI2's.
     attribute("CheckBitmap", "installer.checkBitmap", PATH),
-    todo(
+    lowering(
         "EnableWindow",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "a control's `enabled`: `agree.enabled = false` (§15.32)",
     ),
     exposed(
         "EnumRegKey",
@@ -1409,9 +1413,13 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
         "local label = instTypes.getText(\"Full\")\ndetailPrint(label)",
     ),
-    todo(
+    // Three fields at once — `checked`, `value` and the second half of `font` —
+    // because a message *is* the setter for most of what a control holds. The
+    // one field it cannot serve is reading `value`: `WM_GETTEXT` wants a buffer
+    // and NSIS has nowhere to put one, so that read is `System::Call`.
+    lowering(
         "SendMessage",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "a control's fields: `agree.checked = true`, `serial.value = \"\"` (§15.32)",
     ),
     // The third row filed under "addresses a window by handle" that takes no
     // handle, after `HideWindow` and `LockWindow`. A group reason is a guess
@@ -1426,9 +1434,10 @@ pub const ROWS: &[Row] = &[
     // setting anything at compile time. Two of them take a handle nobody can
     // get — MUI2 keeps its `$mui.*` controls to itself — and the third has to be
     // called from a page callback, which is the same missing design.
-    todo(
+    lowering(
         "SetCtlColors",
-        "addresses a control by handle; the `hwnd` surface wants nsDialogs designed first",
+        "a control's `colors`: `serial.colors = { text = \"800000\", back = \"transparent\" }` \
+         (§15.32)",
     ),
     // Its reason said page callbacks did not exist, and batch 20 gave every
     // page `pre`, `show` and `leave`. The control it writes into is the one
@@ -1445,9 +1454,9 @@ pub const ROWS: &[Row] = &[
             named("resizeToFit"),
         ],
     ),
-    todo(
+    lowering(
         "LoadAndSetImage",
-        "addresses a control by handle; the `hwnd` surface wants nsDialogs designed first",
+        "a `bitmap`'s `image`: `bitmap { image = \"check.bmp\", y = 90, height = 20 }` (§15.32)",
     ),
     // The four compression settings and the overwrite default. All five carry
     // the objection that retired itself: they are positional, so a *call* would
@@ -1595,9 +1604,9 @@ pub const ROWS: &[Row] = &[
     ),
     attribute("ShowInstDetails", "showInstDetails", Setting::Enum),
     attribute("ShowUninstDetails", "showUninstDetails", Setting::Enum),
-    todo(
+    lowering(
         "ShowWindow",
-        "addresses a window by handle; the `hwnd` surface wants nsDialogs designed first",
+        "a control's `visible`: `badge.visible = false` (§15.32)",
     ),
     attribute("SilentInstall", "silentInstall", Setting::Enum),
     attribute("SilentUnInstall", "silentUninstall", Setting::Enum),
@@ -1916,9 +1925,14 @@ pub const ROWS: &[Row] = &[
          it to one required position: the shape has no `Setting`",
     ),
     attribute("CompletedText", "completedText", STR),
-    todo(
+    // Its old reason — §3's "`Call`-by-address has no Lua shape" — is still true
+    // of the *surface*, and the events are why it stops being a backlog entry
+    // anyway: the address of a generated callback exists in exactly one place,
+    // and the program that wants it wrote `onClick`. `GetLabelAddress` keeps the
+    // reason, because §8 owns labels and there is nothing to take the address of.
+    lowering(
         "GetFunctionAddress",
-        "takes the address of a function or label; `Call`-by-address has no Lua shape (§3)",
+        "an event: `button { \"Check\", onClick = function() … end }` (§15.32)",
     ),
     todo(
         "GetLabelAddress",
