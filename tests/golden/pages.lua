@@ -62,6 +62,26 @@ installer {
 		variable = dataDir,
 	},
 
+	-- The eighth page, and the only one whose body is the compiler's: `Page
+	-- custom` names a creator and a leave function, so `pre` and `show` are
+	-- inlined either side of the dialog and `leave` becomes the second name on
+	-- the line (§15.32). The header is a `MUI_HEADER_TEXT` call rather than the
+	-- `!define` the other five write, because MUI2 never reads a define for a
+	-- page it did not insert.
+	page.custom { "Registration",
+		headerText = "Serial number",
+		headerSubText = "Enter the key from your invoice.",
+		pre = function()
+			detailPrint("about to build the dialog")
+		end,
+		show = function()
+			detailPrint("the dialog is up")
+		end,
+		leave = function()
+			detailPrint("leaving the dialog")
+		end,
+	},
+
 	page.instFiles {},
 	page.finish {},
 
@@ -75,6 +95,13 @@ uninstaller {
 		topText = "Pages will be removed.",
 		locationText = "From:",
 	},
+
+	-- The same page with nothing on it, in the other half: no caption, no
+	-- `leave`, no header. `UninstPage custom` with one name after it is the
+	-- shortest line this construct can produce, and `un.` leads the function
+	-- because NSIS spells the half in the name (§15.3).
+	page.custom {},
+
 	page.instFiles {},
 
 	section("Core", function()

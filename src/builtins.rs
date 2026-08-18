@@ -104,6 +104,12 @@ pub const CONSTANTS: &[Constant] = &[
     constant("EXEFILE", Ty::Str),
     constant("PLUGINSDIR", Ty::Str),
     constant("LANGUAGE", Ty::nonneg()),
+    // The installer's own window, and the only handle a program can name
+    // without having created the thing it addresses: `getDlgItem(HWNDPARENT, 2)`
+    // reaches the Cancel button MUI2 drew, not one of ours (§15.32). Read-only
+    // for the same reason as `$EXEDIR` — it is a fact about the running
+    // installer, and NSIS accepts a write to it silently.
+    constant("HWNDPARENT", Ty::Handle),
     root("HKLM"),
     root("HKCU"),
     root("HKCR"),

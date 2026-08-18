@@ -256,6 +256,96 @@ fn only_a_page_with_a_header_takes_header_text() {
     );
 }
 
+/// The custom page's header is the one setting that changes *mechanism*
+/// between it and its seven siblings, and the reason is MUI2's: `Page custom`
+/// is a stock NSIS line MUI2 never sees, so a `!define` it reads at insertion
+/// time would do nothing here and then leak onto the next page that does read
+/// it (§15.32).
+#[test]
+fn a_custom_page_calls_the_header_macro_instead_of_defining_it() {
+    let output = build(&program(
+        "page.custom { headerText = \"Serial\", headerSubText = \"From the invoice.\" },",
+    ));
+    assert!(
+        output.contains("!insertmacro MUI_HEADER_TEXT \"Serial\" \"From the invoice.\""),
+        "{output}"
+    );
+    assert!(!output.contains("MUI_PAGE_HEADER_TEXT"), "{output}");
+
+    // The macro takes two arguments and there is no spelling for omitting one,
+    // so the half that was not written is empty rather than absent.
+    let output = build(&program("page.custom { headerText = \"Serial\" },"));
+    assert!(
+        output.contains("!insertmacro MUI_HEADER_TEXT \"Serial\" \"\""),
+        "{output}"
+    );
+}
+
+/// `Page custom` has two function slots and the page has three hooks, so `pre`
+/// and `show` are inlined into the creator on either side of the dialog and
+/// only `leave` becomes a name on the line.
+#[test]
+fn a_custom_page_inlines_two_of_its_three_hooks() {
+    let output = build(&program(
+        "page.custom {\n\
+         \tpre = function() detailPrint(\"before\") end,\n\
+         \tshow = function() detailPrint(\"after\") end,\n\
+         \tleave = function() detailPrint(\"leaving\") end,\n\
+         },",
+    ));
+    assert!(
+        output.contains("Page custom mui.custom.create mui.custom.leave"),
+        "{output}"
+    );
+    // One function for the page and one for `leave`, and no third.
+    assert_eq!(output.matches("\nFunction ").count(), 2, "{output}");
+
+    let before = output
+        .find("DetailPrint \"before\"")
+        .expect("the `pre` body");
+    let create = output.find("nsDialogs::Create").expect("the dialog");
+    let after = output
+        .find("DetailPrint \"after\"")
+        .expect("the `show` body");
+    let show = output.find("nsDialogs::Show").expect("the show call");
+    assert!(
+        before < create && create < after && after < show,
+        "{output}"
+    );
+}
+
+/// A trailing argument is only omissible while the ones after it are too, which
+/// is why a captioned page with no `leave` writes the empty string NSIS reads
+/// as "none" — and a page with neither writes one name and stops.
+#[test]
+fn a_custom_page_writes_only_the_arguments_it_needs() {
+    let output = build(&program("page.custom {},"));
+    assert!(
+        output.contains("Page custom mui.custom.create\n"),
+        "{output}"
+    );
+
+    let output = build(&program("page.custom { \"Registration\" },"));
+    assert!(
+        output.contains("Page custom mui.custom.create \"\" \"Registration\""),
+        "{output}"
+    );
+}
+
+/// The array part of the table is the caption, and there is one of those. A
+/// second positional is not a page with two names — it is a table written by
+/// mistake, and every other page rejects the array part outright.
+#[test]
+fn a_custom_page_takes_one_caption() {
+    let raised = errors(&program("page.custom { \"One\", \"Two\" },"));
+    assert!(
+        raised
+            .iter()
+            .any(|(code, message)| *code == Code::WrongArity && message.contains("one caption")),
+        "{raised:?}"
+    );
+}
+
 /// A page name outside the closed set is caught at the page rather than at
 /// `makensis`, and the message lists the seven — which is the other half of
 /// what member access buys: an editor completes them, and a compiler that has

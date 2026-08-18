@@ -1157,20 +1157,19 @@ pub const ROWS: &[Row] = &[
     attribute("OutFile", "outFile", PATH),
     // These four shared one reason, and the page block splits them in two.
     //
-    // `Page` and `UninstPage` keep it: their syntax line is an alternation
-    // whose `custom` half is where an nsDialogs page is inserted, MUI2 ships no
-    // `MUI_PAGE_CUSTOM` to insert one through, and so that half is real work
-    // rather than a spelling this language declines.
+    // `Page` and `UninstPage` are the compiler's lines now. Their syntax line
+    // is an alternation, and both halves are written from `page.*`: the seven
+    // MUI2 pages become `!insertmacro MUI_PAGE_*`, and `page.custom` becomes
+    // the `Page custom` this row spells, with the creator and the leave
+    // function generated around it (§15.32). Nobody writes the line, because
+    // its two arguments are names only the compiler has.
     //
     // The other three are `Rejected` now. `PageEx` is the classic page block
     // MUI2 *generates* around every one of its pages — `PageEx directory` …
     // `PageExEnd` is what `!insertmacro MUI_PAGE_DIRECTORY` expands to — so
     // writing one is not configuring the UI, it is reimplementing MUI2 beside
     // it.
-    todo(
-        "Page",
-        "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
-    ),
+    language("Page", "`page.*` inside `installer {}`"),
     rejected(
         "PageCallbacks",
         "legal only inside `PageEx`, where MUI2 fills it with the names of the functions it \
@@ -1639,10 +1638,7 @@ pub const ROWS: &[Row] = &[
     // rather than to this line, because MUI2 emits `UninstallIcon` itself from
     // that define and would otherwise win.
     language("UninstallIcon", "`icon` in `uninstaller {}`"),
-    todo(
-        "UninstPage",
-        "a page construct; custom pages need a design (nsDialogs) that does not exist yet",
-    ),
+    language("UninstPage", "`page.*` inside `uninstaller {}`"),
     // `locationText` beside it. `confirm` is the uninstaller's first page and
     // exists in no other half, which is why the field path has no `un.` in it:
     // the block the page is written in supplies that (§15.3).

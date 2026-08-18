@@ -3,10 +3,10 @@ installua coverage -- makensis v3.12, 276 commands
   exposed          100
   attribute         64
   lowering-target   18
-  language          12
+  language          14
   directive         37
   rejected          15
-  todo              30
+  todo              28
 
 todo:
   BGGradient              `off | (top [bottom [text]])` is an alternation, and the snapshot flattens it to one required position: the shape has no `Setting`
@@ -23,7 +23,6 @@ todo:
   LoadLanguageFile        §15.26's locale tables are designed and unimplemented
   LogSet                  the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
   LogText                 the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`
-  Page                    a page construct; custom pages need a design (nsDialogs) that does not exist yet
   SectionGetInstTypes     reads back the bit field its write takes as a list of names, and there is no list value in this language to answer with (§13)
   SendMessage             addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   SetCtlColors            addresses a control by handle; the `hwnd` surface wants nsDialogs designed first
@@ -32,7 +31,6 @@ todo:
   ShowWindow              addresses a window by handle; the `hwnd` surface wants nsDialogs designed first
   SubCaption              MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
   Target                  says `cpu` and `unicode` in one word, and both are attributes already
-  UninstPage              a page construct; custom pages need a design (nsDialogs) that does not exist yet
   UninstallSubCaption     MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
   SpaceTexts              `none | (required [available])` is an alternation, and the snapshot flattens it to one required position: the shape has no `Setting`
   GetFunctionAddress      takes the address of a function or label; `Call`-by-address has no Lua shape (§3)

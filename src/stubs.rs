@@ -211,11 +211,11 @@ fn blocks() -> String {
     out
 }
 
-/// The seven pages (§15.7), as a table of constructors rather than a list of
-/// names.
+/// The eight pages (§15.7, §15.32), as a table of constructors rather than a
+/// list of names.
 ///
 /// `page.directory { … }` and not `page("Directory", … )` because the set is
-/// **closed**: MUI2 picks these seven and a user picks a section's name, so a
+/// **closed**: MUI2 picks seven of these and a user picks a section's name, so a
 /// member completes where a string cannot. That is also what buys a per-page
 /// field class — the settings differ by page, and one `page(name, options)`
 /// signature would have to take the union of all of them.
@@ -260,6 +260,9 @@ const PAGES: &str = "\
 ---@field locationText? string\n\
 ---@field variable? string\n\
 \n\
+---@class (exact) installua.Page.Custom : installua.Page\n\
+---@field [1]? string\n\
+\n\
 ---@class installua.Pages\n\
 ---@field welcome fun(options?: installua.Page.Full)\n\
 ---@field license fun(options: installua.Page.License)\n\
@@ -268,6 +271,7 @@ const PAGES: &str = "\
 ---@field instFiles fun(options?: installua.Page)\n\
 ---@field finish fun(options?: installua.Page.Full)\n\
 ---@field confirm fun(options?: installua.Page.Confirm)\n\
+---@field custom fun(options?: installua.Page.Custom)\n\
 \n\
 ---@type installua.Pages\n\
 page = {}\n\n";

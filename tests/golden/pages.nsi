@@ -37,12 +37,14 @@ Var dataDir
 !define MUI_DIRECTORYPAGE_TEXT_TOP "And where the data goes."
 !define MUI_DIRECTORYPAGE_VARIABLE $dataDir
 !insertmacro MUI_PAGE_DIRECTORY
+Page custom mui.custom.create mui.custom.leave "Registration"
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
 !define MUI_UNCONFIRMPAGE_TEXT_TOP "Pages will be removed."
 !define MUI_UNCONFIRMPAGE_TEXT_LOCATION "From:"
 !insertmacro MUI_UNPAGE_CONFIRM
+UninstPage custom un.mui.custom.create
 !insertmacro MUI_UNPAGE_INSTFILES
 
 !insertmacro MUI_LANGUAGE "English"
@@ -61,6 +63,33 @@ FunctionEnd
 
 Function mui.directory.leave
   DetailPrint "leaving the program folder page"
+FunctionEnd
+
+Function mui.custom.leave
+  DetailPrint "leaving the dialog"
+FunctionEnd
+
+Function mui.custom.create
+  DetailPrint "about to build the dialog"
+  !insertmacro MUI_HEADER_TEXT "Serial number" "Enter the key from your invoice."
+  nsDialogs::Create 1018
+  Pop $0
+  StrCmpS $0 "error" __GENERATED_dialog_0_failed 0
+  DetailPrint "the dialog is up"
+  nsDialogs::Show
+  Return
+__GENERATED_dialog_0_failed:
+  Abort
+FunctionEnd
+
+Function un.mui.custom.create
+  nsDialogs::Create 1018
+  Pop $0
+  StrCmpS $0 "error" __GENERATED_dialog_0_failed 0
+  nsDialogs::Show
+  Return
+__GENERATED_dialog_0_failed:
+  Abort
 FunctionEnd
 
 Function .onInit

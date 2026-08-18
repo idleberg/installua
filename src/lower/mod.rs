@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::alloc;
 use crate::ast::*;
 use crate::callgraph;
-use crate::cfg::{self, BlockId, Body, Terminator};
+use crate::cfg::{self, BlockId, Body, Terminator, Test};
 use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 use crate::ir;
 use crate::regs::Slot;
@@ -448,6 +448,12 @@ struct Page {
     /// on — so this is a fact about MUI2 rather than a policy of ours.
     halves: [bool; 2],
     header: bool,
+    /// Whether the page is one NSIS inserts (`!insertmacro MUI_PAGE_*`) or one
+    /// the compiler writes the body of (`Page custom`). Exactly one page is the
+    /// second kind, and everything that differs about it follows from this:
+    /// there is no MUI2 macro to configure, so the settings that are `!define`s
+    /// on the other seven are arguments and instructions here.
+    custom: bool,
     own: &'static [PageField],
 }
 
@@ -457,20 +463,26 @@ const fn page(installua: &'static str, nsis: &'static str, own: &'static [PageFi
         nsis,
         halves: [true, true],
         header: true,
+        custom: false,
         own,
     }
 }
 
-/// The seven pages, as a **closed set**: this is why a page is reached by
+/// The eight pages, as a **closed set**: this is why a page is reached by
 /// member access (`page.directory`) where a section is reached by string
 /// (`section("Tools", …)`). A user picks a section's name and MUI2 picks
 /// these, so one completes and the other cannot (§15.1).
+///
+/// Seven of them are MUI2's and the eighth is not, and it is still in the same
+/// list for the same reason: what a user picks from is a set an editor can
+/// finish, and where the page's body comes from is not a fact about the name.
 const V1_PAGES: &[Page] = &[
     Page {
         installua: "welcome",
         nsis: "WELCOME",
         halves: [true, true],
         header: false,
+        custom: false,
         own: &[],
     },
     page("license", "LICENSE", LICENSE_FIELDS),
@@ -482,6 +494,7 @@ const V1_PAGES: &[Page] = &[
         nsis: "FINISH",
         halves: [true, true],
         header: false,
+        custom: false,
         own: &[],
     },
     Page {
@@ -489,7 +502,21 @@ const V1_PAGES: &[Page] = &[
         nsis: "CONFIRM",
         halves: [false, true],
         header: true,
+        custom: false,
         own: CONFIRM_FIELDS,
+    },
+    // The eighth, and the only one that is not MUI2's. It is reached by the
+    // same member access as the other seven because it is a *page* — the set
+    // stays closed, and what a user picks is still from a list an editor can
+    // complete (§15.1). What it is not is a `!insertmacro`: `Page custom` names
+    // two functions, and both of them are ours to write (§15.32).
+    Page {
+        installua: "custom",
+        nsis: "custom",
+        halves: [true, true],
+        header: true,
+        custom: true,
+        own: &[],
     },
 ];
 
@@ -1745,13 +1772,24 @@ impl<'p> Lowerer<'_, 'p> {
             }
         };
         let mut named: Vec<(&Name, &Expr)> = Vec::new();
+        let mut positional: Vec<&Expr> = Vec::new();
         for entry in written {
             match entry {
                 TableField::Named { name, value } => named.push((name, value)),
+                // §15.23's form: the array part is the parameter. Only the
+                // custom page has one — the other seven are named by the macro
+                // they insert and captioned by MUI2's own language file.
+                TableField::Positional { value } if page.custom => positional.push(value),
                 TableField::Positional { value } => {
                     self.todo(value.span(), "a positional entry in a page");
                 }
             }
+        }
+
+        if page.custom {
+            self.page_fields_known(&named, page);
+            self.custom_page(&named, &positional, which, half, page);
+            return;
         }
 
         // `MUI_PAGE_LICENSE` takes the file as its macro argument rather than
@@ -1813,7 +1851,25 @@ impl<'p> Lowerer<'_, 'p> {
             }
         }
 
-        for (name, _) in &named {
+        self.page_fields_known(&named, page);
+
+        let mut all = vec![ir::Arg::raw(format!("{}{}", half.page_prefix(), page.nsis))];
+        all.extend(macro_args);
+        let lowered = ir::Page {
+            defines,
+            insert: ir::Instruction::new("!insertmacro", all),
+            undefines,
+        };
+        match half {
+            Half::Installer => self.module.pages.push(lowered),
+            Half::Uninstaller => self.module.unpages.push(lowered),
+        }
+        self.mui = true;
+    }
+
+    /// Every field a page was given, checked against the ones it has.
+    fn page_fields_known(&mut self, named: &[(&Name, &Expr)], page: &Page) {
+        for (name, _) in named {
             let known = name.text == "file" && page.installua == "license"
                 || page.fields().any(|field| field.installua == name.text);
             if !known {
@@ -1835,18 +1891,175 @@ impl<'p> Lowerer<'_, 'p> {
                 );
             }
         }
+    }
 
-        let mut all = vec![ir::Arg::raw(format!("{}{}", half.page_prefix(), page.nsis))];
-        all.extend(macro_args);
+    /// `page.custom { "Registration", … }` — the eighth page, whose body is the
+    /// compiler's to write.
+    ///
+    /// Everything here is the same *setting* as on the other seven and a
+    /// different *mechanism*, which is the split §15.7 already draws. `Page
+    /// custom` is a stock NSIS instruction and MUI2 never sees it, so
+    /// `MUI_PAGE_HEADER_TEXT` — a define MUI2 reads from inside the `PageEx` it
+    /// generates — would sit there doing nothing and then leak onto the next
+    /// page that *does* read it. `MUI_HEADER_TEXT` inside the creator is the
+    /// call MUI2's own documentation writes, and it has no ordering to get
+    /// wrong: it is an instruction in a function body rather than a define with
+    /// a lifetime.
+    ///
+    /// The three callbacks land in two places for a reason that is NSIS's, not
+    /// ours. `Page custom` names a creator and a leave function; there is no
+    /// third slot. So `pre` and `show` are *inlined* into the creator, on either
+    /// side of the dialog: `pre` runs before it exists — early enough for
+    /// `abort()` to skip the page — and `show` runs once every control is up and
+    /// before the window is shown.
+    fn custom_page(
+        &mut self,
+        named: &[(&Name, &Expr)],
+        positional: &[&Expr],
+        which: &Name,
+        half: Half,
+        page: &Page,
+    ) {
+        let written = |field: &str| {
+            named
+                .iter()
+                .find(|(name, _)| name.text == field)
+                .map(|(_, value)| *value)
+        };
+
+        // At most one, and it is the caption. More than one is not a page with
+        // two names — it is a table whose array part was written by mistake.
+        let caption = match positional {
+            [] => None,
+            [one] => self.constant_arg(one, "the page's caption"),
+            [_, extra, ..] => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::WrongArity,
+                        extra.span(),
+                        "a `custom` page takes one caption",
+                    )
+                    .note("everything else in the table is a named field"),
+                );
+                return;
+            }
+        };
+
+        // Both halves of `MUI_HEADER_TEXT`, because the macro takes two
+        // arguments and there is no spelling for omitting one. An empty string
+        // is what MUI2's own callers pass, and it leaves the strip's second line
+        // blank rather than stale.
+        let header = if written("headerText").is_some() || written("headerSubText").is_some() {
+            let mut text = |field| match written(field) {
+                Some(value) => self
+                    .constant_arg(value, field)
+                    .unwrap_or_else(|| ir::Arg::str("")),
+                None => ir::Arg::str(""),
+            };
+            let (top, sub) = (text("headerText"), text("headerSubText"));
+            Some(vec![ir::Arg::raw("MUI_HEADER_TEXT"), top, sub])
+        } else {
+            None
+        };
+
+        let pre = written("pre").and_then(|value| self.callback_body(value, "pre"));
+        let show = written("show").and_then(|value| self.callback_body(value, "show"));
+        let leave =
+            written("leave").and_then(|value| self.page_callback(value, half, page, "leave"));
+
+        let span = which.span;
+        let create = self.page_function_name(half, page, "create");
+        let (body, _) = self.body_with(span, Some(half), |lowerer| {
+            if let Some((block, _)) = pre {
+                lowerer.block(block);
+            }
+            if let Some(header) = header {
+                lowerer.emit(ir::Instruction::new("!insertmacro", header));
+            }
+
+            // 1018 is the id of the inner control MUI2 draws its pages into. It
+            // is Microsoft's dialog resource in NSIS's own UI file rather than a
+            // number anybody chose, which is why it is written here once and
+            // never offered as a setting.
+            let dialog = lowerer.body.vreg(span);
+            lowerer.generated_plugin_call(
+                "nsDialogs::Create",
+                vec![ir::Arg::raw("1018")],
+                vec![dialog.clone()],
+                span,
+            );
+
+            // The plugin pushes the string `error` instead of a handle when the
+            // dialog does not come up. Continuing past that shows the user an
+            // empty page, so the generated form checks it even though nothing
+            // the program did can cause it.
+            let n = lowerer.body.construct();
+            let failed = lowerer.fresh(format!("dialog_{n}_failed"));
+            let created = lowerer.fresh(format!("dialog_{n}"));
+            // Written as "carry on unless it failed" rather than "fail if it
+            // did", so the failure arm is the last block in the body: `Abort`
+            // ends the function, and a block that ends the body needs no
+            // `Return` line after it.
+            lowerer.terminate(
+                Terminator::Branch {
+                    test: Test::Str {
+                        lhs: ir::Arg::slot(dialog),
+                        rhs: ir::Arg::str("error"),
+                        case_sensitive: true,
+                        negate: true,
+                    },
+                    then_block: created,
+                    else_block: failed,
+                },
+                created,
+            );
+
+            if let Some((block, _)) = show {
+                lowerer.block(block);
+            }
+            lowerer.generated_plugin_call("nsDialogs::Show", Vec::new(), Vec::new(), span);
+            lowerer.terminate(Terminator::Return, failed);
+            lowerer.emit(ir::Instruction::new("Abort", Vec::new()));
+        });
+        self.module.functions.push(ir::Function {
+            name: create.clone(),
+            body,
+        });
+
+        // `Page custom creator leave caption`, and each trailing argument is
+        // only omissible while the ones after it are too — so a page with a
+        // caption and no `leave` writes the empty string NSIS reads as "none".
+        let mut all = vec![ir::Arg::raw("custom"), ir::Arg::raw(create)];
+        if leave.is_some() || caption.is_some() {
+            all.push(match leave {
+                Some(name) => ir::Arg::raw(name),
+                None => ir::Arg::str(""),
+            });
+        }
+        all.extend(caption);
+
         let lowered = ir::Page {
-            defines,
-            insert: ir::Instruction::new("!insertmacro", all),
-            undefines,
+            defines: Vec::new(),
+            insert: ir::Instruction::new(
+                match half {
+                    Half::Installer => "Page",
+                    Half::Uninstaller => "UninstPage",
+                },
+                all,
+            ),
+            undefines: Vec::new(),
         };
         match half {
             Half::Installer => self.module.pages.push(lowered),
             Half::Uninstaller => self.module.unpages.push(lowered),
         }
+        // Nothing is `!include`d for this: `nsDialogs.dll` ships with NSIS and a
+        // plugin call needs no header. `nsDialogs.nsh` exists for the `${NSD_*}`
+        // macros, and the compiler expands those itself rather than depending on
+        // an include whose order the user would then have to know.
+        //
+        // `MUI_HEADER_TEXT` is MUI2's, and a custom page beside seven inserted
+        // ones is the whole point: the header is on either way.
         self.mui = true;
     }
 
@@ -1992,6 +2205,22 @@ impl<'p> Lowerer<'_, 'p> {
         page: &Page,
         which: &str,
     ) -> Option<String> {
+        let (block, span) = self.callback_body(value, which)?;
+        let name = self.page_function_name(half, page, which);
+        let body = self.body(block, &[], span, None, Some(half));
+        self.module.functions.push(ir::Function {
+            name: name.clone(),
+            body,
+        });
+        Some(name)
+    }
+
+    /// The block behind `pre = function() … end`, checked.
+    ///
+    /// Split from [`Self::page_callback`] because a custom page's `pre` and
+    /// `show` become no function at all: `Page custom` has two slots and three
+    /// hooks, so two of them are inlined into the creator (§15.32).
+    fn callback_body<'a>(&mut self, value: &'a Expr, which: &str) -> Option<(&'a Block, Span)> {
         let Expr::Function {
             params,
             block,
@@ -2012,9 +2241,12 @@ impl<'p> Lowerer<'_, 'p> {
             );
             return None;
         }
+        Some((block, *span))
+    }
 
-        // A second `page.directory` in the same half is legal, so the name has
-        // to distinguish them.
+    /// A name for a function this page owns. A second `page.directory` in the
+    /// same half is legal, so the name has to distinguish them.
+    fn page_function_name(&self, half: Half, page: &Page, which: &str) -> String {
         let stem = format!("{}mui.{}.{which}", half.prefix(), page.installua);
         let mut name = stem.clone();
         let mut nth = 2;
@@ -2022,13 +2254,7 @@ impl<'p> Lowerer<'_, 'p> {
             name = format!("{stem}.{nth}");
             nth += 1;
         }
-
-        let body = self.body(block, &[], *span, None, Some(half));
-        self.module.functions.push(ir::Function {
-            name: name.clone(),
-            body,
-        });
-        Some(name)
+        name
     }
 
     /// A positional entry in `installer {}`: a `section`, a page or a callback.
@@ -2036,7 +2262,7 @@ impl<'p> Lowerer<'_, 'p> {
         let Some(name) = value.callee_name() else {
             // `page.directory { … }`: a member rather than a bare name, which
             // is what a **closed** set of names buys — an editor completes the
-            // seven and a typo is caught where it is written (§15.1).
+            // eight and a typo is caught where it is written (§15.1).
             if let Some((base, which)) = value.callee_field()
                 && base == "page"
             {
@@ -2748,7 +2974,24 @@ impl<'p> Lowerer<'_, 'p> {
             .and_then(|name| self.known.signature(name))
             .cloned()
             .unwrap_or_default();
+        let (body, returns) = self.body_with(span, half, |lowerer| {
+            lowerer.parameters(params, &signature);
+            lowerer.block(block);
+        });
+        self.returns(owner, &returns);
+        body
+    }
 
+    /// The same, for a body the compiler assembles rather than one the user
+    /// wrote: a custom page's creator is generated instructions with the user's
+    /// `pre` and `show` blocks between them, and there is no single [`Block`] to
+    /// hand [`Self::body`].
+    fn body_with(
+        &mut self,
+        span: Span,
+        half: Option<Half>,
+        build: impl FnOnce(&mut BodyLowerer),
+    ) -> (Body, Vec<(Vec<Ty>, Span)>) {
         // The install types the block declared, for a `handle.installTypes`
         // write. Copied rather than borrowed because a `func` belongs to no half
         // and the two lists are the block's, not the body's.
@@ -2775,11 +3018,8 @@ impl<'p> Lowerer<'_, 'p> {
             span,
             current: Body::ENTRY,
         };
-        lowerer.parameters(params, &signature);
-        lowerer.block(block);
-        let (body, returns) = lowerer.finish();
-        self.returns(owner, &returns);
-        body
+        build(&mut lowerer);
+        lowerer.finish()
     }
 
     /// Every `return` in one body has to agree on how many values it leaves,
@@ -3066,6 +3306,29 @@ impl BodyLowerer<'_, '_> {
         let current = self.current;
         let span = self.span;
         self.body.push(current, instruction.at(span));
+    }
+
+    /// A plugin call the *compiler* writes: `nsDialogs::Create`, and the
+    /// `CreateControl`s under it (§15.32).
+    ///
+    /// An opaque site rather than a bare [`Self::emit`], for the same reason a
+    /// user's plugin call is one: a plugin clobbers every register, and the
+    /// saves the allocator inserts are the only thing standing between a
+    /// generated dialog and a live value it silently overwrites.
+    fn generated_plugin_call(
+        &mut self,
+        nsis: &str,
+        args: Vec<ir::Arg>,
+        results: Vec<Slot>,
+        span: Span,
+    ) {
+        let site =
+            self.body
+                .opaque_site(vec![ir::Instruction::new(nsis, args).at(span)], false, span);
+        let current = self.current;
+        self.body.push_step(current, ir::Step::Saves(site));
+        self.body.calls[site].results = results;
+        self.body.push_step(current, ir::Step::Call(site));
     }
 
     /// Ends the current block with `terminator` and continues in a fresh one.

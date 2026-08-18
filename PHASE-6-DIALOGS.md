@@ -234,10 +234,24 @@ one:
    anything holding a register, because `Arg::Raw` reads nothing and hiding a register
    from liveness is not a formatting decision. `SendMessage`'s `/TIMEOUT=` and two other
    flags now have a spelling waiting for them.
-2. **`page.custom` as an eighth page**, with the generated creator: `Page custom`
+2. **`page.custom` as an eighth page**, with the generated creator. *(done)* `Page custom`
    emission, the `nsDialogs::Create`/`Show` protocol, `MUI_HEADER_TEXT` in place of the
-   two header defines, and `$HWNDPARENT` added as a read-only constant so `getDlgItem` has
-   a dialog to name. `Page` and `UninstPage` move `todo` → `Class::Language`.
+   two header defines, and `HWNDPARENT` added as a read-only constant so `getDlgItem` has
+   a dialog to name. `Page` and `UninstPage` moved `todo` → `Class::Language`.
+
+   Three things the ruling did not say, decided here:
+
+   - **`Page custom` has two function slots and the page has three hooks**, so `pre` and
+     `show` are inlined into the creator on either side of the dialog — `pre` before
+     `nsDialogs::Create`, early enough that `abort()` skips the page, and `show` after the
+     controls and before `nsDialogs::Show`. Only `leave` is a name on the line. `Call`ing
+     them instead was the alternative and was dropped: whether `Abort` propagates out of a
+     `Call` is not a question generated code should depend on.
+   - **The caption is the array part**, matching §15.23: `page.custom { "Registration", … }`.
+     The other seven reject a positional entry outright, because MUI2 names them.
+   - **`body()` split into `body_with(span, half, build)`**, since a generated body is
+     compiler instructions with user blocks between them and there is no single `Block` to
+     hand the old signature.
 3. **Control declarations, deferred and claimed.** The pass from batch 22–26's step 3,
    generalised from *section claimed by block* to *declaration claimed by construct*. The
    four claim rules and their diagnostics are shared text, not a second wording.
@@ -263,7 +277,8 @@ one:
 `todo` 35 → **21**; `exposed` 96 → **107**.
 
 Steps 0 and 1 are five of those: `todo` 35 → **30**, `exposed` 96 → **100**,
-`attribute` 63 → **64**.
+`attribute` 63 → **64**. Step 2 is the two `language` rows: `todo` 30 → **28**,
+`language` 12 → **14**.
 
 That leaves one grouped reason in the backlog — §15.26's five locale-table rows — and
 sixteen one-offs.

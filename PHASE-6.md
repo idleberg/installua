@@ -1714,6 +1714,72 @@ three batches that an example turned out to need something an example cannot car
 
 `todo` 35 → **30**; `exposed` 96 → **100**; `attribute` 63 → **64**.
 
+## Batch 28 — an eighth page, whose body is the compiler's
+
+`PHASE-6-DIALOGS.md` step 2. `page.custom { … }` joins the seven MUI2 pages in the same
+closed set, reached by the same member access, and everything that differs about it
+follows from one fact: `Page custom` is a stock NSIS line MUI2 never sees.
+
+### The setting stays, the mechanism changes
+
+Batch 20's ruling was that what is private to MUI2 is the *line* and what stays public is
+the *setting*. The custom page is the first case where the split cuts the other way — the
+setting is the same `headerText` its five siblings take, and the mechanism cannot be:
+
+| | the seven | the eighth |
+| --- | --- | --- |
+| the line | `!insertmacro MUI_PAGE_DIRECTORY` | `Page custom mui.custom.create mui.custom.leave "Registration"` |
+| the header | `!define MUI_PAGE_HEADER_TEXT "…"` | `!insertmacro MUI_HEADER_TEXT "…" "…"` inside the creator |
+| the hooks | three defines, three functions | two inlined into the creator, one named on the line |
+
+The header was the one contested call, and the case against the define is that it *works*:
+`!define MUI_PAGE_HEADER_TEXT` before a `Page custom` assembles clean, does nothing, and
+then leaks onto the next page that does read it — a wrong header two pages away with no
+diagnostic anywhere. It is also exactly the include-order hazard this language exists to
+remove: a define has a lifetime and an instruction in a function body does not.
+
+### `Page custom` has two slots and the page has three hooks
+
+So `pre` and `show` are not functions at all. They are inlined into the generated creator
+on either side of the dialog: `pre` before `nsDialogs::Create`, early enough that `abort()`
+skips the page, and `show` after it, once every control is up and before the window is
+shown. Only `leave` becomes a name on the line, because NSIS has a slot for it.
+
+That needed one refactor and no new concept. `body()` split into `body_with(span, half,
+build)`, because a generated body is compiler instructions with user blocks between them
+and there is no single `Block` to hand the old signature.
+
+```nsi
+Function mui.custom.create
+  DetailPrint "about to build the dialog"
+  !insertmacro MUI_HEADER_TEXT "Serial number" "Enter the key from your invoice."
+  nsDialogs::Create 1018
+  Pop $0
+  StrCmpS $0 "error" __GENERATED_dialog_0_failed 0
+  DetailPrint "the dialog is up"
+  nsDialogs::Show
+  Return
+__GENERATED_dialog_0_failed:
+  Abort
+FunctionEnd
+```
+
+The error check is written as *carry on unless it failed* rather than *fail if it did*,
+which puts the failure arm last: `Abort` ends the function, and a block that ends the body
+needs no `Return` line after it. The dialog handle goes through an opaque call site rather
+than a bare emit, for the reason ruling 7 gives — a plugin clobbers every register, and the
+saves the allocator inserts are the only thing between a generated dialog and a live value.
+
+### What landed
+
+| move | rows |
+| ---- | ---- |
+| `todo` → language | 2 |
+
+`todo` 30 → **28**; `language` 12 → **14**. `Page` and `UninstPage` are the compiler's
+lines now: both halves of their syntax line are written from `page.*`, and the two
+arguments of the `custom` half are names only the compiler has.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -1722,7 +1788,7 @@ three batches that an example turned out to need something an example cannot car
   batch 18 the *file surface* one, batch 19 the *part path and part switches* pair,
   batch 20 the *where MUI settings live is unruled* group, and batches 22–26 the
   *addresses a section by index* one, and batch 27 took five rows out of the `hwnd` one
-  without designing anything for it. Of the 30 left, the `hwnd` surface is 9, §15.26's
+  without designing anything for it. Of the 28 left, the `hwnd` surface is 7, §15.26's
   locale tables are 5, and the rest are one-offs. One group remains, and what is left of
   it does name design that is really missing — but it also named five rows that were
   already finished, so re-reading it was worth more than designing for it would have been.
