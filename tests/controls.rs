@@ -1,0 +1,267 @@
+//! The control surface (§15.32): what a `page.custom` draws, and the four claim
+//! rules it shares with `section`.
+//!
+//! The golden in [`tests/goldens.rs`](goldens.rs) proves a page of controls
+//! emits and assembles. What is here is the half a golden cannot show: the
+//! writings that are refused, and the three places the generated form is not the
+//! obvious one — a claimed control's `Var`, an unclaimed one's `Pop`, and the
+//! style word folded at compile time so that nothing has to be `!include`d.
+
+use installua::diag::{Code, Diagnostics};
+
+fn build(source: &str) -> String {
+    let mut diags = Diagnostics::new();
+    let output = installua::build(source, &mut diags);
+    assert!(diags.is_empty(), "{}", diags.render("<test>"));
+    output.expect("compiles")
+}
+
+fn errors(source: &str) -> Vec<(Code, String)> {
+    let mut diags = Diagnostics::new();
+    installua::build(source, &mut diags);
+    diags.iter().map(|d| (d.code, d.message.clone())).collect()
+}
+
+/// A program whose installer holds one custom page and one section.
+fn program(declarations: &str, controls: &str) -> String {
+    format!(
+        "attributes {{ outFile = \"a.exe\", name = \"a\" }}\n\
+         {declarations}\n\
+         installer {{\n\
+         page.custom {{ controls = {{ {controls} }} }},\n\
+         page.instFiles {{}},\n\
+         section(\"Core\", function() detailPrint(\"x\") end),\n\
+         }}\n"
+    )
+}
+
+/// Ruling 5, which is the standing requirement made structural: a program that
+/// uses a custom page includes nothing, so there is no include order for it to
+/// get wrong. `${__NSD_Label_STYLE}` would need `nsDialogs.nsh`; the number it
+/// expands to needs nothing.
+#[test]
+fn a_control_is_created_with_no_header_of_any_kind() {
+    let output = build(&program("", "label { \"Hi\", y = 0, height = 12 },"));
+
+    assert!(
+        output
+            .contains("nsDialogs::CreateControl STATIC 0x54000100 0x00000020 0 0u 100% 12u \"Hi\""),
+        "{output}"
+    );
+    assert!(!output.contains("nsDialogs.nsh"), "{output}");
+    assert!(!output.contains("${__NSD"), "{output}");
+}
+
+/// Ruling 7, and the reason it is not a register: a handle is popped in the
+/// creator and read in `leave`, which is a different NSIS function, and every
+/// plugin call in between clobbers every register (§15.11).
+#[test]
+fn only_a_claimed_control_earns_a_var() {
+    let output = build(&program(
+        "local serial = text { \"\", y = 0, height = 12 }",
+        "label { \"Serial:\", y = 0, height = 12 }, serial,",
+    ));
+
+    assert!(output.contains("Var __GENERATED_ctl_serial"), "{output}");
+    assert!(output.contains("Pop $__GENERATED_ctl_serial"), "{output}");
+    // The label is bound to no `local`, so its handle is popped into whatever
+    // the allocator had spare and named nowhere. Popped all the same: the
+    // plugin pushes a handle whether or not the program wants one.
+    assert_eq!(output.matches("Var __GENERATED_ctl").count(), 1, "{output}");
+    assert_eq!(
+        output.matches("nsDialogs::CreateControl").count(),
+        2,
+        "{output}"
+    );
+    assert_eq!(output.matches("\n  Pop ").count(), 3, "{output}");
+}
+
+/// The list's order is the drawing order and the tab order, and it is the one
+/// thing a control's declaration does not decide. Same shape as a section: the
+/// `local` above says what, the list below says where.
+#[test]
+fn the_list_decides_the_order_and_the_declaration_does_not() {
+    let output = build(&program(
+        "local second = text { \"\", y = 20, height = 12 }\n\
+         local first = label { \"Serial:\", y = 0, height = 12 }",
+        "first, second,",
+    ));
+
+    let first = output.find("\"Serial:\"").expect("the label");
+    let second = output.find("Pop $__GENERATED_ctl_second").expect("the box");
+    assert!(first < second, "{output}");
+}
+
+/// `items` is filled by message rather than by a create argument, because
+/// `CreateControl` has one text and a list has many. `STR:` is `SendMessage`'s
+/// spelling for "a string, not a number", and it is the compiler's to write.
+#[test]
+fn a_list_control_is_filled_by_message() {
+    let output = build(&program(
+        "local flavour = dropList { y = 0, height = 60, items = { \"Full\", \"Minimal\" } }",
+        "flavour,",
+    ));
+
+    assert!(
+        output.contains("SendMessage $__GENERATED_ctl_flavour 0x0143 0 \"STR:Full\""),
+        "{output}"
+    );
+    assert!(
+        output.contains("SendMessage $__GENERATED_ctl_flavour 0x0143 0 \"STR:Minimal\""),
+        "{output}"
+    );
+}
+
+/// Ruling 6. `x` and `width` default to constants — the left edge and the full
+/// width — and `y` and `height` have no default at all, because the only one
+/// they could have is *under the control written above*, which is the auto-flow
+/// this surface does not have.
+#[test]
+fn a_control_says_where_it_sits() {
+    let raised = errors(&program("", "label { \"Hi\", height = 12 },"));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::MissingAttribute);
+    assert!(raised[0].1.contains("`y`"), "{raised:?}");
+
+    // And the two that do default, do so without reading any other control.
+    let output = build(&program("", "label { \"Hi\", y = 4, height = 12 },"));
+    assert!(output.contains(" 0 4u 100% 12u "), "{output}");
+}
+
+/// A bare number is **pixels** to nsDialogs, and a page laid out in pixels comes
+/// apart at a different font size or DPI. An integer is therefore written with
+/// the `u` that makes it dialog units, and a string passes through for the two
+/// things a number cannot say.
+#[test]
+fn a_measurement_is_dialog_units_unless_it_says_otherwise() {
+    let output = build(&program(
+        "",
+        "label { \"Hi\", x = 2, y = 0, width = \"100%\", height = \"-13u\" },",
+    ));
+    assert!(output.contains(" 2u 0u 100% -13u "), "{output}");
+
+    // Anything nsDialogs cannot read it treats as zero, which is a control that
+    // is there, is the right size, and sits in the corner.
+    let raised = errors(&program(
+        "",
+        "label { \"Hi\", y = 0, height = 12, width = \"wide\" },",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::BadFieldValue);
+}
+
+/// Claim rule 1, in the words a control needs: a `local` no page lists is data
+/// written at one level that evaporates if nothing reads it.
+#[test]
+fn a_control_no_page_lists_is_an_error() {
+    let raised = errors(&program(
+        "local orphan = label { \"Hi\", y = 0, height = 12 }",
+        "",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::MissingAttribute);
+    assert!(raised[0].1.contains("no page lists"), "{raised:?}");
+}
+
+/// Claim rules 2 and 3, which are the section's two rules over the construct one
+/// step in: one declaration is one control, in one place.
+#[test]
+fn a_control_is_listed_once() {
+    let raised = errors(&program(
+        "local serial = text { \"\", y = 0, height = 12 }",
+        "serial, serial,",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::DuplicateBlock);
+    assert!(raised[0].1.contains("twice among `controls`"), "{raised:?}");
+
+    let both = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local serial = text { \"\", y = 0, height = 12 }\n\
+         installer { page.custom { controls = { serial } }, page.instFiles {} }\n\
+         uninstaller { page.custom { controls = { serial } }, page.instFiles {} }\n",
+    );
+    assert!(
+        both.iter()
+            .any(|(code, message)| *code == Code::DuplicateBlock
+                && message.contains("both `installer` and `uninstaller`")),
+        "{both:?}"
+    );
+}
+
+/// The declaration and the construct that lists it have to agree. A control in a
+/// block would be a window with no dialog to sit in, and a section among
+/// `controls` would be an install-time thing among drawing ones.
+#[test]
+fn a_declaration_is_listed_by_the_construct_it_belongs_to() {
+    let control_in_a_block = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local serial = text { \"\", y = 0, height = 12 }\n\
+         installer { serial, page.instFiles {} }\n",
+    );
+    assert!(
+        control_in_a_block
+            .iter()
+            .any(|(code, message)| *code == Code::BadFieldValue
+                && message.contains("this lists a section or a group")),
+        "{control_in_a_block:?}"
+    );
+
+    let section_in_a_page = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local core = section(\"Core\", function() detailPrint(\"x\") end)\n\
+         installer { core, page.custom { controls = { core } }, page.instFiles {} }\n",
+    );
+    assert!(
+        section_in_a_page
+            .iter()
+            .any(|(code, message)| *code == Code::BadFieldValue
+                && message.contains("this lists a control")),
+        "{section_in_a_page:?}"
+    );
+}
+
+/// The kind knows what it holds. `items` on a label is the same error as
+/// `expanded` on a section: a field of a different thing, named on this one.
+#[test]
+fn a_control_takes_only_its_own_options() {
+    let raised = errors(&program(
+        "",
+        "label { \"Hi\", y = 0, height = 12, items = { \"a\" } },",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::UnknownField);
+    assert!(raised[0].1.contains("holds no items"), "{raised:?}");
+
+    let unknown = errors(&program(
+        "",
+        "label { \"Hi\", y = 0, height = 12, colour = \"red\" },",
+    ));
+    assert_eq!(unknown.len(), 1, "{unknown:?}");
+    assert_eq!(unknown[0].0, Code::UnknownField);
+}
+
+/// A control belongs to one half the way a section does. The `Var` carries the
+/// half in its name for the same reason the define does: one `.nsi` holds both
+/// executables, and one name declared twice is an error under `-WX`.
+#[test]
+fn each_half_names_its_own_controls() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local before = text { \"\", y = 0, height = 12 }\n\
+         local after = text { \"\", y = 0, height = 12 }\n\
+         installer {\n\
+         page.custom { controls = { before } },\n\
+         page.instFiles {},\n\
+         section(\"Core\", function() writeUninstaller(INSTDIR .. \"/un.exe\") end),\n\
+         }\n\
+         uninstaller {\n\
+         page.custom { controls = { after } },\n\
+         page.instFiles {},\n\
+         section(\"Core\", function() detailPrint(\"x\") end),\n\
+         }\n",
+    );
+
+    assert!(output.contains("Var __GENERATED_ctl_before"), "{output}");
+    assert!(output.contains("Var __GENERATED_unctl_after"), "{output}");
+}

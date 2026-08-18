@@ -22,6 +22,7 @@ use installua::diag::{Code, Diagnostics};
 const GOLDENS: &[(&str, &[Code])] = &[
     ("components", &[]),
     ("control-flow", &[]),
+    ("dialog", &[]),
     ("pages", &[]),
     ("returns", &[Code::DeepRecursion]),
     ("sections", &[]),

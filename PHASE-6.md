@@ -1780,6 +1780,69 @@ saves the allocator inserts are the only thing between a generated dialog and a 
 lines now: both halves of their syntax line are written from `page.*`, and the two
 arguments of the `custom` half are names only the compiler has.
 
+## Batch 29 — a control is a declaration, claimed by the page that lists it
+
+`PHASE-6-DIALOGS.md` step 3, and the payoff for having done sections first. A control is
+bound to a `local`, listed by a `page.custom`'s `controls`, and checked by the *same* pass
+that claims a section — the four claim rules are one set of rules over two constructs
+rather than two wordings of one idea.
+
+### What generalised, and what did not
+
+| | a section | a control |
+| --- | --- | --- |
+| listed by | `installer {}` / `uninstaller {}` | `page.custom { controls = { … } }` |
+| the claim earns | `!define SEC_core` | `Var __GENERATED_ctl_serial` |
+| listed nowhere | *"`core` is a `section` no block lists"* | *"`serial` is a `label` no page lists"* |
+| listed twice | one wording | the same one, naming `controls` |
+
+The one rule that needed a *new* check rather than new words is the kind: a control among
+a block's entries is a window with no dialog to sit in, and a section among `controls` is
+an install-time thing among drawing ones. `Site::accepts` is that check, and it is what
+made `claim` take a site at all.
+
+### Nothing is included, so the style word is a number
+
+```nsi
+Var __GENERATED_ctl_serial
+
+Function mui.custom.create
+  nsDialogs::Create 1018
+  Pop $0
+  StrCmpS $0 "error" __GENERATED_dialog_0_failed 0
+  nsDialogs::CreateControl STATIC 0x54000100 0x00000020 0 0u 100% 12u "Serial:"
+  Pop $0
+  nsDialogs::CreateControl EDIT 0x54010080 0x00000300 0 20u 100% 12u ""
+  Pop $__GENERATED_ctl_serial
+  nsDialogs::Show
+```
+
+`${NSD_CreateLabel}` is `nsDialogs.nsh` writing three constants in front of
+`nsDialogs::CreateControl`; the compiler folds the six `WS_*`/`SS_*` names behind each one
+at compile time and writes the number. A program with a dialog on it therefore has the
+same include list as one without — ruling 5, and the standing requirement about include
+order made structural rather than documented.
+
+Three decisions the ruling did not cover, made here:
+
+- **`y` and `height` are required; `x` and `width` default.** Ruling 6 rejects auto-flow,
+  and the two defaults it leaves are *constants* — the left edge, and the full width of
+  the dialog. A default `y` could only mean "under the last control", which is the coupling
+  the whole batch-22 arc removed from sections.
+- **An integer is dialog units and is emitted with the `u` that says so.** nsDialogs reads
+  a bare number as **pixels**, so the obvious emission is the one that comes apart at a
+  different DPI. A string passes through for `"100%"` and `"-13u"`, and anything that is
+  not a measurement is an error rather than the 0 nsDialogs would silently read.
+- **Thirteen kinds, not fifteen.** `bitmap` and `link` are the two that do not work as
+  declarations alone — one needs `LoadAndSetImage` and the other needs the click that opens
+  the address — so they land with the field and the event that make them real.
+
+### What landed
+
+No rows moved: the twelve `hwnd` rows are reached through control *fields*, which are step
+4. What landed is the construct they will be reached through, `tests/golden/dialog.lua`
+through tier 3, and `installua.Control` in the stubs.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.

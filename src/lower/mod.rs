@@ -15,6 +15,7 @@
 //! first is a five-second wait and the second is a five-second fix, and
 //! collapsing them is how a `todo` count stops predicting anything.
 
+pub mod control;
 mod expr;
 mod handle;
 mod insttype;
@@ -140,6 +141,8 @@ struct Claim {
     half: Half,
     /// Where it was listed, so a second claim can point at the first.
     span: Span,
+    /// What listed it, so the second claim's message names the right construct.
+    site: Site,
 }
 
 /// The define a claimed section is addressed through.
@@ -153,6 +156,66 @@ fn index_name(local: &str, half: Half) -> String {
     match half {
         Half::Installer => format!("SEC_{local}"),
         Half::Uninstaller => format!("UNSEC_{local}"),
+    }
+}
+
+/// The `Var` a claimed control's handle lives in.
+///
+/// A `Var` and not a register, because a plugin call clobbers every one of them
+/// (§15.11) and the handle has to survive from the creator into `leave` — two
+/// NSIS functions, with the whole page in between (ruling 7). The allocator
+/// never sees it, which is exactly what [`Slot::Global`] means.
+///
+/// Named from the local for the same reason a section's define is, and prefixed
+/// like a generated label because it is one more name in the `Var` namespace the
+/// author also writes in.
+fn control_var(local: &str, half: Half) -> String {
+    match half {
+        Half::Installer => format!("{}ctl_{local}", cfg::LABEL_PREFIX),
+        Half::Uninstaller => format!("{}unctl_{local}", cfg::LABEL_PREFIX),
+    }
+}
+
+/// What a bare name is being listed by, and so which declarations it may name.
+///
+/// The claim rules are one set of rules over two constructs: a block lists
+/// sections and groups, a page's `controls` lists controls, and everything after
+/// that — listed twice, listed by both halves, listed by nothing — is the same
+/// four checks in the same words (ruling 3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Site {
+    /// `installer {}` / `uninstaller {}`, or a `group`'s sections, which is the
+    /// block's list one level down.
+    Block,
+    /// `page.custom { controls = { … } }`.
+    Controls,
+}
+
+impl Site {
+    fn accepts(self, kind: DeferredKind) -> bool {
+        match self {
+            Site::Block => !kind.is_control(),
+            Site::Controls => kind.is_control(),
+        }
+    }
+
+    /// What this site lists, for the two diagnostics that have to say.
+    fn lists(self) -> &'static str {
+        match self {
+            Site::Block => "a section or a group",
+            Site::Controls => "a control",
+        }
+    }
+
+    fn how(self) -> &'static str {
+        match self {
+            Site::Block => {
+                "a bare name here lists a declaration: bind one with `local x = section { … }` (§13)"
+            }
+            Site::Controls => {
+                "a bare name here lists a declaration: bind one with `local x = text { … }` (§13)"
+            }
+        }
     }
 }
 
@@ -189,10 +252,12 @@ enum Where {
 
 impl Where {
     fn accepts(self, kind: DeferredKind) -> bool {
-        match self {
-            Where::Both => true,
-            Where::Sections => kind == DeferredKind::Section,
-            Where::Groups => kind == DeferredKind::Group,
+        match (self, kind) {
+            // A control's fields are its own and none of these are among them.
+            (_, DeferredKind::Control(_)) => false,
+            (Where::Both, _) => true,
+            (Where::Sections, kind) => kind == DeferredKind::Section,
+            (Where::Groups, kind) => kind == DeferredKind::Group,
         }
     }
 }
@@ -246,10 +311,68 @@ const HANDLE_FIELDS: &[&str] = &[
     "installTypes",
 ];
 
+/// Whether a string is a measurement nsDialogs will read: a whole number, with
+/// an optional `-` in front and an optional `u` or `%` after.
+///
+/// Checked rather than passed through, because everything nsDialogs does not
+/// understand it reads as **0 pixels** — a control that is there, is the right
+/// size, and sits in the corner. A typo in a width should not be a page that
+/// looks broken at run time.
+fn is_measurement(text: &str) -> bool {
+    let digits = text
+        .strip_prefix('-')
+        .unwrap_or(text)
+        .trim_end_matches(['u', '%']);
+    // One suffix at most, and it is the last character.
+    let suffix = text.len() - text.trim_end_matches(['u', '%']).len();
+    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) && suffix <= 1
+}
+
+/// One control, lowered: what the creator writes for it, in the order it writes
+/// it.
+///
+/// A struct rather than a list of instructions because the handle is not known
+/// until the creator runs — a claimed control's is its `Var` and an unclaimed
+/// one's is whatever register the allocator gives it — and the `items` after it
+/// address that handle.
+struct Created {
+    /// `nsDialogs::CreateControl`'s eight arguments: class, style, extended
+    /// style, x, y, width, height, text.
+    create: Vec<ir::Arg>,
+    /// The `Var` the handle is popped into, or `None` for a control the program
+    /// never names.
+    var: Option<String>,
+    /// The `ADDSTRING` message for this control's class, where it has one.
+    add_item: Option<u32>,
+    /// One `"STR:…"` per item, already in the form `SendMessage` wants.
+    items: Vec<ir::Arg>,
+    span: Span,
+}
+
 /// A `group`'s member list, in either of §15.23's two forms and without judging
 /// the call. The shape errors belong to [`Lowerer::group`], which reports them
 /// once where the group is lowered; this is the claim pass looking for the bare
 /// names inside.
+/// A `page.custom`'s `controls = { … }`, without judging the page. The shape
+/// errors belong to [`Lowerer::custom_page`]; this is the claim pass looking for
+/// the bare names inside.
+fn page_controls(value: &Expr) -> Option<&[TableField]> {
+    let Expr::Call { args, .. } = value else {
+        return None;
+    };
+    let [Expr::Table { fields, .. }] = args.as_slice() else {
+        return None;
+    };
+    let controls = fields.iter().find_map(|field| match field {
+        TableField::Named { name, value } if name.text == "controls" => Some(value),
+        _ => None,
+    })?;
+    match controls {
+        Expr::Table { fields, .. } => Some(fields),
+        _ => None,
+    }
+}
+
 fn group_members(value: &Expr) -> Option<&[TableField]> {
     let Expr::Call { args, .. } = value else {
         return None;
@@ -313,6 +436,21 @@ struct PageField {
     /// `MUI_LICENSEPAGE_CHECKBOX_TEXT_ACCEPT`, which is a name nothing defines.
     /// Without this a second page of the same type inherits the first one's.
     cleared: bool,
+}
+
+/// The one field a page has that is not a [`PageField`], because it is not a
+/// `!define` at all.
+///
+/// Two of the eight have one. `license`'s `file` is an argument of the
+/// `!insertmacro` rather than a setting read from inside it, and `custom`'s
+/// `controls` is what the compiler draws — no define exists for either, so
+/// there is nothing for the table to hold and they are named here instead.
+fn extra_field(page: &Page) -> Option<&'static str> {
+    match page.installua {
+        "license" => Some("file"),
+        "custom" => Some("controls"),
+        _ => None,
+    }
 }
 
 const fn field(installua: &'static str, define: &'static str, holds: Holds) -> PageField {
@@ -763,16 +901,30 @@ impl<'p> Lowerer<'_, 'p> {
                 continue;
             };
             let what = deferred.kind.word();
+            let (lists, write, order) = if deferred.kind.is_control() {
+                (
+                    "page",
+                    format!("write `{local},` among the `controls` of a `page.custom {{}}`"),
+                    "the list's order is the tab order; the declaration's is nothing (§15.32)",
+                )
+            } else {
+                (
+                    "block",
+                    format!(
+                        "write `{local},` among the entries of `installer {{}}` or \
+                         `uninstaller {{}}`"
+                    ),
+                    "the block's order is the install order; the declaration's is nothing (§13)",
+                )
+            };
             self.diags.push(
                 Diagnostic::error(
                     Code::MissingAttribute,
                     deferred.span,
-                    format!("`{local}` is a `{what}` no block lists"),
+                    format!("`{local}` is a `{what}` no {lists} lists"),
                 )
-                .note(format!(
-                    "write `{local},` among the entries of `installer {{}}` or `uninstaller {{}}`"
-                ))
-                .note("the block's order is the install order; the declaration's is nothing (§13)"),
+                .note(write)
+                .note(order),
             );
         }
 
@@ -796,6 +948,18 @@ impl<'p> Lowerer<'_, 'p> {
             .iter()
             .map(|global| global.name.clone())
             .collect();
+        // And one more `Var` per claimed control, because a handle outlives the
+        // function that popped it (ruling 7). Only the claimed ones: a control
+        // listed inline and bound to no `local` is addressed by nothing, so a
+        // ten-control page costs the handful of `Var`s the program names.
+        for local in &self.resolved.deferred_order {
+            let Some(deferred) = self.resolved.deferred.get(local) else {
+                continue;
+            };
+            if let (true, Some(claim)) = (deferred.kind.is_control(), self.claims.get(local)) {
+                self.module.vars.push(control_var(local, claim.half));
+            }
+        }
     }
 
     fn finish(mut self) -> (ir::Module, Inferred) {
@@ -1869,25 +2033,17 @@ impl<'p> Lowerer<'_, 'p> {
 
     /// Every field a page was given, checked against the ones it has.
     fn page_fields_known(&mut self, named: &[(&Name, &Expr)], page: &Page) {
+        let mut fields: Vec<&str> = page.fields().map(|field| field.installua).collect();
+        fields.extend(extra_field(page));
         for (name, _) in named {
-            let known = name.text == "file" && page.installua == "license"
-                || page.fields().any(|field| field.installua == name.text);
-            if !known {
+            if !fields.contains(&name.text.as_str()) {
                 self.diags.push(
                     Diagnostic::error(
                         Code::UnknownField,
                         name.span,
                         format!("`{}` is not a `{}` page field", name.text, page.installua),
                     )
-                    .note(format!(
-                        "the fields are {}",
-                        list(
-                            &page
-                                .fields()
-                                .map(|field| field.installua)
-                                .collect::<Vec<_>>()
-                        )
-                    )),
+                    .note(format!("the fields are {}", list(&fields))),
                 );
             }
         }
@@ -1962,6 +2118,14 @@ impl<'p> Lowerer<'_, 'p> {
             None
         };
 
+        // Built before the body is, because a control is checked with the
+        // `Lowerer` in hand — constants, diagnostics, the claim map — and what
+        // comes back is instructions the creator threads together.
+        let controls = match written("controls") {
+            Some(value) => self.controls(value),
+            None => Vec::new(),
+        };
+
         let pre = written("pre").and_then(|value| self.callback_body(value, "pre"));
         let show = written("show").and_then(|value| self.callback_body(value, "show"));
         let leave =
@@ -2014,6 +2178,37 @@ impl<'p> Lowerer<'_, 'p> {
                 created,
             );
 
+            // The controls, in the order the list wrote them — which is the
+            // order Windows gives them the tab key in, and the one thing about
+            // a control that its declaration does not decide (ruling 3).
+            for control in &controls {
+                let handle = match &control.var {
+                    Some(var) => Slot::Global(var.clone()),
+                    // Popped and dropped: `CreateControl` pushes a handle
+                    // whether or not anything wants it, and leaving it on the
+                    // stack is how a page ends up reading its own control as a
+                    // string later on.
+                    None => lowerer.body.vreg(control.span),
+                };
+                lowerer.generated_plugin_call(
+                    "nsDialogs::CreateControl",
+                    control.create.clone(),
+                    vec![handle.clone()],
+                    control.span,
+                );
+                for item in &control.items {
+                    lowerer.emit(ir::Instruction::new(
+                        "SendMessage",
+                        vec![
+                            ir::Arg::slot(handle.clone()),
+                            ir::Arg::raw(format!("0x{:04X}", control.add_item.unwrap_or(0))),
+                            ir::Arg::int(0),
+                            item.clone(),
+                        ],
+                    ));
+                }
+            }
+
             if let Some((block, _)) = show {
                 lowerer.block(block);
             }
@@ -2061,6 +2256,281 @@ impl<'p> Lowerer<'_, 'p> {
         // `MUI_HEADER_TEXT` is MUI2's, and a custom page beside seven inserted
         // ones is the whole point: the header is on either way.
         self.mui = true;
+    }
+
+    /// `controls = { label { … }, serial, agree }` — the page's list, in the
+    /// order it draws and tabs through.
+    ///
+    /// Two kinds of entry, and the difference is only whether the program says
+    /// the control's name again later: a bare name is a declaration this page is
+    /// claiming, and anything else is a declaration written where it is used.
+    /// Neither is a different control (ruling 3).
+    fn controls(&mut self, value: &Expr) -> Vec<Created> {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                "controls",
+                "a list of controls",
+                "a page draws what this list holds, in the order it holds it",
+            );
+            return Vec::new();
+        };
+
+        let mut created = Vec::new();
+        for field in fields {
+            let value = match field {
+                TableField::Positional { value } => value,
+                TableField::Named { name, value } => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::BadFieldValue,
+                            name.span,
+                            format!("`{}` is a key in a list of controls", name.text),
+                        )
+                        .note(
+                            "every entry is a control or the name of one; what a control is called \
+                             is the `local` it was bound to",
+                        )
+                        .note(format!(
+                            "the settings go inside the control: `{} {{ … }}`",
+                            name.text
+                        )),
+                    );
+                    value
+                }
+            };
+
+            // A bare name: this page is listing a declaration, exactly as a
+            // block lists a section, and the claim rules are the same four.
+            if let Expr::Name(name) = value {
+                let Some((declared, kind, var)) = self.listed(name) else {
+                    continue;
+                };
+                let DeferredKind::Control(control) = kind else {
+                    continue;
+                };
+                created.extend(self.control(declared, control, Some(var)));
+                continue;
+            }
+
+            let Some(callee) = value.callee_name() else {
+                self.todo(value.span(), "this control");
+                continue;
+            };
+            let Some(control) = control::control(callee) else {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        value.span(),
+                        format!("`{callee}` is not a control"),
+                    )
+                    .note(format!("the controls are {}", list(&control::names()))),
+                );
+                continue;
+            };
+            created.extend(self.control(value, control, None));
+        }
+        created
+    }
+
+    /// One control declaration, checked and turned into the plugin call that
+    /// creates it.
+    ///
+    /// §15.23's shape with nothing positional but the text: `nsDialogs` takes
+    /// x, y, width and height as four separate arguments and a table's array
+    /// part is a sequence, so writing them unnamed would be four numbers in an
+    /// order a reader has to know. The one thing that *is* the control's
+    /// parameter — the text it is drawn with — stays where §15.23 puts it.
+    fn control(
+        &mut self,
+        value: &Expr,
+        control: &'static control::Control,
+        var: Option<String>,
+    ) -> Option<Created> {
+        let what = control.installua;
+        let Expr::Call { args, .. } = value else {
+            self.todo(value.span(), "this control");
+            return None;
+        };
+        let [Expr::Table { fields, span }] = args.as_slice() else {
+            self.todo(value.span(), &format!("this `{what}` form"));
+            return None;
+        };
+        let span = *span;
+
+        let mut text = None;
+        let mut geometry: [Option<String>; 4] = [None, None, None, None];
+        let mut items = None;
+        for field in fields {
+            match field {
+                TableField::Positional { value } if text.is_none() && control.text.is_some() => {
+                    text = self.constant_arg(value, control.text.unwrap_or(what));
+                }
+                TableField::Positional { value } => {
+                    let note = match control.text {
+                        Some(is) => {
+                            format!("the first entry is {is}, and everything else is named")
+                        }
+                        None => format!("a `{what}` is drawn with no text at all"),
+                    };
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::BadFieldValue,
+                            value.span(),
+                            format!("a `{what}` takes no second unnamed entry"),
+                        )
+                        .note(note),
+                    );
+                }
+                TableField::Named { name, value } => {
+                    let axis = ["x", "y", "width", "height"]
+                        .iter()
+                        .position(|field| *field == name.text);
+                    if let Some(axis) = axis {
+                        geometry[axis] = self.measurement(value, &name.text);
+                        continue;
+                    }
+                    if name.text == "items" {
+                        if !control.takes_items() {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    Code::UnknownField,
+                                    name.span,
+                                    format!("a `{what}` holds no items"),
+                                )
+                                .note(
+                                    "`items` is a `dropList`'s and a `listBox`'s: they are the \
+                                       two controls that are a list",
+                                ),
+                            );
+                            continue;
+                        }
+                        items = Some(self.items(value));
+                        continue;
+                    }
+                    let mut options = vec!["x", "y", "width", "height"];
+                    if control.takes_items() {
+                        options.push("items");
+                    }
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{}` is not a `{what}` option", name.text),
+                        )
+                        .note(format!("the options are {}", list(&options))),
+                    );
+                }
+            }
+        }
+
+        // `y` and `height` are required and `x` and `width` are not, and the
+        // asymmetry is ruling 6 rather than an oversight: the two defaults here
+        // are constants — the left edge, and the full width — while a default
+        // `y` could only mean *under the last control*, which is the auto-flow
+        // this surface does not have. A control that says where it sits says so
+        // itself, and moving one never moves another.
+        for (axis, field) in [(1, "y"), (3, "height")] {
+            if geometry[axis].is_none() {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::MissingAttribute,
+                        span,
+                        format!("this `{what}` has no `{field}`"),
+                    )
+                    .note(
+                        "there is no auto-flow: a control that does not say where it sits would \
+                         have to sit under the one written above it, and the order of the list is \
+                         the only thing that would then decide its position",
+                    ),
+                );
+                return None;
+            }
+        }
+        let [x, y, width, height] = geometry;
+
+        let mut create = vec![
+            ir::Arg::raw(control.class),
+            ir::Arg::raw(format!("0x{:08X}", control.style)),
+            ir::Arg::raw(format!("0x{:08X}", control.exstyle)),
+            ir::Arg::raw(x.unwrap_or_else(|| "0".to_string())),
+            ir::Arg::raw(y?),
+            ir::Arg::raw(width.unwrap_or_else(|| "100%".to_string())),
+            ir::Arg::raw(height?),
+        ];
+        // The text is the last argument and NSIS has no way to omit one, so a
+        // control with nothing written on it — and one that was given nothing —
+        // passes the empty string the plugin reads as "no text".
+        create.push(text.unwrap_or_else(|| ir::Arg::str("")));
+
+        Some(Created {
+            create,
+            var,
+            add_item: control.add_item,
+            items: items.unwrap_or_default(),
+            span,
+        })
+    }
+
+    /// `items = { "Alpha", "Beta" }`, as the arguments of the `ADDSTRING`s that
+    /// fill the list.
+    ///
+    /// `STR:` is `SendMessage`'s spelling for "this argument is a string rather
+    /// than a number", and it is the compiler's to write: it is a fact about
+    /// NSIS's instruction, not about the list.
+    fn items(&mut self, value: &Expr) -> Vec<ir::Arg> {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                "items",
+                "a list of strings",
+                "each one becomes a row of the list, in the order written",
+            );
+            return Vec::new();
+        };
+        let mut items = Vec::new();
+        for field in fields {
+            let TableField::Positional { value } = field else {
+                let TableField::Named { name, .. } = field else {
+                    continue;
+                };
+                self.bad_value(
+                    name.span,
+                    "items",
+                    "a list of strings",
+                    "a row of a list has no name: it is addressed by what it says",
+                );
+                continue;
+            };
+            if let Some(item) = self.constant_string(value, "an item") {
+                items.push(ir::Arg::str(format!("STR:{item}")));
+            }
+        }
+        items
+    }
+
+    /// One of `x`, `y`, `width`, `height`, in the form nsDialogs reads.
+    ///
+    /// An integer is dialog units, written with the `u` that says so: nsDialogs
+    /// reads a bare number as **pixels**, and a page laid out in pixels is one
+    /// that comes apart at a different font size or DPI. A string passes
+    /// through, which is how `"100%"` and `"-13u"` — a width relative to the
+    /// dialog, and an edge measured from the far side — are said at all.
+    fn measurement(&mut self, value: &Expr, field: &str) -> Option<String> {
+        match self.constant(value) {
+            Some(ConstValue::Int(units)) => Some(format!("{units}u")),
+            Some(ConstValue::Str(text)) if is_measurement(&text) => Some(text),
+            _ => {
+                self.bad_value(
+                    value.span(),
+                    field,
+                    "a whole number of dialog units",
+                    "a string is passed through for the two forms a number cannot say: `\"100%\"` \
+                     is a share of the dialog and `\"-13u\"` is measured from its far edge",
+                );
+                None
+            }
+        }
     }
 
     /// One page setting, as the `!define`s it becomes and the `!undef`s that
@@ -2309,6 +2779,10 @@ impl<'p> Lowerer<'_, 'p> {
                 }
             }
             DeferredKind::Group => self.group(value, half, Some(index)),
+            // Unreachable: a control's claim comes from a `controls` list, and
+            // a bare control name among a block's entries never earns one
+            // ([`Site::accepts`]), so [`Self::listed`] has already said `None`.
+            DeferredKind::Control(_) => {}
         }
     }
 
@@ -2322,11 +2796,14 @@ impl<'p> Lowerer<'_, 'p> {
             return None;
         }
         let deferred = self.resolved.deferred.get(&name.text)?;
-        Some((
-            deferred.value,
-            deferred.kind,
-            index_name(&name.text, claim.half),
-        ))
+        // The name the claim earned: a `!define` for the index of a section, a
+        // `Var` for the handle of a control. Both are derived from the *local*,
+        // and both are what every use of the handle then reads.
+        let earned = match deferred.kind.is_control() {
+            true => control_var(&name.text, claim.half),
+            false => index_name(&name.text, claim.half),
+        };
+        Some((deferred.value, deferred.kind, earned))
     }
 
     /// Every bare name among the two blocks' entries, recorded as a claim.
@@ -2356,7 +2833,7 @@ impl<'p> Lowerer<'_, 'p> {
                     continue;
                 };
                 if let Expr::Name(name) = value {
-                    self.claim(name, half);
+                    self.claim(name, half, Site::Block);
                     continue;
                 }
                 // A group lists declarations too, and its members are an
@@ -2364,13 +2841,21 @@ impl<'p> Lowerer<'_, 'p> {
                 if value.callee_name() == Some("group") {
                     self.claim_members(value, half);
                 }
+                // And so does a custom page, one construct further in: its
+                // `controls` are claimed by the page, which is claimed by the
+                // block, which is what carries the half down to them.
+                if let Some(("page", which)) = value.callee_field()
+                    && which.text == "custom"
+                {
+                    self.claim_controls(value, half);
+                }
             }
         }
     }
 
     /// Records that this block lists this declaration. Claim rules 2 and 3, and
     /// the collision between the define this earns and the author's `<const>`s.
-    fn claim(&mut self, name: &Name, half: Half) {
+    fn claim(&mut self, name: &Name, half: Half, site: Site) {
         let Some(deferred) = self
             .resolved
             .deferred
@@ -2381,15 +2866,41 @@ impl<'p> Lowerer<'_, 'p> {
                 Diagnostic::error(
                     Code::UnknownField,
                     name.span,
-                    format!("`{}` is not a section or a group", name.text),
+                    format!("`{}` is not {}", name.text, site.lists()),
                 )
-                .note(
-                    "a bare name here lists a declaration: bind one with \
-                     `local x = section { … }` (§13)",
-                ),
+                .note(site.how()),
             );
             return;
         };
+
+        // The right kind of declaration in the wrong construct. A control in a
+        // block would be a window with no dialog to sit in, and a section in a
+        // `controls` list would be an install-time thing among drawing ones.
+        if !site.accepts(deferred.0) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    name.span,
+                    format!(
+                        "`{}` is a `{}`, and this lists {}",
+                        name.text,
+                        deferred.0.word(),
+                        site.lists()
+                    ),
+                )
+                .note(match site {
+                    Site::Block => {
+                        "a control is listed by the `controls` of a `page.custom {}`, because a \
+                         window needs the dialog it sits in (§15.32)"
+                    }
+                    Site::Controls => {
+                        "a section is listed by `installer {}` or `uninstaller {}`: it is what \
+                         gets installed, not what is drawn (§13)"
+                    }
+                }),
+            );
+            return;
+        }
 
         // One declaration, one place in the tree. Listing it twice in a block
         // would emit its body twice under two indices, and listing it in both
@@ -2397,38 +2908,53 @@ impl<'p> Lowerer<'_, 'p> {
         // a name, and a handle that means neither.
         if let Some(previous) = self.claims.get(&name.text) {
             let previous_line = previous.span.start_line;
-            let message = if previous.half == half {
-                format!("`{}` is listed twice in `{half} {{}}`", name.text)
-            } else {
+            let message = if previous.half != half {
                 format!(
                     "`{}` is listed in both `{}` and `{half}`",
                     name.text, previous.half
                 )
+            } else if site == Site::Controls && previous.site == Site::Controls {
+                format!("`{}` is listed twice among `controls`", name.text)
+            } else {
+                format!("`{}` is listed twice in `{half} {{}}`", name.text)
             };
             self.diags.push(
                 Diagnostic::error(Code::DuplicateBlock, name.span, message)
                     .note(format!("the first one is at line {previous_line}"))
                     .note(
-                        "a declaration is one section, in one place in the tree: list it once and \
-                         address it by its name from either half's code",
+                        "a declaration is one thing, in one place: list it once and address it by \
+                         its name from either half's code",
                     ),
             );
             return;
         }
 
-        // The define is the compiler's, but it lands in a namespace shared with
-        // the author's `<const>`s, and NSIS reads a second `!define` of one name
-        // as a warning it then ships (§12).
-        let index = index_name(&name.text, half);
-        if self.resolved.consts.contains_key(&index) {
+        // The name a claim earns is the compiler's, but it lands in a namespace
+        // the author writes in too — a section's `!define` beside the
+        // `<const>`s, a control's `Var` beside the globals — and NSIS holds one
+        // name once: a second `!define` is a warning it then ships (§12), and a
+        // second `Var` is an error.
+        let (earned, kind_of_name) = match deferred.0.is_control() {
+            true => (control_var(&name.text, half), "global"),
+            false => (index_name(&name.text, half), "`<const>`"),
+        };
+        let taken = match deferred.0.is_control() {
+            true => self
+                .resolved
+                .globals
+                .iter()
+                .any(|global| global.name == earned),
+            false => self.resolved.consts.contains_key(&earned),
+        };
+        if taken {
             self.diags.push(
                 Diagnostic::error(
                     Code::DuplicateBlock,
                     name.span,
-                    format!("`{index}` is already a `<const>`"),
+                    format!("`{earned}` is already a {kind_of_name}"),
                 )
                 .note(format!(
-                    "listing `{}` defines `{index}` for its index, and NSIS holds one name once",
+                    "listing `{}` takes `{earned}` for its handle, and NSIS holds one name once",
                     name.text
                 )),
             );
@@ -2440,6 +2966,7 @@ impl<'p> Lowerer<'_, 'p> {
             Claim {
                 half,
                 span: name.span,
+                site,
             },
         );
 
@@ -2460,7 +2987,24 @@ impl<'p> Lowerer<'_, 'p> {
                 value: Expr::Name(name),
             } = member
             {
-                self.claim(name, half);
+                self.claim(name, half, Site::Block);
+            }
+        }
+    }
+
+    /// The bare names among a `page.custom`'s `controls`, claimed for the half
+    /// whose block holds the page.
+    ///
+    /// Syntactic like the rest of the pass, and for the same reason: the shape
+    /// errors belong to [`Self::custom_page`], which reports them once where the
+    /// page is lowered.
+    fn claim_controls(&mut self, page: &Expr, half: Half) {
+        for control in page_controls(page).unwrap_or_default() {
+            if let TableField::Positional {
+                value: Expr::Name(name),
+            } = control
+            {
+                self.claim(name, half, Site::Controls);
             }
         }
     }

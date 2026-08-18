@@ -39,6 +39,15 @@ impl BodyLowerer<'_, '_> {
     /// on something that is not a handle.
     pub(super) fn handle(&mut self, base: &str, span: Span) -> Option<Handle> {
         let kind = self.resolved.deferred.get(base)?.kind;
+        // A control is a handle on the same terms — a `local`, claimed by the
+        // construct that lists it — but its fields are `SendMessage`s rather
+        // than `SectionGetFlags`, and they are the next batch's. Saying so is
+        // the honest sentence; "not a field of a section" would be the wrong
+        // one about the right name.
+        if kind.is_control() {
+            self.todo(span, &format!("a field on `{base}`"));
+            return None;
+        }
         // Unclaimed. Claim rule 1 has already said so at the declaration, and
         // saying it again at every use would bury it.
         let claim = self.claims.get(base)?;
@@ -96,8 +105,10 @@ impl BodyLowerer<'_, '_> {
         };
         if !on.accepts(handle.kind) {
             let (is, isnt) = match handle.kind {
-                DeferredKind::Section => ("a `section`", "a `group`"),
                 DeferredKind::Group => ("a `group`", "a `section`"),
+                // A section, or a control that never gets here: `Self::handle`
+                // turns a control back at the door.
+                _ => ("a `section`", "a `group`"),
             };
             self.diags.push(
                 Diagnostic::error(

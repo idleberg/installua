@@ -23,6 +23,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::ast::*;
 use crate::builtins;
 use crate::diag::{Code, Diagnostic, Diagnostics, Span};
+use crate::lower::control::{self, Control};
 use crate::types::Ty;
 
 /// A compile-time value. These never reach a register: `<const>` is build-time
@@ -87,7 +88,8 @@ impl Namespace {
     }
 }
 
-/// What `local core = section { … }` and `local tools = group { … }` bind.
+/// What `local core = section { … }`, `local tools = group { … }` and
+/// `local serial = text { … }` bind.
 ///
 /// Not a value either, for the same reason a namespace is not: there is nothing
 /// at run time for `core` to be. NSIS spells a section as an *index*, and the
@@ -95,9 +97,11 @@ impl Namespace {
 /// binding, and the reason the set of sections is never enumerated by the
 /// compiler (`PHASE-6-SECTIONS.md` ruling 1).
 ///
-/// The call is held rather than lowered, because lowering it needs the half it
-/// belongs to and the install types the block declared, and neither is in scope
-/// above the block (ruling 2).
+/// The call is held rather than lowered, because lowering it needs the construct
+/// that lists it: a section's half and its block's install types, a control's
+/// dialog. Neither is in scope where the `local` is written (ruling 2), and a
+/// control's is stronger still — `nsDialogs::CreateControl` only means anything
+/// between a `Create` and a `Show`.
 #[derive(Clone, Debug)]
 pub struct Deferred<'a> {
     pub kind: DeferredKind,
@@ -109,6 +113,10 @@ pub struct Deferred<'a> {
 pub enum DeferredKind {
     Section,
     Group,
+    /// One of the kinds in [`crate::lower::control::CONTROLS`], carried rather
+    /// than looked up again: the name is what decided this is a declaration at
+    /// all, so the row it matched is already in hand.
+    Control(&'static Control),
 }
 
 impl DeferredKind {
@@ -116,7 +124,14 @@ impl DeferredKind {
         match self {
             DeferredKind::Section => "section",
             DeferredKind::Group => "group",
+            DeferredKind::Control(control) => control.installua,
         }
+    }
+
+    /// Whether this is a control, which is the question every claim rule asks:
+    /// a control is listed by a page and the other two by a block.
+    pub fn is_control(self) -> bool {
+        matches!(self, DeferredKind::Control(_))
     }
 }
 
@@ -368,16 +383,18 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
     }
 }
 
-/// `section { … }` / `group { … }`, as the kind of declaration it defers.
+/// `section { … }`, `group { … }` or a control, as the kind of declaration it
+/// defers.
 ///
 /// The shape of the call is not checked here: that is `fn section`'s work, and
 /// it happens where the call is lowered so that one wrong `section` reports once
 /// rather than once per pass.
 fn deferred_kind(value: &Expr) -> Option<DeferredKind> {
-    match value.callee_name()? {
+    let callee = value.callee_name()?;
+    match callee {
         "section" => Some(DeferredKind::Section),
         "group" => Some(DeferredKind::Group),
-        _ => None,
+        _ => control::control(callee).map(DeferredKind::Control),
     }
 }
 

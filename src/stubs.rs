@@ -24,6 +24,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use crate::builtins;
+use crate::lower::control;
 use crate::table::{self, Class, Param};
 use crate::types::Ty;
 
@@ -43,6 +44,7 @@ pub fn meta() -> String {
     out.push_str(&aliases());
     out.push_str(&blocks());
     out.push_str(&declarations());
+    out.push_str(&controls());
     out.push_str(&instructions());
     out.push_str(&constants());
     out
@@ -262,6 +264,7 @@ const PAGES: &str = "\
 \n\
 ---@class (exact) installua.Page.Custom : installua.Page\n\
 ---@field [1]? string\n\
+---@field controls? table\n\
 \n\
 ---@class installua.Pages\n\
 ---@field welcome fun(options?: installua.Page.Full)\n\
@@ -445,6 +448,42 @@ fn declarations() -> String {
 /// `Out` parameters do not appear in the parameter list: their count **is** the
 /// number of Lua return values (§15.23), so a stub that listed them would be
 /// teaching the NSIS calling convention this language exists to hide.
+/// The control declarations, from the same table that lowers them (§15.32).
+///
+/// Generated rather than written out, so that a kind added to the table is a
+/// kind the editor completes: thirteen near-identical stubs are exactly the
+/// thing a list should produce.
+fn controls() -> String {
+    let mut out = String::from(
+        "-- The controls a `page.custom` draws (§15.32), in §15.23's table form: the\n\
+         -- array part is the text the control is drawn with and the hash part is\n\
+         -- where it sits. A control is listed by a page's `controls`, and the\n\
+         -- `local` it is bound to decides nothing about its position.\n\n\
+         ---@class (exact) installua.ControlOptions\n\
+         ---@field [1]? string The text it is drawn with, where it has one.\n\
+         ---@field x? integer|string From the left edge; defaults to 0.\n\
+         ---@field y? integer|string From the top. Required: there is no auto-flow.\n\
+         ---@field width? integer|string Defaults to the width of the dialog.\n\
+         ---@field height? integer|string Required, for the same reason as `y`.\n\
+         ---@field items? string[] The rows of a `dropList` or a `listBox`.\n\
+         local ControlOptions = {}\n\n\
+         -- What a bound control is at install time. The window handle NSIS reads\n\
+         -- is the compiler's: it appears in no Installua source.\n\
+         ---@class (exact) installua.Control\n\
+         local Control = {}\n\n",
+    );
+    for control in control::CONTROLS {
+        let _ = writeln!(
+            out,
+            "---@param options installua.ControlOptions\n\
+             ---@return installua.Control\n\
+             function {}(options) end\n",
+            control.installua
+        );
+    }
+    out
+}
+
 fn instructions() -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\

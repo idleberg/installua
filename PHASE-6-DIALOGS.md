@@ -94,7 +94,7 @@ attributes { name = "Example", outFile = "setup.exe" }
 
 -- A control is declared like a section and listed like one. The `local` decides
 -- nothing about where it sits; `controls` does.
-local serial  = text     { y = 20, height = 12, default = "" }
+local serial  = text     { "", y = 20, height = 12 }
 local agree   = checkbox { "I have read the terms", y = 40, height = 12 }
 local proceed = button   { "Check", x = 0, y = 60, width = 60, height = 14 }
 
@@ -252,17 +252,44 @@ one:
    - **`body()` split into `body_with(span, half, build)`**, since a generated body is
      compiler instructions with user blocks between them and there is no single `Block` to
      hand the old signature.
-3. **Control declarations, deferred and claimed.** The pass from batch 22–26's step 3,
-   generalised from *section claimed by block* to *declaration claimed by construct*. The
-   four claim rules and their diagnostics are shared text, not a second wording.
+3. **Control declarations, deferred and claimed.** *(done)* The pass from batch 22–26's
+   step 3, generalised from *section claimed by block* to *declaration claimed by
+   construct*: `DeferredKind::Control` carries the row it matched, `Site` says what a bare
+   name is being listed by, and the four claim rules are the same four in the same words —
+   only the construct they name changes. `page.custom` gained `controls`, and the creator
+   writes one `nsDialogs::CreateControl` per entry, with the style words folded to numbers
+   so that nothing is `!include`d (ruling 5).
+
+   Four things the rulings did not say, decided here:
+
+   - **`Site::accepts` is a new check rather than new wording.** The other three rules
+     generalised as text; this one is the question the section plan never had to ask,
+     because a section had only one kind of place to be listed.
+   - **`y` and `height` are required and `x` and `width` default to constants** — the left
+     edge and the full width. Ruling 6 rejects auto-flow, and the only default a `y` could
+     have is "under the last control", which is the coupling sections just lost.
+   - **An integer is dialog units, emitted with the `u` that says so**, because nsDialogs
+     reads a bare number as pixels. A string passes through for `"100%"` and `"-13u"`, and
+     anything that is not a measurement is an error rather than the 0 nsDialogs reads it
+     as.
+   - **Thirteen kinds, not fifteen.** `bitmap` and `link` need a field and an event to
+     mean anything, so they land in steps 4 and 5 rather than as controls that draw
+     nothing. `default = "…"` from the surface sketch above is not a thing: the array part
+     is the text, per §15.23 and the kind table.
+
+   One thing is deliberately still wrong until step 4: a control handle read anywhere at
+   all is `NotYetImplemented`, which shadows claim rule 4's cross-half message. The rule is
+   checked for sections and its control half returns with the fields.
 4. **Control fields.** `lower/handle.rs` grows the control side beside the section side:
    the read-modify-write shape is gone (a control field is one `SendMessage` each), and
    the write-only pair gets its own diagnostic.
 5. **Events.** `onClick` and `onChange` as declaration options, lowering to
    `GetFunctionAddress` + `nsDialogs::OnClick`, with the callback emitted as an ordinary
    generated function.
-6. **Table rows, stubs, golden, docs.** Twelve rows move, `installua.Control` joins
-   `installua.Section` in `stubs.rs`, `tests/golden/dialog.lua` goes through tier 3, and
+6. **Table rows, stubs, golden, docs.** Twelve rows move; `installua.Control` and
+   `tests/golden/dialog.lua` landed early, in step 3, because a construct with no golden
+   is a construct nothing assembles. What is left here is the rows, the fields on
+   `installua.Control`, and
    §15.7 gains an *"Amended in Phase 6"* block saying the eighth page is not MUI2's — plus
    a new §15.32 for the control model, since it is a construct rather than an amendment.
 
@@ -278,7 +305,8 @@ one:
 
 Steps 0 and 1 are five of those: `todo` 35 → **30**, `exposed` 96 → **100**,
 `attribute` 63 → **64**. Step 2 is the two `language` rows: `todo` 30 → **28**,
-`language` 12 → **14**.
+`language` 12 → **14**. Step 3 moves none: the twelve remaining rows are reached through
+control *fields*, and what it landed is the construct they hang off.
 
 That leaves one grouped reason in the backlog — §15.26's five locale-table rows — and
 sixteen one-offs.
