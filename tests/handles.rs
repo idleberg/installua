@@ -126,6 +126,82 @@ fn install_types_are_written_as_a_bit_field() {
     );
 }
 
+/// The read is the same field called rather than assigned to: NSIS hands back a
+/// bit field, this language has no list to decode it into, and the question a
+/// script asks at run time is about one type. The name is compile-time on both
+/// sides, so the shift is the position the block declared.
+#[test]
+fn an_install_type_is_read_back_one_name_at_a_time() {
+    let source = "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local core = section(\"Core\", function() end)\n\
+         installer {\n\
+           installTypes = { \"Full\", \"Minimal\" },\n\
+           core,\n\
+           onInit(function()\n\
+             local first = core.installTypes(\"Full\")\n\
+             local second = core.installTypes(\"Minimal\")\n\
+             detailPrint(first .. second)\n\
+           end),\n\
+         }\n";
+    let output = build(source);
+    // Bit 0 needs no shift, and bit 1 does. Both are masked down to `0`/`1`,
+    // because a `bool` here is those two numbers and nothing else.
+    assert!(
+        output.contains("SectionGetInstTypes ${SEC_core} $0\n  IntOp $0 $0 & 1\n"),
+        "{output}"
+    );
+    assert!(
+        output.contains("IntOp $1 $1 >>> 1\n  IntOp $1 $1 & 1\n"),
+        "{output}"
+    );
+}
+
+/// The field is a list going in and a question coming out, and reading it bare
+/// is neither. Said rather than lowered, because the bit field NSIS would hand
+/// over is a number the surface never promised.
+#[test]
+fn the_install_types_are_not_a_value() {
+    let raised = errors(&addressing("local which = core.installTypes"));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::TypeConflict);
+    assert!(raised[0].1.contains("not a value to read"), "{raised:?}");
+}
+
+/// A name the block never declared is the same error in the read as in the
+/// write: one list of positions, checked in one place (§13).
+#[test]
+fn reading_an_undeclared_install_type_is_an_error() {
+    let raised = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local core = section(\"Core\", function() end)\n\
+         installer {\n\
+           installTypes = { \"Full\" },\n\
+           core,\n\
+           onInit(function()\n\
+             if core.installTypes(\"Typical\") then detailPrint(\"yes\") end\n\
+           end),\n\
+         }\n",
+    );
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::UnknownField);
+    assert!(
+        raised[0].1.contains("`Typical` is not an install type"),
+        "{raised:?}"
+    );
+}
+
+/// A group holds sections and each of those answers for itself, so the read is
+/// turned back at the same door the write is.
+#[test]
+fn a_group_is_in_no_install_type() {
+    let raised = errors(&addressing(
+        "if tools.installTypes(\"Full\") then detailPrint(\"yes\") end",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::UnknownField);
+    assert!(raised[0].1.contains("is a `section`'s field"), "{raised:?}");
+}
+
 /// Claim rule 4, and the only one of the four about a *use*. One `.nsi` holds
 /// both halves, so `${SEC_core}` in `un.onInit` compiles and addresses a section
 /// the uninstaller does not contain — which is why the compiler has to say it.

@@ -266,6 +266,11 @@ installer {
 	section("SectionSetInstTypes", function()
 		handle.installTypes = { "Minimal" }
 	end),
+	section("SectionGetInstTypes", function()
+		if handle.installTypes("Full") then
+			detailPrint("the addressed section is in Full")
+		end
+	end),
 	section("SectionGetText", function()
 		local label = handle.text
 		detailPrint(label)

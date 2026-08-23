@@ -585,6 +585,23 @@ impl BodyLowerer<'_, '_> {
             _ => {}
         }
 
+        // `docs.installTypes("Full")` — the read half of a section's install
+        // types, and the one field in the surface that is called rather than
+        // read. `SectionGetInstTypes` gives a bit field, this language has no
+        // list to decode it into, and the question a script asks is membership:
+        // so the type's name is the argument and the answer is a `bool` (§13).
+        if let Expr::Call { callee, .. } = call
+            && let Expr::Field {
+                base, name: field, ..
+            } = callee.as_ref()
+            && field.text == "installTypes"
+            && base
+                .name()
+                .is_some_and(|base| self.resolved.deferred.contains_key(base))
+        {
+            return self.inst_type_member(base, field, args, dest, span);
+        }
+
         // `menu.write(function() … end)` — the shortcut-writing region, which is
         // a method on a start menu page and not a call to anything.
         if let Some((base, method)) = name.split_once('.')

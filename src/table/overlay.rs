@@ -1410,9 +1410,16 @@ pub const ROWS: &[Row] = &[
         &[bound(Ty::Handle), bound(Ty::nonneg())],
         "handle.installTypes = { \"Minimal\" }",
     ),
-    todo(
+    // The read is the same field called rather than assigned to, because the
+    // bit field NSIS hands back has no list value here to become — and a script
+    // asking about install types at run time is asking about one of them. The
+    // name is the argument, the answer is a `bool`, and the position is the
+    // compiler's on both sides (§13).
+    exposed(
         "SectionGetInstTypes",
-        "reads back the bit field its write takes as a list of names, and there is no list value in this language to answer with (§13)",
+        "handle.installTypes",
+        &[bound(Ty::Handle), bound(Ty::Bool)],
+        "if handle.installTypes(\"Full\") then\n\tdetailPrint(\"the addressed section is in Full\")\nend",
     ),
     exposed(
         "SectionGetText",

@@ -357,6 +357,14 @@ Section "SectionSetInstTypes"
   SectionSetInstTypes ${SEC_handle} 2
 SectionEnd
 
+Section "SectionGetInstTypes"
+  SectionGetInstTypes ${SEC_handle} $0
+  IntOp $0 $0 & 1
+  StrCmpS $0 1 0 __GENERATED_endif_0
+  DetailPrint "the addressed section is in Full"
+__GENERATED_endif_0:
+SectionEnd
+
 Section "SectionGetText"
   SectionGetText ${SEC_handle} $0
   DetailPrint $0

@@ -2942,6 +2942,46 @@ meaning for a row that cannot live in a section. `Place::Anywhere` is every othe
 
 Coverage: `todo` 5 → 4, `exposed` 102 → 103. 299 tests.
 
+## Batch 51 — the read did not have to answer with the whole list
+
+`SectionGetInstTypes` was the last survivor of the *addresses a section by index* family, and
+its reason had outlived its premise: *"reads back the bit field its write takes as a list of
+names, and there is no list value in this language to answer with"*. The second clause is
+still true. The first is an assumption — that a read has to hand back what the write took.
+
+```lua
+installer {
+	installTypes = { "Full", "Minimal" },
+	core,
+	onInit(function()
+		if core.installTypes("Full") then       -- SectionGetInstTypes ${SEC_core} $0
+			detailPrint("core ships with Full")  -- IntOp $0 $0 & 1
+		end
+	end),
+}
+```
+
+**The question a script asks at run time is membership, and membership is one bit.** So the
+read is the same field *called* rather than assigned to: the type's name is the argument
+because the answer is one bit and the bit is which name. `core.installTypes` read bare is an
+error that says so. The write stays what it was — a list, resolved to a mask at compile time —
+and the position is the compiler's on both sides, so inserting a type at the front of the
+block's list moves the read along with every `SectionSetInstTypes` and `SetCurInstType` (§13).
+
+**No new syntax.** `docs.installTypes("Full")` is an `Expr::Call` with a dotted callee, which
+is the shape `menu.write(…)` and `instTypes.getText(…)` already use; the alternative that read
+best — `docs.installTypes["Full"]` — would have added an index expression to a language that
+has none, for one row. The lowering shares the flag read's arithmetic exactly: shift to bit 0
+when the position is not 0, then mask, because a `bool` here is `0` or `1` and nothing else
+(§15.20). The group check is the field table's, so a `group` is turned back in the same words
+its `size` is.
+
+**Sixth failure mode for a stale reason, and the first that is a false premise rather than a
+false fact.** Every clause of this reason was true. What was wrong was the unstated shape it
+assumed the answer had to take.
+
+Coverage: `todo` 4 → 3, `exposed` 103 → 104. 303 tests.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -2957,7 +2997,7 @@ Coverage: `todo` 5 → 4, `exposed` 102 → 103. 299 tests.
   designing the thing its reason asked for and then finding that six of its rows were not
   callable at all. Batch 45 emptied the *flattened alternation* pair and batch 46 the last
   one-off with a fixture behind it. Batch 47 read the last three groups and found that
-  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **4** that
+  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **3** that
   remain are one-offs. This bullet has now outlived the thing it describes: the
   grouping was a way of noticing that one reason covered several rows, and every reason
   that did has been spent.
@@ -2976,6 +3016,9 @@ Coverage: `todo` 5 → 4, `exposed` 102 → 103. 299 tests.
   Batch 49 is the fifth failure mode and the cheapest: a reason that was *never* a blocker,
   written in the same edit as the two rows that answer it. The census prints a row's reason
   and never its neighbours, so a row can sit two lines above its own answer indefinitely.
+  Batch 51 is the sixth and the only one whose every clause was **true**: the blocker was a
+  premise underneath the reason — that a read must answer with what its write took — and a
+  premise is not written down anywhere to be re-read.
 - **A `Setting` cannot say "meaningful only when a sibling holds one value".**
   `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.
@@ -3001,9 +3044,10 @@ Coverage: `todo` 5 → 4, `exposed` 102 → 103. 299 tests.
   be found the same way, which is to say by luck.
 - ~~**A running program cannot name a section.**~~ **Closed by batches 22–26**, with the
   first of the three answers and its premise dropped: `section(…)` returns the handle, so
-  there is no name for the compiler to invent. What is left of the family is one row —
+  there is no name for the compiler to invent. ~~What is left of the family is one row —
   `SectionGetInstTypes`, which would have to answer with a list value this language does
-  not have.
+  not have.~~ **Closed outright by batch 51**: it does not have to answer with a list, because
+  the question is membership and membership is one bit.
 - **A metavariable with no marker is still a keyword.** `PERemoveResource restype resname
   reslang|ALL` reads `reslang` as a member beside `ALL`, and unlike `{GUID}` there is
   nothing in the notation that says it is a placeholder — not a brace, not a case, not a
@@ -3015,9 +3059,11 @@ Coverage: `todo` 5 → 4, `exposed` 102 → 103. 299 tests.
   batch 27**, arriving with `SetBrandingImage`'s `/IMGID=` exactly as this bullet asked —
   with the first of those rows rather than before it. `Offer::Valued` is waiting for
   `SendMessage`'s `/TIMEOUT=` and two others when their rows land.
-- **Nothing says where a call is legal.** `SetSilent` is meaningful only in `.onInit`,
-  `SetAutoClose` only outside it, and the compiler has no way to state either. Both tiers
-  pass a call that is simply dead.
+- ~~**Nothing says where a call is legal.**~~ **Half-closed by batch 50.** `table::Place`
+  states it and `check_place` enforces it, which is what `SetSilent` needed. `setAutoClose` is
+  the mirror case and is *not* covered: it is honoured everywhere **except** `.onInit`, and
+  `Place` has no variant for that. One row wants it, so it should arrive with the second —
+  the same rule the metavariable bullet below asks for.
 - ~~**No fixture carries a version resource.**~~ **Closed by batch 46**, and the estimate
   was wrong in the interesting direction: the task was not finding a PE but *making* one
   worth committing. `tests/fixtures/assets/version.dll` is 1 KB, generated by a script

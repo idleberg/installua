@@ -532,15 +532,130 @@ impl BodyLowerer<'_, '_> {
                     sign: Sign::NonNeg,
                 }))
             }
-            // `SectionGetInstTypes` yields the bit field NSIS stores, and the
-            // field's type is `string[]`. There is no list value in this
-            // language to decode it into, so the read waits for one rather than
-            // handing back a number the surface never promised.
+            // `SectionGetInstTypes` yields the bit field NSIS stores, and there
+            // is no list value in this language to decode it into. The read is
+            // [`Self::inst_type_member`] instead — one name at a time, which is
+            // the question a script was asking anyway.
             HandleField::InstallTypes => {
-                self.todo(field.span, "reading `installTypes`");
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeConflict,
+                        field.span,
+                        "`installTypes` is not a value to read",
+                    )
+                    .note(
+                        "NSIS stores it as a bit field and this language has no list to decode \
+                         it into",
+                    )
+                    .note("ask about one of them: `if core.installTypes(\"Full\") then` (§13)"),
+                );
                 None
             }
         }
+    }
+
+    /// `docs.installTypes("Full")` — whether the addressed section is in the
+    /// install type of that name.
+    ///
+    /// The write half takes the whole list and the read half takes one name,
+    /// which is not an asymmetry for its own sake. `SectionGetInstTypes` hands
+    /// back the bit field NSIS stores; there is no list value in this language
+    /// to decode it into, and a script that asks about install types at run time
+    /// is asking about one of them. So the read is the membership test, spelled
+    /// as a call on the field the write assigns to — the name is the argument
+    /// because the answer is one bit and the bit is which name.
+    ///
+    /// The position is the compiler's on both sides (§13): inserting a type at
+    /// the front of the block's `installTypes` moves this read along with every
+    /// `SectionSetInstTypes` and every `SetCurInstType`.
+    pub(super) fn inst_type_member(
+        &mut self,
+        base: &Expr,
+        field: &Name,
+        args: &[Expr],
+        dest: Option<&Slot>,
+        span: Span,
+    ) -> Option<Ty> {
+        let Addressed::Section(handle) = self.addressed(base, base.span())? else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    field.span,
+                    "`installTypes` is a section's, and this is a control",
+                )
+                .note("a control is drawn on a page; an install type picks sections (§13)"),
+            );
+            return None;
+        };
+        // `Where::Sections` again, so a `group` is turned back here in the same
+        // words a `group`'s `size` is. The field table is the one place that
+        // knows which handles carry which fields.
+        self.field(&handle, field)?;
+
+        let [which] = args else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`installTypes` takes 1 argument(s), and {} were given",
+                        args.len()
+                    ),
+                )
+                .note("write `installTypes(\"Full\")`, naming one type the block declares"),
+            );
+            return None;
+        };
+
+        let Some(dest) = dest else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    span,
+                    "`installTypes` answers a question that nothing reads",
+                )
+                .note("write `if core.installTypes(\"Full\") then`, or bind it to a `local`")
+                .note("assigning the field is the other direction: `core.installTypes = { … }`"),
+            );
+            return None;
+        };
+
+        let position = self.inst_type_position(which, "installTypes")?;
+        let types = self.claim_temp(span);
+        self.emit(ir::Instruction::new(
+            "SectionGetInstTypes",
+            vec![
+                ir::Arg::raw(format!("${{{}}}", handle.index)),
+                ir::Arg::dest(types.clone()),
+            ],
+        ));
+        // Down to bit 0 and masked, exactly as a flag read is: a `bool` in this
+        // compiler is `0` or `1` and nothing else (§15.20), so the bit's own
+        // value is the wrong number even where it is truthy.
+        let source = if position == 0 {
+            ir::Arg::slot(types)
+        } else {
+            self.emit(ir::Instruction::new(
+                "IntOp",
+                vec![
+                    ir::Arg::dest(dest.clone()),
+                    ir::Arg::slot(types),
+                    ir::Arg::raw(">>>"),
+                    ir::Arg::int(position as i64),
+                ],
+            ));
+            ir::Arg::slot(dest.clone())
+        };
+        self.emit(ir::Instruction::new(
+            "IntOp",
+            vec![
+                ir::Arg::dest(dest.clone()),
+                source,
+                ir::Arg::raw("&"),
+                ir::Arg::int(1),
+            ],
+        ));
+        Some(Ty::Bool)
     }
 
     /// `docs.text = ""` — a write, which is one `Section*Set` and, for a flag,
