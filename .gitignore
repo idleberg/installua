@@ -30,5 +30,12 @@ examples/*/assets/*.exe
 tests/fixtures/assembling.nsi
 tests/fixtures/*.exe
 
+# `version.dll` is a fixture and not a build product: `GetDLLVersionLocal` needs
+# a real PE carrying a version resource, and `make-version-dll.py` beside it is
+# how this one was made. Named explicitly because a global excludes file that
+# ignores `*.dll` is the normal setup, and a fixture that silently never gets
+# committed is a repository that does not build for anyone else.
+!tests/fixtures/assets/version.dll
+
 # lua-language-server scratch (--logpath, --check_out_path)
 verification/**/.out*

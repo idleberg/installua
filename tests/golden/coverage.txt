@@ -1,15 +1,14 @@
 installua coverage -- makensis v3.12, 276 commands
 
-  exposed          101
+  exposed          102
   attribute         66
   lowering-target   26
   language          14
   directive         37
   rejected          16
-  todo              16
+  todo              15
 
 todo:
-  GetDLLVersionLocal      its example reads the build machine at compile time, and no fixture yet carries a version resource
   FindClose               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindNext                runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
@@ -30,8 +29,5 @@ installua MUI coverage -- Modern UI 2, 255 names
 
   exposed          130
   internal         108
-  rejected          16
-  todo               1
-
-mui todo:
-  MUI_UI                                          the dialog resource for the whole UI; a user's only reason to write it is a `.exe` UI of their own
+  rejected          17
+  todo               0

@@ -26,6 +26,10 @@ installer {
 		local high, low = getDllVersion(INSTDIR .. "/shell.dll")
 		detailPrint(high .. "." .. low)
 	end),
+	section("GetDLLVersionLocal", function()
+		local high, low = getDllVersionLocal("assets/version.dll")
+		detailPrint(high .. "." .. low)
+	end),
 	section("GetFileTime", function()
 		local high, low = getFileTime(INSTDIR .. "/app.exe")
 		detailPrint(high .. " " .. low)

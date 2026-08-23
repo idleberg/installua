@@ -37,6 +37,11 @@ const fn rejected(name: &'static str, why: &'static str) -> Row {
     }
 }
 
+/// Unused, and kept: this census has no `Todo` left in it, which is a state to
+/// be able to *lose* rather than one to bake in. The next MUI carries names
+/// nobody has read yet, and the first of them wants a bucket to land in that is
+/// neither "exposed" nor "we decided against it".
+#[allow(dead_code)]
 const fn todo(name: &'static str, why: &'static str) -> Row {
     Row {
         name,
@@ -596,9 +601,17 @@ pub const ROWS: &[Row] = &[
         "MUI_TEXTCOLOR",
         "installer { headerColors = { text = \"…\", background = \"…\" } }",
     ),
-    todo(
+    // The last `todo` in this census, and the four rows below say why it is a
+    // `rejected` instead: naming a dialog resource directly contradicts the
+    // settings that chose it. `MUI_UI` is the same answer one level up — it
+    // replaces the whole UI, so every `page.*` field, every header image and
+    // every colour would be describing a dialog that is no longer there. A user
+    // who has built their own `.exe` UI has left this language's model of a
+    // page behind, and `raw` is where that belongs (§10).
+    rejected(
         "MUI_UI",
-        "the dialog resource for the whole UI; a user's only reason to write it is a `.exe` UI of their own",
+        "the dialog resource for the whole UI: replacing it contradicts every `page.*` setting \
+         that shapes one, and a UI of your own is a `raw` block",
     ),
     rejected(
         "MUI_UI_COMPONENTSPAGE_NODESC",

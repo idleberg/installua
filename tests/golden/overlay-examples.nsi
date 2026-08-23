@@ -30,6 +30,11 @@ Section "GetDLLVersion"
   DetailPrint "$0.$1"
 SectionEnd
 
+Section "GetDLLVersionLocal"
+  GetDLLVersionLocal "assets/version.dll" $0 $1
+  DetailPrint "$0.$1"
+SectionEnd
+
 Section "GetFileTime"
   GetFileTime "$INSTDIR\app.exe" $0 $1
   DetailPrint "$0 $1"
