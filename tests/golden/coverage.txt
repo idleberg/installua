@@ -2,14 +2,13 @@ installua coverage -- makensis v3.12, 276 commands
 
   exposed          105
   attribute         68
-  lowering-target   26
+  lowering-target   27
   language          14
   directive         37
   rejected          24
-  todo               2
+  todo               1
 
 todo:
-  LicenseLangString       a license *file* per language, where §15.26's tables hold strings; the page takes one path and there is no per-locale shape for it yet
   InitPluginsDir          the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)
 
 installua MUI coverage -- Modern UI 2, 255 names
