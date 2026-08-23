@@ -2884,6 +2884,26 @@ a decision was made.
 Coverage: `todo` 8 → 6, `attribute` 66 → 68. Every remaining `todo` is a one-off; the last
 group is gone.
 
+## Batch 49 — a row whose own comment had already answered it
+
+`Target x86-unicode` is `cpu` and `unicode` hyphenated together. Both have been `attribute`
+rows since Phase 4, so `Target` is not a setting this language lacks — it is a *spelling* of
+two settings it already has, and it was a `todo` only because nobody re-read it.
+
+**It is `rejected` for a second reason the first one hides.** `unicode` is not a line the
+lowering writes; it is a field the emitter reads *before* it writes anything, because it picks
+the encoding of every string in the output. A `target` row would therefore be a second way to
+set it, arriving at a different time — the one shape a settings language must not have. `cpu`
+would merely be duplicated; `unicode` would be raced.
+
+The comment above the row had said "both are attributes already" since it was written. Batch
+47 found seven rows in that state and this is the eighth, so the pattern is not a fluke: a
+`todo` written *at the same time* as the rows that answer it is invisible, because the census
+reports the reason and never the neighbours. The census cannot catch this class. Reading can.
+
+Coverage: `todo` 6 → 5, `rejected` 23 → 24. No code changed, and no test — the golden is the
+assertion.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -2899,7 +2919,7 @@ group is gone.
   designing the thing its reason asked for and then finding that six of its rows were not
   callable at all. Batch 45 emptied the *flattened alternation* pair and batch 46 the last
   one-off with a fixture behind it. Batch 47 read the last three groups and found that
-  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **6** that
+  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **5** that
   remain are one-offs. This bullet has now outlived the thing it describes: the
   grouping was a way of noticing that one reason covered several rows, and every reason
   that did has been spent.
@@ -2915,6 +2935,9 @@ group is gone.
   step 0 was *re-read the group* — and it found a fourth failure mode: a reason written
   about the **hardest** member and then applied to every other. Four of its five rows take
   no handle at all, and the fifth was waiting on a feature built seven batches earlier.
+  Batch 49 is the fifth failure mode and the cheapest: a reason that was *never* a blocker,
+  written in the same edit as the two rows that answer it. The census prints a row's reason
+  and never its neighbours, so a row can sit two lines above its own answer indefinitely.
 - **A `Setting` cannot say "meaningful only when a sibling holds one value".**
   `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.

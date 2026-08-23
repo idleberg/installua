@@ -1694,12 +1694,12 @@ pub const ROWS: &[Row] = &[
         Setting::Handled("string"),
     ),
     // `Target x86-unicode` is `cpu` and `unicode` hyphenated together, and both
-    // of those are rows already. A third spelling of the same two settings would
-    // be a second way to set `unicode`, which is not a line but a field the
-    // emitter reads — so the two rows below are the whole of it.
-    todo(
+    // of those are rows already. A third spelling would also be a second way to
+    // set `unicode`, which is not a line but a field the emitter reads before it
+    // writes anything — so the two rows below are the whole of it.
+    rejected(
         "Target",
-        "says `cpu` and `unicode` in one word, and both are attributes already",
+        "one word for `cpu` and `unicode`, which are separate settings here",
     ),
     attribute("CPU", "cpu", Setting::Enum),
     attribute("Unicode", "unicode", Setting::Handled("boolean")),
