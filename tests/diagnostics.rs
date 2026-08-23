@@ -156,6 +156,13 @@ const CASES: &[(Code, &str)] = &[
          strCpy(target, \"C:/App\")\n\
          end), }",
     ),
+    (
+        Code::WrongPlace,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         setSilent(\"silent\")\n\
+         end), }",
+    ),
 ];
 
 /// Twenty-one values **live at once** — the last line reads all of them, so no

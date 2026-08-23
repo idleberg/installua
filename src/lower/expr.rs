@@ -630,6 +630,7 @@ impl BodyLowerer<'_, '_> {
         };
 
         let name = builtin.installua.unwrap_or(builtin.nsis);
+        self.check_place(builtin, name, span);
         let lowered = self.surface_args(builtin, name, args, 0, span)?;
 
         match builtin.predicate {
@@ -686,6 +687,40 @@ impl BodyLowerer<'_, '_> {
                 }
             },
         }
+    }
+
+    /// Refuse a call NSIS would accept and then ignore.
+    ///
+    /// The only rule in the pass about *where* a call is rather than what it
+    /// says, and it earns the exception: `makensis -WX` takes `SetSilent silent`
+    /// in a section without a word, the installer reads its silent flag once
+    /// before any page runs, and the call is dead. There is no output to be
+    /// wrong, so the golden and the `-WX` assembly are both blind to it and this
+    /// is the only place the mistake is visible at all.
+    ///
+    /// A `func` is refused too, even one only ever called from `onInit`. The
+    /// compiler cannot see where a `func` runs, and between a false error the
+    /// author reads and a false pass the author ships, the error is the one that
+    /// can be argued with.
+    fn check_place(&mut self, builtin: &table::Instruction, name: &str, span: Span) {
+        if builtin.place == table::Place::Anywhere || self.place == builtin.place {
+            return;
+        }
+        self.diags.push(
+            Diagnostic::error(
+                Code::WrongPlace,
+                span,
+                format!("`{name}` is only honoured from `onInit`"),
+            )
+            .note(
+                "NSIS settles this before the first page runs, so a call from anywhere later \
+                 assembles clean and then does nothing",
+            )
+            .note(
+                "a `func` counts as anywhere later, because nothing here can see which bodies \
+                 call it — write the call in `onInit(…)` itself",
+            ),
+        );
     }
 
     /// Everything a caller wrote for one instruction, checked and placed

@@ -265,6 +265,12 @@ pub enum Code {
     /// `IntOp` is `+`, `StrCpy` is assignment. Not an unknown name — the
     /// compiler knows exactly what it is, and says what to write (§5).
     NsisRetired,
+
+    /// A call written somewhere NSIS accepts it and then ignores it. `SetSilent`
+    /// outside `.onInit` assembles clean under `-WX` and does nothing at run
+    /// time, so this is the only place the difference is ever visible. See
+    /// [`crate::table::Place`].
+    WrongPlace,
 }
 
 impl Code {
@@ -310,6 +316,7 @@ impl Code {
         Code::IncludeCycle,
         Code::IncludeForm,
         Code::NsisRetired,
+        Code::WrongPlace,
     ];
 
     pub fn slug(self) -> &'static str {
@@ -354,6 +361,7 @@ impl Code {
             Code::IncludeCycle => "include-cycle",
             Code::IncludeForm => "include-form",
             Code::NsisRetired => "nsis-retired",
+            Code::WrongPlace => "wrong-place",
         }
     }
 }

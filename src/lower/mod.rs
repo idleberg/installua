@@ -1696,7 +1696,7 @@ impl<'p> Lowerer<'_, 'p> {
                 continue;
             }
             let span = inits.first().map(Stmt::span).unwrap_or_default();
-            let (body, _) = self.body_with(span, Some(half), |lowerer| {
+            let (body, _) = self.body_with(span, Some(half), table::Place::OnInit, |lowerer| {
                 for instruction in prelude {
                     lowerer.emit(instruction);
                 }
@@ -2913,7 +2913,7 @@ impl<'p> Lowerer<'_, 'p> {
             return;
         };
         let name = format!("{}mui.{}", half.prefix(), hook.word);
-        let body = self.body(block, &[], at, None, Some(half));
+        let body = self.body(block, &[], at, None, Some(half), table::Place::Anywhere);
         self.module.functions.push(ir::Function {
             name: name.clone(),
             body,
@@ -3629,7 +3629,7 @@ impl<'p> Lowerer<'_, 'p> {
 
         let span = which.span;
         let create = self.page_function_name(half, page, "create");
-        let (body, _) = self.body_with(span, Some(half), |lowerer| {
+        let (body, _) = self.body_with(span, Some(half), table::Place::Anywhere, |lowerer| {
             if let Some((block, _)) = pre {
                 lowerer.block(block);
             }
@@ -4660,7 +4660,7 @@ impl<'p> Lowerer<'_, 'p> {
     ) -> Option<String> {
         let (block, span) = self.callback_body(value, which)?;
         let name = self.page_function_name(half, page, which);
-        let body = self.body(block, &[], span, None, Some(half));
+        let body = self.body(block, &[], span, None, Some(half), table::Place::Anywhere);
         self.module.functions.push(ir::Function {
             name: name.clone(),
             body,
@@ -4711,7 +4711,7 @@ impl<'p> Lowerer<'_, 'p> {
             nth += 1;
         }
 
-        let (body, _) = self.body_with(span, Some(half), |lowerer| {
+        let (body, _) = self.body_with(span, Some(half), table::Place::Anywhere, |lowerer| {
             let pushed = lowerer.body.vreg(span);
             lowerer.emit(ir::Instruction::new("Pop", vec![ir::Arg::dest(pushed)]));
             build(lowerer);
@@ -5106,10 +5106,17 @@ impl<'p> Lowerer<'_, 'p> {
             "onInit" => std::mem::take(&mut self.init_prelude[half.index()]),
             _ => Vec::new(),
         };
+        // The one callback with a rule of its own: `SetSilent` is read before
+        // any page runs, so `.onInit` is the only body it survives. Every other
+        // callback is `Anywhere` — none of them is early enough.
+        let place = match which {
+            "onInit" => table::Place::OnInit,
+            _ => table::Place::Anywhere,
+        };
         let body = if prelude.is_empty() {
-            self.body(&block, &[], *span, None, Some(half))
+            self.body(&block, &[], *span, None, Some(half), place)
         } else {
-            let (body, _) = self.body_with(*span, Some(half), |lowerer| {
+            let (body, _) = self.body_with(*span, Some(half), place, |lowerer| {
                 for instruction in prelude {
                     lowerer.emit(instruction);
                 }
@@ -5415,7 +5422,7 @@ impl<'p> Lowerer<'_, 'p> {
                 Some(text) => Some(self.describe(index, text, half)),
                 None => index,
             },
-            body: self.body(block, &[], *span, None, Some(half)),
+            body: self.body(block, &[], *span, None, Some(half), table::Place::Anywhere),
         })
     }
 
@@ -5588,7 +5595,14 @@ impl<'p> Lowerer<'_, 'p> {
         };
         let _ = keyword;
 
-        let body = self.body(block, params, *span, Some(&name.value), None);
+        let body = self.body(
+            block,
+            params,
+            *span,
+            Some(&name.value),
+            None,
+            table::Place::Anywhere,
+        );
         self.module.functions.push(ir::Function {
             name: name.value.clone(),
             body,
@@ -5605,12 +5619,13 @@ impl<'p> Lowerer<'_, 'p> {
         span: Span,
         owner: Option<&str>,
         half: Option<Half>,
+        place: table::Place,
     ) -> Body {
         let signature = owner
             .and_then(|name| self.known.signature(name))
             .cloned()
             .unwrap_or_default();
-        let (body, returns) = self.body_with(span, half, |lowerer| {
+        let (body, returns) = self.body_with(span, half, place, |lowerer| {
             lowerer.parameters(params, &signature);
             lowerer.block(block);
         });
@@ -5626,6 +5641,7 @@ impl<'p> Lowerer<'_, 'p> {
         &mut self,
         span: Span,
         half: Option<Half>,
+        place: table::Place,
         build: impl FnOnce(&mut BodyLowerer),
     ) -> (Body, Vec<(Vec<Ty>, Span)>) {
         // The install types the block declared, for a `handle.installTypes`
@@ -5647,6 +5663,7 @@ impl<'p> Lowerer<'_, 'p> {
             claims: &self.claims,
             lang_strings: &self.lang_strings,
             half,
+            place,
             inst_types,
             body: Body::new(span),
             scopes: vec![Vec::new()],
@@ -5840,6 +5857,11 @@ struct BodyLowerer<'a, 'p> {
     /// call: there is no wrong half to name a section from, so rule 4 has
     /// nothing to compare against and does not run.
     half: Option<Half>,
+    /// Which NSIS body this is, for the one row that is honoured in only one of
+    /// them. Unlike [`Self::half`] there is no `None` case: a `func` is
+    /// [`table::Place::Anywhere`] rather than unknown, because a call NSIS
+    /// would ignore is refused wherever the compiler cannot prove otherwise.
+    place: table::Place,
     /// The install types the block declared, in order — the name → position
     /// binding a `handle.installTypes = { … }` write resolves against, and the
     /// same one `SectionIn` uses at compile time (§13).

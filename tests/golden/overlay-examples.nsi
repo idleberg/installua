@@ -526,3 +526,7 @@ SectionEnd
 Section "un.Uninstall"
   RMDir $INSTDIR
 SectionEnd
+
+Function .onInit
+  SetSilent "silent"
+FunctionEnd

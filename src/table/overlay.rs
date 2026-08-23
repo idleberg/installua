@@ -22,7 +22,7 @@
 //! retired row there, which is not a contradiction: the emitter needs its
 //! shape and the user needs the replacement.
 
-use super::{Class, Field, Kind, Offer, Part, Setting};
+use super::{Class, Field, Kind, Offer, Part, Place, Setting};
 use crate::types::Ty;
 
 /// The hand-written half of one parameter, positional against the skeleton's
@@ -81,6 +81,10 @@ pub struct Row {
     /// `MessageBox` has label positions and is not a predicate. The label kind
     /// says *the compiler fills this*; this says *the call answers a question*.
     pub predicate: bool,
+    /// Where a call to this row is honoured, as opposed to accepted. See
+    /// [`Place`] — one row is not [`Place::Anywhere`], and this exists because
+    /// no test tier can see the difference.
+    pub place: Place,
 }
 
 const fn ann(ty: Ty, kind: Kind) -> Ann {
@@ -186,6 +190,17 @@ const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) 
         options: &[],
         conflicts: &[],
         predicate: false,
+        place: Place::Anywhere,
+    }
+}
+
+/// A row NSIS honours only from `.onInit`. Separate from [`exposed`] for the
+/// same reason [`flagged`] is: one row needs it and two hundred and seventy-five
+/// do not.
+const fn on_init(row: Row) -> Row {
+    Row {
+        place: Place::OnInit,
+        ..row
     }
 }
 
@@ -1635,18 +1650,23 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
         "if shellVarContextAll() then detailPrint(\"all users\") end",
     ),
-    // Written as a row and reverted. `makensis -WX` takes `SetSilent silent`
-    // inside a section without a word, and NSIS then ignores it at run time:
-    // the instruction is only meaningful from `.onInit`. Neither tier catches
-    // that, because nothing is wrong with the *output* — the call is simply
-    // dead. A row needs a mandatory example, `tests/overlay.rs` puts every
-    // example in a section by design, and an example that does nothing is
-    // worse than no row.
-    todo(
+    // The runtime half of `silentInstall`, which is an attribute and therefore
+    // decided at build time. This is the only way to make a run silent — or to
+    // make it *stop* being silent — from something the installer reads on the
+    // machine it is running on.
+    //
+    // The row was written once before and reverted, because `makensis -WX`
+    // takes `SetSilent silent` inside a section without a word and NSIS then
+    // ignores it: neither test tier can see a call that assembles and does
+    // nothing. `Place` is what the reverted attempt was missing, and it is a
+    // compiler rule rather than a test because that is where the difference is
+    // visible at all.
+    on_init(exposed(
         "SetSilent",
-        "only meaningful from `.onInit`, and an example lives in a section: the row \
-         needs a place to say where a call is legal",
-    ),
+        "setSilent",
+        &[ann(Ty::Str, Kind::Enum)],
+        "setSilent(\"silent\")",
+    )),
     attribute("ShowInstDetails", "showInstDetails", Setting::Enum),
     attribute("ShowUninstDetails", "showUninstDetails", Setting::Enum),
     lowering(

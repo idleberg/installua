@@ -210,6 +210,8 @@ cannot carry an honest example until something can say where a call is legal. `S
 is back in the backlog with that as its reason, and it is the first entry in the backlog
 that names a missing *check* rather than a missing design.
 
+*(Batch 50 built the check: `table::Place`, and the reason above is its doc comment.)*
+
 ## Batch 5 — outputs go where the table says
 
 Four rows, and the emitter changed to make them possible:
@@ -2904,6 +2906,42 @@ reports the reason and never the neighbours. The census cannot catch this class.
 Coverage: `todo` 6 → 5, `rejected` 23 → 24. No code changed, and no test — the golden is the
 assertion.
 
+## Batch 50 — the third thing NSIS gets wrong quietly
+
+`setSilent("silent")` is the runtime half of the `silentInstall` attribute: the only way to
+make a run silent, or to make it stop being silent, from something the installer reads on the
+machine it is running on.
+
+```lua
+installer {
+	onInit(function()
+		setSilent("silent")     -- SetSilent "silent"
+	end),
+}
+```
+
+**The row was written once before and reverted.** `makensis -WX` takes `SetSilent silent`
+inside a section without a word, and the installer then ignores it — the silent flag is read
+once, before the first page runs. Both test tiers are blind to that: the golden records what
+the compiler emits and the call emits correctly, and tier 3 asks whether NSIS accepts the
+output and it does. There is no wrong output to find. So this is a **compiler rule**, and that
+is the whole content of the batch: `table::Place` says where a call is honoured as opposed to
+accepted, `BodyLowerer` carries which body it is in, and `check_place` is the first thing in
+the pass that looks at *where* a call is rather than at what it says.
+
+**A `func` is refused, including one only `onInit` calls.** The compiler cannot see which
+bodies reach a `func`, and the two ways to be wrong are not symmetric: a false error is read
+by the author and argued with, a false pass is shipped. `src/callgraph.rs` could answer the
+question precisely and was not asked to — a day's work to allow a program nobody has written.
+
+**The harness reads `Place` rather than restating it.** `tests/overlay.rs` partitions the
+examples on the same field the diagnostic reads, so a row moved between the two bodies lands
+in the right one without this file being touched, and the mandatory-example rule keeps its
+meaning for a row that cannot live in a section. `Place::Anywhere` is every other row and the
+`callback` lowering is where the one exception is named.
+
+Coverage: `todo` 5 → 4, `exposed` 102 → 103. 299 tests.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -2919,7 +2957,7 @@ assertion.
   designing the thing its reason asked for and then finding that six of its rows were not
   callable at all. Batch 45 emptied the *flattened alternation* pair and batch 46 the last
   one-off with a fixture behind it. Batch 47 read the last three groups and found that
-  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **5** that
+  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **4** that
   remain are one-offs. This bullet has now outlived the thing it describes: the
   grouping was a way of noticing that one reason covered several rows, and every reason
   that did has been spent.

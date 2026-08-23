@@ -438,6 +438,24 @@ impl Param {
     }
 }
 
+/// Where a call to a command is *honoured*, as opposed to accepted.
+///
+/// A third thing NSIS gets wrong quietly. `makensis -WX` takes `SetSilent
+/// silent` inside a section without a word and the installer then ignores it:
+/// the silent flag is read once, before any page runs, so a call from anywhere
+/// later is dead code that assembles clean. Neither `tests/overlay.rs` tier
+/// catches that, because nothing is wrong with the output — which is why this
+/// is a compile-time refusal and not a test.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    /// Any body: a section, a `func`, a callback. Every row but one.
+    Anywhere,
+    /// Directly inside `onInit(…)`, and nowhere else — a `func` included, even
+    /// one only ever called from there. The compiler cannot see where a `func`
+    /// runs and a wrong guess is silent, so the narrow rule is the honest one.
+    OnInit,
+}
+
 /// A command, both halves.
 #[derive(Clone, Debug)]
 pub struct Instruction {
@@ -458,6 +476,8 @@ pub struct Instruction {
     /// A `bool`-valued call rather than a statement (§15.20). See
     /// [`overlay::Row::predicate`].
     pub predicate: bool,
+    /// Where a call is honoured. See [`Place`].
+    pub place: Place,
 }
 
 impl Instruction {
@@ -735,6 +755,7 @@ fn join() -> Vec<Instruction> {
                 conflicts: row.map(|row| row.conflicts).unwrap_or(&[]),
                 note: skeleton.note,
                 predicate: row.is_some_and(|row| row.predicate),
+                place: row.map_or(Place::Anywhere, |row| row.place),
             }
         })
         .collect()

@@ -48,7 +48,27 @@ fn program() -> String {
          \thandle,\n",
     );
 
-    for (name, example) in examples() {
+    // A row that is only honoured from `.onInit` cannot have its example in a
+    // section, and the compiler is the thing that says so: `table::Place` is
+    // read here rather than restated, so a row moved between the two arrives in
+    // the right body without this file being touched. All of them share one
+    // `onInit`, because NSIS has exactly one and a second would be a function
+    // nothing calls.
+    let (in_init, in_section): (Vec<_>, Vec<_>) = examples()
+        .into_iter()
+        .partition(|(_, _, place)| *place == table::Place::OnInit);
+
+    if !in_init.is_empty() {
+        source.push_str("\tonInit(function()\n");
+        for (_, example, _) in &in_init {
+            for line in example.lines() {
+                source.push_str(&format!("\t\t{line}\n"));
+            }
+        }
+        source.push_str("\tend),\n");
+    }
+
+    for (name, example, _) in in_section {
         source.push_str(&format!("\tsection(\"{name}\", function()\n"));
         for line in example.lines() {
             source.push_str(&format!("\t\t{line}\n"));
@@ -66,16 +86,16 @@ fn program() -> String {
     source
 }
 
-/// One `(section name, example)` per `Exposed` row, in `-CMDHELP` order.
+/// One `(section name, example, place)` per `Exposed` row, in `-CMDHELP` order.
 ///
 /// Keyed on the NSIS name rather than the Installua one because two rows can
 /// share an Installua name — `writeReg` is `WriteRegStr` and `WriteRegDWORD` —
 /// and both dispatches need their own example.
-fn examples() -> Vec<(&'static str, &'static str)> {
+fn examples() -> Vec<(&'static str, &'static str, table::Place)> {
     table::overlay::ROWS
         .iter()
         .filter(|row| row.class == Class::Exposed)
-        .filter_map(|row| row.example.map(|example| (row.nsis, example)))
+        .filter_map(|row| row.example.map(|example| (row.nsis, example, row.place)))
         .collect()
 }
 
@@ -421,6 +441,70 @@ fn an_alternation_refuses_true() {
         "{rendered}"
     );
     assert!(rendered.contains("BGGradient off"), "{rendered}");
+}
+
+/// The whole reason [`table::Place`] exists: this program assembles under
+/// `makensis -WX` without a word and the installer ignores the call, so the two
+/// tiers below are both blind to it and the compiler is the only witness.
+#[test]
+fn a_call_nsis_would_ignore_is_refused() {
+    let source = "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+        installer { section(\"Core\", function()\n\
+        \tsetSilent(\"silent\")\n\
+        end), }\n";
+
+    let mut diags = Diagnostics::new();
+    installua::build(source, &mut diags);
+    let rendered = diags.render("section.lua");
+    assert!(
+        diags.contains(installua::diag::Code::WrongPlace),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("only honoured from `onInit`"),
+        "{rendered}"
+    );
+}
+
+/// A `func` is refused as well, and this is the case where the compiler is
+/// deliberately wrong in the safe direction: this one is only ever called from
+/// `onInit` and there is no way for the pass to know it.
+#[test]
+fn a_func_is_refused_even_when_only_on_init_calls_it() {
+    let source = "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+        func(\"quiet\", function()\n\
+        \tsetSilent(\"silent\")\n\
+        end)\n\
+        installer {\n\
+        \tonInit(function() quiet() end),\n\
+        \tsection(\"Core\", function() detailPrint(\"x\") end),\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    installua::build(source, &mut diags);
+    let rendered = diags.render("func.lua");
+    assert!(
+        diags.contains(installua::diag::Code::WrongPlace),
+        "{rendered}"
+    );
+    assert!(rendered.contains("counts as anywhere later"), "{rendered}");
+}
+
+/// And the place it *is* honoured, which is the row's own example. The line is
+/// the enum's member rather than a number: `SetSilent` and the `silentInstall`
+/// attribute spell the same word two different ways round.
+#[test]
+fn on_init_is_where_it_is_honoured() {
+    let source = "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+        installer {\n\
+        \tonInit(function() setSilent(\"silent\") end),\n\
+        \tsection(\"Core\", function() detailPrint(\"x\") end),\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags).unwrap_or_default();
+    assert!(!diags.has_errors(), "{}", diags.render("oninit.lua"));
+    assert!(built.contains("\n  SetSilent \"silent\"\n"), "in:\n{built}");
 }
 
 /// A gap in the middle is still a gap: NSIS counts arguments, and `least` moved

@@ -13,6 +13,9 @@ end)
 installer {
 	installTypes = { "Full", "Minimal" },
 	handle,
+	onInit(function()
+		setSilent("silent")
+	end),
 	section("Abort", function()
 		abort("stopped")
 	end),
