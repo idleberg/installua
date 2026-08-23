@@ -4,6 +4,7 @@ SetCompressor lzma
 AddBrandingImage top "20u" "2u"
 AutoCloseWindow true
 BGFont "face" 1 1
+BGGradient 000000 "0000FF" "FFFFFF"
 BrandingText "brandingText"
 Caption "caption"
 CRCCheck on
@@ -45,6 +46,7 @@ MiscButtonText "back" "next" "cancel" "close"
 DetailsButtonText "detailsButtonText"
 UninstallButtonText "uninstallButtonText"
 InstallButtonText "installButtonText"
+SpaceTexts "required" "available"
 CompletedText "completedText"
 AllowSkipFiles on
 

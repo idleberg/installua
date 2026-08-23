@@ -104,7 +104,7 @@ fn alias_table() -> Vec<(String, Vec<&'static str>, bool)> {
             // `installDirRegKey.root` is a registry root, which the `Reg*`
             // instructions already have an alias for, and a second alias with
             // identical members is what this function exists to avoid.
-            Class::Attribute(table::Setting::Table(_)) => None,
+            Class::Attribute(table::Setting::Table(_) | table::Setting::Off { .. }) => None,
             Class::Attribute(_) => continue,
             _ => continue,
         };
@@ -342,33 +342,52 @@ fn bare_type(entry: &table::Instruction, field: &str, holds: table::Setting) -> 
         table::Setting::Enum => alias_of(field),
         table::Setting::Str { .. } => "string".to_string(),
         table::Setting::Handled(ty) => ty.to_string(),
-        table::Setting::Table(parts) => {
-            let parts: Vec<String> = parts
-                .iter()
-                .enumerate()
-                .map(|(index, part)| {
-                    let ty = match part.holds {
-                        table::Setting::Enum => entry
-                            .params
-                            .get(index)
-                            .map(|param| alias_of(param.shape.name))
-                            .unwrap_or_else(|| "string".to_string()),
-                        other => bare_type(entry, part.field, other),
-                    };
-                    let optional = entry
-                        .params
-                        .get(index)
-                        .is_some_and(|param| !param.required());
-                    format!("{}{}: {ty}", part.field, if optional { "?" } else { "" })
-                })
-                .collect();
-            format!("{{ {} }}", parts.join(", "))
+        table::Setting::Table(parts) => inline_table(entry, parts, None),
+        // `false` and not `boolean`: `true` is not a value this field takes, and
+        // a literal type is the only way to say so where the user reads it.
+        table::Setting::Off { parts, least, .. } => {
+            format!("false|{}", inline_table(entry, parts, Some(least)))
         }
         // A list of whatever one line takes. The brackets go on the outside
         // because the repetition is of the *line*, which is the whole of what
         // the inner type describes.
         table::Setting::Each(one) => format!("{}[]", bare_type(entry, field, *one)),
     }
+}
+
+/// The inline table type a field's parts spell, one key per position.
+///
+/// `least` is [`table::Setting::Off`]'s, for the reason its lowering reads it:
+/// the snapshot flattened the alternation and has one position where the branch
+/// has several, so the row is the only thing left that knows.
+fn inline_table(
+    entry: &table::Instruction,
+    parts: &'static [table::Part],
+    least: Option<usize>,
+) -> String {
+    let parts: Vec<String> = parts
+        .iter()
+        .enumerate()
+        .map(|(index, part)| {
+            let ty = match (part.holds, least) {
+                (table::Setting::Enum, None) => entry
+                    .params
+                    .get(index)
+                    .map(|param| alias_of(param.shape.name))
+                    .unwrap_or_else(|| "string".to_string()),
+                (other, _) => bare_type(entry, part.field, other),
+            };
+            let optional = match least {
+                Some(least) => index >= least,
+                None => entry
+                    .params
+                    .get(index)
+                    .is_some_and(|param| !param.required()),
+            };
+            format!("{}{}: {ty}", part.field, if optional { "?" } else { "" })
+        })
+        .collect();
+    format!("{{ {} }}", parts.join(", "))
 }
 
 fn declarations() -> String {

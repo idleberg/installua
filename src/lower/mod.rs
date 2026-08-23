@@ -2006,6 +2006,9 @@ impl<'p> Lowerer<'_, 'p> {
     ) {
         match holds {
             table::Setting::Table(parts) => self.table_setting(entry, field, value, parts),
+            table::Setting::Off { word, parts, least } => {
+                self.off_setting(entry, field, value, word, parts, least);
+            }
             // Only reachable if a row grew a `Handled` setting without the arm
             // above that is supposed to shape it.
             table::Setting::Handled(_) => {
@@ -2098,9 +2101,13 @@ impl<'p> Lowerer<'_, 'p> {
                     None
                 }
             },
-            // All three are shapes rather than values: a table and an `Each` are
-            // more than one of these, and `Handled` is not lowered here at all.
-            table::Setting::Table(_) | table::Setting::Each(_) | table::Setting::Handled(_) => {
+            // All four are shapes rather than values: a table, an `Off` and an
+            // `Each` are more than one of these, and `Handled` is not lowered
+            // here at all.
+            table::Setting::Table(_)
+            | table::Setting::Off { .. }
+            | table::Setting::Each(_)
+            | table::Setting::Handled(_) => {
                 self.todo(value.span(), &format!("`{field}` in this position"));
                 None
             }
@@ -2299,6 +2306,73 @@ impl<'p> Lowerer<'_, 'p> {
             return;
         };
 
+        if let Some(args) = self.part_args(entry, field, value, fields, parts, None) {
+            self.module
+                .attributes
+                .push(ir::Instruction::new(entry.nsis, args));
+        }
+    }
+
+    /// `bgGradient = false` or `bgGradient = { top = …, … }`: the two branches
+    /// of an alternation (§13).
+    ///
+    /// `false` and not `"off"`, because the word is NSIS's spelling of a state
+    /// Lua already has one of — and not `nil` either, since leaving the field
+    /// out has to keep meaning "write no line at all". The table branch is a
+    /// [`table::Setting::Table`] in every respect but where its optionality
+    /// comes from, which is why both go through the same loop.
+    fn off_setting(
+        &mut self,
+        entry: &'static table::Instruction,
+        field: &str,
+        value: &Expr,
+        word: &'static str,
+        parts: &'static [table::Part],
+        least: usize,
+    ) {
+        let how = format!(
+            "`false` writes `{} {word}`, and `{field} = {{ {} }}` writes the other branch",
+            entry.nsis,
+            shape(parts)
+        );
+
+        match value {
+            Expr::Table { fields, .. } => {
+                if let Some(args) = self.part_args(entry, field, value, fields, parts, Some(least))
+                {
+                    self.module
+                        .attributes
+                        .push(ir::Instruction::new(entry.nsis, args));
+                }
+            }
+            // `true` is the one wrong value worth its own reading: it says "yes,
+            // do this", and the thing it would be turning on has no default
+            // colours for this row to guess at.
+            _ => match self.constant(value) {
+                Some(ConstValue::Bool(false)) => {
+                    self.module
+                        .attributes
+                        .push(ir::Instruction::new(entry.nsis, vec![ir::Arg::raw(word)]));
+                }
+                _ => self.bad_value(value.span(), field, "`false` or a table", &how),
+            },
+        }
+    }
+
+    /// The parts of one table, in the order NSIS reads them.
+    ///
+    /// `least` is written only by [`table::Setting::Off`], whose alternation the
+    /// snapshot flattened; `None` asks the snapshot, which is what every other
+    /// row does and the only answer that cannot be wrong.
+    fn part_args(
+        &mut self,
+        entry: &'static table::Instruction,
+        field: &str,
+        value: &Expr,
+        fields: &[TableField],
+        parts: &'static [table::Part],
+        least: Option<usize>,
+    ) -> Option<Vec<ir::Arg>> {
         let mut written: Vec<(&str, &Expr)> = Vec::new();
         for given in fields {
             let TableField::Named { name, value: part } = given else {
@@ -2330,10 +2404,13 @@ impl<'p> Lowerer<'_, 'p> {
 
         let mut args = Vec::new();
         for (index, part) in parts.iter().enumerate() {
-            let optional = entry
-                .params
-                .get(index)
-                .is_some_and(|param| !param.required());
+            let optional = match least {
+                Some(least) => index >= least,
+                None => entry
+                    .params
+                    .get(index)
+                    .is_some_and(|param| !param.required()),
+            };
             if optional && last.is_none_or(|last| index > last) {
                 continue;
             }
@@ -2349,29 +2426,31 @@ impl<'p> Lowerer<'_, 'p> {
                     "`{}` counts its arguments, so nothing before a position you wrote can be left out",
                     entry.nsis
                 ));
-                let spare = optional_parts(entry, parts);
+                let spare = match least {
+                    Some(least) => parts[least.min(parts.len())..]
+                        .iter()
+                        .map(|part| part.field)
+                        .collect(),
+                    None => optional_parts(entry, parts),
+                };
                 if !spare.is_empty() {
                     diag = diag.note(format!("only {} may be left out", list(&spare)));
                 }
                 self.diags.push(diag);
-                return;
+                return None;
             };
-            let arg = match self.value_arg(
-                part.holds,
-                entry.params.get(index),
-                part.field,
-                entry.nsis,
-                given,
-            ) {
-                Some(arg) => arg,
-                None => return,
+            // An alternation has no position to stand against — the snapshot
+            // kept one for the branch that is a bare word — so its parts are
+            // read as what the row says they hold and nothing more.
+            let param = match least {
+                Some(_) => None,
+                None => entry.params.get(index),
             };
+            let arg = self.value_arg(part.holds, param, part.field, entry.nsis, given)?;
             args.push(arg);
         }
 
-        self.module
-            .attributes
-            .push(ir::Instruction::new(entry.nsis, args));
+        Some(args)
     }
 
     /// `Name "${APP}"` and its seven siblings: one attribute, one argument.

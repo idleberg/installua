@@ -364,10 +364,18 @@ pub const ROWS: &[Row] = &[
             part("weight", Setting::Int),
         ]),
     ),
-    todo(
+    // The first of the two alternations, and the row [`Setting::Off`] was
+    // written for: `bgGradient = false` turns the second window off, a table
+    // colours it. Only `top` is required — a gradient from one colour to
+    // nothing is a solid background, which is a thing people ask for.
+    attribute(
         "BGGradient",
-        "`off | (top [bottom [text]])` is an alternation, and the snapshot flattens \
-         it to one required position: the shape has no `Setting`",
+        "bgGradient",
+        Setting::Off {
+            word: "off",
+            parts: &[part("top", STR), part("bottom", STR), part("text", STR)],
+            least: 1,
+        },
     ),
     // `/TRIMLEFT`, `/TRIMRIGHT` and `/TRIMCENTER` are one fused flag with three
     // suffixes, which the options table cannot say and an attribute cannot hold.
@@ -1923,10 +1931,17 @@ pub const ROWS: &[Row] = &[
     attribute("DetailsButtonText", "detailsButtonText", STR),
     attribute("UninstallButtonText", "uninstallButtonText", STR),
     attribute("InstallButtonText", "installButtonText", STR),
-    todo(
+    // The second alternation, and the same shape: `spaceTexts = false` hides
+    // both labels on the components page, a table rewrites them. `available`
+    // may be left out, which is NSIS's `[available]` and not a choice here.
+    attribute(
         "SpaceTexts",
-        "`none | (required [available])` is an alternation, and the snapshot flattens \
-         it to one required position: the shape has no `Setting`",
+        "spaceTexts",
+        Setting::Off {
+            word: "none",
+            parts: &[part("required", STR), part("available", STR)],
+            least: 1,
+        },
     ),
     attribute("CompletedText", "completedText", STR),
     // Its old reason — §3's "`Call`-by-address has no Lua shape" — is still true

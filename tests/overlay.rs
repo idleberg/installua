@@ -191,6 +191,11 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
                 .collect();
             format!("{{ {} }}", parts.join(", "))
         }
+        // The table branch, because it is the one with positions in it: that
+        // `false` writes the bare word is one line and lives in a unit test.
+        table::Setting::Off { parts, .. } => {
+            derived(entry, index, field, table::Setting::Table(parts))
+        }
         // One element, because the point of the golden is that the shape emits
         // and not that it emits twice — and because two `PERemoveResource`
         // lines naming the same resource is an error the second time. That a
@@ -210,6 +215,11 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
 /// narrowing the table cannot state, which is why they are examples rather than
 /// rows — the same reason `peSubsysVer`'s `"5.1"` is below.
 const REAL: &[(&str, &str, &str)] = &[
+    // Three `RRGGBB` colours. `Setting::Str` says "a string" and NSIS reads six
+    // hex digits, which is the same narrowing `peSubsysVer` has below.
+    ("BGGradient", "top", "\"000000\""),
+    ("BGGradient", "bottom", "\"0000FF\""),
+    ("BGGradient", "text", "\"FFFFFF\""),
     ("PEAddResource", "file", "\"assets/icon.ico\""),
     ("PEAddResource", "restype", "\"#100\""),
     ("PEAddResource", "resname", "\"#1\""),
@@ -347,6 +357,94 @@ fn a_repeating_position_fills_one_line() {
         .filter(|line| line.starts_with("ManifestSupportedOS"))
         .collect();
     assert_eq!(lines, ["ManifestSupportedOS Win7 Win10"], "in:\n{built}");
+}
+
+/// `false` writes the bare word the row carries, which is a different word per
+/// row — the whole reason [`table::Setting::Off`] holds one at all.
+///
+/// The golden above writes the *table* branch of both alternations, so this
+/// branch is checked here or nowhere.
+#[test]
+fn an_alternation_writes_its_bare_word() {
+    let source = "attributes {\n\
+        \toutFile = \"a.exe\",\n\
+        \tname = \"a\",\n\
+        \tbgGradient = false,\n\
+        \tspaceTexts = false,\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags).unwrap_or_default();
+    assert!(!diags.has_errors(), "{}", diags.render("off.lua"));
+
+    assert!(built.contains("\nBGGradient off\n"), "in:\n{built}");
+    assert!(built.contains("\nSpaceTexts none\n"), "in:\n{built}");
+}
+
+/// The trailing positions the flattening lost are still optional: `[bottomc
+/// [textc]]` means a gradient may be one colour.
+#[test]
+fn an_alternation_may_stop_early() {
+    let source = "attributes {\n\
+        \toutFile = \"a.exe\",\n\
+        \tname = \"a\",\n\
+        \tbgGradient = { top = \"000000\" },\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags).unwrap_or_default();
+    assert!(!diags.has_errors(), "{}", diags.render("short.lua"));
+
+    let lines: Vec<&str> = built
+        .lines()
+        .filter(|line| line.starts_with("BGGradient"))
+        .collect();
+    assert_eq!(lines, ["BGGradient 000000"], "in:\n{built}");
+}
+
+/// `true` is not the other half of `false` here. There is nothing to turn *on*:
+/// the row has no default colours, so the table branch is the only way to say
+/// yes and the message has to point at it.
+#[test]
+fn an_alternation_refuses_true() {
+    let source = "attributes {\n\
+        \toutFile = \"a.exe\",\n\
+        \tname = \"a\",\n\
+        \tbgGradient = true,\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    installua::build(source, &mut diags);
+    let rendered = diags.render("true.lua");
+    assert!(
+        diags.contains(installua::diag::Code::BadFieldValue),
+        "{rendered}"
+    );
+    assert!(rendered.contains("BGGradient off"), "{rendered}");
+}
+
+/// A gap in the middle is still a gap: NSIS counts arguments, and `least` moved
+/// where the required positions end without moving the rule.
+#[test]
+fn an_alternation_still_counts_arguments() {
+    let source = "attributes {\n\
+        \toutFile = \"a.exe\",\n\
+        \tname = \"a\",\n\
+        \tbgGradient = { bottom = \"0000FF\" },\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    installua::build(source, &mut diags);
+    let rendered = diags.render("gap.lua");
+    assert!(
+        diags.contains(installua::diag::Code::BadFieldValue),
+        "{rendered}"
+    );
+    assert!(rendered.contains("has no `top`"), "{rendered}");
+    assert!(
+        rendered.contains("only `bottom`, `text` may be left out"),
+        "{rendered}"
+    );
 }
 
 /// An **open** enum takes a value it does not list, and a closed one still does

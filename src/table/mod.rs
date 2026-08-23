@@ -293,6 +293,22 @@ pub enum Setting {
     /// three strings apart, and because a language whose tables have no order
     /// (§12) cannot be asked to supply one by counting.
     Table(&'static [Part]),
+    /// `BGGradient off | (topc [bottomc [textc]])`: one bare word, or the
+    /// positions behind it. `false` writes the word, because Lua already spells
+    /// "this is not there" and a second spelling would be a keyword to learn;
+    /// a table writes the other branch and is a [`Setting::Table`] in every
+    /// other respect.
+    ///
+    /// The only shape carrying its own `least`, where every other row leaves
+    /// required-ness to the snapshot. It has to: `-CMDHELP` prints an
+    /// alternation as *one* required position, so a row naming three parts has
+    /// nothing left to be checked against. `least` is how many of them must be
+    /// written, and it stands for the trailing brackets the flattening lost.
+    Off {
+        word: &'static str,
+        parts: &'static [Part],
+        least: usize,
+    },
     /// `PEAddResource f t n` written once per resource: the field holds a Lua
     /// **array**, and the whole line is emitted once per element, in the order
     /// the elements were written — the one order a Lua table does have (§12).

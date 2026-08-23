@@ -2718,6 +2718,50 @@ and the not-yet-implemented message for both says *"as a statement"*, because bo
 as expressions and it was the position that was missing, never the name. That wording is the
 answer to an objection this table raised against itself two batches ago.
 
+## Batch 45 — an alternation is `false` or a table
+
+Two rows sat in the backlog with the same reason written twice:
+
+```text
+BGGradient (off | (topc [bottomc [textc]]))
+SpaceTexts (none | (required [available]))
+```
+
+`-CMDHELP` prints an alternation as **one required position**, so the snapshot said
+`BGGradient` takes one argument called `off` — which is the name of the *other* branch. There
+was no `Setting` for "a bare word, or these three", and rather than shape one for a single row
+both waited for the second.
+
+```lua
+attributes {
+	bgGradient = false,                                     -- BGGradient off
+	bgGradient = { top = "000000", bottom = "0000FF" },     -- BGGradient 000000 0000FF
+	spaceTexts = false,                                     -- SpaceTexts none
+	spaceTexts = { required = "Needs: " },                  -- SpaceTexts "Needs: "
+}
+```
+
+**`false` and not `"off"`.** Lua already spells "this is not there", and NSIS's word for it
+differs per row — `off` here, `none` there. A caller who had to write the right one of those
+would be writing NSIS. `Setting::Off` carries the word so the row knows it and the surface does
+not. `nil` was never a candidate: leaving the field out has to keep meaning *write no line*.
+
+**`true` is refused, and its message points at the table.** There is nothing to turn on — the
+row has no default colours to guess at — so the only way to say yes is to say which colours.
+
+**The one shape that carries its own optionality.** Everywhere else required-ness is the
+snapshot's, precisely so a row cannot lie about it. Here the snapshot has already lost it:
+one position where the branch has three. `least` is what the flattening dropped —
+`[bottomc [textc]]` — and the argument-counting rule is unchanged around it, so a gap in the
+middle is still the error it was. The two branches share one loop with `Setting::Table`, which
+is why they cannot come to disagree about what a part is.
+
+**A colour is still a string.** `Setting::Str` says "a string" and NSIS reads six hex digits;
+the narrowing is real and the table cannot state it, so `makensis` catches it — the same
+deferral `peSubsysVer`'s `"5.1"` has, and the reason the golden's colours are in `REAL`.
+
+Coverage: `todo` 18 → 16, `attribute` 64 → 66.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.

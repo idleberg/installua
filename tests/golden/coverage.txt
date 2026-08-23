@@ -1,15 +1,14 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed          101
-  attribute         64
+  attribute         66
   lowering-target   26
   language          14
   directive         37
   rejected          16
-  todo              18
+  todo              16
 
 todo:
-  BGGradient              `off | (top [bottom [text]])` is an alternation, and the snapshot flattens it to one required position: the shape has no `Setting`
   GetDLLVersionLocal      its example reads the build machine at compile time, and no fixture yet carries a version resource
   FindClose               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
   FindFirst               runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)
@@ -23,7 +22,6 @@ todo:
   SubCaption              MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
   Target                  says `cpu` and `unicode` in one word, and both are attributes already
   UninstallSubCaption     MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
-  SpaceTexts              `none | (required [available])` is an alternation, and the snapshot flattens it to one required position: the shape has no `Setting`
   GetLabelAddress         takes the address of a function or label; `Call`-by-address has no Lua shape (§3)
   GetCurrentAddress       takes the address of a function or label; `Call`-by-address has no Lua shape (§3)
   InitPluginsDir          the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)

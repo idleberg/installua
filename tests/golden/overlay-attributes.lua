@@ -3,6 +3,7 @@ attributes {
 	brandingImage = { edge = "top", size = "20u", padding = "2u" },
 	autoCloseWindow = true,
 	bgFont = { face = "face", height = 1, weight = 1 },
+	bgGradient = { top = "000000", bottom = "0000FF", text = "FFFFFF" },
 	brandingText = "brandingText",
 	caption = "caption",
 	crcCheck = true,
@@ -45,6 +46,7 @@ attributes {
 	detailsButtonText = "detailsButtonText",
 	uninstallButtonText = "uninstallButtonText",
 	installButtonText = "installButtonText",
+	spaceTexts = { required = "required", available = "available" },
 	completedText = "completedText",
 	allowSkipFiles = true,
 }
