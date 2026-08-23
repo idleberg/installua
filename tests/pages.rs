@@ -1426,3 +1426,93 @@ fn a_start_menu_page_no_block_lists_is_refused() {
         "{raised:?}"
     );
 }
+
+/// `subCaption` is the one page setting that becomes an NSIS line rather than a
+/// MUI2 define, and each page carries its own index into `SubCaption`'s five.
+///
+/// The indices are the whole of the feature: a wrong one is a caption on the
+/// wrong page, which nothing downstream can catch — `makensis` accepts 0 to 4
+/// and MUI2 never reads them back.
+#[test]
+fn a_page_writes_its_own_subcaption_index() {
+    let output = build(&program(
+        "page.license { file = \"tests/fixtures/assets/license.txt\", subCaption = \"Terms\" },\n\
+         page.components { subCaption = \"Pick\" },\n\
+         page.directory { subCaption = \"Where\" },\n\
+         page.instFiles { subCaption = \"Working\" },",
+    ));
+
+    let lines: Vec<&str> = output
+        .lines()
+        .filter(|line| line.starts_with("SubCaption"))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "SubCaption 0 \"Terms\"",
+            "SubCaption 1 \"Pick\"",
+            "SubCaption 2 \"Where\"",
+            "SubCaption 3 \"Working\"",
+        ],
+        "in:\n{output}"
+    );
+}
+
+/// The uninstaller numbers three pages of its own, and neither the command nor
+/// the index is the installer's. `instFiles` is 3 in one half and 1 in the
+/// other, which is why the field carries a pair rather than a number.
+#[test]
+fn the_uninstaller_half_has_its_own_numbering() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         installer { page.instFiles { subCaption = \"Working\" }, }\n\
+         uninstaller {\n\
+         page.confirm { subCaption = \"Really?\" },\n\
+         page.instFiles { subCaption = \"Removing\" },\n\
+         }\n",
+    );
+
+    assert!(output.contains("SubCaption 3 \"Working\""), "{output}");
+    assert!(
+        output.contains("UninstallSubCaption 0 \"Really?\""),
+        "{output}"
+    );
+    assert!(
+        output.contains("UninstallSubCaption 1 \"Removing\""),
+        "{output}"
+    );
+}
+
+/// Three of the five installer pages have no uninstaller number, and that is
+/// NSIS's arithmetic rather than a decision here: `UninstallSubCaption` counts
+/// to 2. A page that has the field in one half and not the other is the first
+/// of its kind, so the message says which half and why.
+#[test]
+fn a_subcaption_with_no_uninstaller_number_is_refused() {
+    let raised = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         installer { page.instFiles {} }\n\
+         uninstaller {\n\
+         page.directory { subCaption = \"Where\" },\n\
+         page.instFiles {},\n\
+         }\n",
+    );
+    assert!(
+        raised
+            .iter()
+            .any(|(code, message)| *code == Code::UnknownField
+                && message.contains("`subCaption` has no uninstaller half")),
+        "{raised:?}"
+    );
+}
+
+/// Index 4 and its uninstaller twin are MUI2's: `MUI_PAGE_INSTFILES` writes
+/// `SubCaption 4 " "` to blank the *Completed* caption. Nothing refuses them,
+/// because there is no field to refuse — 3 and 4 are one page in two states and
+/// this language names the page.
+#[test]
+fn the_completed_subcaption_is_mui2s_and_unwritable() {
+    let output = build(&program("page.instFiles { subCaption = \"Working\" },"));
+    assert!(!output.contains("SubCaption 4"), "{output}");
+    assert!(output.contains("SubCaption 3 \"Working\""), "{output}");
+}

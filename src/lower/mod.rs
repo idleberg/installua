@@ -544,6 +544,21 @@ enum Holds {
     /// existence — MUI2 asks `!ifdef` and never expands it — so there is no
     /// value to write and no third state to have.
     Flag,
+    /// `subCaption = "Terms"`: an NSIS line this compiler writes itself, which
+    /// no other page setting is.
+    ///
+    /// The doc comment on [`PageField`] says the line is absent on purpose,
+    /// because MUI2 writes `DirText` and `ComponentText` from its own defines
+    /// and a second line loses the race. This row is the exception that proves
+    /// the rule rather than a hole in it: MUI2 writes **one** `SubCaption` in
+    /// its entire source — `SubCaption 4 " "`, inside `MUI_PAGE_INSTFILES`,
+    /// blanking the *Completed* caption — and index 4 is the one this language
+    /// has no page for. Indices 0 to 3 are unclaimed, so there is nothing to
+    /// race.
+    ///
+    /// The payload is the page's index in each half, `None` where the page has
+    /// no number in that half's numbering.
+    Caption([Option<u8>; 2]),
     /// A global, named bare: `variable = target`. NSIS wants a *variable* in
     /// this position rather than a value, because `DirVar` stores into it, so a
     /// string would be the wrong kind of thing even where it reads alike.
@@ -713,6 +728,24 @@ const fn field(installua: &'static str, define: &'static str, holds: Holds) -> P
     }
 }
 
+/// `subCaption`, the one page setting that is an NSIS **line** and not a
+/// `!define`.
+///
+/// The pair is the page's index in each half, because `SubCaption` and
+/// `UninstallSubCaption` number their own pages and neither numbering is the
+/// other's: `instFiles` is 3 installing and 1 uninstalling, and three of the
+/// five installer pages have no uninstaller number at all. `define` is empty
+/// and unread — see [`Holds::Caption`] for why this one is safe to write where
+/// `ComponentText` is not.
+const fn caption(indices: [Option<u8>; 2]) -> PageField {
+    PageField {
+        installua: "subCaption",
+        define: "",
+        holds: Holds::Caption(indices),
+        cleared: true,
+    }
+}
+
 /// The same, for a define MUI2 leaves standing.
 const fn sticky(installua: &'static str, define: &'static str, holds: Holds) -> PageField {
     PageField {
@@ -773,6 +806,11 @@ const WELCOME_FIELDS: &[PageField] = &[
 /// MUI2 falls back to its own language string for whichever is missing — so
 /// these are four fields and not two pairs.
 const INSTFILES_FIELDS: &[PageField] = &[
+    // 3 installing, 1 uninstalling. The only page with a number in both
+    // halves, and the only one whose *other* number — 4 and 2, "Completed" —
+    // is the pair MUI2 blanks: this page is that state, and this language has
+    // no second name for it.
+    caption([Some(3), Some(1)]),
     field(
         "finishHeaderText",
         "MUI_INSTFILESPAGE_FINISHHEADER_TEXT",
@@ -802,6 +840,7 @@ const INSTFILES_FIELDS: &[PageField] = &[
 ];
 
 const LICENSE_FIELDS: &[PageField] = &[
+    caption([Some(0), None]),
     field("topText", "MUI_LICENSEPAGE_TEXT_TOP", Holds::Str),
     field("bottomText", "MUI_LICENSEPAGE_TEXT_BOTTOM", Holds::Str),
     field("button", "MUI_LICENSEPAGE_BUTTON", Holds::Str),
@@ -834,6 +873,7 @@ const LICENSE_FIELDS: &[PageField] = &[
 ];
 
 const COMPONENTS_FIELDS: &[PageField] = &[
+    caption([Some(1), None]),
     field("topText", "MUI_COMPONENTSPAGE_TEXT_TOP", Holds::Str),
     field(
         "instTypeText",
@@ -858,6 +898,7 @@ const COMPONENTS_FIELDS: &[PageField] = &[
 ];
 
 const DIRECTORY_FIELDS: &[PageField] = &[
+    caption([Some(2), None]),
     field("topText", "MUI_DIRECTORYPAGE_TEXT_TOP", Holds::Str),
     field(
         "destinationText",
@@ -1089,6 +1130,7 @@ const STARTMENU_FIELDS: &[PageField] = &[
 ];
 
 const CONFIRM_FIELDS: &[PageField] = &[
+    caption([None, Some(0)]),
     field("topText", "MUI_UNCONFIRMPAGE_TEXT_TOP", Holds::Str),
     field(
         "locationText",
@@ -1303,7 +1345,12 @@ const BLOCK_MUI_DEFINES: &[&str] = &[
 /// way to catch it is a list both sides can read.
 pub fn mui_defines() -> Vec<&'static str> {
     fn walk(field: &'static PageField, out: &mut Vec<&'static str>) {
-        out.push(field.define);
+        // `subCaption` writes an NSIS line and no define at all, so it has
+        // nothing to join against the MUI2 inventory. It is the only field that
+        // does, and the empty name is what says so.
+        if !field.define.is_empty() {
+            out.push(field.define);
+        }
         match field.holds {
             Holds::Text(text)
             | Holds::Colors(text)
@@ -4173,6 +4220,37 @@ impl<'p> Lowerer<'_, 'p> {
                     "MUI2 reads this one with `!ifdef`, so it is on or absent",
                 ),
             },
+            Holds::Caption(indices) => {
+                let Some(index) = indices[half as usize] else {
+                    // Three of the five installer pages have no uninstaller
+                    // number, and this is not a gap in the row: NSIS numbers
+                    // three uninstaller pages and license is not among them, so
+                    // there is no line to write rather than one we decline to.
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            value.span(),
+                            format!("`{}` has no uninstaller half", field.installua),
+                        )
+                        .note(format!(
+                            "`UninstallSubCaption` numbers only the confirm, instFiles and \
+                             completed pages, so a `{}` page has none",
+                            page.installua
+                        )),
+                    );
+                    return;
+                };
+                if let Some(arg) = self.constant_arg(value, field.installua) {
+                    let line = match half {
+                        Half::Installer => "SubCaption",
+                        Half::Uninstaller => "UninstallSubCaption",
+                    };
+                    self.module.attributes.push(ir::Instruction::new(
+                        line,
+                        vec![ir::Arg::raw(index.to_string()), arg],
+                    ));
+                }
+            }
             Holds::Var => {
                 let Some(name) = value.name() else {
                     self.bad_value(

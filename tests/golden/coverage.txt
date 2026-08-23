@@ -1,21 +1,19 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed          102
-  attribute         66
+  attribute         68
   lowering-target   26
   language          14
   directive         37
   rejected          23
-  todo               8
+  todo               6
 
 todo:
   ReserveFile             `file…` and `/plugin file.dll` are two alternatives in one line, and the second is a plugin DLL (§11)
   LicenseLangString       a license *file* per language, where §15.26's tables hold strings; the page takes one path and there is no per-locale shape for it yet
   SectionGetInstTypes     reads back the bit field its write takes as a list of names, and there is no list value in this language to answer with (§13)
   SetSilent               only meaningful from `.onInit`, and an example lives in a section: the row needs a place to say where a call is legal
-  SubCaption              MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
   Target                  says `cpu` and `unicode` in one word, and both are attributes already
-  UninstallSubCaption     MUI2 blanks exactly one index of it and leaves the rest free; a row owned for one argument value and open for the others has no shape in the table
   InitPluginsDir          the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)
 
 installua MUI coverage -- Modern UI 2, 255 names

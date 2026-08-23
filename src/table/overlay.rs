@@ -1678,10 +1678,20 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::nonneg(), Kind::Value), ann(Ty::Str, Kind::Value)],
         "local n = string.len(\"abc\")\ndetailPrint(\"len \" .. n)",
     ),
-    todo(
+    // The five indices are the classic UI's page list, and this language names
+    // those pages — so the row is not one field but four, `subCaption` on each
+    // page it numbers, and the block it is written in picks the command (§15.3).
+    //
+    // Index 4, *Completed*, is the one MUI2 claims: `MUI_PAGE_INSTFILES` writes
+    // `SubCaption 4 " "`. It needs no shape to refuse it, because 3 and 4 are
+    // the same page in two states — installing, then done — and this language
+    // has a name for the page and none for the state. The row that was waiting
+    // for "owned at one argument value and open at the others" was waiting for
+    // a shape it turns out not to need.
+    attribute(
         "SubCaption",
-        "MUI2 blanks exactly one index of it and leaves the rest free; a row owned \
-         for one argument value and open for the others has no shape in the table",
+        "page.*.subCaption",
+        Setting::Handled("string"),
     ),
     // `Target x86-unicode` is `cpu` and `unicode` hyphenated together, and both
     // of those are rows already. A third spelling of the same two settings would
@@ -1708,10 +1718,15 @@ pub const ROWS: &[Row] = &[
     // exists in no other half, which is why the field path has no `un.` in it:
     // the block the page is written in supplies that (§15.3).
     attribute("UninstallText", "page.confirm.topText", STR),
-    todo(
+    // Three indices where the installer has five, and they are not the same
+    // three: `confirm` is 0 and `instFiles` is 1, so a page carries both
+    // numbers and `subCaption` on a `license` page inside `uninstaller {}` is
+    // refused — NSIS gives it no number, which is a smaller thing than a
+    // decision. Index 2 is MUI2's, exactly as index 4 is above.
+    attribute(
         "UninstallSubCaption",
-        "MUI2 blanks exactly one index of it and leaves the rest free; a row owned \
-         for one argument value and open for the others has no shape in the table",
+        "page.*.subCaption in `uninstaller {}`",
+        Setting::Handled("string"),
     ),
     exposed(
         "UnRegDLL",

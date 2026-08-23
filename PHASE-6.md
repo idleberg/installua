@@ -2836,6 +2836,54 @@ where a call is legal, a per-locale file shape) and two on §11's plugin surface
 
 Coverage: `todo` 15 → 8, `rejected` 16 → 23.
 
+## Batch 48 — the last group, and it dissolved instead of being solved
+
+`SubCaption` and `UninstallSubCaption` had one reason between them, and it asked for a shape:
+*a row owned for one argument value and open for the others.* MUI2 writes exactly one
+`SubCaption` in its whole source — `SubCaption 4 " "`, in `Pages/InstallFiles.nsh:29` — and
+`UninstallSubCaption 2 " "` beside it, leaving the other seven indices free.
+
+**The five indices are the classic UI's page list, and this language names those pages.**
+
+| NSIS | default | Installua |
+| --- | --- | --- |
+| `SubCaption 0` | ": License Agreement" | `page.license` |
+| `SubCaption 1` | ": Installation Options" | `page.components` |
+| `SubCaption 2` | ": Installation Directory" | `page.directory` |
+| `SubCaption 3` | ": Installing Files" | `page.instFiles` |
+| `SubCaption 4` | ": Completed" | — |
+
+```lua
+installer {
+	page.directory { subCaption = "Where to?" },   -- SubCaption 2 "Where to?"
+	page.instFiles { subCaption = "Working" },     -- SubCaption 3 "Working"
+}
+uninstaller {
+	page.confirm { subCaption = "Really?" },       -- UninstallSubCaption 0 "Really?"
+	page.instFiles { subCaption = "Removing" },    -- UninstallSubCaption 1 "Removing"
+}
+```
+
+**The blocked index needed no shape to refuse it.** 3 and 4 are the *same page in two states* —
+installing, then done — and this language has a name for the page and none for the state. So
+there is no field for MUI2 to be fighting over, and the thing eleven batches of census had
+recorded as missing table machinery was a question that stops existing once the pages are
+named. The reason had been written about the *command* and the answer lived one level up.
+
+**It is the first page setting that is an NSIS line rather than a MUI2 define**, and
+`PageField`'s doc comment says the line is absent on purpose — MUI2 writes `DirText` and
+`ComponentText` from its own defines, and a second line assembles clean and then loses the
+race (§15.7). This is the exception that proves that rule rather than a hole in it: MUI2 never
+writes indices 0–3, so nothing races us. `Holds::Caption` carries the page's index **in each
+half**, because `SubCaption` and `UninstallSubCaption` number their own pages and neither
+numbering is the other's — `instFiles` is 3 in one and 1 in the other, and three of the five
+installer pages have no uninstaller number at all. A `subCaption` on a `license` page inside
+`uninstaller {}` is refused, and the message says NSIS counts to 2 there rather than implying
+a decision was made.
+
+Coverage: `todo` 8 → 6, `attribute` 66 → 68. Every remaining `todo` is a one-off; the last
+group is gone.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -2851,9 +2899,8 @@ Coverage: `todo` 15 → 8, `rejected` 16 → 23.
   designing the thing its reason asked for and then finding that six of its rows were not
   callable at all. Batch 45 emptied the *flattened alternation* pair and batch 46 the last
   one-off with a fixture behind it. Batch 47 read the last three groups and found that
-  none of them was a group of `todo`s at all. Of the **8** left, two are in one group — the
-  two `*SubCaption` — and six are one-offs, and that group is the only one still naming
-  work rather than a decision. This bullet has now outlived the thing it describes: the
+  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **6** that
+  remain are one-offs. This bullet has now outlived the thing it describes: the
   grouping was a way of noticing that one reason covered several rows, and every reason
   that did has been spent.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
@@ -2878,9 +2925,11 @@ Coverage: `todo` 15 → 8, `rejected` 16 → 23.
   same cross-field constraint `compressionLevel` wants. ~~The same goes for the settings
   with no NSIS command behind them, which no census row tracks.~~ **Closed by batch 33**:
   `installua coverage` now prints a second census, and there are 96 of them.
-- **`SubCaption` and `UninstallSubCaption` are still blocked, and not by the page world.**
-  MUI2 blanks exactly one index of nine and leaves the rest free. The shape a table has no
-  way to say is a row *owned for one argument value and open for the others*.
+- ~~**`SubCaption` and `UninstallSubCaption` are still blocked, and not by the page world.**~~
+  **Closed by batch 48**, and by the page world after all. The shape this asked for — a row
+  *owned for one argument value and open for the others* — was never needed: the owned index
+  is *Completed*, which is the instFiles page in its second state, and a language that names
+  the page and not the state has nothing to put the field on.
 - ~~**A `Setting` cannot say "either a keyword or a tuple".**~~ **Closed by batch 45.**
   `Setting::Off` is the shape, and it arrived with the second row exactly as the
   metavariable bullet below asks a shape to: `BGGradient` and `SpaceTexts` were one
