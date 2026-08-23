@@ -119,11 +119,14 @@ const CASES: &[(Code, &str)] = &[
          if answer == \"OK\" then detailPrint(\"always\") end\n\
          end), }",
     ),
-    // `languages {}` used to be this case. It is the eighth block to land, so
-    // the honest backlog moved on to §15.27's.
+    // `languages {}` used to be this case. `include` is what the backlog moved
+    // on to, and it is the honest one of the three blocks left: `import` and
+    // `plugin` are exposed as calls and unimplemented only in block form, so
+    // either would raise "not in this version's exposed set" about a name that
+    // is (§15.28).
     (
         Code::NotYetImplemented,
-        "attributes { outFile = \"a.exe\" }\nimport {}",
+        "attributes { outFile = \"a.exe\" }\ninclude(\"other.lua\")",
     ),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
     (Code::BadFieldValue, r#"attributes { unicode = "yes" }"#),
