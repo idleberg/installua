@@ -1348,7 +1348,6 @@ const V1_BLOCKS: &[&str] = &[
     "func",
     "import",
     "plugin",
-    "include",
 ];
 
 /// How many rounds the signature fixpoint gets. Three is enough for the deepest
@@ -1831,8 +1830,12 @@ impl<'p> Lowerer<'_, 'p> {
             // Lowered by [`Self::languages_pass`] before this loop began, so
             // that a body written above it can still read `lang.greeting`.
             "languages" => {}
+            // `import` and `plugin` are the last two, and both are exposed as
+            // *expressions* — `local mui = import "MUI2"`. What is missing is
+            // this position, not the name, and the message says which rather
+            // than claiming a name the compiler answers to is unknown.
             other if V1_BLOCKS.contains(&other) => {
-                self.todo(span, &format!("`{other}`"));
+                self.todo(span, &format!("`{other}` as a statement"));
             }
             other => {
                 self.diags.push(

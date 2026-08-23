@@ -12,23 +12,35 @@
 //! spell "this node's span", and the whole point of the pass is that there is
 //! one place that decides what the language is.
 
+pub mod include;
 pub mod lift;
 pub mod strings;
 
 use crate::ast::Program;
 use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 
-/// Parses and checks `source`. Returns `None` only when parsing failed outright
-/// — a source that parses always produces a tree, however many diagnostics it
-/// also produced, so a caller can keep checking (§9-4).
+/// Parses and checks `source` as the root of a one-file program.
+///
+/// Returns `None` only when parsing failed outright — a source that parses
+/// always produces a tree, however many diagnostics it also produced, so a
+/// caller can keep checking (§9-4). `include` is *not* followed here: loading
+/// needs a file system, and [`include::load`] is where that is decided.
 pub fn check(source: &str, diags: &mut Diagnostics) -> Option<Program> {
+    check_file(source, 0, diags)
+}
+
+/// The same, for a source that is one file of several: every span it produces
+/// is stamped with `file` (§15.28).
+pub fn check_file(source: &str, file: u32, diags: &mut Diagnostics) -> Option<Program> {
     let ast = match full_moon::parse(source) {
         Ok(ast) => ast,
         Err(errors) => {
             for error in errors {
                 let span = match &error {
-                    full_moon::Error::AstError(error) => position_span(error.range().0),
-                    full_moon::Error::TokenizerError(error) => position_span(error.position()),
+                    full_moon::Error::AstError(error) => position_span(error.range().0, file),
+                    full_moon::Error::TokenizerError(error) => {
+                        position_span(error.position(), file)
+                    }
                 };
                 diags.push(Diagnostic::error(
                     Code::ParseError,
@@ -40,11 +52,12 @@ pub fn check(source: &str, diags: &mut Diagnostics) -> Option<Program> {
         }
     };
 
-    Some(lift::lift(&ast, diags))
+    Some(lift::lift(&ast, file, diags))
 }
 
-fn position_span(position: full_moon::tokenizer::Position) -> Span {
+fn position_span(position: full_moon::tokenizer::Position, file: u32) -> Span {
     Span {
+        file,
         start_line: position.line(),
         start_column: position.character(),
         end_line: position.line(),

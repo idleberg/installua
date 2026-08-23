@@ -23,6 +23,7 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::diag::Files;
 use crate::map::{LineMap, Origin};
 
 /// One thing `makensis` said, before translation.
@@ -103,16 +104,27 @@ fn numbered_warning(text: &str) -> Option<Option<usize>> {
 /// generated line failing is by definition a compiler bug, so the report says
 /// so and names the retained script rather than pointing at code that is not
 /// responsible.
-pub fn translate(message: &Message, map: &LineMap, source: &str, script: &Path) -> String {
+pub fn translate(
+    message: &Message,
+    map: &LineMap,
+    source: &str,
+    files: &Files,
+    script: &Path,
+) -> String {
     let script = script.display();
     let origin = message.line.and_then(|line| map.origin(line));
     match (origin, message.line) {
         (Some(Origin::User(span)), _) => {
-            format!("{source}:{span}: error[makensis]: {}", message.text)
+            format!(
+                "{}:{span}: error[makensis]: {}",
+                name(span, source, files),
+                message.text
+            )
         }
         (Some(Origin::Raw(span)), _) => format!(
-            "{source}:{span}: error[makensis]: {}\n  note: this line is inside a `raw` block, \
+            "{}:{span}: error[makensis]: {}\n  note: this line is inside a `raw` block, \
              which nothing in this compiler checked (§13)",
+            name(span, source, files),
             message.text
         ),
         (Some(Origin::Emitted(what)), Some(line)) => format!(
@@ -128,6 +140,17 @@ pub fn translate(message: &Message, map: &LineMap, source: &str, script: &Path) 
              kept at {script}",
             message.text
         ),
+    }
+}
+
+/// Which file a mapped span belongs to. File `0` is spelled the way the caller
+/// spelled it — `installua build` uses the path as typed — and everything else
+/// is an `include`, named relative to it (§15.28).
+fn name<'a>(span: &crate::diag::Span, source: &'a str, files: &'a Files) -> &'a str {
+    if span.file == 0 {
+        source
+    } else {
+        files.name(span.file).unwrap_or(source)
     }
 }
 
@@ -149,6 +172,7 @@ pub fn assemble(
     script: &Path,
     map: &LineMap,
     source: &str,
+    files: &Files,
     makensis: &str,
 ) -> std::io::Result<Assembly> {
     let output = Command::new(makensis)
@@ -169,7 +193,7 @@ pub fn assemble(
 
     let problems = parse(&log)
         .iter()
-        .map(|message| translate(message, map, source, script))
+        .map(|message| translate(message, map, source, files, script))
         .collect();
 
     Ok(Assembly {

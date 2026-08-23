@@ -2652,9 +2652,78 @@ bytes, not correctness, it needs per-string whole-program reachability, and ther
 over-strip: a wrongly stripped string compiles clean and renders empty at run time. Adding it
 later changes no source and no census row, only goldens.
 
+## Batch 44 — a program may be more than one file
+
+§15.28, whose only condition was that something force it. `languages {}` did: a localised
+installer's strings do not sit comfortably in one file, and neither do forty sections.
+
+```lua
+include "strings/de.lua"        -- merges declarations; emits nothing
+local mui = import "MUI2"       -- emits !include "MUI2.nsh"
+```
+
+**Two words because they belong to two stages.** `import` is *in* the artifact; `include`
+leaves no trace in it. Overloading one name across that boundary is the staging conflation §2
+forbids, and the golden is written to assert the negative: `tests/golden/include.lua` is three
+files, and its `.nsi` carries no marker, no ordering artefact and nothing that says which file
+a line came from. `the_output_is_the_same_as_one_file` says it as a predicate — the split
+program and the merged one are compared as text.
+
+**The merge is free because resolution was already order-free.** Each file is parsed and
+lifted on its own, then the top-level blocks are concatenated and everything downstream sees
+one `Program`. So a `func` in one file and its caller in another need no rule between them —
+`a_file_may_be_included_after_it_is_used` puts the `include` *below* the call — and §15.11's
+whole-program clobber analysis is untouched, because this splits source layout and not
+compilation units. A top-level `local` is spliced with everything else and is therefore
+visible to the file that included it, which is the one place Lua's own scoping shows through.
+
+**An included file may hold anything the root may.** No second grammar. A second
+`installer {}` is the error it already was, and the at-most-one rules do the catching — the
+alternative, a declarations-only subset, would have made splitting *code* impossible, which is
+the half `require` could not do and the reason §15.28 declined it.
+
+**The structural cost was that a span had no file.** `Span` was four line/column numbers and
+two byte offsets, and `render` took one path for a whole run — correct for one source and
+wrong the moment two can raise. `Span` now carries `file`, an index into a `Files` table that
+`Diagnostics` holds beside its items, because a position is only readable once something says
+in which file. The field is stamped in exactly one place: every span the lift pass produces
+comes through `Lifter::span`, so one field attributes a whole file. `map::Origin::User` gets
+it for free, which is what lets `installua build` name the right file when it translates a
+`makensis` complaint about a `raw` block two files away.
+
+**Loading is injected, so §9-2 survives.** `Options` grows a `Loader` — `Disk` for the build
+tool, `Memory` for tests, an editor, an embedder — and every test in `tests/include.rs`
+compiles a multi-file project without touching the disk. A source with no directory behind it
+still compiles; it merely cannot `include`, and the diagnostic says which of the two is
+missing rather than blaming the path.
+
+**Three codes, and each names a rule rather than a symptom.** `include-not-found` (with a note
+about the extension when the path has none, since that is the mistake a module system would
+have made legal), `include-cycle` (which prints the whole loop — the file the loader noticed it
+at is rarely the one with the mistake in it), and `include-form` for the two positions that
+cannot mean anything: inside a body, where only install time could decide it, and with a path
+that is not a literal. A malformed `include` is now *dropped* rather than kept, because
+leaving it in the tree earned it a second and worse diagnostic from lowering, where `include`
+is not a declaration and never will be.
+
+**`installua check` follows includes too.** Checking one file of a project and reporting every
+name its siblings declare as undefined would be worse than no `check` at all.
+
+**The editor mitigation was already built.** `stubs::project_meta` has emitted every `func` and
+global across a project's sources since Phase 5; batch 44 adds the `include` declaration itself
+to the meta file, so the word is not an unknown global either.
+
+**One census consequence.** `include` leaves `V1_BLOCKS`, which is now `import` and `plugin` —
+and the not-yet-implemented message for both says *"as a statement"*, because both are exposed
+as expressions and it was the position that was missing, never the name. That wording is the
+answer to an objection this table raised against itself two batches ago.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
+- **`include` has no `.installua/` convention and no project file.** A path is relative to the
+  file that names it, which is all v1 needs, but nothing yet says where a shared library of
+  `func`s belongs. The first project that vendors one will decide it.
 - **The `todo` reasons are grouped**, and the grind retired the groups it could. Batch 16
   emptied the two *classic UI* groups, batch 17 the *compile time and positional* one,
   batch 18 the *file surface* one, batch 19 the *part path and part switches* pair,

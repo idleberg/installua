@@ -215,14 +215,16 @@ was designed against the whole `-CMDHELP` set rather than against the twelve the
 | --- | --- |
 | Commands with their own control-flow shape | `MessageBox` took a whole ruling (§15.18) — statement, flag set and jump table at once |
 | The `Section*` family | `SectionGetFlags`/`SetFlags` address sections **by index**, a real compile-time ↔ install-time name binding (§13) |
-| The `MUI_*` settings | data-shaped, but each needs a *home* (`installer {}` vs `page {}`), and page-scoped ones carry §15.7's sequential-`!define` hazard. Counted since batch 33: 255 names, 12 `todo` |
+| The `MUI_*` settings | data-shaped, but each needs a *home* (`installer {}` vs `page {}`), and page-scoped ones carry §15.7's sequential-`!define` hazard. Counted since batch 33 and finished in batch 43: 255 names, 1 `todo` |
 | Custom pages / nsDialogs | no design exists — plugin calls, callbacks and a layout model |
 | New kind-2 stdlib adapters | `string.sub`/`format`/`math.*` are hand-written lowerings onto instructions, not declarations (§15.21) |
 | A fifth lattice type | four is a closed set; a fifth touches every rule in §15.14 |
 
 **And the deferred language features were never covered by the groups at all** — section
 index output, code-splitting via `include`, `truncDiv`, the module form of the API. v1 makes
-none of those cheaper.
+none of those cheaper. Two have since landed on their own terms: section index output with
+batches 22–26, and `include` with batch 44, once `languages {}` gave it the forcing case the
+deferral asked for.
 
 So: **v1 makes command surface cheap and leaves language surface hard.** That is the right
 way round, since command surface is the part that is large.
@@ -272,8 +274,8 @@ argument, so none closes a door.
 | `sar(a, b)` | probably never | NSIS's arithmetic `>>` has no Lua operator; `raw` covers it |
 | `Name` accelerator opt-out | a second field | nobody has asked; auto-doubling on a constant name covers the real case |
 | Section index output | `local id = section("Main", fn)` returning a compile-time symbol | needed only once a program reaches `SectionSetFlags` |
-| The 12 `todo` `MUI_*` names | overlay rows in `installer {}` / `page {}` | pure data entry → `mui::Class::Todo`; v1 carries what the five programs reach |
-| Multi-file code splitting | `include` (§15.28) | decided, but only `languages {}` forces it in v1 |
+| The last `todo` `MUI_*` name | `MUI_UI` | one row, and deliberate: it replaces MUI2's dialog resources wholesale, which is not a setting |
+| ~~Multi-file code splitting~~ | ~~`include` (§15.28)~~ | **landed in batch 44** — `languages {}` was the thing that had to force it, and did |
 | Module form of the API | LuaCATS supports naming a meta file so it is also `require`-able | §15.13 — additive, for the embedded case |
 | `System::Call` signature parsing | narrows the opaque-clobber set | §15.11 — a later optimisation, tractable once liveness exists |
 
@@ -302,11 +304,12 @@ boundary cases rather than a formula, and explicitly says those tests are the de
 NSIS's negative `maxlen`/`startoffset` are *close to but not identical to* Lua's, so this is
 a silent-wrong-answer surface inside an adapter users will reach for constantly.
 
-**`MUI_*` volume.** Counted rather than estimated since batch 33: `tables/mui-3.12.txt`
-has **255** names, of which 120 are exposed, 107 are MUI2's own state, 16 are refused and
-**12 are `todo`**. Not design work, but not small, and it is the most likely thing to make
-v1 feel incomplete. The estimate this replaces was "roughly seventy", which was low by a
-factor of nearly four once MUI2's macros and its uninstaller halves were counted too.
+**~~`MUI_*` volume.~~ Spent, batch 43.** Counted rather than estimated since batch 33:
+`tables/mui-3.12.txt` has **255** names, of which 130 are exposed, 108 are MUI2's own state,
+16 are refused and **1 is `todo`** — `MUI_UI`, which replaces MUI2's dialog resources
+wholesale and is deliberate rather than pending. The estimate the count replaced was "roughly
+seventy", low by a factor of nearly four once MUI2's macros and its uninstaller halves were
+counted too; the risk was real and the counting is what retired it.
 
 **Silent string truncation** (§15.31). NSIS truncates over-long strings with **no
 diagnostic at all** — verified: an 1100-character literal compiles clean under `-WX` and

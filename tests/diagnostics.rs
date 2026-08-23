@@ -6,7 +6,10 @@
 //! `Code::ALL` without a case in `CASES` fails the build, so omission is
 //! unrepresentable (§14).
 
+use std::collections::BTreeMap;
+
 use installua::diag::{Code, Diagnostics, Severity};
+use installua::frontend::include::Loader;
 
 /// One source per code, each the smallest thing that raises it.
 ///
@@ -119,14 +122,13 @@ const CASES: &[(Code, &str)] = &[
          if answer == \"OK\" then detailPrint(\"always\") end\n\
          end), }",
     ),
-    // `languages {}` used to be this case. `include` is what the backlog moved
-    // on to, and it is the honest one of the three blocks left: `import` and
-    // `plugin` are exposed as calls and unimplemented only in block form, so
-    // either would raise "not in this version's exposed set" about a name that
-    // is (§15.28).
+    // `languages {}` and then `include` were this case in turn, and both are
+    // now implemented. `import` is what is left: it is exposed as an
+    // *expression* — `local mui = import "MUI2"` — so the message names the
+    // position rather than the name, which is the whole of what is missing.
     (
         Code::NotYetImplemented,
-        "attributes { outFile = \"a.exe\" }\ninclude(\"other.lua\")",
+        "attributes { outFile = \"a.exe\" }\nimport {}",
     ),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
     (Code::BadFieldValue, r#"attributes { unicode = "yes" }"#),
@@ -135,6 +137,18 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\nattributes { name = \"b\" }",
     ),
     (Code::MissingAttribute, r#"attributes { name = "Spine" }"#),
+    (
+        Code::IncludeNotFound,
+        "attributes { outFile = \"a.exe\" }\ninclude(\"missing.lua\")",
+    ),
+    (
+        Code::IncludeCycle,
+        "attributes { outFile = \"a.exe\" }\ninclude(\"loop.lua\")",
+    ),
+    (
+        Code::IncludeForm,
+        "attributes { outFile = \"a.exe\" }\ninclude(1)",
+    ),
     (
         Code::NsisRetired,
         "attributes { outFile = \"a.exe\" }\n\
@@ -181,9 +195,25 @@ const OVERLONG: &str = concat!(
     r#"")"#,
 );
 
+/// Every case compiles against the same two-file in-memory project, so that a
+/// case needing a second file has one and no case needs the disk (§9-2).
+/// `loop.lua` includes itself, which is the only way to write a cycle small
+/// enough to sit in this table.
 fn compile(source: &str) -> Diagnostics {
+    let sources = BTreeMap::from([
+        ("loop.lua".to_string(), "include \"loop.lua\"\n".to_string()),
+        (
+            "other.lua".to_string(),
+            "func(\"helper\", function() detailPrint(\"hi\") end)\n".to_string(),
+        ),
+    ]);
+    let options = installua::Options {
+        loader: Loader::Memory(sources),
+        ..installua::Options::default()
+    };
+
     let mut diags = Diagnostics::new();
-    installua::build(source, &mut diags);
+    installua::build_with(source, &options, &mut diags);
     diags
 }
 

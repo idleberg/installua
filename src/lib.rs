@@ -57,14 +57,34 @@ use crate::diag::Diagnostics;
 
 /// What the compiler needs from the world outside the source text.
 ///
-/// There is exactly one entry — the directory relative paths resolve against —
-/// and it is an `Option` because §9-2 requires that everything here work
-/// against an in-memory string with no file system involved. A source that
-/// never reaches the build machine (no `glob`) compiles either way; one that
-/// does gets an honest diagnostic rather than a guess at the current directory.
+/// Every entry is optional because §9-2 requires that all of this work against
+/// an in-memory string with no file system involved. A source that never
+/// reaches the build machine (no `glob`, no `include`) compiles either way; one
+/// that does gets an honest diagnostic rather than a guess at the current
+/// directory.
 #[derive(Clone, Debug, Default)]
 pub struct Options {
+    /// The directory relative paths resolve against.
     pub base: Option<PathBuf>,
+    /// The root source's own path, relative to `base` (§15.28). Without it a
+    /// file that `include`s the root back cannot be recognised as the cycle it
+    /// is, since the root would have no name for the loop to close on.
+    pub root: Option<PathBuf>,
+    /// Where `include` reads from. [`Loader::Disk`] by default.
+    pub loader: frontend::include::Loader,
+}
+
+impl Options {
+    /// The options `installua build <file>` uses: both halves of the path, so
+    /// that relative paths mean the same thing wherever the build is run from.
+    pub fn for_file(input: &std::path::Path) -> Options {
+        let (base, root) = frontend::include::split(input);
+        Options {
+            base: Some(base),
+            root: Some(root),
+            ..Options::default()
+        }
+    }
 }
 
 /// Parses and checks `source` without lowering it — what `installua check`
@@ -75,6 +95,13 @@ pub struct Options {
 /// wants a tree for completion still gets one.
 pub fn check(source: &str, diags: &mut Diagnostics) -> Option<Program> {
     frontend::check(source, diags)
+}
+
+/// The same, following `include` — one tree out of however many files named
+/// each other (§15.28). `diags` comes back holding the table those spans are
+/// measured in.
+pub fn check_with(source: &str, options: &Options, diags: &mut Diagnostics) -> Option<Program> {
+    frontend::include::load(source, options, diags)
 }
 
 /// Compiles as far as the IR, stopping before layout and emission.
@@ -94,7 +121,7 @@ pub fn compile_with(
     options: &Options,
     diags: &mut Diagnostics,
 ) -> Option<ir::Module> {
-    let program = check(source, diags)?;
+    let program = check_with(source, options, diags)?;
     if diags.has_errors() {
         return None;
     }

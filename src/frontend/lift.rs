@@ -30,8 +30,12 @@ use crate::frontend::strings::{self, LiteralKind};
 /// a Lua programmer reaches for and the one that can never work.
 const ITERATORS: &[&str] = &["glob", "lines", "range"];
 
-pub fn lift(ast: &lua::Ast, diags: &mut Diagnostics) -> Program {
-    let mut lifter = Lifter { diags };
+pub fn lift(ast: &lua::Ast, file: u32, diags: &mut Diagnostics) -> Program {
+    let mut lifter = Lifter {
+        diags,
+        file,
+        depth: 0,
+    };
     Program {
         block: lifter.block(ast.nodes()),
     }
@@ -39,6 +43,15 @@ pub fn lift(ast: &lua::Ast, diags: &mut Diagnostics) -> Program {
 
 struct Lifter<'a> {
     diags: &'a mut Diagnostics,
+    /// Which source this is, stamped onto every span the pass produces —
+    /// `full-moon` measures each file from its own byte zero, so the answer is
+    /// known here and nowhere downstream (§15.28).
+    file: u32,
+    /// How many blocks deep the walk is. One thing depends on it: `include` is
+    /// a top-level statement, and nesting is the difference between merging a
+    /// file and asking the compiler to do so conditionally, which no stage
+    /// could.
+    depth: usize,
 }
 
 /// Where an expression sits, which decides one thing only: whether a function
@@ -52,7 +65,21 @@ enum Position {
 }
 
 impl Lifter<'_> {
+    /// Every span this pass produces comes through here, which is what makes
+    /// one field enough to attribute a whole file (§15.28).
+    fn span(&self, node: &impl Node) -> Span {
+        span_of(node).in_file(self.file)
+    }
+
+    fn name(&self, token: &TokenReference) -> Name {
+        Name {
+            text: token.token().to_string(),
+            span: self.span(token),
+        }
+    }
+
     fn block(&mut self, block: &lua::Block) -> Block {
+        self.depth += 1;
         let mut out = Vec::new();
         for stmt in block.stmts() {
             if let Some(stmt) = self.stmt(stmt) {
@@ -64,11 +91,12 @@ impl Lifter<'_> {
         {
             out.push(stmt);
         }
+        self.depth -= 1;
         out
     }
 
     fn stmt(&mut self, stmt: &lua::Stmt) -> Option<Stmt> {
-        let span = span_of(stmt);
+        let span = self.span(stmt);
         match stmt {
             lua::Stmt::Assignment(assignment) => {
                 let targets = assignment
@@ -86,7 +114,29 @@ impl Lifter<'_> {
 
             lua::Stmt::LocalAssignment(local) => Some(self.local(local, span)),
 
-            lua::Stmt::FunctionCall(call) => Some(Stmt::Call(self.function_call(call, span)?)),
+            lua::Stmt::FunctionCall(call) => {
+                let call = Stmt::Call(self.function_call(call, span)?);
+                // An `include` merges one file's declarations into another's,
+                // which is something the whole program either does or does
+                // not. Inside a body there is no stage that could decide,
+                // because the deciding would be install-time and the merging
+                // is compile-time (§15.28).
+                if self.depth > 1
+                    && matches!(&call, Stmt::Call(expr) if expr.callee_name() == Some("include"))
+                {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::IncludeForm,
+                            span,
+                            "`include` is a top-level statement",
+                        )
+                        .note("it merges another file's declarations into this one, so it cannot depend on anything decided at install time")
+                        .note("move it to the top of the file; declarations are order-free (§15.6)"),
+                    );
+                    return None;
+                }
+                Some(call)
+            }
 
             lua::Stmt::Do(block) => Some(Stmt::Do {
                 block: self.block(block.block()),
@@ -102,7 +152,7 @@ impl Lifter<'_> {
             }),
 
             lua::Stmt::NumericFor(node) => Some(Stmt::NumericFor {
-                name: name_of(node.index_variable()),
+                name: self.name(node.index_variable()),
                 start: self.expr(node.start(), Position::Value)?,
                 end: self.expr(node.end(), Position::Value)?,
                 step: node.step().and_then(|e| self.expr(e, Position::Value)),
@@ -158,7 +208,7 @@ impl Lifter<'_> {
     }
 
     fn last_stmt(&mut self, last: &lua::LastStmt) -> Option<Stmt> {
-        let span = span_of(last);
+        let span = self.span(last);
         match last {
             lua::LastStmt::Break(_) => Some(Stmt::Break { span }),
             lua::LastStmt::Return(node) => Some(Stmt::Return {
@@ -188,13 +238,13 @@ impl Lifter<'_> {
                 "const" => is_const = true,
                 "close" => self.reject(
                     Code::CloseAttribute,
-                    span_of(attribute),
+                    self.span(attribute),
                     "`<close>` is not supported",
                     &["there is no runtime to close over; close a handle explicitly"],
                 ),
                 other => self.reject(
                     Code::UnknownAttribute,
-                    span_of(attribute),
+                    self.span(attribute),
                     format!("`<{other}>` is not a Lua attribute"),
                     &["Lua 5.4 has `<const>` and `<close>`; only `<const>` exists here"],
                 ),
@@ -202,7 +252,7 @@ impl Lifter<'_> {
         }
 
         Stmt::Local {
-            names: local.names().iter().map(name_of).collect(),
+            names: local.names().iter().map(|token| self.name(token)).collect(),
             is_const,
             values: self.expr_list(local.expressions(), Position::Value),
             span,
@@ -217,7 +267,7 @@ impl Lifter<'_> {
 
         if let Some(else_ifs) = node.else_if() {
             for else_if in else_ifs.iter().rev() {
-                let arm_span = span_of(else_if);
+                let arm_span = self.span(else_if);
                 let Some(cond) = self.expr(else_if.condition(), Position::Value) else {
                     continue;
                 };
@@ -290,7 +340,7 @@ impl Lifter<'_> {
         }
 
         Some(Stmt::GenericFor {
-            names: node.names().iter().map(name_of).collect(),
+            names: node.names().iter().map(|token| self.name(token)).collect(),
             iterator,
             block: self.block(node.block()),
             span,
@@ -308,7 +358,7 @@ impl Lifter<'_> {
     }
 
     fn expr(&mut self, expr: &lua::Expression, position: Position) -> Option<Expr> {
-        let span = span_of(expr);
+        let span = self.span(expr);
         match expr {
             // Parentheses carry no meaning once precedence is in the tree.
             lua::Expression::Parentheses { expression, .. } => self.expr(expression, position),
@@ -338,10 +388,10 @@ impl Lifter<'_> {
                 let mut params = Vec::new();
                 for parameter in body.parameters() {
                     match parameter {
-                        lua::Parameter::Name(token) => params.push(name_of(token)),
+                        lua::Parameter::Name(token) => params.push(self.name(token)),
                         other => self.reject(
                             Code::Varargs,
-                            span_of(other),
+                            self.span(other),
                             "`...` is not a parameter",
                             &["there is no vararg calling convention; the stack is the ABI (§11)"],
                         ),
@@ -475,7 +525,7 @@ impl Lifter<'_> {
     /// wants anyway.
     fn var(&mut self, var: &lua::Var) -> Option<Expr> {
         match var {
-            lua::Var::Name(token) => Some(Expr::Name(name_of(token))),
+            lua::Var::Name(token) => Some(Expr::Name(self.name(token))),
             lua::Var::Expression(expression) => {
                 let base = self.prefix(expression.prefix())?;
                 self.suffixes(base, expression.suffixes())
@@ -483,7 +533,7 @@ impl Lifter<'_> {
             other => {
                 self.reject(
                     Code::NotYetImplemented,
-                    span_of(other),
+                    self.span(other),
                     format!("this expression is not part of Installua: `{other}`"),
                     &[],
                 );
@@ -514,12 +564,12 @@ impl Lifter<'_> {
 
     fn prefix(&mut self, prefix: &lua::Prefix) -> Option<Expr> {
         match prefix {
-            lua::Prefix::Name(token) => Some(Expr::Name(name_of(token))),
+            lua::Prefix::Name(token) => Some(Expr::Name(self.name(token))),
             lua::Prefix::Expression(expression) => self.expr(expression, Position::Value),
             other => {
                 self.reject(
                     Code::NotYetImplemented,
-                    span_of(other),
+                    self.span(other),
                     format!("this expression is not part of Installua: `{other}`"),
                     &[],
                 );
@@ -535,17 +585,17 @@ impl Lifter<'_> {
     ) -> Option<Expr> {
         let mut acc = base;
         for suffix in suffixes {
-            let span = acc.span().join(span_of(suffix));
+            let span = acc.span().join(self.span(suffix));
             acc = match suffix {
                 lua::Suffix::Index(lua::Index::Dot { name, .. }) => Expr::Field {
                     base: Box::new(acc),
-                    name: name_of(name),
+                    name: self.name(name),
                     span,
                 },
                 lua::Suffix::Index(lua::Index::Brackets { expression, .. }) => {
                     self.reject(
                         Code::IndexExpression,
-                        span_of(expression),
+                        self.span(expression),
                         "`[…]` indexing is not supported",
                         &[
                             "there are no runtime tables; a compile-time table's fields are \
@@ -564,14 +614,14 @@ impl Lifter<'_> {
                 }
                 lua::Suffix::Call(lua::Call::MethodCall(method)) => Expr::MethodCall {
                     receiver: Box::new(acc),
-                    method: name_of(method.name()),
+                    method: self.name(method.name()),
                     args: self.args(method.args(), false),
                     span,
                 },
                 other => {
                     self.reject(
                         Code::NotYetImplemented,
-                        span_of(other),
+                        self.span(other),
                         format!("this expression is not part of Installua: `{other}`"),
                         &[],
                     );
@@ -591,27 +641,27 @@ impl Lifter<'_> {
                 .iter()
                 .filter_map(|argument| match (verbatim, argument) {
                     (true, lua::Expression::String(token)) => {
-                        let span = span_of(argument);
+                        let span = self.span(argument);
                         self.string(token, true, span).map(Expr::Str)
                     }
                     _ => self.expr(argument, Position::Argument),
                 })
                 .collect(),
             lua::FunctionArgs::String(token) => {
-                let span = span_of(token);
+                let span = self.span(token);
                 self.string(token, verbatim, span)
                     .map(Expr::Str)
                     .into_iter()
                     .collect()
             }
             lua::FunctionArgs::TableConstructor(table) => {
-                let span = span_of(table);
+                let span = self.span(table);
                 vec![self.table(table, span)]
             }
             other => {
                 self.reject(
                     Code::NotYetImplemented,
-                    span_of(other),
+                    self.span(other),
                     "this call form is not part of Installua",
                     &[],
                 );
@@ -627,7 +677,7 @@ impl Lifter<'_> {
                 lua::Field::NameKey { key, value, .. } => {
                     if let Some(value) = self.expr(value, Position::Argument) {
                         fields.push(TableField::Named {
-                            name: name_of(key),
+                            name: self.name(key),
                             value,
                         });
                     }
@@ -640,7 +690,7 @@ impl Lifter<'_> {
                 lua::Field::ExpressionKey { key, .. } => {
                     self.reject(
                         Code::IndexExpression,
-                        span_of(key),
+                        self.span(key),
                         "`[…] =` is not a table key here",
                         &["a compile-time table's keys are names, as the fields they become are"],
                     );
@@ -648,7 +698,7 @@ impl Lifter<'_> {
                 other => {
                     self.reject(
                         Code::NotYetImplemented,
-                        span_of(other),
+                        self.span(other),
                         "this table field is not part of Installua",
                         &[],
                     );
@@ -777,17 +827,11 @@ fn parse_integer(text: &str) -> Option<i64> {
     trimmed.parse::<i64>().ok()
 }
 
-fn name_of(token: &TokenReference) -> Name {
-    Name {
-        text: token.token().to_string(),
-        span: span_of(token),
-    }
-}
-
 pub fn span_of(node: &impl Node) -> Span {
     let (start, end) = (node.start_position(), node.end_position());
     match (start, end) {
         (Some(start), Some(end)) => Span {
+            file: 0,
             start_line: start.line(),
             start_column: start.character(),
             end_line: end.line(),

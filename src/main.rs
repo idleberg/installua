@@ -72,8 +72,11 @@ fn check(args: &[&str]) -> ExitCode {
             return ExitCode::from(2);
         };
 
+        // Following `include` here rather than checking the one file: a name
+        // an included file declares is not an error, and a `check` that said it
+        // was would be worse than no `check` at all (§15.28).
         let mut diags = Diagnostics::new();
-        installua::check(&source, &mut diags);
+        installua::check_with(&source, &installua::Options::for_file(&path), &mut diags);
         report(&diags, &path);
         failed |= diags.has_errors();
     }
@@ -116,9 +119,7 @@ fn build(args: &[&str], assemble: bool) -> ExitCode {
     // Relative paths in the source resolve against the *source's* directory,
     // not the shell's: a `glob` means the same thing wherever the build is run
     // from, which is what makes the output reproducible (§14).
-    let options = installua::Options {
-        base: Some(input.parent().unwrap_or(Path::new(".")).to_path_buf()),
-    };
+    let options = installua::Options::for_file(&input);
 
     let mut diags = Diagnostics::new();
     let result = installua::build_mapped(&source, &options, &mut diags);
@@ -150,7 +151,7 @@ fn build(args: &[&str], assemble: bool) -> ExitCode {
     // (\u{a7}15.22).
     let makensis = std::env::var("MAKENSIS").unwrap_or_else(|_| "makensis".to_string());
     let source_name = input.display().to_string();
-    match installua::assemble::assemble(&output, &map, &source_name, &makensis) {
+    match installua::assemble::assemble(&output, &map, &source_name, diags.files(), &makensis) {
         Err(error) => {
             eprintln!("installua: cannot run `{makensis}`: {error}");
             eprintln!("installua: the script was written to {}", output.display());

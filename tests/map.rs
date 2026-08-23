@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use installua::assemble::{self, Message};
-use installua::diag::Diagnostics;
+use installua::diag::{Diagnostics, Files};
 use installua::map::{LineMap, Origin};
 
 /// A program with all three origins in it: an ordinary statement, a `raw`
@@ -85,7 +85,13 @@ fn a_raw_line_maps_to_its_block_and_says_it_is_unchecked() {
         line: Some(line),
         text: "Error in script \"a.nsi\" on line 12 -- aborting creation process".to_string(),
     };
-    let rendered = assemble::translate(&message, &map, "install.lua", Path::new("a.nsi"));
+    let rendered = assemble::translate(
+        &message,
+        &map,
+        "install.lua",
+        &Files::default(),
+        Path::new("a.nsi"),
+    );
     assert_eq!(
         rendered,
         "install.lua:11:3: error[makensis]: Error in script \"a.nsi\" on line 12 -- aborting \
@@ -104,7 +110,13 @@ fn a_generated_line_is_reported_as_a_compiler_bug() {
         line: Some(line),
         text: "Error in script \"a.nsi\" on line 6 -- aborting creation process".to_string(),
     };
-    let rendered = assemble::translate(&message, &map, "install.lua", Path::new("out/a.nsi"));
+    let rendered = assemble::translate(
+        &message,
+        &map,
+        "install.lua",
+        &Files::default(),
+        Path::new("out/a.nsi"),
+    );
     assert!(
         rendered.starts_with(
             "error: makensis rejected a line Installua generated (!include, out/a.nsi:"
@@ -164,7 +176,13 @@ fn a_message_with_no_line_keeps_the_script() {
         text: "Error: could not resolve label \"nowhere\" in unnamed install section (0)"
             .to_string(),
     };
-    let rendered = assemble::translate(&message, &map, "install.lua", Path::new("a.nsi"));
+    let rendered = assemble::translate(
+        &message,
+        &map,
+        "install.lua",
+        &Files::default(),
+        Path::new("a.nsi"),
+    );
     assert_eq!(
         rendered,
         "error[makensis]: Error: could not resolve label \"nowhere\" in unnamed install section \

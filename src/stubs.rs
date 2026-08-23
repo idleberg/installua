@@ -433,6 +433,12 @@ fn declarations() -> String {
          function func(name, body) end\n\n\
          ---@param body fun()\n\
          function onInit(body) end\n\n\
+         -- Source layout, not a module system: the file's declarations are\n\
+         -- merged into this one and nothing is emitted (§15.28). The names it\n\
+         -- contributes come from `project.lua` beside this file, since\n\
+         -- `lua-language-server` cannot follow the merge itself.\n\
+         ---@param path string\n\
+         function include(path) end\n\n\
          ---@param header string\n\
          ---@return table\n\
          function import(header) end\n\n\

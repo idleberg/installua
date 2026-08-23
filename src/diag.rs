@@ -14,6 +14,14 @@ use std::fmt;
 /// `makensis` and every editor protocol want, so no conversion happens here.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Span {
+    /// Which source this span is measured in — an index into [`Files`], where
+    /// `0` is always the file the build was started from (§15.28).
+    ///
+    /// It lives here rather than on [`Diagnostic`] because `include` merges
+    /// every file's declarations into one tree before resolution: past the
+    /// frontend there is no "current file" for a raiser to be stamped with, and
+    /// most diagnostics are raised past the frontend.
+    pub file: u32,
     pub start_line: usize,
     pub start_column: usize,
     pub end_line: usize,
@@ -24,6 +32,10 @@ pub struct Span {
 
 impl Span {
     /// A span covering both ends, for a diagnostic that spans two nodes.
+    ///
+    /// Two spans from different files never legitimately meet — every joining
+    /// caller joins two nodes of one expression — so the left one's file wins
+    /// rather than the join carrying a third answer.
     pub fn join(self, other: Span) -> Span {
         let (start, end) = if self.start_byte <= other.start_byte {
             (self, other)
@@ -31,6 +43,7 @@ impl Span {
             (other, self)
         };
         Span {
+            file: self.file,
             start_line: start.start_line,
             start_column: start.start_column,
             end_line: end.end_line,
@@ -38,6 +51,55 @@ impl Span {
             start_byte: start.start_byte,
             end_byte: end.end_byte,
         }
+    }
+
+    /// The same span, attributed to `file`. What the frontend stamps once per
+    /// source, since `full-moon` measures every file from its own byte zero.
+    pub fn in_file(self, file: u32) -> Span {
+        Span { file, ..self }
+    }
+}
+
+/// The sources a set of spans is measured in: index `0` is the file the build
+/// started from, and the rest are what `include` pulled in, in load order
+/// (§15.28).
+///
+/// Ordinary owned data, threaded like everything else here — the table is not
+/// a registry and there is no global one.
+#[derive(Clone, Debug, Default)]
+pub struct Files {
+    names: Vec<String>,
+}
+
+impl Files {
+    /// Adds a source and returns its index. The root is added first and gets
+    /// `0`, which is also [`Span::default`]'s file, so a span nobody stamped
+    /// still points at the file the user named.
+    pub fn add(&mut self, name: impl Into<String>) -> u32 {
+        self.names.push(name.into());
+        (self.names.len() - 1) as u32
+    }
+
+    /// The index this source already has, if it has one. What the loader uses
+    /// to include a file once however many times it is named.
+    pub fn find(&self, name: &str) -> Option<u32> {
+        self.names.iter().position(|n| n == name).map(|i| i as u32)
+    }
+
+    pub fn name(&self, file: u32) -> Option<&str> {
+        self.names.get(file as usize).map(String::as_str)
+    }
+
+    pub fn len(&self) -> usize {
+        self.names.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.names.iter().map(String::as_str)
     }
 }
 
@@ -184,6 +246,21 @@ pub enum Code {
     DuplicateBlock,
     /// A required attribute that no block supplied.
     MissingAttribute,
+
+    // -- loading (§15.28)
+    /// An `include` whose file is missing, unreadable, or has no directory to
+    /// resolve against.
+    IncludeNotFound,
+    /// A file that includes itself, however long the way round. Naming the
+    /// whole loop is the point: the file the loader noticed it at is rarely the
+    /// one with the mistake in it.
+    IncludeCycle,
+    /// An `include` written somewhere it cannot mean anything: inside a body,
+    /// or with an argument that is not a string literal. The path has to be
+    /// readable without running anything, which is §2's staging rule and not a
+    /// parser limitation.
+    IncludeForm,
+
     /// An NSIS instruction that has a Lua spelling instead: `StrCmp` is `==`,
     /// `IntOp` is `+`, `StrCpy` is assignment. Not an unknown name — the
     /// compiler knows exactly what it is, and says what to write (§5).
@@ -229,6 +306,9 @@ impl Code {
         Code::BadFieldValue,
         Code::DuplicateBlock,
         Code::MissingAttribute,
+        Code::IncludeNotFound,
+        Code::IncludeCycle,
+        Code::IncludeForm,
         Code::NsisRetired,
     ];
 
@@ -270,6 +350,9 @@ impl Code {
             Code::BadFieldValue => "bad-field-value",
             Code::DuplicateBlock => "duplicate-block",
             Code::MissingAttribute => "missing-attribute",
+            Code::IncludeNotFound => "include-not-found",
+            Code::IncludeCycle => "include-cycle",
+            Code::IncludeForm => "include-form",
             Code::NsisRetired => "nsis-retired",
         }
     }
@@ -324,6 +407,11 @@ impl Diagnostic {
 #[derive(Clone, Debug, Default)]
 pub struct Diagnostics {
     items: Vec<Diagnostic>,
+    /// The sources the spans are measured in, filled by the loader as it
+    /// follows `include` (§15.28). It sits beside the items because a span is
+    /// not readable without it: `4:12` is a position only once something says
+    /// *in which file*.
+    files: Files,
 }
 
 impl Diagnostics {
@@ -360,12 +448,31 @@ impl Diagnostics {
         self.items.iter().any(|d| d.code == code)
     }
 
+    /// The source table these spans are measured in.
+    pub fn files(&self) -> &Files {
+        &self.files
+    }
+
+    /// For the loader, which is the only thing that fills it.
+    pub fn files_mut(&mut self) -> &mut Files {
+        &mut self.files
+    }
+
     /// Every diagnostic, in the order raised — not just the first (§9-4).
+    ///
+    /// `path` names file `0`: the caller knows how it wants the root spelled —
+    /// `installua build` uses the path as typed — and every other file is named
+    /// by the loader, relative to the same root.
     pub fn render(&self, path: &str) -> String {
         let mut out = String::new();
         for d in &self.items {
+            let file = if d.span.file == 0 {
+                path
+            } else {
+                self.files.name(d.span.file).unwrap_or(path)
+            };
             out.push_str(&format!(
-                "{path}:{}: {}[{}]: {}\n",
+                "{file}:{}: {}[{}]: {}\n",
                 d.span, d.severity, d.code, d.message
             ));
             for note in &d.notes {

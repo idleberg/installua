@@ -44,9 +44,7 @@ fn build(name: &str, expected: &[Code]) -> String {
     let source = std::fs::read_to_string(directory.join("install.lua"))
         .unwrap_or_else(|error| panic!("{name}/install.lua: {error}"));
 
-    let options = installua::Options {
-        base: Some(directory),
-    };
+    let options = installua::Options::for_file(&directory.join("install.lua"));
     let mut diags = Diagnostics::new();
     let output = installua::build_with(&source, &options, &mut diags);
 

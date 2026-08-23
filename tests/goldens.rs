@@ -23,6 +23,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("components", &[]),
     ("control-flow", &[]),
     ("dialog", &[]),
+    ("include", &[]),
     ("languages", &[]),
     ("pages", &[]),
     ("returns", &[Code::DeepRecursion]),
@@ -42,9 +43,13 @@ fn golden() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden")
 }
 
-fn build(source: &str, expected: &[Code]) -> String {
+/// Compiled against `tests/golden` as its base, so a golden can `include`
+/// another file and a relative path means the same thing wherever the test runs
+/// (§15.28) — the arrangement `tests/examples.rs` has always used.
+fn build(name: &str, source: &str, expected: &[Code]) -> String {
+    let options = installua::Options::for_file(&golden().join(format!("{name}.lua")));
     let mut diags = Diagnostics::new();
-    let output = installua::build(source, &mut diags);
+    let output = installua::build_with(source, &options, &mut diags);
 
     let raised: Vec<Code> = diags.iter().map(|d| d.code).collect();
     assert_eq!(
@@ -63,7 +68,7 @@ fn goldens_match_their_expected_output() {
             .unwrap_or_else(|_| panic!("the source for {name}"));
         let want = std::fs::read_to_string(golden().join(format!("{name}.nsi")))
             .unwrap_or_else(|_| panic!("the golden for {name}"));
-        assert_eq!(build(&source, expected), want, "{name}");
+        assert_eq!(build(name, &source, expected), want, "{name}");
     }
 }
 
@@ -85,7 +90,7 @@ fn goldens_assemble_under_wx() {
             std::env::temp_dir().join(format!("installua-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&directory).expect("temp directory");
         let script = directory.join(format!("{name}.nsi"));
-        std::fs::write(&script, build(&source, expected)).expect("write the script");
+        std::fs::write(&script, build(name, &source, expected)).expect("write the script");
         for (asset, bytes) in ASSETS {
             std::fs::write(directory.join(asset), bytes).expect("write the asset");
         }
