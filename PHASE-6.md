@@ -2802,6 +2802,40 @@ that had just cost batch 44 its five new files. `.gitignore` now names it with a
 
 Coverage: commands `todo` 16 → 15, `exposed` 101 → 102. MUI `todo` 1 → 0, `rejected` 16 → 17.
 
+## Batch 47 — seven rows that were never waiting on anything
+
+No code. Seven `Todo`s became `Rejected`s, and the census went 15 → 8.
+
+A `todo` says *nobody has done this yet*; a `rejected` says *this language answers the
+question differently*. Every one of these seven was the second, wearing the first's label —
+in three cases since Phase 4. The cost of the mislabel is not tidiness: a backlog is read as a
+list of work, so seven rows that will never be written were being re-estimated every time
+anyone counted what was left.
+
+**The three `Find*`.** §15.19 iterates a directory on the *build* machine and unrolls the
+result, so `for … in glob` is a known list of files before anything runs. `FindFirst`/`Next`/
+`Close` are the other answer — a cursor over the *target's* disk at install time — and offering
+both would give the language two meanings for "the files in this directory".
+
+**The two address rows.** §8 owns labels, so there is no label to take the address of, and §3
+has no value type to hold one: the number is only ever consumed by `Call`, which reaches its
+target by name. `GetCurrentAddress` is worse — "here" in a compiled body is not a position any
+Installua program can name. They were left behind when `GetFunctionAddress` became a lowering
+target, and the reason that kept them is final rather than pending.
+
+**The two `Log*`.** The blocker is a compile-time flag in *someone else's build of the
+assembler*: stock `makensis` refuses at compile time with *"Error: LogSet specified,
+NSIS_CONFIG_LOG not defined."* A surface that depended on how the user's `makensis` was
+compiled would put a portability question in every script that used it. `detailPrint` writes
+to the details window, which every build has.
+
+**What is left is 8 rows, and six of them are one-offs.** The remaining group — the two
+`*SubCaption` — is the only one that still names work rather than a decision. Four of the
+six one-offs are blocked on a language feature that does not exist (a list value, a rule for
+where a call is legal, a per-locale file shape) and two on §11's plugin surface.
+
+Coverage: `todo` 15 → 8, `rejected` 16 → 23.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -2816,13 +2850,12 @@ Coverage: commands `todo` 16 → 15, `exposed` 101 → 102. MUI `todo` 1 → 0, 
   without designing anything for it. Batch 32 emptied the `hwnd` group outright, by
   designing the thing its reason asked for and then finding that six of its rows were not
   callable at all. Batch 45 emptied the *flattened alternation* pair and batch 46 the last
-  one-off with a fixture behind it. Of the 15 left, nine are in four groups — the three
-  `Find*`, the two `Log*`, the two remaining address rows, the two `*SubCaption` — and six
-  are one-offs. Every group that named missing *design*
-  is now gone; three of the four that remain name a **deliberate** answer this language
-  already gave elsewhere (§15.19 unrolls iteration on the build machine, §3 has no
-  `Call`-by-address), which is to say they are closer to `rejected` than the reasons admit
-  — and re-reading a reason is what four batches of this grind found to be the work.
+  one-off with a fixture behind it. Batch 47 read the last three groups and found that
+  none of them was a group of `todo`s at all. Of the **8** left, two are in one group — the
+  two `*SubCaption` — and six are one-offs, and that group is the only one still naming
+  work rather than a decision. This bullet has now outlived the thing it describes: the
+  grouping was a way of noticing that one reason covered several rows, and every reason
+  that did has been spent.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
   sixteen batches because the reason was true of the shape they were rejected as. Batch 18

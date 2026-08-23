@@ -767,17 +767,26 @@ pub const ROWS: &[Row] = &[
         ],
         "local window = findWindow(\"Notepad\")\nif isWindow(window) then\n\tdetailPrint(\"already running\")\nend",
     ),
-    todo(
+    // `Todo` for six phases, and it was always a `Rejected`: the reason names a
+    // decision this language already made rather than work nobody has done.
+    // §15.19 iterates a directory on the **build** machine and unrolls the
+    // result, so `for … in glob` is a known list of files by the time anything
+    // runs. The three `Find*` are the other answer — a cursor over whatever is
+    // on the *target* disk at install time — and the two cannot be offered side
+    // by side without the language having two meanings for "the files in this
+    // directory". A row that will not be written is a `rejected`, and calling it
+    // a `todo` for six phases said the opposite to everyone reading the census.
+    rejected(
         "FindClose",
-        "runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)",
+        "iterating the target's disk at install time; §15.19 unrolls `for … in glob` on the build machine instead",
     ),
-    todo(
+    rejected(
         "FindFirst",
-        "runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)",
+        "iterating the target's disk at install time; §15.19 unrolls `for … in glob` on the build machine instead",
     ),
-    todo(
+    rejected(
         "FindNext",
-        "runtime directory iteration; `for … in glob` is unrolled on the build machine instead (§15.19)",
+        "iterating the target's disk at install time; §15.19 unrolls `for … in glob` on the build machine instead",
     ),
     // Three of the four flags are booleans and become fields; `/x` is the row
     // `Offer::List` exists for. It takes a filespec *and* repeats, so its field
@@ -1166,13 +1175,19 @@ pub const ROWS: &[Row] = &[
     // defined."* — not a warning, and not a runtime surprise either. The stock
     // `makensis` cannot assemble a script containing this, so a row exposing it
     // would ship a call that fails on most machines and works on the author's.
-    todo(
+    //
+    // That is a `rejected` and not a `todo`, because nothing here is waiting on
+    // anything: the blocker is a **compile-time flag in someone else's build of
+    // the assembler**, and a language whose surface depended on how the user's
+    // `makensis` was compiled would have a portability question in every script.
+    // `detailPrint` writes to the details window, which every build has.
+    rejected(
         "LogSet",
-        "the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`",
+        "logging needs `makensis` built with `NSIS_CONFIG_LOG`, which the stock build is not; use `detailPrint`",
     ),
-    todo(
+    rejected(
         "LogText",
-        "the stock `makensis` errors on it: logging needs a build with `NSIS_CONFIG_LOG`",
+        "logging needs `makensis` built with `NSIS_CONFIG_LOG`, which the stock build is not; use `detailPrint`",
     ),
     flagged(
         exposed(
@@ -1971,13 +1986,20 @@ pub const ROWS: &[Row] = &[
         "GetFunctionAddress",
         "an event: `button { \"Check\", onClick = function() … end }` (§15.32)",
     ),
-    todo(
+    // The two that stayed behind when `GetFunctionAddress` became a lowering
+    // target, and they stayed for a reason that is final rather than pending.
+    // §8 owns labels: there is no label in this language to take the address of,
+    // and §3 has no value type an address could be held in — the number these
+    // produce is only ever consumed by `Call`, which reaches its target by name.
+    // `GetCurrentAddress` is worse still, since "here" in a compiled body is not
+    // a position any Installua program can name.
+    rejected(
         "GetLabelAddress",
-        "takes the address of a function or label; `Call`-by-address has no Lua shape (§3)",
+        "§8 owns labels, so there is none to address; `Call` reaches its target by name (§3)",
     ),
-    todo(
+    rejected(
         "GetCurrentAddress",
-        "takes the address of a function or label; `Call`-by-address has no Lua shape (§3)",
+        "the address of the current instruction, which no Installua program has a name for (§3, §8)",
     ),
     directive("!addplugindir"),
     todo(
