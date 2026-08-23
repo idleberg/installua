@@ -133,6 +133,10 @@ Section "FlushINI"
   FlushINI "$INSTDIR\app.ini"
 SectionEnd
 
+Section "ReserveFile"
+  ReserveFile /x "*.tmp" "assets\icon.ico"
+SectionEnd
+
 Section "FileClose"
   FileOpen $0 "$INSTDIR\log.txt" "w"
   FileClose $0

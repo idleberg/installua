@@ -109,6 +109,9 @@ installer {
 	section("FlushINI", function()
 		flushIni(INSTDIR .. "/app.ini")
 	end),
+	section("ReserveFile", function()
+		reserveFile("assets/icon.ico", { exclude = { "*.tmp" } })
+	end),
 	section("FileClose", function()
 		local f = fileOpen(INSTDIR .. "/log.txt", "w")
 		f:close()
