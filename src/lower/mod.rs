@@ -17,8 +17,10 @@
 
 pub mod control;
 mod expr;
+mod fields;
 mod handle;
 mod insttype;
+mod languages;
 mod sig;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,6 +37,8 @@ use crate::table;
 use crate::types::Ty;
 
 pub use sig::{Inferred, Signature};
+
+use fields::Fields;
 
 /// The `attributes {}` surface, read from the census rather than frozen here: a
 /// name is an attribute exactly when a [`table::Class::Attribute`] row claims
@@ -75,7 +79,85 @@ const V1_INSTALLER_FIELDS: &[&str] = &[
     "installColors",
     "progressBar",
     "licenseBkColor",
+    "headerColors",
+    "abortPrompt",
+    "autoClose",
+    "headerImage",
+    "wizardImage",
+    "smallDescriptions",
 ];
+
+/// The four words MUI2's image branch tests for, in the order its `!if` chain
+/// tests them.
+///
+/// MUI2 spells them and this compiler does not rename them: an unknown value is
+/// a `!warning` there and an error here, and the words are the ones a user
+/// finds in MUI2's own Readme and in every script they are porting.
+const STRETCH_MODES: &[&str] = &[
+    "FitControl",
+    "AspectFitHeight",
+    "NoStretchNoCrop",
+    "NoStretchNoCropNoAlign",
+];
+
+/// A hook MUI2 calls from a callback of its own: a define holding a function
+/// name, and the function beside it.
+///
+/// Three of the four NSIS callbacks a MUI2 script wants are **MUI2's** —
+/// `MUI2.nsh` writes `.onGUIInit`, `.onUserAbort` and `.onMouseOverSection`
+/// itself — so a script cannot write them and this is the only door in. `onInit`
+/// is not here for exactly that reason: NSIS's `.onInit` is nobody else's, so
+/// the compiler writes it directly.
+#[derive(Clone, Copy, Debug)]
+struct MuiHook {
+    /// The word written in the block, which is NSIS's own name for the callback
+    /// MUI2 calls it from — so a script being ported greps for it and finds it.
+    word: &'static str,
+    install: &'static str,
+    uninstall: &'static str,
+    /// Whether MUI2 reaches this one only when the uninstaller has a page.
+    /// `MUI_INSERT` writes the `un.` halves of `.onGUIInit` and `.onUserAbort`
+    /// behind `!ifdef MUI_UNINSTALLER`, which `MUI_UNPAGE_INIT` sets — so
+    /// without a page the define is written, the function is written, and
+    /// nothing calls either.
+    needs_unpage: bool,
+}
+
+const MUI_HOOKS: &[MuiHook] = &[
+    MuiHook {
+        word: "onGUIInit",
+        install: "MUI_CUSTOMFUNCTION_GUIINIT",
+        uninstall: "MUI_CUSTOMFUNCTION_UNGUIINIT",
+        needs_unpage: true,
+    },
+    MuiHook {
+        word: "onUserAbort",
+        install: "MUI_CUSTOMFUNCTION_ABORT",
+        uninstall: "MUI_CUSTOMFUNCTION_UNABORT",
+        needs_unpage: true,
+    },
+    // Not `needs_unpage`: the block this one is called from is the compiler's
+    // own, so it exists whenever the hook does (§15.23, batch 40).
+    MuiHook {
+        word: "onMouseOverSection",
+        install: "MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION",
+        uninstall: "MUI_CUSTOMFUNCTION_UNONMOUSEOVERSECTION",
+        needs_unpage: false,
+    },
+];
+
+impl MuiHook {
+    fn named(word: &str) -> Option<&'static MuiHook> {
+        MUI_HOOKS.iter().find(|hook| hook.word == word)
+    }
+
+    fn define(&self, half: Half) -> &'static str {
+        match half {
+            Half::Installer => self.install,
+            Half::Uninstaller => self.uninstall,
+        }
+    }
+}
 
 /// The fields NSIS reads once for the whole script, so only `installer {}` has
 /// them: written in both blocks they would define one name twice, which is a
@@ -89,6 +171,8 @@ const ONCE_GLOBAL_FIELDS: &[&str] = &[
     "installColors",
     "progressBar",
     "licenseBkColor",
+    "headerColors",
+    "smallDescriptions",
 ];
 
 /// NSIS numbers install types one to thirty-two and rejects anything else
@@ -113,6 +197,14 @@ impl Half {
         match self {
             Half::Installer => "",
             Half::Uninstaller => "un.",
+        }
+    }
+
+    /// Which slot of a two-element per-half array this is.
+    fn index(self) -> usize {
+        match self {
+            Half::Installer => 0,
+            Half::Uninstaller => 1,
         }
     }
 
@@ -173,6 +265,30 @@ fn control_var(local: &str, half: Half) -> String {
     match half {
         Half::Installer => format!("{}ctl_{local}", cfg::LABEL_PREFIX),
         Half::Uninstaller => format!("{}unctl_{local}", cfg::LABEL_PREFIX),
+    }
+}
+
+/// The `Var` MUI2 leaves the chosen Start Menu folder in.
+///
+/// A `Var` because `MUI_PAGE_STARTMENU` takes one — the page stores into it —
+/// and it has to outlive the page by the whole of the install. Named from the
+/// local like a control's, and prefixed like a generated label for the same
+/// reason: it is one more name in a namespace the author also writes in.
+fn start_menu_var(local: &str) -> String {
+    format!("{}sm_{local}", cfg::LABEL_PREFIX)
+}
+
+/// The name a claim earns, and which namespace it lands in.
+///
+/// Three kinds of declaration and two namespaces: a section's index is a
+/// `!define` beside the author's `<const>`s, and a control's handle and a start
+/// menu page's folder are `Var`s beside the author's globals. NSIS holds one
+/// name once in either, which is what the caller checks.
+fn earned_name(local: &str, kind: DeferredKind, half: Half) -> (String, &'static str) {
+    match kind {
+        DeferredKind::Control(_) => (control_var(local, half), "global"),
+        DeferredKind::StartMenu => (start_menu_var(local), "global"),
+        _ => (index_name(local, half), "`<const>`"),
     }
 }
 
@@ -394,6 +510,14 @@ fn page_controls(value: &Expr) -> Option<&[TableField]> {
     }
 }
 
+/// One named member of a table, by the name a user writes.
+fn named<'e>(fields: &'e [TableField], name: &str) -> Option<&'e Expr> {
+    fields.iter().find_map(|entry| match entry {
+        TableField::Named { name: key, value } if key.text == name => Some(value),
+        _ => None,
+    })
+}
+
 fn group_members(value: &Expr) -> Option<&[TableField]> {
     let Expr::Call { args, .. } = value else {
         return None;
@@ -434,6 +558,112 @@ enum Holds {
     /// A table whose keys are further defines, and whose presence turns the
     /// setting on the way [`Holds::Text`] does.
     Nested(&'static [PageField]),
+    /// `colors = { text = "000000", background = "FFFFFF" }`: the field's own
+    /// define takes the background and the payload takes the text.
+    ///
+    /// One field holding two for the reason §15.32 gives one level down — MUI2
+    /// spends both of these on a single `SetCtlColors`, so `bgColor` and
+    /// `textColor` as separate fields would let a script write one and get the
+    /// other from whatever MUI2 had defaulted it to. It is also what the pair's
+    /// cross-field constraint becomes: MUI2 reads the text colour only inside an
+    /// `!ifdef` on the background, so a text colour written alone is read by
+    /// nothing, and a shape that asks for both cannot say the case that does
+    /// nothing.
+    Colors(&'static str),
+    /// A string and the one define that gives it more room: `title = "Done"`,
+    /// or `title = { text = "Done", lines = 3 }`.
+    ///
+    /// One field holding two, because the second is geometry for the first and
+    /// nothing else. `MUI_FINISHPAGE_TITLE_3LINES` and `…_TEXT_LARGE` change
+    /// the height of the box the string is drawn in — a field apiece would let
+    /// a script make room and never say what goes in it, and the plain string
+    /// stays the plain string.
+    Roomy(&'static str, Room),
+    /// A table of parts whose *presence* means the setting is on, where the
+    /// field's own define is MUI2's opt-**out**: `reboot = false` writes
+    /// `MUI_FINISHPAGE_NOREBOOTSUPPORT` and a table writes nothing but its
+    /// parts.
+    ///
+    /// [`Holds::Nested`] inverted, and inverted because MUI2 is: the three
+    /// reboot strings and `REBOOTLATER_DEFAULT` are read only inside the
+    /// `!ifndef MUI_FINISHPAGE_NOREBOOTSUPPORT` branch, so a table that also
+    /// turned the opt-out on would write four defines nothing reads.
+    Off(&'static [PageField]),
+    /// One of two words, one of which writes the define and the other nothing:
+    /// `default = "later"` is `MUI_FINISHPAGE_REBOOTLATER_DEFAULT` and
+    /// `default = "now"` is MUI2's own default, which is the absence of it.
+    ///
+    /// Two words rather than a `bool` because the choice is between two named
+    /// things and not between doing and not doing, and a build script can pass
+    /// either one without branching.
+    Word {
+        writes: &'static str,
+        silent: &'static str,
+    },
+    /// A callback that also turns its setting on, the way [`Holds::Text`] does
+    /// a string: `call = function() … end` is `MUI_FINISHPAGE_RUN ""` *and*
+    /// `…_RUN_FUNCTION`, because MUI2 asks `!ifdef` about the first — that is
+    /// what draws the checkbox — and `Call`s the second when it is ticked.
+    ///
+    /// The stem names the function the compiler writes, since `call` is the
+    /// same word under `run` and under `readme` and the two are different
+    /// functions.
+    Calls {
+        function: &'static str,
+        stem: &'static str,
+    },
+    /// A `bool` whose **`false`** writes the define, because MUI2's is an
+    /// opt-out: `checked = false` is `MUI_FINISHPAGE_RUN_NOTCHECKED` and `true`
+    /// is the absence of it. [`Holds::Flag`] the other way round.
+    Not,
+    /// A checkbox or a link: a table in one of a few spellings, where the
+    /// spelling picks the parts and one of the parts writes the widget's own
+    /// define.
+    Widget(&'static [Form]),
+    /// A box that is either worded or taken away: `checkbox = "Do not create
+    /// shortcuts"` writes the payload, `checkbox = false` writes the field's own
+    /// define — MUI2's `…_NODISABLE` — and `true` writes neither, which is
+    /// MUI2's own box with MUI2's own words.
+    ///
+    /// One field holding two for [`Holds::Colors`]'s reason: `StartMenu.nsh`
+    /// expands `…_TEXT_CHECKBOX` only inside the `!ifndef …_NODISABLE` branch,
+    /// so a wording written beside the switch that removes the box is a define
+    /// nothing reads, and a shape that asks for both cannot say the case that
+    /// does nothing.
+    Checkbox(&'static str),
+}
+
+/// One spelling of a [`Holds::Widget`].
+///
+/// `run` has two — a program to `Exec` and a function to `Call` — and they are
+/// two part lists rather than one list with optional members, because that is
+/// what makes `parameters` beside a function unspellable: MUI2 expands
+/// `MUI_FINISHPAGE_RUN_PARAMETERS` only in the branch where there is no
+/// function, so a shape that permitted both would write a define nothing reads.
+#[derive(Debug)]
+struct Form {
+    /// The part that has to be written, and that writes the widget's own
+    /// define. Which key is present is what picks the spelling.
+    key: &'static str,
+    /// The parts that have to come with it. `link` is a label *and* the place
+    /// it goes: MUI2 writes a click handler that `ExecShell`s
+    /// `MUI_FINISHPAGE_LINK_LOCATION` under `!ifdef MUI_FINISHPAGE_LINK`, so a
+    /// label without one is a link to nowhere.
+    needs: &'static [&'static str],
+    parts: &'static [PageField],
+}
+
+/// How a [`Holds::Roomy`] field spells its second half.
+///
+/// Two spellings and not one, because MUI2's two are not the same kind of
+/// switch: the title box is two lines tall or three, and the body text either
+/// gets the taller box or does not.
+#[derive(Clone, Copy, Debug)]
+enum Room {
+    /// `lines = 3`.
+    Lines,
+    /// `large = true`.
+    Large,
 }
 
 /// One setting of one page: the name a user writes, the `MUI_*` define it
@@ -501,6 +731,16 @@ const COMMON_FIELDS: &[PageField] = &[
     field("leave", "MUI_PAGE_CUSTOMFUNCTION_LEAVE", Holds::Callback),
 ];
 
+/// The fourth hook, and why it is not in `COMMON_FIELDS`: `Pages.nsh` writes it
+/// the same way as the other three, but only the nsDialogs pages — welcome,
+/// finish and the start menu — insert `MUI_PAGE_FUNCTION_CUSTOM DESTROYED`.
+/// Offered on `page.directory` it would define a name nothing ever calls.
+const DESTROYED_FIELD: PageField = field(
+    "destroyed",
+    "MUI_PAGE_CUSTOMFUNCTION_DESTROYED",
+    Holds::Callback,
+);
+
 /// The bold heading strip inside the page — not the title bar, which is
 /// `caption` on the block, and not the page's own body text.
 ///
@@ -512,7 +752,57 @@ const HEADER_FIELDS: &[PageField] = &[
     field("headerSubText", "MUI_PAGE_HEADER_SUBTEXT", Holds::Str),
 ];
 
+/// The welcome page: a title, a body, and the hook the full-window pages have.
+///
+/// `text` is a plain string and not a [`Holds::Roomy`] one, unlike the finish
+/// page's: MUI2 draws this box at a fixed 130u and has no `…_LARGE` for it.
+const WELCOME_FIELDS: &[PageField] = &[
+    field(
+        "title",
+        "MUI_WELCOMEPAGE_TITLE",
+        Holds::Roomy("MUI_WELCOMEPAGE_TITLE_3LINES", Room::Lines),
+    ),
+    field("text", "MUI_WELCOMEPAGE_TEXT", Holds::Str),
+    DESTROYED_FIELD,
+];
+
+/// The install-log page's two endings.
+///
+/// MUI2 swaps the header strip when the copy stops: one wording for the run
+/// that finished and one for the run that did not. Each half stands alone —
+/// MUI2 falls back to its own language string for whichever is missing — so
+/// these are four fields and not two pairs.
+const INSTFILES_FIELDS: &[PageField] = &[
+    field(
+        "finishHeaderText",
+        "MUI_INSTFILESPAGE_FINISHHEADER_TEXT",
+        Holds::Str,
+    ),
+    field(
+        "finishHeaderSubText",
+        "MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT",
+        Holds::Str,
+    ),
+    // `sticky`, and this is MUI2's own hole rather than ours:
+    // `InstallFiles.nsh` unsets `FINISHHEADER_*` and `ABORTWARNING_*` and
+    // never unsets `ABORTHEADER_*`, which is the pair it actually reads. The
+    // same class of typo as `License.nsh`'s `CHECKBOX_TEXT_ACCEPT`, and
+    // without the compiler's own `!undef` a second instfiles page is headed
+    // with the first one's abort wording.
+    sticky(
+        "abortHeaderText",
+        "MUI_INSTFILESPAGE_ABORTHEADER_TEXT",
+        Holds::Str,
+    ),
+    sticky(
+        "abortHeaderSubText",
+        "MUI_INSTFILESPAGE_ABORTHEADER_SUBTEXT",
+        Holds::Str,
+    ),
+];
+
 const LICENSE_FIELDS: &[PageField] = &[
+    field("topText", "MUI_LICENSEPAGE_TEXT_TOP", Holds::Str),
     field("bottomText", "MUI_LICENSEPAGE_TEXT_BOTTOM", Holds::Str),
     field("button", "MUI_LICENSEPAGE_BUTTON", Holds::Str),
     field(
@@ -551,6 +841,20 @@ const COMPONENTS_FIELDS: &[PageField] = &[
         Holds::Str,
     ),
     field("listText", "MUI_COMPONENTSPAGE_TEXT_COMPLIST", Holds::Str),
+    // The description box's caption, and the words in it while the pointer is
+    // over nothing. Page-scoped, unlike `smallDescriptions`: MUI2 reads both
+    // through `MUI_DEFAULT` inside the page declaration and `MUI_UNSET`s them
+    // after, so a second components page may differ.
+    field(
+        "descriptionTitle",
+        "MUI_COMPONENTSPAGE_TEXT_DESCRIPTION_TITLE",
+        Holds::Str,
+    ),
+    field(
+        "descriptionText",
+        "MUI_COMPONENTSPAGE_TEXT_DESCRIPTION_INFO",
+        Holds::Str,
+    ),
 ];
 
 const DIRECTORY_FIELDS: &[PageField] = &[
@@ -566,6 +870,222 @@ const DIRECTORY_FIELDS: &[PageField] = &[
         "MUI_DIRECTORYPAGE_VERIFYONLEAVE",
         Holds::Flag,
     ),
+    // `sticky` because `Directory.nsh` clears neither one: MUI2 reads them from
+    // the Show function it writes per page and leaves them standing, so without
+    // the `!undef` a second directory page is painted in the first one's
+    // colours.
+    sticky(
+        "colors",
+        "MUI_DIRECTORYPAGE_BGCOLOR",
+        Holds::Colors("MUI_DIRECTORYPAGE_TEXTCOLOR"),
+    ),
+];
+
+/// The reboot half of the finish page, which MUI2 draws instead of the normal
+/// one when the install set `SetRebootFlag`.
+///
+/// Reached only through `reboot = { … }`, and that is the point: all four are
+/// read inside `!ifndef MUI_FINISHPAGE_NOREBOOTSUPPORT`, so the shape that
+/// writes them is the shape that cannot also have turned reboot support off.
+const REBOOT_FIELDS: &[PageField] = &[
+    field("text", "MUI_FINISHPAGE_TEXT_REBOOT", Holds::Str),
+    field("now", "MUI_FINISHPAGE_TEXT_REBOOTNOW", Holds::Str),
+    field("later", "MUI_FINISHPAGE_TEXT_REBOOTLATER", Holds::Str),
+    field(
+        "default",
+        "MUI_FINISHPAGE_REBOOTLATER_DEFAULT",
+        Holds::Word {
+            writes: "later",
+            silent: "now",
+        },
+    ),
+];
+
+/// The run checkbox, spelled as a program to start.
+const RUN_PATH_FIELDS: &[PageField] = &[
+    field("path", "MUI_FINISHPAGE_RUN", Holds::Str),
+    field("parameters", "MUI_FINISHPAGE_RUN_PARAMETERS", Holds::Str),
+    field("text", "MUI_FINISHPAGE_RUN_TEXT", Holds::Str),
+    field("checked", "MUI_FINISHPAGE_RUN_NOTCHECKED", Holds::Not),
+];
+
+/// The same checkbox, spelled as a function to call. No `parameters`: MUI2
+/// reads them only where it builds the `Exec` line.
+const RUN_CALL_FIELDS: &[PageField] = &[
+    field(
+        "call",
+        "MUI_FINISHPAGE_RUN",
+        Holds::Calls {
+            function: "MUI_FINISHPAGE_RUN_FUNCTION",
+            stem: "run",
+        },
+    ),
+    field("text", "MUI_FINISHPAGE_RUN_TEXT", Holds::Str),
+    field("checked", "MUI_FINISHPAGE_RUN_NOTCHECKED", Holds::Not),
+];
+
+const RUN_FORMS: &[Form] = &[
+    Form {
+        key: "path",
+        needs: &[],
+        parts: RUN_PATH_FIELDS,
+    },
+    Form {
+        key: "call",
+        needs: &[],
+        parts: RUN_CALL_FIELDS,
+    },
+];
+
+/// The readme checkbox. The same two spellings as `run`, and no `parameters`
+/// in either: MUI2 opens this one with `ExecShell open`, which takes none.
+const README_PATH_FIELDS: &[PageField] = &[
+    field("path", "MUI_FINISHPAGE_SHOWREADME", Holds::Str),
+    field("text", "MUI_FINISHPAGE_SHOWREADME_TEXT", Holds::Str),
+    field(
+        "checked",
+        "MUI_FINISHPAGE_SHOWREADME_NOTCHECKED",
+        Holds::Not,
+    ),
+];
+
+const README_CALL_FIELDS: &[PageField] = &[
+    field(
+        "call",
+        "MUI_FINISHPAGE_SHOWREADME",
+        Holds::Calls {
+            function: "MUI_FINISHPAGE_SHOWREADME_FUNCTION",
+            stem: "readme",
+        },
+    ),
+    field("text", "MUI_FINISHPAGE_SHOWREADME_TEXT", Holds::Str),
+    field(
+        "checked",
+        "MUI_FINISHPAGE_SHOWREADME_NOTCHECKED",
+        Holds::Not,
+    ),
+];
+
+const README_FORMS: &[Form] = &[
+    Form {
+        key: "path",
+        needs: &[],
+        parts: README_PATH_FIELDS,
+    },
+    Form {
+        key: "call",
+        needs: &[],
+        parts: README_CALL_FIELDS,
+    },
+];
+
+/// The link along the bottom of the page: one spelling, and `url` is not
+/// optional in it.
+const LINK_FIELDS: &[PageField] = &[
+    field("text", "MUI_FINISHPAGE_LINK", Holds::Str),
+    field("url", "MUI_FINISHPAGE_LINK_LOCATION", Holds::Str),
+    field("color", "MUI_FINISHPAGE_LINK_COLOR", Holds::Str),
+];
+
+const LINK_FORMS: &[Form] = &[Form {
+    key: "text",
+    needs: &["url"],
+    parts: LINK_FIELDS,
+}];
+
+/// The finish page.
+///
+/// `autoClose` is not here and is a block field: MUI2 reads
+/// `MUI_FINISHPAGE_NOAUTOCLOSE` from `MUI_FINISHPAGE_GUIINIT`, behind an
+/// `!ifndef` on the half's own `WELCOMEFINISHPAGE_GUINIT`, so it is read on the
+/// first welcome-or-finish page of that half and never again — the same rule
+/// that put `checkBitmap` on the block.
+const FINISH_FIELDS: &[PageField] = &[
+    field(
+        "title",
+        "MUI_FINISHPAGE_TITLE",
+        Holds::Roomy("MUI_FINISHPAGE_TITLE_3LINES", Room::Lines),
+    ),
+    field(
+        "text",
+        "MUI_FINISHPAGE_TEXT",
+        Holds::Roomy("MUI_FINISHPAGE_TEXT_LARGE", Room::Large),
+    ),
+    field("button", "MUI_FINISHPAGE_BUTTON", Holds::Str),
+    field(
+        "cancelEnabled",
+        "MUI_FINISHPAGE_CANCEL_ENABLED",
+        Holds::Flag,
+    ),
+    field(
+        "reboot",
+        "MUI_FINISHPAGE_NOREBOOTSUPPORT",
+        Holds::Off(REBOOT_FIELDS),
+    ),
+    field("run", "MUI_FINISHPAGE_RUN", Holds::Widget(RUN_FORMS)),
+    field(
+        "readme",
+        "MUI_FINISHPAGE_SHOWREADME",
+        Holds::Widget(README_FORMS),
+    ),
+    field("link", "MUI_FINISHPAGE_LINK", Holds::Widget(LINK_FORMS)),
+    DESTROYED_FIELD,
+];
+
+/// Where the page remembers the folder, as one field holding three.
+///
+/// `StartMenu.nsh` guards every read of the three with
+/// `!ifdef …_REGISTRY_ROOT & …_REGISTRY_KEY & …_REGISTRY_VALUENAME`, so any one
+/// of them alone is a define nothing reads — and any two are as well. A
+/// [`Form`] with the other two under `needs` is exactly that constraint: the
+/// shape that writes one is the shape that has written all three.
+const REGISTRY_FIELDS: &[PageField] = &[
+    field("root", "MUI_STARTMENUPAGE_REGISTRY_ROOT", Holds::Str),
+    field("key", "MUI_STARTMENUPAGE_REGISTRY_KEY", Holds::Str),
+    field("value", "MUI_STARTMENUPAGE_REGISTRY_VALUENAME", Holds::Str),
+];
+
+const REGISTRY_FORMS: &[Form] = &[Form {
+    key: "root",
+    needs: &["key", "value"],
+    parts: REGISTRY_FIELDS,
+}];
+
+/// The Start Menu folder page.
+///
+/// The only page bound to a `local`, and the fields say why: MUI2 reads the
+/// folder back through `MUI_STARTMENU_GETFOLDER <id>` and wraps the shortcut
+/// writing in `MUI_STARTMENU_WRITE_BEGIN <id>`, so the page has a *name* that
+/// install-time code uses. Nothing here spells that name — the id is the local
+/// and the variable is minted beside it — which is the whole of what binding it
+/// buys.
+const STARTMENU_FIELDS: &[PageField] = &[
+    field(
+        "defaultFolder",
+        "MUI_STARTMENUPAGE_DEFAULTFOLDER",
+        Holds::Str,
+    ),
+    field("topText", "MUI_STARTMENUPAGE_TEXT_TOP", Holds::Str),
+    field(
+        "checkbox",
+        "MUI_STARTMENUPAGE_NODISABLE",
+        Holds::Checkbox("MUI_STARTMENUPAGE_TEXT_CHECKBOX"),
+    ),
+    field(
+        "registry",
+        "MUI_STARTMENUPAGE_REGISTRY_ROOT",
+        Holds::Widget(REGISTRY_FORMS),
+    ),
+    // No `colors`, and the reason is a typo in MUI2 rather than a decision
+    // here. `StartMenu.nsh:141` paints `$mui.StartMenuMenu.FolderList`; the
+    // variable it declares at line 17 and fills at line 136 is
+    // `$mui.StartMenuPage.FolderList`. The line is reached only when
+    // `MUI_STARTMENUPAGE_BGCOLOR` is defined, so a page that sets the colours
+    // raises `warning 6000: unknown variable/constant` — and this compiler
+    // assembles under `-WX`. The two defines are refused in the inventory with
+    // that reason, which is the only place a name can be *unusable* rather than
+    // unimplemented (§15.23).
+    DESTROYED_FIELD,
 ];
 
 const CONFIRM_FIELDS: &[PageField] = &[
@@ -642,19 +1162,31 @@ const V1_PAGES: &[Page] = &[
         halves: [true, true],
         header: false,
         custom: false,
-        own: &[],
+        own: WELCOME_FIELDS,
     },
     page("license", "LICENSE", LICENSE_FIELDS),
     page("components", "COMPONENTS", COMPONENTS_FIELDS),
     page("directory", "DIRECTORY", DIRECTORY_FIELDS),
-    page("instFiles", "INSTFILES", &[]),
+    page("instFiles", "INSTFILES", INSTFILES_FIELDS),
+    // Installer-only, and that is MUI2's fact rather than our policy: there is
+    // no `MUI_UNPAGE_STARTMENU`. The uninstaller reaches the same folder
+    // through `MUI_STARTMENU_GETFOLDER`, which is what a `menu.folder` read in
+    // that half becomes.
+    Page {
+        installua: "startMenu",
+        nsis: "STARTMENU",
+        halves: [true, false],
+        header: true,
+        custom: false,
+        own: STARTMENU_FIELDS,
+    },
     Page {
         installua: "finish",
         nsis: "FINISH",
         halves: [true, true],
         header: false,
         custom: false,
-        own: &[],
+        own: FINISH_FIELDS,
     },
     Page {
         installua: "confirm",
@@ -691,6 +1223,120 @@ impl Page {
         let header: &'static [PageField] = if self.header { HEADER_FIELDS } else { &[] };
         self.own.iter().chain(header).chain(COMMON_FIELDS)
     }
+}
+
+/// The block-level `MUI_*` defines, listed beside the arms of `block_field`
+/// that write them.
+///
+/// A list *and* the arms, which is one name in two places — deliberately, and
+/// only these six. The arms differ in ways a table would have to grow a column
+/// for apiece (`icon` writes one of two names depending on the half, three of
+/// the others are paths and two are not), and the duplication is caught rather
+/// than trusted: `tests/mui.rs` asserts that this list and the MUI inventory's
+/// `Exposed` rows are the same set.
+const BLOCK_MUI_DEFINES: &[&str] = &[
+    "MUI_BGCOLOR",
+    "MUI_TEXTCOLOR",
+    "MUI_ICON",
+    "MUI_UNICON",
+    "MUI_COMPONENTSPAGE_CHECKBITMAP",
+    "MUI_INSTFILESPAGE_COLORS",
+    "MUI_INSTFILESPAGE_PROGRESSBAR",
+    "MUI_LICENSEPAGE_BGCOLOR",
+    "MUI_ABORTWARNING",
+    "MUI_ABORTWARNING_TEXT",
+    "MUI_ABORTWARNING_CANCEL_DEFAULT",
+    // One name for two spellings, and the only entry here that is: MUI2 builds
+    // this one with its uninstaller prefix, so the uninstaller's is
+    // `MUI_UNFINISHPAGE_NOAUTOCLOSE` and the snapshot records the pair as the
+    // single row the `un` tag marks (§15.23).
+    "MUI_FINISHPAGE_NOAUTOCLOSE",
+    "MUI_UNABORTWARNING",
+    "MUI_UNABORTWARNING_TEXT",
+    "MUI_UNABORTWARNING_CANCEL_DEFAULT",
+    // §15.26's dialog. Seven settings and no macro: the three macros the block
+    // writes are `!insertmacro` lines rather than `!define`s, so they are
+    // exposed without being here — same shape as `MUI_LANGUAGE` itself.
+    "MUI_LANGDLL_WINDOWTITLE",
+    "MUI_LANGDLL_INFO",
+    "MUI_LANGDLL_ALLLANGUAGES",
+    "MUI_LANGDLL_ALWAYSSHOW",
+    "MUI_LANGDLL_REGISTRY_ROOT",
+    "MUI_LANGDLL_REGISTRY_KEY",
+    "MUI_LANGDLL_REGISTRY_VALUENAME",
+    "MUI_HEADERIMAGE",
+    "MUI_HEADERIMAGE_BITMAP",
+    "MUI_HEADERIMAGE_BITMAP_STRETCH",
+    "MUI_HEADERIMAGE_BITMAP_RTL",
+    "MUI_HEADERIMAGE_BITMAP_RTL_STRETCH",
+    // The uninstaller's four are spelled out rather than tagged `un`, because
+    // MUI2 spells them out: `UNBITMAP` is a name of its own in the snapshot,
+    // where `MUI_UNWELCOMEFINISHPAGE_BITMAP` below is not.
+    "MUI_HEADERIMAGE_UNBITMAP",
+    "MUI_HEADERIMAGE_UNBITMAP_STRETCH",
+    "MUI_HEADERIMAGE_UNBITMAP_RTL",
+    "MUI_HEADERIMAGE_UNBITMAP_RTL_STRETCH",
+    "MUI_HEADERIMAGE_RIGHT",
+    "MUI_HEADER_TRANSPARENT_TEXT",
+    // Two more of the `un`-tagged kind, like `MUI_FINISHPAGE_NOAUTOCLOSE`: MUI2
+    // builds these through `${_un}`, so one row apiece covers the uninstaller's
+    // `MUI_UNWELCOMEFINISHPAGE_BITMAP` and `…_BITMAP_STRETCH` too.
+    "MUI_WELCOMEFINISHPAGE_BITMAP",
+    "MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH",
+    "MUI_COMPONENTSPAGE_SMALLDESC",
+    // The hover hook, which is a define holding a function name and so belongs
+    // here rather than beside the description block it is called from.
+    "MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION",
+    "MUI_CUSTOMFUNCTION_UNONMOUSEOVERSECTION",
+    "MUI_CUSTOMFUNCTION_GUIINIT",
+    "MUI_CUSTOMFUNCTION_UNGUIINIT",
+    "MUI_CUSTOMFUNCTION_ABORT",
+    "MUI_CUSTOMFUNCTION_UNABORT",
+];
+
+/// Every `MUI_*` define this compiler writes: the block's, then every page's,
+/// then the nested ones a field expands into.
+///
+/// Public for the inventory's sake (`crate::mui`). A define the emitter writes
+/// while the inventory still calls it `todo` is drift in the direction that
+/// matters — the burndown claiming work is left when it is done — and the only
+/// way to catch it is a list both sides can read.
+pub fn mui_defines() -> Vec<&'static str> {
+    fn walk(field: &'static PageField, out: &mut Vec<&'static str>) {
+        out.push(field.define);
+        match field.holds {
+            Holds::Text(text)
+            | Holds::Colors(text)
+            | Holds::Checkbox(text)
+            | Holds::Roomy(text, _)
+            | Holds::Calls { function: text, .. } => out.push(text),
+            Holds::Nested(fields) | Holds::Off(fields) => {
+                for nested in fields {
+                    walk(nested, out);
+                }
+            }
+            // Every spelling, since each writes what the others do not — and
+            // the ones they share are deduped below.
+            Holds::Widget(forms) => {
+                for form in forms {
+                    for part in form.parts {
+                        walk(part, out);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut out: Vec<&'static str> = BLOCK_MUI_DEFINES.to_vec();
+    for page in V1_PAGES {
+        for field in page.fields() {
+            walk(field, &mut out);
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// The frozen v1 block surface, for the same reason.
@@ -790,7 +1436,13 @@ fn lower_once(
         mui: false,
         global_inits: Vec::new(),
         claims: BTreeMap::new(),
-        on_init: false,
+        on_init: [false, false],
+        init_prelude: [Vec::new(), Vec::new()],
+        lang_strings: BTreeSet::new(),
+        descriptions: [Vec::new(), Vec::new()],
+        hover: [false, false],
+        minted: 0,
+        un_hooks: Vec::new(),
         requires: Requirements::default(),
     };
     lowerer.program(program);
@@ -827,7 +1479,28 @@ struct Lowerer<'a, 'p> {
     /// not stored beside them.
     claims: BTreeMap<String, Claim>,
     /// Whether an `.onInit` was written, so that one is not invented twice.
-    on_init: bool,
+    /// The uninstaller's is the second slot (§15.26 needs both).
+    on_init: [bool; 2],
+    /// Lines the compiler owes the *first* of each half's init callback:
+    /// `MUI_LANGDLL_DISPLAY` and `MUI_UNGETLANGUAGE`, which have to run before
+    /// anything reads `$LANGUAGE` and so cannot wait for a body to ask for them.
+    init_prelude: [Vec<ir::Instruction>; 2],
+    /// The `LangString` names `languages {}` declared, so `lang.greeting` is a
+    /// resolved read rather than a `$(…)` nobody checked (§15.26).
+    lang_strings: BTreeSet<String>,
+    /// Each half's components-page hover texts, as `(index define, text)` in
+    /// section order — the block MUI2 spells with three macros.
+    descriptions: [Vec<(String, ir::Arg)>; 2],
+    /// Whether a half wrote `onMouseOverSection`. MUI2 calls the hook from
+    /// inside the block and from nowhere else, so this forces the block even
+    /// when no section carries a `description`.
+    hover: [bool; 2],
+    /// How many description indices have been minted, so the next one is new.
+    minted: usize,
+    /// Uninstaller hooks MUI2 reaches only through `!ifdef MUI_UNINSTALLER`,
+    /// with the entry that wrote each — checked once the block's pages are
+    /// known, since §15.6 lets the page be written below the hook.
+    un_hooks: Vec<(Span, &'static str)>,
     /// What the program needs included and initialised. Collected during
     /// lowering and emitted at the top, which is the only order that works
     /// (§15.21).
@@ -903,6 +1576,9 @@ impl<'p> Lowerer<'_, 'p> {
         // `installer { onInit(…), core }` is ordinary — and the claim is what
         // says which half a handle names, so the map has to be complete before
         // the first body is walked (§15.6).
+        // §15.26's block, before anything that could read `lang.greeting` or
+        // ask for an `.onInit` — same order-freeness argument as the claims.
+        self.languages_pass(program);
         self.claim_pass(program);
 
         for stmt in &program.block {
@@ -922,21 +1598,25 @@ impl<'p> Lowerer<'_, 'p> {
                 continue;
             };
             let what = deferred.kind.word();
-            let (lists, write, order) = if deferred.kind.is_control() {
-                (
+            let (lists, write, order) = match deferred.kind {
+                DeferredKind::Control(_) => (
                     "page",
                     format!("write `{local},` among the `controls` of a `page.custom {{}}`"),
                     "the list's order is the tab order; the declaration's is nothing (§15.32)",
-                )
-            } else {
-                (
+                ),
+                DeferredKind::StartMenu => (
+                    "block",
+                    format!("write `{local},` among the entries of `installer {{}}`"),
+                    "the block's order is the page order; the declaration's is nothing (§15.3)",
+                ),
+                _ => (
                     "block",
                     format!(
                         "write `{local},` among the entries of `installer {{}}` or \
                          `uninstaller {{}}`"
                     ),
                     "the block's order is the install order; the declaration's is nothing (§13)",
-                )
+                ),
             };
             self.diags.push(
                 Diagnostic::error(
@@ -949,14 +1629,38 @@ impl<'p> Lowerer<'_, 'p> {
             );
         }
 
-        // Nothing declared an `.onInit`, and there are globals to initialise:
-        // the callback exists to hold them.
-        if !self.global_inits.is_empty() && !self.on_init {
-            let inits = std::mem::take(&mut self.global_inits);
+        // Nothing declared an `.onInit`, and there is something for one to do:
+        // globals to initialise (§15.24), or a language to pick before anything
+        // reads `$LANGUAGE` (§15.26). The callback exists to hold them, and
+        // inventing it is the same ruling as inventing the `.` on its name.
+        for half in [Half::Installer, Half::Uninstaller] {
+            let prelude = std::mem::take(&mut self.init_prelude[half.index()]);
+            let inits = match half {
+                Half::Installer => std::mem::take(&mut self.global_inits),
+                Half::Uninstaller => Vec::new(),
+            };
+            if self.on_init[half.index()] || (prelude.is_empty() && inits.is_empty()) {
+                continue;
+            }
+            // The uninstaller's is worth nothing when there is no uninstaller:
+            // `un.onInit` in a script with no `uninstaller {}` is a function
+            // NSIS never calls. Keyed off the block rather than off its pages,
+            // since a silent uninstaller has none and still runs.
+            if half == Half::Uninstaller && self.uninstaller_span.is_none() {
+                continue;
+            }
             let span = inits.first().map(Stmt::span).unwrap_or_default();
-            let body = self.body(&inits, &[], span, None, Some(Half::Installer));
+            let (body, _) = self.body_with(span, Some(half), |lowerer| {
+                for instruction in prelude {
+                    lowerer.emit(instruction);
+                }
+                lowerer.block(&inits);
+            });
             self.module.functions.push(ir::Function {
-                name: ".onInit".to_string(),
+                name: format!(
+                    "{}onInit",
+                    if half == Half::Installer { "." } else { "un." }
+                ),
                 body,
             });
         }
@@ -977,8 +1681,19 @@ impl<'p> Lowerer<'_, 'p> {
             let Some(deferred) = self.resolved.deferred.get(local) else {
                 continue;
             };
-            if let (true, Some(claim)) = (deferred.kind.is_control(), self.claims.get(local)) {
-                self.module.vars.push(control_var(local, claim.half));
+            let Some(claim) = self.claims.get(local) else {
+                continue;
+            };
+            match deferred.kind {
+                DeferredKind::Control(_) => {
+                    self.module.vars.push(control_var(local, claim.half));
+                }
+                // And one per listed start menu page, for the same reason one
+                // level up: `MUI_PAGE_STARTMENU` stores the folder the user
+                // picked into it, and the sections that write the shortcuts run
+                // long after the page is gone.
+                DeferredKind::StartMenu => self.module.vars.push(start_menu_var(local)),
+                _ => {}
             }
         }
     }
@@ -991,10 +1706,16 @@ impl<'p> Lowerer<'_, 'p> {
         // independent, unlike `!define`s, so there is nothing to preserve.
         if self.mui {
             self.module.includes.push("MUI2.nsh".to_string());
-            self.module.languages.push(ir::Instruction::new(
-                "!insertmacro",
-                vec![ir::Arg::raw("MUI_LANGUAGE"), ir::Arg::str("English")],
-            ));
+            // A program with no `languages {}` still needs one language line —
+            // MUI2 `!warning`s without one — so English stands in. Written out
+            // it would be `languages { locales = { English = {} } }`, which is
+            // why this is a default and not a policy (§15.26).
+            if self.module.languages.is_empty() {
+                self.module.languages.push(ir::Instruction::new(
+                    "!insertmacro",
+                    vec![ir::Arg::raw("MUI_LANGUAGE"), ir::Arg::str("English")],
+                ));
+            }
         }
         self.module.includes.extend(
             self.requires
@@ -1010,6 +1731,42 @@ impl<'p> Lowerer<'_, 'p> {
                 .iter()
                 .map(|name| ir::Instruction::new("${Using:StrFunc}", vec![ir::Arg::raw(name)])),
         );
+
+        // An uninstaller hook with no uninstaller page. `MUI_INSERT` writes
+        // `un.onGUIInit` and `un.onUserAbort` behind `!ifdef MUI_UNINSTALLER`,
+        // and `MUI_UNPAGE_INIT` is the only thing that sets it — so without a
+        // page the define is written, the function is written, and nothing ever
+        // calls either. Checked here rather than where the hook is written,
+        // because §15.6 lets the page be written below it.
+        if self.module.unpages.is_empty() {
+            for (span, word) in std::mem::take(&mut self.un_hooks) {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::MissingAttribute,
+                        span,
+                        format!("`{word}` in `uninstaller {{}}` needs an uninstaller page"),
+                    )
+                    .note(
+                        "MUI2 writes the `un.` half of the callback that calls it only for a \
+                         script that has one, so this function would never run (§15.3)",
+                    ),
+                );
+            }
+        }
+
+        // One description block per half that has anything to say. A half with
+        // texts needs it to show them; a half with only the hook needs it
+        // because MUI2 calls the hook from inside it (§15.23).
+        for half in [Half::Installer, Half::Uninstaller] {
+            let texts = std::mem::take(&mut self.descriptions[half.index()]);
+            if texts.is_empty() && !self.hover[half.index()] {
+                continue;
+            }
+            self.module.descriptions.push(ir::Descriptions {
+                un: half == Half::Uninstaller,
+                texts,
+            });
+        }
 
         self.learned.globals = self
             .globals
@@ -1071,6 +1828,9 @@ impl<'p> Lowerer<'_, 'p> {
                 self.installer(fields, Half::Uninstaller);
             }
             "func" => self.function(name, call),
+            // Lowered by [`Self::languages_pass`] before this loop began, so
+            // that a body written above it can still read `lang.greeting`.
+            "languages" => {}
             other if V1_BLOCKS.contains(&other) => {
                 self.todo(span, &format!("`{other}`"));
             }
@@ -1788,6 +2548,78 @@ impl<'p> Lowerer<'_, 'p> {
                 "licenseBkColor" if half == Half::Installer => {
                     self.mui_define("MUI_LICENSEPAGE_BGCOLOR", value, "licenseBkColor", false);
                 }
+                // The header strip's two colours, which MUI2 spends on the four
+                // `SetCtlColors` in `MUI_INTERFACE`: the background, the two
+                // lines of text and the image behind them. Block-scoped because
+                // MUI2 reads them inside the `!ifndef`-guarded macro, so a
+                // second page could not differ even if it asked.
+                "headerColors" if half == Half::Installer => {
+                    if let Some((text, back)) = self.colours(value, "headerColors") {
+                        self.module.mui_defines.push(ir::Define {
+                            name: "MUI_TEXTCOLOR".to_string(),
+                            value: Some(text),
+                        });
+                        self.module.mui_defines.push(ir::Define {
+                            name: "MUI_BGCOLOR".to_string(),
+                            value: Some(back),
+                        });
+                        self.mui = true;
+                    }
+                }
+                // The narrow description box, which is a different dialog
+                // resource rather than a layout tweak: MUI2 spends it on a
+                // `ChangeUI IDD_SELCOM` inside the `!ifndef`-guarded interface
+                // macro, so it is the block's and the installer's alone.
+                "smallDescriptions" if half == Half::Installer => match self.constant(value) {
+                    Some(ConstValue::Bool(false)) => {}
+                    Some(ConstValue::Bool(true)) => {
+                        self.module.mui_defines.push(ir::Define {
+                            name: "MUI_COMPONENTSPAGE_SMALLDESC".to_string(),
+                            value: None,
+                        });
+                        self.mui = true;
+                    }
+                    _ => self.bad_value(
+                        value.span(),
+                        "smallDescriptions",
+                        "a `bool`",
+                        "`true` swaps the components page for the one with the short \
+                         description box",
+                    ),
+                },
+                "abortPrompt" => self.abort_prompt(value, half),
+                "headerImage" => self.header_image(value, half),
+                "wizardImage" => self.wizard_image(value, half),
+                // `autoClose = false` keeps the install log on screen instead
+                // of stepping to the finish page by itself. A block field and
+                // not a `page.finish` one: MUI2 reads it from
+                // `MUI_FINISHPAGE_GUIINIT`, behind an `!ifndef` on the half's
+                // `WELCOMEFINISHPAGE_GUINIT`, so the second finish page of a
+                // half could not differ even if it asked (§15.7).
+                "autoClose" => {
+                    let define = match half {
+                        Half::Installer => "MUI_FINISHPAGE_NOAUTOCLOSE",
+                        Half::Uninstaller => "MUI_UNFINISHPAGE_NOAUTOCLOSE",
+                    };
+                    match self.constant(value) {
+                        // MUI2 closes by itself unless told otherwise, so `true`
+                        // is the default and writes nothing.
+                        Some(ConstValue::Bool(true)) => {}
+                        Some(ConstValue::Bool(false)) => {
+                            self.module.mui_defines.push(ir::Define {
+                                name: define.to_string(),
+                                value: None,
+                            });
+                            self.mui = true;
+                        }
+                        _ => self.bad_value(
+                            value.span(),
+                            "autoClose",
+                            "a `bool`",
+                            "`false` leaves the install log up until the user clicks Next",
+                        ),
+                    }
+                }
                 "installTypes" => self.install_types(value, half),
                 other if half == Half::Uninstaller && ONCE_GLOBAL_FIELDS.contains(&other) => {
                     self.diags.push(
@@ -1823,6 +2655,492 @@ impl<'p> Lowerer<'_, 'p> {
                 continue;
             };
             self.body_entry(value, half);
+        }
+    }
+
+    /// `abortPrompt = true`, or `abortPrompt = { text = …, default = "cancel" }`
+    /// — the "are you sure you want to quit" box, on the Cancel button.
+    ///
+    /// One field holding three defines, for the reason `colors` holds two:
+    /// MUI2 reads `MUI_ABORTWARNING_TEXT` and `…_CANCEL_DEFAULT` only inside an
+    /// `!ifdef MUI_ABORTWARNING`, so three flat fields would let a script write
+    /// a message that nothing ever shows. Here the field's presence *is* the
+    /// enable, and the invalid state has no spelling.
+    ///
+    /// Per half, unlike `headerColors`: `MUI_ABORTWARNING` and
+    /// `MUI_UNABORTWARNING` are two names MUI2 reads in two places, so
+    /// `uninstaller { abortPrompt = … }` is real and not a redefinition.
+    fn abort_prompt(&mut self, value: &Expr, half: Half) {
+        let (on, text, cancel) = match half {
+            Half::Installer => (
+                "MUI_ABORTWARNING",
+                "MUI_ABORTWARNING_TEXT",
+                "MUI_ABORTWARNING_CANCEL_DEFAULT",
+            ),
+            Half::Uninstaller => (
+                "MUI_UNABORTWARNING",
+                "MUI_UNABORTWARNING_TEXT",
+                "MUI_UNABORTWARNING_CANCEL_DEFAULT",
+            ),
+        };
+
+        let fields = match value {
+            // `false` and leaving the field out are the same thing, so a
+            // configuration that switches the prompt off has a spelling that is
+            // not deleting the line.
+            _ if matches!(self.constant(value), Some(ConstValue::Bool(false))) => return,
+            _ if matches!(self.constant(value), Some(ConstValue::Bool(true))) => &[][..],
+            Expr::Table { fields, .. } => fields,
+            _ => {
+                self.bad_value(
+                    value.span(),
+                    "abortPrompt",
+                    "`true` or a table",
+                    "write `abortPrompt = true` for MUI2's own wording, or `abortPrompt = { text \
+                     = \"Really quit?\" }` for yours",
+                );
+                return;
+            }
+        };
+
+        let mut defines = vec![ir::Define {
+            name: on.to_string(),
+            value: None,
+        }];
+
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                self.bad_value(
+                    value.span(),
+                    "abortPrompt",
+                    "named fields",
+                    "the fields are `text` and `default`",
+                );
+                continue;
+            };
+            match name.text.as_str() {
+                // MUI2's own default is a language string, translated in every
+                // language file it ships; a literal here is one language's
+                // wording in all of them, which is the user's call to make.
+                "text" => {
+                    if let Some(arg) = self.constant_arg(value, "text") {
+                        defines.push(ir::Define {
+                            name: text.to_string(),
+                            value: Some(arg),
+                        });
+                    }
+                }
+                // Which button Enter presses. `"ok"` writes nothing, because
+                // that is what MUI2 does already — a define for the default
+                // would be a line whose only effect is to exist.
+                "default" => match self.constant(value).map(|constant| constant.text()) {
+                    Some(button) if button == "cancel" => defines.push(ir::Define {
+                        name: cancel.to_string(),
+                        value: None,
+                    }),
+                    Some(button) if button == "ok" => {}
+                    _ => self.bad_value(
+                        value.span(),
+                        "default",
+                        "`\"ok\"` or `\"cancel\"`",
+                        "`\"cancel\"` makes Enter keep installing; `\"ok\"` is MUI2's own default, \
+                         where Enter quits",
+                    ),
+                },
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not an `abortPrompt` field"),
+                        )
+                        .note("the fields are `text` and `default`"),
+                    );
+                }
+            }
+        }
+
+        self.module.mui_defines.extend(defines);
+        self.mui = true;
+    }
+
+    /// `onGUIInit(function() … end)` and the other two — the function, and the
+    /// define that is the only way MUI2 can be told about it.
+    ///
+    /// `onMouseOverSection` is the one whose absence would be silent in the
+    /// *compiler's* output rather than MUI2's: MUI2 reads that define from
+    /// inside `MUI_FUNCTION_DESCRIPTION_END` and from nowhere else, so writing
+    /// the hook is what makes the block exist — a program with a hook and
+    /// nothing to describe still gets `BEGIN`/`END` around an empty `${if}`.
+    fn mui_callback(&mut self, value: &Expr, half: Half, hook: &'static MuiHook) {
+        let Expr::Call { args, span, .. } = value else {
+            return;
+        };
+        let [written] = args.as_slice() else {
+            self.todo(*span, &format!("this `{}` form", hook.word));
+            return;
+        };
+        let Some((block, at)) = self.callback_body(written, hook.word) else {
+            return;
+        };
+        let name = format!("{}mui.{}", half.prefix(), hook.word);
+        let body = self.body(block, &[], at, None, Some(half));
+        self.module.functions.push(ir::Function {
+            name: name.clone(),
+            body,
+        });
+        self.module.mui_defines.push(ir::Define {
+            name: hook.define(half).to_string(),
+            value: Some(ir::Arg::str(name)),
+        });
+        if hook.word == "onMouseOverSection" {
+            self.hover[half.index()] = true;
+        }
+        if half == Half::Uninstaller && hook.needs_unpage {
+            self.un_hooks.push((*span, hook.word));
+        }
+        self.mui = true;
+    }
+
+    /// Records one section's or group's hover text, and hands back the define
+    /// the description will address it through.
+    ///
+    /// A section listed by a `local` already has one, and it is used: a minted
+    /// name is never invented over a real one. A section written inline has
+    /// none, and gets `SEC.desc.N` — a dot, so it cannot collide with the define
+    /// [`index_name`] builds from a Lua local, which has no way to spell one.
+    fn describe(&mut self, index: Option<String>, text: ir::Arg, half: Half) -> String {
+        let index = index.unwrap_or_else(|| {
+            let name = format!("SEC.desc.{}", self.minted);
+            self.minted += 1;
+            name
+        });
+        self.descriptions[half.index()].push((index.clone(), text));
+        self.mui = true;
+        index
+    }
+
+    /// `headerImage = "header.bmp"`, `= true`, or the table with the RTL half
+    /// and the two script-wide switches.
+    ///
+    /// One field holding six defines, for `abortPrompt`'s reason: `Interface.nsh`
+    /// reads every one of them inside `!ifdef MUI_HEADERIMAGE`, so the field's
+    /// presence *is* the enable and a bitmap nothing displays has no spelling.
+    /// `= true` is the whole of the enable — MUI2 then defaults the bitmap to the
+    /// one it ships.
+    ///
+    /// Per half like `icon`, and by the same mechanism: the half picks
+    /// `…_BITMAP` or `…_UNBITMAP`, which are two names MUI2 reads in two places
+    /// (§15.3). The enable itself is neither half's, so it is written once.
+    fn header_image(&mut self, value: &Expr, half: Half) {
+        let (bitmap, stretch, rtl, rtl_stretch) = match half {
+            Half::Installer => (
+                "MUI_HEADERIMAGE_BITMAP",
+                "MUI_HEADERIMAGE_BITMAP_STRETCH",
+                "MUI_HEADERIMAGE_BITMAP_RTL",
+                "MUI_HEADERIMAGE_BITMAP_RTL_STRETCH",
+            ),
+            Half::Uninstaller => (
+                "MUI_HEADERIMAGE_UNBITMAP",
+                "MUI_HEADERIMAGE_UNBITMAP_STRETCH",
+                "MUI_HEADERIMAGE_UNBITMAP_RTL",
+                "MUI_HEADERIMAGE_UNBITMAP_RTL_STRETCH",
+            ),
+        };
+        const MEMBERS: &str = "the fields are `file`, `stretch`, `rtl`, `right` and \
+                               `transparentText`";
+
+        let fields = match value {
+            _ if matches!(self.constant(value), Some(ConstValue::Bool(true))) => &[][..],
+            Expr::Table { fields, .. } => fields,
+            // The short spelling, and the common one: a bitmap and MUI2's
+            // defaults for everything about it.
+            _ => {
+                if let Some(file) = self.image_file(value, "headerImage") {
+                    self.header_image_on();
+                    self.module.mui_defines.push(ir::Define {
+                        name: bitmap.to_string(),
+                        value: Some(file),
+                    });
+                }
+                return;
+            }
+        };
+
+        self.header_image_on();
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                self.bad_value(value.span(), "headerImage", "named fields", MEMBERS);
+                continue;
+            };
+            match name.text.as_str() {
+                "file" => {
+                    if let Some(file) = self.image_file(value, "file") {
+                        self.module.mui_defines.push(ir::Define {
+                            name: bitmap.to_string(),
+                            value: Some(file),
+                        });
+                    }
+                }
+                "stretch" => {
+                    if let Some(mode) = self.stretch(value) {
+                        self.module.mui_defines.push(ir::Define {
+                            name: stretch.to_string(),
+                            value: Some(mode),
+                        });
+                    }
+                }
+                // The right-to-left bitmap, and its own stretch: MUI2 reads
+                // `…_RTL_STRETCH` only where `…_RTL` is defined, so the pair is
+                // a table whose `file` is not optional.
+                "rtl" => self.header_image_rtl(value, rtl, rtl_stretch),
+                // Script-wide, with no `UN` spelling of their own — MUI2 reads
+                // both once, for both halves.
+                "right" | "transparentText" if half == Half::Uninstaller => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{}` is not an `uninstaller` field", name.text),
+                        )
+                        .note(
+                            "MUI2 reads this one once for the whole script, so it governs both \
+                             halves — write it in `installer { headerImage = { … } }` (§15.3)",
+                        ),
+                    );
+                }
+                "right" => self.header_image_flag(value, "right", "MUI_HEADERIMAGE_RIGHT"),
+                "transparentText" => {
+                    self.header_image_flag(value, "transparentText", "MUI_HEADER_TRANSPARENT_TEXT")
+                }
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not a `headerImage` field"),
+                        )
+                        .note(MEMBERS),
+                    );
+                }
+            }
+        }
+    }
+
+    /// `MUI_HEADERIMAGE`, once. Both blocks may carry the field and the enable
+    /// is neither one's: written twice it is a redefinition, which is a warning
+    /// and so an error under `-WX` (§14 tier 3).
+    fn header_image_on(&mut self) {
+        self.mui = true;
+        if self
+            .module
+            .mui_defines
+            .iter()
+            .any(|define| define.name == "MUI_HEADERIMAGE")
+        {
+            return;
+        }
+        self.module.mui_defines.push(ir::Define {
+            name: "MUI_HEADERIMAGE".to_string(),
+            value: None,
+        });
+    }
+
+    fn header_image_flag(&mut self, value: &Expr, which: &str, define: &str) {
+        match self.constant(value) {
+            Some(ConstValue::Bool(false)) => {}
+            Some(ConstValue::Bool(true)) => self.module.mui_defines.push(ir::Define {
+                name: define.to_string(),
+                value: None,
+            }),
+            _ => self.bad_value(
+                value.span(),
+                which,
+                "a `bool`",
+                "MUI2 reads this one with `!ifdef`, so it is on or absent",
+            ),
+        }
+    }
+
+    /// `rtl = "header-rtl.bmp"` or `rtl = { file = …, stretch = … }`.
+    fn header_image_rtl(&mut self, value: &Expr, rtl: &str, rtl_stretch: &str) {
+        let fields = match value {
+            Expr::Table { fields, .. } => fields,
+            _ => {
+                if let Some(file) = self.image_file(value, "rtl") {
+                    self.module.mui_defines.push(ir::Define {
+                        name: rtl.to_string(),
+                        value: Some(file),
+                    });
+                }
+                return;
+            }
+        };
+
+        let Some(file) = named(fields, "file") else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    value.span(),
+                    "`rtl` has no `file`".to_string(),
+                )
+                .note(
+                    "MUI2 reads the right-to-left stretch only where the right-to-left bitmap \
+                     is defined, so a table without one writes nothing that is read",
+                ),
+            );
+            return;
+        };
+        if let Some(file) = self.image_file(file, "file") {
+            self.module.mui_defines.push(ir::Define {
+                name: rtl.to_string(),
+                value: Some(file),
+            });
+        }
+
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                self.bad_value(
+                    value.span(),
+                    "rtl",
+                    "named fields",
+                    "the fields are `file` and `stretch`",
+                );
+                continue;
+            };
+            match name.text.as_str() {
+                "file" => {}
+                "stretch" => {
+                    if let Some(mode) = self.stretch(value) {
+                        self.module.mui_defines.push(ir::Define {
+                            name: rtl_stretch.to_string(),
+                            value: Some(mode),
+                        });
+                    }
+                }
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not an `rtl` field"),
+                        )
+                        .note("the fields are `file` and `stretch`"),
+                    );
+                }
+            }
+        }
+    }
+
+    /// `wizardImage = "wizard.bmp"` or `= { file = …, stretch = … }` — the tall
+    /// bitmap down the side of the welcome and finish pages.
+    ///
+    /// A block field because it is *two* pages' and neither's: welcome and
+    /// finish read the same define, so a page that carried it would be one of
+    /// two places to write one setting. There is no enable to go with it —
+    /// MUI2 draws its own `win.bmp` unless told otherwise — so `file` is what
+    /// the field is for and a table without one is refused.
+    fn wizard_image(&mut self, value: &Expr, half: Half) {
+        let (bitmap, stretch) = match half {
+            Half::Installer => (
+                "MUI_WELCOMEFINISHPAGE_BITMAP",
+                "MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH",
+            ),
+            Half::Uninstaller => (
+                "MUI_UNWELCOMEFINISHPAGE_BITMAP",
+                "MUI_UNWELCOMEFINISHPAGE_BITMAP_STRETCH",
+            ),
+        };
+
+        let fields = match value {
+            Expr::Table { fields, .. } => fields,
+            _ => {
+                if let Some(file) = self.image_file(value, "wizardImage") {
+                    self.module.mui_defines.push(ir::Define {
+                        name: bitmap.to_string(),
+                        value: Some(file),
+                    });
+                    self.mui = true;
+                }
+                return;
+            }
+        };
+
+        let Some(file) = named(fields, "file") else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    value.span(),
+                    "`wizardImage` has no `file`".to_string(),
+                )
+                .note(
+                    "write `wizardImage = \"wizard.bmp\"`, or leave the field out for MUI2's own",
+                ),
+            );
+            return;
+        };
+        if let Some(file) = self.image_file(file, "file") {
+            self.module.mui_defines.push(ir::Define {
+                name: bitmap.to_string(),
+                value: Some(file),
+            });
+            self.mui = true;
+        }
+
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                self.bad_value(
+                    value.span(),
+                    "wizardImage",
+                    "named fields",
+                    "the fields are `file` and `stretch`",
+                );
+                continue;
+            };
+            match name.text.as_str() {
+                "file" => {}
+                "stretch" => {
+                    if let Some(mode) = self.stretch(value) {
+                        self.module.mui_defines.push(ir::Define {
+                            name: stretch.to_string(),
+                            value: Some(mode),
+                        });
+                    }
+                }
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not a `wizardImage` field"),
+                        )
+                        .note("the fields are `file` and `stretch`"),
+                    );
+                }
+            }
+        }
+    }
+
+    /// A bitmap named by a build-time path, the way `icon` is.
+    fn image_file(&mut self, value: &Expr, which: &str) -> Option<ir::Arg> {
+        Some(self.constant_arg(value, which)?.into_path())
+    }
+
+    /// One of MUI2's four stretch modes, checked against its own `!if` chain.
+    fn stretch(&mut self, value: &Expr) -> Option<ir::Arg> {
+        let mode = self.constant(value).map(|constant| constant.text());
+        match mode {
+            Some(mode) if STRETCH_MODES.contains(&mode.as_str()) => Some(ir::Arg::str(mode)),
+            _ => {
+                self.bad_value(
+                    value.span(),
+                    "stretch",
+                    &list(STRETCH_MODES),
+                    "MUI2 warns and falls back to `\"FitControl\"`, which is a wrong image at \
+                     build time and a right one only by accident",
+                );
+                None
+            }
         }
     }
 
@@ -1909,7 +3227,10 @@ impl<'p> Lowerer<'_, 'p> {
     ///
     /// Page order is the order the entries were written, and it is the one list
     /// in the output that is never sorted: it is what the user sees.
-    fn page(&mut self, call: &Expr, which: &Name, half: Half) {
+    ///
+    /// `bound` is the local a `page.startMenu { … }` was bound to, and `None`
+    /// for every other page — the seven that are entries and nothing else.
+    fn page(&mut self, call: &Expr, which: &Name, half: Half, bound: Option<&str>) {
         let Some(page) = V1_PAGES.iter().find(|page| page.installua == which.text) else {
             self.diags.push(
                 Diagnostic::error(
@@ -1983,6 +3304,31 @@ impl<'p> Lowerer<'_, 'p> {
         // block-level `license` with no License page listed evaporates without
         // a word, and here that is unwritable.
         let mut macro_args = Vec::new();
+        // `MUI_PAGE_STARTMENU` takes an id and a variable, and both are the
+        // compiler's: the id is the local, which is already unique, and the
+        // variable is minted from it. A start menu page written inline has
+        // neither, and nothing to address the folder it chose — so it is
+        // refused here rather than assembled into a page whose answer is
+        // unreachable.
+        if page.installua == "startMenu" {
+            let Some(local) = bound else {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::MissingAttribute,
+                        which.span,
+                        "a `startMenu` page has to be bound to a local",
+                    )
+                    .note("write `local menu = page.startMenu { … }` and list `menu,` in the block")
+                    .note(
+                        "the local is the page's id: it is what `menu.folder` and `menu.write` \
+                         name, and `MUI_PAGE_STARTMENU` takes one either way (§13)",
+                    ),
+                );
+                return;
+            };
+            macro_args.push(ir::Arg::raw(local));
+            macro_args.push(ir::Arg::var(format!("${}", start_menu_var(local))));
+        }
         if page.installua == "license" {
             let file = named
                 .iter()
@@ -2705,7 +4051,17 @@ impl<'p> Lowerer<'_, 'p> {
         defines: &mut Vec<ir::Define>,
         undefines: &mut Vec<String>,
     ) {
-        let mut define = |name: &str, value: Option<ir::Arg>, cleared: bool| {
+        // A free function rather than the closure it was, because
+        // `Holds::Nested` and `Holds::Off` now lower their parts by calling
+        // this method again — and a closure holding `defines` would be the
+        // borrow that recursion cannot get past.
+        fn define(
+            defines: &mut Vec<ir::Define>,
+            undefines: &mut Vec<String>,
+            name: &str,
+            value: Option<ir::Arg>,
+            cleared: bool,
+        ) {
             defines.push(ir::Define {
                 name: name.to_string(),
                 value,
@@ -2713,19 +4069,21 @@ impl<'p> Lowerer<'_, 'p> {
             if !cleared {
                 undefines.push(name.to_string());
             }
-        };
+        }
 
         match field.holds {
             Holds::Str => {
                 if let Some(arg) = self.constant_arg(value, field.installua) {
-                    define(field.define, Some(arg), field.cleared);
+                    define(defines, undefines, field.define, Some(arg), field.cleared);
                 }
             }
             Holds::Flag => match self.constant(value) {
                 // `false` is not a define with a false value: MUI2 asks
                 // `!ifdef`, so the only way to say no is to say nothing.
                 Some(ConstValue::Bool(false)) => {}
-                Some(ConstValue::Bool(true)) => define(field.define, None, field.cleared),
+                Some(ConstValue::Bool(true)) => {
+                    define(defines, undefines, field.define, None, field.cleared);
+                }
                 _ => self.bad_value(
                     value.span(),
                     field.installua,
@@ -2761,6 +4119,8 @@ impl<'p> Lowerer<'_, 'p> {
                     return;
                 }
                 define(
+                    defines,
+                    undefines,
                     field.define,
                     Some(ir::Arg::var(format!("${name}"))),
                     field.cleared,
@@ -2770,14 +4130,78 @@ impl<'p> Lowerer<'_, 'p> {
                 let Some(name) = self.page_callback(value, half, page, field.installua) else {
                     return;
                 };
-                define(field.define, Some(ir::Arg::str(name)), field.cleared);
+                define(
+                    defines,
+                    undefines,
+                    field.define,
+                    Some(ir::Arg::str(name)),
+                    field.cleared,
+                );
             }
             Holds::Text(text) => {
                 if let Some(arg) = self.constant_arg(value, field.installua) {
-                    define(field.define, None, field.cleared);
-                    define(text, Some(arg), field.cleared);
+                    define(defines, undefines, field.define, None, field.cleared);
+                    define(defines, undefines, text, Some(arg), field.cleared);
                 }
             }
+            Holds::Colors(text) => {
+                if let Some((text_arg, back)) = self.colours(value, field.installua) {
+                    define(defines, undefines, field.define, Some(back), field.cleared);
+                    define(defines, undefines, text, Some(text_arg), field.cleared);
+                }
+            }
+            // A string on its own, or one with the define that gives it room.
+            // Written apart, because the plain spelling has to stay plain: the
+            // table is the exception and `title = "Done"` is the rule.
+            Holds::Roomy(more, room) => {
+                let (text, roomy) = self.roomy(value, field, room);
+                if let Some(text) = text
+                    && let Some(arg) = self.constant_arg(text, field.installua)
+                {
+                    define(defines, undefines, field.define, Some(arg), field.cleared);
+                }
+                if roomy {
+                    define(defines, undefines, more, None, field.cleared);
+                }
+            }
+            Holds::Word { writes, silent } => {
+                match self.constant(value).map(|constant| constant.text()) {
+                    Some(word) if word == writes => {
+                        define(defines, undefines, field.define, None, field.cleared);
+                    }
+                    // MUI2's own default, which is the absence of the define —
+                    // so the word that names it writes nothing, and a script
+                    // can pass either without branching.
+                    Some(word) if word == silent => {}
+                    _ => self.bad_value(
+                        value.span(),
+                        field.installua,
+                        &format!("`\"{writes}\"` or `\"{silent}\"`"),
+                        &format!("`\"{silent}\"` is MUI2's own default"),
+                    ),
+                }
+            }
+            // The inverse of `Nested`: the table is the *on* state, and the
+            // field's own define is the opt-out that only `false` writes.
+            Holds::Off(parts) => match self.constant(value) {
+                Some(ConstValue::Bool(false)) => {
+                    define(defines, undefines, field.define, None, field.cleared);
+                }
+                Some(ConstValue::Bool(true)) => {}
+                _ => {
+                    let Expr::Table { fields, .. } = value else {
+                        self.bad_value(
+                            value.span(),
+                            field.installua,
+                            "`false` or a table",
+                            "write `reboot = false` to drop the reboot half of the page, or \
+                             `reboot = { later = \"Restart later\" }` to word it yourself",
+                        );
+                        return;
+                    };
+                    self.nested_fields(field, fields, parts, half, page, defines, undefines);
+                }
+            },
             Holds::Nested(parts) => {
                 let Expr::Table { fields, .. } = value else {
                     self.bad_value(
@@ -2788,37 +4212,275 @@ impl<'p> Lowerer<'_, 'p> {
                     );
                     return;
                 };
-                define(field.define, None, field.cleared);
-                for part in parts {
-                    let written = fields.iter().find_map(|entry| match entry {
-                        TableField::Named { name, value } if name.text == part.installua => {
-                            Some(value)
-                        }
-                        _ => None,
-                    });
-                    let Some(written) = written else { continue };
-                    if let Some(arg) = self.constant_arg(written, part.installua) {
-                        define(part.define, Some(arg), part.cleared);
+                define(defines, undefines, field.define, None, field.cleared);
+                self.nested_fields(field, fields, parts, half, page, defines, undefines);
+            }
+            Holds::Calls { function, stem } => {
+                let Some(name) = self.page_callback(value, half, page, stem) else {
+                    return;
+                };
+                // Empty rather than absent: MUI2's own documentation writes
+                // `!define MUI_FINISHPAGE_RUN ""` for this case, and the
+                // define is read by an `!ifdef` in every branch that a
+                // function reaches.
+                define(
+                    defines,
+                    undefines,
+                    field.define,
+                    Some(ir::Arg::str(String::new())),
+                    field.cleared,
+                );
+                define(
+                    defines,
+                    undefines,
+                    function,
+                    Some(ir::Arg::str(name)),
+                    field.cleared,
+                );
+            }
+            Holds::Not => match self.constant(value) {
+                // MUI2's default is ticked, and the define is how a script
+                // says otherwise — so the *true* case is the one that writes
+                // nothing.
+                Some(ConstValue::Bool(true)) => {}
+                Some(ConstValue::Bool(false)) => {
+                    define(defines, undefines, field.define, None, field.cleared);
+                }
+                _ => self.bad_value(
+                    value.span(),
+                    field.installua,
+                    "a `bool`",
+                    "the box is ticked when the page opens unless this says `false`",
+                ),
+            },
+            Holds::Widget(forms) => {
+                self.widget(field, value, forms, half, page, defines, undefines);
+            }
+            // Three states and two defines, and the third state writes neither:
+            // MUI2 draws the box and words it from its own language file unless
+            // told otherwise.
+            Holds::Checkbox(text) => match self.constant(value) {
+                Some(ConstValue::Bool(false)) => {
+                    define(defines, undefines, field.define, None, field.cleared);
+                }
+                Some(ConstValue::Bool(true)) => {}
+                _ => {
+                    if let Some(arg) = self.constant_arg(value, field.installua) {
+                        define(defines, undefines, text, Some(arg), field.cleared);
                     }
                 }
-                for entry in fields {
-                    let TableField::Named { name, .. } = entry else {
-                        continue;
-                    };
-                    if !parts.iter().any(|part| part.installua == name.text) {
-                        self.diags.push(
-                            Diagnostic::error(
-                                Code::UnknownField,
-                                name.span,
-                                format!("`{}` is not a `{}` field", name.text, field.installua),
-                            )
-                            .note(format!(
-                                "the fields are {}",
-                                list(&parts.iter().map(|part| part.installua).collect::<Vec<_>>())
-                            )),
-                        );
-                    }
+            },
+        }
+    }
+
+    /// `run = { path = … }`, `run = { call = … }` or `run = "…"`: the spelling
+    /// picked by which key is written, and then lowered like any other table.
+    ///
+    /// Exactly one key, because the two spellings are two different MUI2
+    /// branches and a table with both would say which program to `Exec` and
+    /// then call a function instead of `Exec`ing anything.
+    #[allow(clippy::too_many_arguments)]
+    fn widget(
+        &mut self,
+        field: &PageField,
+        value: &Expr,
+        forms: &'static [Form],
+        half: Half,
+        page: &Page,
+        defines: &mut Vec<ir::Define>,
+        undefines: &mut Vec<String>,
+    ) {
+        let keys = list(&forms.iter().map(|form| form.key).collect::<Vec<_>>());
+
+        // The short spelling: `run = "$INSTDIR\\foo.exe"` is the first form's
+        // key and nothing else. Offered only where that form needs nothing
+        // more, since a `link` is never one string.
+        let Expr::Table { fields, .. } = value else {
+            let first = &forms[0];
+            let short = first
+                .needs
+                .is_empty()
+                .then(|| first.parts.iter().find(|part| part.installua == first.key))
+                .flatten();
+            let Some(key) = short else {
+                self.bad_value(
+                    value.span(),
+                    field.installua,
+                    "a table",
+                    &format!(
+                        "the fields are {}",
+                        list(
+                            &first
+                                .parts
+                                .iter()
+                                .map(|part| part.installua)
+                                .collect::<Vec<_>>()
+                        )
+                    ),
+                );
+                return;
+            };
+            self.page_field(key, value, half, page, defines, undefines);
+            return;
+        };
+
+        let written: Vec<&Form> = forms
+            .iter()
+            .filter(|form| named(fields, form.key).is_some())
+            .collect();
+        let [form] = written.as_slice() else {
+            let (message, note) = if written.is_empty() {
+                (
+                    format!("`{}` says nothing to do", field.installua),
+                    format!("write {keys} to say what this one is for"),
+                )
+            } else {
+                (
+                    format!("`{}` says two things to do at once", field.installua),
+                    format!("{keys} are two spellings of the same checkbox, so write one"),
+                )
+            };
+            self.diags
+                .push(Diagnostic::error(Code::BadFieldValue, value.span(), message).note(note));
+            return;
+        };
+
+        for need in form.needs {
+            if named(fields, need).is_none() {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::MissingAttribute,
+                        value.span(),
+                        format!("`{}` has no `{need}`", field.installua),
+                    )
+                    .note(format!(
+                        "`{}` is what the user reads and `{need}` is where the click goes, \
+                         so MUI2 wants both",
+                        form.key
+                    )),
+                );
+                return;
+            }
+        }
+        self.nested_fields(field, fields, form.parts, half, page, defines, undefines);
+    }
+
+    /// The parts of a nested field, lowered by their own [`Holds`] and checked
+    /// for names the part list does not have.
+    ///
+    /// Shared by [`Holds::Nested`] and [`Holds::Off`], which differ in what
+    /// they do about the *outer* define and in nothing else.
+    #[allow(clippy::too_many_arguments)]
+    fn nested_fields(
+        &mut self,
+        field: &PageField,
+        fields: &[TableField],
+        parts: &'static [PageField],
+        half: Half,
+        page: &Page,
+        defines: &mut Vec<ir::Define>,
+        undefines: &mut Vec<String>,
+    ) {
+        for part in parts {
+            let Some(written) = named(fields, part.installua) else {
+                continue;
+            };
+            self.page_field(part, written, half, page, defines, undefines);
+        }
+        for entry in fields {
+            let TableField::Named { name, .. } = entry else {
+                continue;
+            };
+            if !parts.iter().any(|part| part.installua == name.text) {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        name.span,
+                        format!("`{}` is not a `{}` field", name.text, field.installua),
+                    )
+                    .note(format!(
+                        "the fields are {}",
+                        list(&parts.iter().map(|part| part.installua).collect::<Vec<_>>())
+                    )),
+                );
+            }
+        }
+    }
+
+    /// `title = "Done"` or `title = { text = "Done", lines = 3 }`, as the
+    /// string and whether the second define comes with it.
+    fn roomy<'e>(
+        &mut self,
+        value: &'e Expr,
+        field: &PageField,
+        room: Room,
+    ) -> (Option<&'e Expr>, bool) {
+        let key = match room {
+            Room::Lines => "lines",
+            Room::Large => "large",
+        };
+        let Expr::Table { fields, .. } = value else {
+            return (Some(value), false);
+        };
+
+        let mut text = None;
+        let mut roomy = false;
+        for entry in fields {
+            let TableField::Named { name, value } = entry else {
+                self.bad_value(
+                    value.span(),
+                    field.installua,
+                    "named fields",
+                    &format!("the fields are `text` and `{key}`"),
+                );
+                continue;
+            };
+            match name.text.as_str() {
+                "text" => text = Some(value),
+                written if written == key => roomy = self.room(value, room, field.installua),
+                other => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not a `{}` field", field.installua),
+                        )
+                        .note(format!("the fields are `text` and `{key}`")),
+                    );
                 }
+            }
+        }
+        (text, roomy)
+    }
+
+    /// Whether a [`Holds::Roomy`] field asked for the taller box.
+    fn room(&mut self, value: &Expr, room: Room, which: &str) -> bool {
+        match (room, self.constant(value)) {
+            // Two or three, and nothing between or beyond: MUI2 has one title
+            // height apiece and no third. A number rather than a `bool`
+            // because that is what the setting is — how many lines the title
+            // is given — and `lines = 4` is worth an error rather than a
+            // silent 3.
+            (Room::Lines, Some(ConstValue::Int(3))) => true,
+            (Room::Lines, Some(ConstValue::Int(2))) => false,
+            (Room::Large, Some(ConstValue::Bool(large))) => large,
+            (Room::Lines, _) => {
+                self.bad_value(
+                    value.span(),
+                    "lines",
+                    "`2` or `3`",
+                    &format!("MUI2 draws `{which}` in a box of one height or the other"),
+                );
+                false
+            }
+            (Room::Large, _) => {
+                self.bad_value(
+                    value.span(),
+                    "large",
+                    "a `bool`",
+                    &format!("`true` gives `{which}` the taller box, for text that needs it"),
+                );
+                false
             }
         }
     }
@@ -2952,7 +4614,7 @@ impl<'p> Lowerer<'_, 'p> {
             if let Some((base, which)) = value.callee_field()
                 && base == "page"
             {
-                self.page(value, which, half);
+                self.page(value, which, half, None);
                 return;
             }
             // A bare name is a declaration this block is listing.
@@ -2965,13 +4627,19 @@ impl<'p> Lowerer<'_, 'p> {
         };
         match name {
             "section" => {
-                if let Some(section) = self.section(value, half) {
+                if let Some(section) = self.section(value, half, None) {
                     self.module.sections.push(ir::SectionItem::Section(section));
                 }
             }
             "group" => self.group(value, half, None),
             "onInit" => self.callback(value, half, "onInit"),
-            other => self.todo(value.span(), &format!("`{other}` here")),
+            other => match MuiHook::named(other) {
+                // The MUI2 hooks, which are entries and not fields for the
+                // reason `onInit` is: a block's positional entries are its
+                // declarations of code, and its named fields are its settings.
+                Some(hook) => self.mui_callback(value, half, hook),
+                None => self.todo(value.span(), &format!("`{other}` here")),
+            },
         }
     }
 
@@ -2989,12 +4657,18 @@ impl<'p> Lowerer<'_, 'p> {
         };
         match kind {
             DeferredKind::Section => {
-                if let Some(mut section) = self.section(value, half) {
-                    section.index_name = Some(index);
+                if let Some(section) = self.section(value, half, Some(index)) {
                     self.module.sections.push(ir::SectionItem::Section(section));
                 }
             }
             DeferredKind::Group => self.group(value, half, Some(index)),
+            // The page goes where the block listed it, like every other entry:
+            // the `local` decides nothing about page order either.
+            DeferredKind::StartMenu => {
+                if let Some(("page", which)) = value.callee_field() {
+                    self.page(value, which, half, Some(&name.text));
+                }
+            }
             // Unreachable: a control's claim comes from a `controls` list, and
             // a bare control name among a block's entries never earns one
             // ([`Site::accepts`]), so [`Self::listed`] has already said `None`.
@@ -3015,10 +4689,7 @@ impl<'p> Lowerer<'_, 'p> {
         // The name the claim earned: a `!define` for the index of a section, a
         // `Var` for the handle of a control. Both are derived from the *local*,
         // and both are what every use of the handle then reads.
-        let earned = match deferred.kind.is_control() {
-            true => control_var(&name.text, claim.half),
-            false => index_name(&name.text, claim.half),
-        };
+        let earned = earned_name(&name.text, deferred.kind, claim.half).0;
         Some((deferred.value, deferred.kind, earned))
     }
 
@@ -3150,17 +4821,14 @@ impl<'p> Lowerer<'_, 'p> {
         // `<const>`s, a control's `Var` beside the globals — and NSIS holds one
         // name once: a second `!define` is a warning it then ships (§12), and a
         // second `Var` is an error.
-        let (earned, kind_of_name) = match deferred.0.is_control() {
-            true => (control_var(&name.text, half), "global"),
-            false => (index_name(&name.text, half), "`<const>`"),
-        };
-        let taken = match deferred.0.is_control() {
-            true => self
+        let (earned, kind_of_name) = earned_name(&name.text, deferred.0, half);
+        let taken = match kind_of_name {
+            "global" => self
                 .resolved
                 .globals
                 .iter()
                 .any(|global| global.name == earned),
-            false => self.resolved.consts.contains_key(&earned),
+            _ => self.resolved.consts.contains_key(&earned),
         };
         if taken {
             self.diags.push(
@@ -3261,14 +4929,34 @@ impl<'p> Lowerer<'_, 'p> {
         // The global initialisers go in front of whatever the user wrote, so a
         // `.onInit` that reads a global sees its value (§15.24).
         let block = if half == Half::Installer && which == "onInit" {
-            self.on_init = true;
+            self.on_init[half.index()] = true;
             let mut all = std::mem::take(&mut self.global_inits);
             all.extend(block.iter().cloned());
             all
         } else {
+            if which == "onInit" {
+                self.on_init[half.index()] = true;
+            }
             block.clone()
         };
-        let body = self.body(&block, &[], *span, None, Some(half));
+        // §15.26's line goes in front of everything, including the global
+        // initialisers: one of them may read `lang.greeting`, and until the
+        // dialog has run `$LANGUAGE` is whatever the system said.
+        let prelude = match which {
+            "onInit" => std::mem::take(&mut self.init_prelude[half.index()]),
+            _ => Vec::new(),
+        };
+        let body = if prelude.is_empty() {
+            self.body(&block, &[], *span, None, Some(half))
+        } else {
+            let (body, _) = self.body_with(*span, Some(half), |lowerer| {
+                for instruction in prelude {
+                    lowerer.emit(instruction);
+                }
+                lowerer.block(&block);
+            });
+            body
+        };
         self.module.functions.push(ir::Function { name, body });
     }
 
@@ -3323,6 +5011,7 @@ impl<'p> Lowerer<'_, 'p> {
             return;
         };
         let mut expanded = false;
+        let mut description = None;
         for (name, value) in options {
             match name.text.as_str() {
                 "expanded" => match self.constant(value) {
@@ -3334,6 +5023,9 @@ impl<'p> Lowerer<'_, 'p> {
                         "it becomes `SectionGroup /e`, which opens the heading in the components tree",
                     ),
                 },
+                // A heading has an index of its own and the tree reports it on
+                // hover, so it takes the same field a section does.
+                "description" => description = self.constant_arg(value, "description"),
                 other => {
                     self.diags.push(
                         Diagnostic::error(
@@ -3341,11 +5033,19 @@ impl<'p> Lowerer<'_, 'p> {
                             name.span,
                             format!("`{other}` is not a `group` option"),
                         )
-                        .note("the options are `expanded`"),
+                        .note("the options are `expanded` and `description`"),
                     );
                 }
             }
         }
+
+        // Before the members, so the heading's text precedes its sections' in
+        // the block — the order the tree lists them in, which is the only order
+        // a reader of the generated function can check against the source.
+        let index = match description {
+            Some(text) => Some(self.describe(index, text, half)),
+            None => index,
+        };
 
         let mut sections = Vec::new();
         for member in members {
@@ -3367,13 +5067,12 @@ impl<'p> Lowerer<'_, 'p> {
                     self.todo(value.span(), "a `group` inside a `group`");
                     continue;
                 }
-                if let Some(mut section) = self.section(declared, half) {
-                    section.index_name = Some(index);
+                if let Some(section) = self.section(declared, half, Some(index)) {
                     sections.push(section);
                 }
                 continue;
             }
-            if let Some(section) = self.section(value, half) {
+            if let Some(section) = self.section(value, half, None) {
                 sections.push(section);
             }
         }
@@ -3406,7 +5105,11 @@ impl<'p> Lowerer<'_, 'p> {
             }));
     }
 
-    fn section(&mut self, value: &Expr, half: Half) -> Option<ir::Section> {
+    /// `index` is the define the caller has already earned for it — `Some` when
+    /// a `local` was listed by name, `None` for a section written inline. A
+    /// `description` turns `None` into a minted one rather than refusing, since
+    /// the index is MUI2's business and not the author's ([`Self::describe`]).
+    fn section(&mut self, value: &Expr, half: Half, index: Option<String>) -> Option<ir::Section> {
         let Expr::Call { callee, args, .. } = value else {
             self.todo(value.span(), "this entry");
             return None;
@@ -3459,6 +5162,7 @@ impl<'p> Lowerer<'_, 'p> {
         let mut optional_span = None;
         let mut inst_types = Vec::new();
         let mut size = None;
+        let mut description = None;
         for (name, value) in options {
             match name.text.as_str() {
                 "optional" => match self.constant(value) {
@@ -3497,6 +5201,11 @@ impl<'p> Lowerer<'_, 'p> {
                     ),
                 },
                 "installTypes" => inst_types = self.section_in(value, half),
+                // The words the components page shows while the pointer is over
+                // this section. Written here rather than on the page, because
+                // the page has no way to name a section and MUI2's own macro
+                // addresses one by its index.
+                "description" => description = self.constant_arg(value, "description"),
                 other => {
                     self.diags.push(
                         Diagnostic::error(
@@ -3504,7 +5213,10 @@ impl<'p> Lowerer<'_, 'p> {
                             name.span,
                             format!("`{other}` is not a `section` option"),
                         )
-                        .note("the options are `optional`, `required`, `installTypes` and `size`"),
+                        .note(
+                            "the options are `optional`, `required`, `installTypes`, `size` and \
+                             `description`",
+                        ),
                     );
                 }
             }
@@ -3535,10 +5247,14 @@ impl<'p> Lowerer<'_, 'p> {
             inst_types,
             required,
             size,
-            // Filled in by the caller when this section was listed by name: a
-            // section written inline in the block is addressed by nothing, so
-            // NSIS is asked to define nothing.
-            index_name: None,
+            // The name the caller earned by listing a `local`, or the one a
+            // `description` minted. A section that is neither addressed nor
+            // described gets no third word: the `!define` NSIS would make is one
+            // more name in a namespace shared with the author's.
+            index_name: match description {
+                Some(text) => Some(self.describe(index, text, half)),
+                None => index,
+            },
             body: self.body(block, &[], *span, None, Some(half)),
         })
     }
@@ -3769,6 +5485,7 @@ impl<'p> Lowerer<'_, 'p> {
             globals: &mut self.globals,
             requires: &mut self.requires,
             claims: &self.claims,
+            lang_strings: &self.lang_strings,
             half,
             inst_types,
             body: Body::new(span),
@@ -3955,6 +5672,10 @@ struct BodyLowerer<'a, 'p> {
     /// define it reads and whether this half is the one that has a `core` at all
     /// (claim rule 4).
     claims: &'a BTreeMap<String, Claim>,
+    /// The `LangString` names in scope, which is every one `languages {}`
+    /// declared: `lang.greeting` is `$(greeting)` and an unknown name is an
+    /// error rather than an empty string (§15.26).
+    lang_strings: &'a BTreeSet<String>,
     /// The half this body runs in. `None` for a `func`, which either half may
     /// call: there is no wrong half to name a section from, so rule 4 has
     /// nothing to compare against and does not run.
@@ -5004,4 +6725,28 @@ fn list(names: &[&str]) -> String {
         .map(|name| format!("`{name}`"))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The two lowerers, taught to read a shared field shape (`fields::Fields`).
+///
+/// Four lines apiece and no more: what they have in common is somewhere to
+/// report and a way to fold a constant, and everything else about them differs.
+impl Fields for Lowerer<'_, '_> {
+    fn diags(&mut self) -> &mut Diagnostics {
+        self.diags
+    }
+
+    fn constant_value(&self, expr: &Expr) -> Option<ConstValue> {
+        self.constant(expr)
+    }
+}
+
+impl Fields for BodyLowerer<'_, '_> {
+    fn diags(&mut self) -> &mut Diagnostics {
+        self.diags
+    }
+
+    fn constant_value(&self, expr: &Expr) -> Option<ConstValue> {
+        self.constant(expr)
+    }
 }

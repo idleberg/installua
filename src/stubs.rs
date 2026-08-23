@@ -207,7 +207,22 @@ fn blocks() -> String {
          ---@param options installua.Installer\n\
          function installer(options) end\n\n\
          ---@param options installua.Installer\n\
-         function uninstaller(options) end\n\n",
+         function uninstaller(options) end\n\n\
+         ---@class (exact) installua.Ask\n\
+         ---@field title? string\n\
+         ---@field info? string\n\
+         ---@field allLanguages? boolean\n\
+         ---@field alwaysShow? boolean\n\
+         ---@field remember? { root: string, key: string, value: string }\n\n\
+         ---@class (exact) installua.Languages\n\
+         ---@field locales table<string, table<string, string>>\n\
+         ---@field ask? installua.Ask\n\n\
+         ---@param options installua.Languages\n\
+         function languages(options) end\n\n\
+         --- The strings `languages {}` declared. A read is `$(name)`, resolved\n\
+         --- against `$LANGUAGE` at run time (§15.26).\n\
+         ---@type table<string, string>\n\
+         lang = {}\n\n",
     );
     out.push_str(PAGES);
     out

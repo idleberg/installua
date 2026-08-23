@@ -385,3 +385,124 @@ fn a_bare_name_that_is_not_a_declaration_says_so() {
         "{raised:?}"
     );
 }
+
+/// A `description` is the one option that needs the section to be *addressable*:
+/// MUI2's macro names one by the index its `Section` line defines. A section
+/// written inline has no such name, so the compiler mints one — the index is
+/// MUI2's business, and asking the author for a `local` would be charging them
+/// for it.
+///
+/// The minted name carries a dot, which is why it can never collide with the
+/// `SEC_<local>` a listed section earns: a Lua local cannot contain one.
+#[test]
+fn a_description_mints_an_index_for_the_section_that_has_none() {
+    let output = build(&program(
+        "section { \"Core\", description = \"What it is.\", body = function() end },\n\
+         section(\"Plain\", function() end),",
+    ));
+    assert!(output.contains("Section \"Core\" SEC.desc.0\n"), "{output}");
+    // Undescribed and unlisted: still no third word, because nothing addresses
+    // it and the `!define` would be one more name in the author's namespace.
+    assert!(output.contains("Section \"Plain\"\n"), "{output}");
+    assert!(
+        output.contains(
+            "!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN\n  \
+             !insertmacro MUI_DESCRIPTION_TEXT ${SEC.desc.0} \"What it is.\"\n\
+             !insertmacro MUI_FUNCTION_DESCRIPTION_END\n"
+        ),
+        "{output}"
+    );
+}
+
+/// And where a real name exists it is used, rather than a minted one alongside
+/// it: one section is one index, whatever else addresses it.
+#[test]
+fn a_listed_section_is_described_through_the_define_it_already_had() {
+    let output = build(&declaring(
+        "local docs = section { \"Docs\", description = \"The manual.\", \
+         body = function() end }",
+        "docs,",
+    ));
+    assert!(output.contains("Section \"Docs\" SEC_docs\n"), "{output}");
+    assert!(
+        output.contains("MUI_DESCRIPTION_TEXT ${SEC_docs} \"The manual.\""),
+        "{output}"
+    );
+    assert!(!output.contains("SEC.desc."), "{output}");
+}
+
+/// A heading has an index of its own and the tree reports it on hover, so it
+/// takes the same option — and its text comes before its sections', which is the
+/// order the tree lists them in.
+#[test]
+fn a_group_is_described_ahead_of_the_sections_under_it() {
+    let output = build(&program(
+        "group { \"Tools\", description = \"Extras.\", sections = {\n\
+         section { \"Profiler\", description = \"Measures.\", body = function() end },\n\
+         } },",
+    ));
+    assert!(
+        output.contains("SectionGroup \"Tools\" SEC.desc.0\n"),
+        "{output}"
+    );
+    let heading = output.find("\"Extras.\"").expect("the heading's text");
+    let under = output.find("\"Measures.\"").expect("the section's text");
+    assert!(heading < under, "{output}");
+}
+
+/// §15.3 again: two halves, two generated functions, two blocks. The
+/// uninstaller's is `MUI_UNFUNCTION_DESCRIPTION_*`, which is the same `UN` NSIS
+/// puts in `un.onMouseOverSection`.
+#[test]
+fn each_half_describes_its_own_sections() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         installer { section { \"Core\", description = \"Kept.\", body = function()\n\
+         writeUninstaller(INSTDIR .. \"/un.exe\")\n\
+         end } }\n\
+         uninstaller { section { \"Remove\", description = \"Gone.\", body = function() end } }\n",
+    );
+    assert!(
+        output.contains(
+            "!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN\n  \
+             !insertmacro MUI_DESCRIPTION_TEXT ${SEC.desc.0} \"Kept.\"\n\
+             !insertmacro MUI_FUNCTION_DESCRIPTION_END\n"
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains(
+            "!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN\n  \
+             !insertmacro MUI_DESCRIPTION_TEXT ${SEC.desc.1} \"Gone.\"\n\
+             !insertmacro MUI_UNFUNCTION_DESCRIPTION_END\n"
+        ),
+        "{output}"
+    );
+}
+
+/// The hook is called from inside the block MUI2 generates and from nowhere
+/// else, so a program that sets one and describes nothing still gets the block —
+/// the alternative is a function that never runs and never says why.
+#[test]
+fn the_hover_hook_brings_the_block_with_it() {
+    let output = build(&program(
+        "onMouseOverSection(function() detailPrint(\"over\") end),\n\
+         section(\"Core\", function() end),",
+    ));
+    assert!(
+        output
+            .contains("!define MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION \"mui.onMouseOverSection\"\n"),
+        "{output}"
+    );
+    assert!(
+        output.contains(
+            "!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN\n\
+             !insertmacro MUI_FUNCTION_DESCRIPTION_END\n"
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains("Function mui.onMouseOverSection\n  DetailPrint \"over\"\n"),
+        "{output}"
+    );
+}

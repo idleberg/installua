@@ -1,0 +1,306 @@
+# Modern UI 2, as its own headers read it.
+#
+# Columns: what the name is, the name, what MUI2's text does with it, where it
+# is first seen, and the `!macro` that line sits in. Regenerate with:
+#
+#     cargo run -q -- mui "$NSISDIR" > tables/mui-3.12.txt
+#
+# Tags, each a fact about the text and none of them a judgement:
+#
+#   default  MUI2 supplies one through `MUI_DEFAULT`, so leaving it out is legal
+#   page     MUI2 `!undef`s or `MUI_UNSET`s it, so it is read once per page
+#   once     it is read inside an `!ifndef`-guarded `*_INTERFACE` macro, so the
+#            first page of its type wins and every later one is ignored
+#   set      MUI2 writes it itself somewhere, so a row may be its state and not
+#            a setting at all
+#   un       MUI2 builds the name with its uninstaller prefix, so `MUI_UN…`
+#            exists too and is the same setting for the other half
+#   doc      MUI2's own Readme.html names it, which is the only place that says
+#            whether a define is yours to write or MUI2's to keep
+#
+# Not read: Deprecated.nsh, whose every macro is a `!error` MUI2 raises on
+# purpose. Naming one in Installua would be an Installua spelling for a
+# thing MUI2 refuses to compile:
+#
+#   MUI_INSTALLOPTIONS_DISPLAY
+#   MUI_INSTALLOPTIONS_DISPLAY_RETURN
+#   MUI_INSTALLOPTIONS_EXTRACT
+#   MUI_INSTALLOPTIONS_EXTRACT_AS
+#   MUI_INSTALLOPTIONS_INITDIALOG
+#   MUI_INSTALLOPTIONS_READ
+#   MUI_INSTALLOPTIONS_SHOW
+#   MUI_INSTALLOPTIONS_SHOW_RETURN
+#   MUI_INSTALLOPTIONS_WRITE
+#   MUI_LEGACY_MAP_NOSTRETCH
+#   MUI_RESERVEFILE_INSTALLOPTIONS
+#
+# Names MUI2 builds out of a macro argument. Each is derived from a name
+# already listed, so there is nothing here for a user to write:
+#
+#   MUI_HEADERIMAGE_BITMAP${RTL}_STRETCH
+#   MUI_PAGE_CUSTOMFUNCTION_${TYPE}
+#   MUI_STARTMENUPAGE_${ID}_DEFAULTFOLDER
+#   MUI_STARTMENUPAGE_${ID}_REGISTRY_KEY
+#   MUI_STARTMENUPAGE_${ID}_REGISTRY_ROOT
+#   MUI_STARTMENUPAGE_${ID}_REGISTRY_VALUENAME
+#   MUI_STARTMENUPAGE_${ID}_VARIABLE
+#   MUI_STARTMENUPAGE_${MUI_STARTMENUPAGE_CURRENT_ID}_REGISTRY_KEY
+#   MUI_STARTMENUPAGE_${MUI_STARTMENUPAGE_CURRENT_ID}_REGISTRY_ROOT
+#   MUI_STARTMENUPAGE_${MUI_STARTMENUPAGE_CURRENT_ID}_REGISTRY_VALUENAME
+#   MUI_STARTMENUPAGE_${MUI_STARTMENUPAGE_CURRENT_ID}_VARIABLE
+
+both     MUI_ABORTWARNING                                      doc                           Interface.nsh:129             MUI_ABORTWARNING
+setting  MUI_ABORTWARNING_CANCEL_DEFAULT                       doc                           Interface.nsh:131             MUI_ABORTWARNING
+setting  MUI_ABORTWARNING_TEXT                                 default doc once              Interface.nsh:100             MUI_INTERFACE
+setting  MUI_BGCOLOR                                           default doc once              Interface.nsh:51              MUI_INTERFACE
+setting  MUI_COMPONENTSPAGE                                    set un                        Pages/Components.nsh:55       MUI_PAGEDECLARATION_COMPONENTS
+setting  MUI_COMPONENTSPAGE_CHECKBITMAP                        default doc once              Pages/Components.nsh:30       MUI_COMPONENTSPAGE_INTERFACE
+both     MUI_COMPONENTSPAGE_INTERFACE                          once set                      Pages/Components.nsh:11       MUI_COMPONENTSPAGE_INTERFACE
+setting  MUI_COMPONENTSPAGE_SMALLDESC                          doc once                      Pages/Components.nsh:37       MUI_COMPONENTSPAGE_INTERFACE
+setting  MUI_COMPONENTSPAGE_TEXT_COMPLIST                      default doc page              Pages/Components.nsh:59       MUI_PAGEDECLARATION_COMPONENTS
+setting  MUI_COMPONENTSPAGE_TEXT_DESCRIPTION_INFO              default doc page              Pages/Components.nsh:62       MUI_PAGEDECLARATION_COMPONENTS
+setting  MUI_COMPONENTSPAGE_TEXT_DESCRIPTION_TITLE             default doc page              Pages/Components.nsh:61       MUI_PAGEDECLARATION_COMPONENTS
+setting  MUI_COMPONENTSPAGE_TEXT_INSTTYPE                      default doc page              Pages/Components.nsh:60       MUI_PAGEDECLARATION_COMPONENTS
+setting  MUI_COMPONENTSPAGE_TEXT_TOP                           default doc page              Pages/Components.nsh:58       MUI_PAGEDECLARATION_COMPONENTS
+setting  MUI_CUSTOMFUNCTION_ABORT                              doc                           Interface.nsh:337             MUI_FUNCTION_ABORTWARNING
+setting  MUI_CUSTOMFUNCTION_GUIINIT                            doc                           Interface.nsh:299             MUI_FUNCTION_GUIINIT
+setting  MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION                 doc                           Pages/Components.nsh:208      MUI_FUNCTION_DESCRIPTION_END
+setting  MUI_CUSTOMFUNCTION_UNABORT                            doc                           Interface.nsh:357             MUI_FUNCTION_UNABORTWARNING
+setting  MUI_CUSTOMFUNCTION_UNGUIINIT                          doc                           Interface.nsh:317             MUI_UNFUNCTION_GUIINIT
+setting  MUI_CUSTOMFUNCTION_UNONMOUSEOVERSECTION               doc                           Pages/Components.nsh:235      MUI_UNFUNCTION_DESCRIPTION_END
+macro    MUI_DEFAULT                                                                         MUI2.nsh:35                   MUI_DEFAULT
+macro    MUI_DESCRIPTION_BEGIN                                                               Pages/Components.nsh:155      MUI_DESCRIPTION_BEGIN
+macro    MUI_DESCRIPTION_END                                                                 Pages/Components.nsh:179      MUI_DESCRIPTION_END
+macro    MUI_DESCRIPTION_TEXT                                  doc                           Pages/Components.nsh:165      MUI_DESCRIPTION_TEXT
+setting  MUI_DIRECTORYPAGE                                     set un                        Pages/Directory.nsh:35        MUI_PAGEDECLARATION_DIRECTORY
+setting  MUI_DIRECTORYPAGE_BGCOLOR                             doc                           Pages/Directory.nsh:114       MUI_FUNCTION_DIRECTORYPAGE
+both     MUI_DIRECTORYPAGE_INTERFACE                           once set                      Pages/Directory.nsh:11        MUI_DIRECTORYPAGE_INTERFACE
+setting  MUI_DIRECTORYPAGE_TEXTCOLOR                           default                       Pages/Directory.nsh:115       MUI_FUNCTION_DIRECTORYPAGE
+setting  MUI_DIRECTORYPAGE_TEXT_DESTINATION                    default doc page              Pages/Directory.nsh:39        MUI_PAGEDECLARATION_DIRECTORY
+setting  MUI_DIRECTORYPAGE_TEXT_TOP                            default doc page              Pages/Directory.nsh:38        MUI_PAGEDECLARATION_DIRECTORY
+setting  MUI_DIRECTORYPAGE_VARIABLE                            doc page                      Pages/Directory.nsh:49        MUI_PAGEDECLARATION_DIRECTORY
+setting  MUI_DIRECTORYPAGE_VERIFYONLEAVE                       doc page                      Pages/Directory.nsh:53        MUI_PAGEDECLARATION_DIRECTORY
+setting  MUI_DISABLE_INSERT_LANGUAGE_AFTER_PAGES_WARNING                                     Localization.nsh:34           MUI_LANGUAGEEX
+setting  MUI_FINISHPAGE                                        set un                        Pages/Finish.nsh:149          MUI_PAGEDECLARATION_FINISH
+both     MUI_FINISHPAGE_ABORTWARNING                           set un                        Pages/Finish.nsh:116          MUI_FINISHPAGE_ABORTWARNING
+setting  MUI_FINISHPAGE_ABORTWARNINGCHECK                      page                          Pages/Finish.nsh:204          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_BUTTON                                 default doc page              Pages/Finish.nsh:157          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_CANCEL_ENABLED                         doc once page                 Pages/Finish.nsh:38           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_CANCEL_ENABLED_VARIABLES               once set                      Pages/Finish.nsh:39           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_CURFIELD_BOTTOM                        page                          Pages/Finish.nsh:206          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_CURFIELD_TOP                           page                          Pages/Finish.nsh:205          MUI_PAGEDECLARATION_FINISH
+macro    MUI_FINISHPAGE_GUIINIT                                                              Pages/Finish.nsh:85           MUI_FINISHPAGE_GUIINIT
+both     MUI_FINISHPAGE_INTERFACE                              once set                      Pages/Finish.nsh:11           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_LINK                                   doc once page                 Pages/Finish.nsh:59           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_LINK_COLOR                             default doc page              Pages/Finish.nsh:163          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_LINK_LOCATION                          doc page                      Pages/Finish.nsh:200          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_LINK_VARIABLES                         once set                      Pages/Finish.nsh:60           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_NOAUTOCLOSE                            doc un                        Pages/Finish.nsh:100          MUI_FINISHPAGE_GUIINIT
+setting  MUI_FINISHPAGE_NOREBOOTSUPPORT                        doc once page                 Pages/Finish.nsh:26           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_REBOOTLATER_DEFAULT                    doc page                      Pages/Finish.nsh:189          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_REBOOTLATER_TOP                        page set                      Pages/Finish.nsh:299          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_REBOOTNOW_TOP                          page set                      Pages/Finish.nsh:297          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_REBOOT_VARIABLES                       once set                      Pages/Finish.nsh:67           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_RETURNVALUE_VARIABLES                  once set                      Pages/Finish.nsh:27           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_RUN                                    doc once page                 Pages/Finish.nsh:45           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_RUN_FUNCTION                           doc page                      Pages/Finish.nsh:194          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_RUN_NOTCHECKED                         doc page                      Pages/Finish.nsh:193          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_RUN_PARAMETERS                         doc page                      Pages/Finish.nsh:192          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_RUN_TEXT                               default doc page              Pages/Finish.nsh:161          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_RUN_TOP                                page set                      Pages/Finish.nsh:304          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_RUN_VARIABLES                          once set                      Pages/Finish.nsh:46           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_SHOWREADME                             doc once page                 Pages/Finish.nsh:52           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_SHOWREADME_FUNCTION                    doc page                      Pages/Finish.nsh:198          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_SHOWREADME_NOTCHECKED                  doc page                      Pages/Finish.nsh:197          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_SHOWREADME_TEXT                        default doc page              Pages/Finish.nsh:162          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_SHOWREADME_TOP                         page set                      Pages/Finish.nsh:309          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_SHOWREADME_VARIABLES                   once set                      Pages/Finish.nsh:53           MUI_FINISHPAGE_INTERFACE
+setting  MUI_FINISHPAGE_TEXT                                   default doc page              Pages/Finish.nsh:156          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_TEXT_BOTTOM_BUTTONS                    page set                      Pages/Finish.nsh:293          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_TEXT_HEIGHT                            page set                      Pages/Finish.nsh:318          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_TEXT_HEIGHT_BUTTONS                    page set                      Pages/Finish.nsh:288          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_TEXT_LARGE                             doc page                      Pages/Finish.nsh:183          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_TEXT_REBOOT                            default doc page              Pages/Finish.nsh:158          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_TEXT_REBOOTLATER                       default doc page              Pages/Finish.nsh:160          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_TEXT_REBOOTNOW                         default doc page              Pages/Finish.nsh:159          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_TEXT_TOP                               page set                      Pages/Finish.nsh:284          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FINISHPAGE_TITLE                                  default doc page              Pages/Finish.nsh:155          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_TITLE_3LINES                           doc page                      Pages/Finish.nsh:181          MUI_PAGEDECLARATION_FINISH
+setting  MUI_FINISHPAGE_TITLE_HEIGHT                           page set                      Pages/Finish.nsh:277          MUI_FUNCTION_FINISHPAGE
+setting  MUI_FORCECLASSICCONTROLS                                                            Pages/Finish.nsh:412          MUI_FUNCTION_FINISHPAGE
+macro    MUI_FUNCTION_ABORTWARNING                                                           Interface.nsh:325             MUI_FUNCTION_ABORTWARNING
+macro    MUI_FUNCTION_COMPONENTSPAGE                                                         Pages/Components.nsh:112      MUI_FUNCTION_COMPONENTSPAGE
+macro    MUI_FUNCTION_DESCRIPTION_BEGIN                        doc                           Pages/Components.nsh:190      MUI_FUNCTION_DESCRIPTION_BEGIN
+macro    MUI_FUNCTION_DESCRIPTION_END                          doc                           Pages/Components.nsh:202      MUI_FUNCTION_DESCRIPTION_END
+macro    MUI_FUNCTION_DIRECTORYPAGE                                                          Pages/Directory.nsh:96        MUI_FUNCTION_DIRECTORYPAGE
+macro    MUI_FUNCTION_FINISHPAGE                                                             Pages/Finish.nsh:238          MUI_FUNCTION_FINISHPAGE
+macro    MUI_FUNCTION_GUIINIT                                                                Interface.nsh:289             MUI_FUNCTION_GUIINIT
+macro    MUI_FUNCTION_INSTFILESPAGE                                                          Pages/InstallFiles.nsh:89     MUI_FUNCTION_INSTFILESPAGE
+macro    MUI_FUNCTION_LICENSEPAGE                                                            Pages/License.nsh:113         MUI_FUNCTION_LICENSEPAGE
+macro    MUI_FUNCTION_STARTMENUPAGE                                                          Pages/StartMenu.nsh:93        MUI_FUNCTION_STARTMENUPAGE
+macro    MUI_FUNCTION_UNABORTWARNING                                                         Interface.nsh:345             MUI_FUNCTION_UNABORTWARNING
+macro    MUI_FUNCTION_WELCOMEPAGE                                                            Pages/Welcome.nsh:118         MUI_FUNCTION_WELCOMEPAGE
+macro    MUI_GUIINIT_OUTERDIALOG                                                             Interface.nsh:235             MUI_GUIINIT_OUTERDIALOG
+setting  MUI_HEADERIMAGE                                       doc once                      Interface.nsh:62              MUI_INTERFACE
+setting  MUI_HEADERIMAGE_BITMAP                                default doc once un           Interface.nsh:64              MUI_INTERFACE
+setting  MUI_HEADERIMAGE_BITMAP_RTL                            doc once un                   Interface.nsh:80              MUI_INTERFACE
+setting  MUI_HEADERIMAGE_BITMAP_RTL_STRETCH                    default doc once              Interface.nsh:66              MUI_INTERFACE
+setting  MUI_HEADERIMAGE_BITMAP_STRETCH                        default doc once              Interface.nsh:65              MUI_INTERFACE
+macro    MUI_HEADERIMAGE_INIT                                                                Interface.nsh:205             MUI_HEADERIMAGE_INIT
+macro    MUI_HEADERIMAGE_INITHELPER_LOADIMAGE                                                Interface.nsh:176             MUI_HEADERIMAGE_INITHELPER_LOADIMAGE
+macro    MUI_HEADERIMAGE_INITHELPER_LOADIMAGEWITHMACRO                                       Interface.nsh:159             MUI_HEADERIMAGE_INITHELPER_LOADIMAGEWITHMACRO
+setting  MUI_HEADERIMAGE_RIGHT                                 doc once                      Interface.nsh:110             MUI_INTERFACE
+setting  MUI_HEADERIMAGE_UNBITMAP                              doc once set                  Interface.nsh:68              MUI_INTERFACE
+setting  MUI_HEADERIMAGE_UNBITMAP_RTL                          doc once set                  Interface.nsh:81              MUI_INTERFACE
+setting  MUI_HEADERIMAGE_UNBITMAP_RTL_STRETCH                  default doc once set          Interface.nsh:83              MUI_INTERFACE
+setting  MUI_HEADERIMAGE_UNBITMAP_STRETCH                      default doc once set          Interface.nsh:70              MUI_INTERFACE
+macro    MUI_HEADER_TEXT                                       doc                           Pages.nsh:81                  MUI_HEADER_TEXT
+macro    MUI_HEADER_TEXT_PAGE                                                                Pages.nsh:60                  MUI_HEADER_TEXT_PAGE
+setting  MUI_HEADER_TRANSPARENT_TEXT                           doc                           Interface.nsh:246             MUI_GUIINIT_OUTERDIALOG
+setting  MUI_ICON                                              default doc once              Interface.nsh:49              MUI_INTERFACE
+setting  MUI_INCLUDED                                          set                           MUI2.nsh:9                    
+both     MUI_INSERT                                            set                           MUI2.nsh:91                   MUI_INSERT
+setting  MUI_INSERT_NSISCONF                                   once                          Interface.nsh:41              MUI_INTERFACE
+setting  MUI_INSTFILESPAGE                                     set un                        Pages/InstallFiles.nsh:41     MUI_PAGEDECLARATION_INSTFILES
+setting  MUI_INSTFILESPAGE_ABORTHEADER_SUBTEXT                 doc                           Pages/InstallFiles.nsh:133    MUI_FUNCTION_INSTFILESPAGE
+setting  MUI_INSTFILESPAGE_ABORTHEADER_TEXT                    doc                           Pages/InstallFiles.nsh:133    MUI_FUNCTION_INSTFILESPAGE
+setting  MUI_INSTFILESPAGE_ABORTWARNING_SUBTEXT                page                          Pages/InstallFiles.nsh:57     MUI_PAGEDECLARATION_INSTFILES
+setting  MUI_INSTFILESPAGE_ABORTWARNING_TEXT                   page                          Pages/InstallFiles.nsh:56     MUI_PAGEDECLARATION_INSTFILES
+setting  MUI_INSTFILESPAGE_COLORS                              default doc once              Pages/InstallFiles.nsh:16     MUI_INSTFILESPAGE_INTERFACE
+setting  MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT                doc page                      Pages/InstallFiles.nsh:55     MUI_PAGEDECLARATION_INSTFILES
+setting  MUI_INSTFILESPAGE_FINISHHEADER_TEXT                   doc page                      Pages/InstallFiles.nsh:54     MUI_PAGEDECLARATION_INSTFILES
+macro    MUI_INSTFILESPAGE_INTERFACE                                                         Pages/InstallFiles.nsh:11     MUI_INSTFILESPAGE_INTERFACE
+setting  MUI_INSTFILESPAGE_PROGRESSBAR                         default doc once              Pages/InstallFiles.nsh:17     MUI_INSTFILESPAGE_INTERFACE
+setting  MUI_INSTFILESYPAGE_INTERFACE                          once set                      Pages/InstallFiles.nsh:13     MUI_INSTFILESPAGE_INTERFACE
+both     MUI_INTERFACE                                         once set                      Interface.nsh:31              MUI_INTERFACE
+macro    MUI_INTERNAL_FULLWINDOW_LOADWIZARDIMAGE                                             Pages.nsh:170                 MUI_INTERNAL_FULLWINDOW_LOADWIZARDIMAGE
+macro    MUI_INTERNAL_LOADANDASPECTSTRETCHIMAGETOCONTROLHEIGHT                               Pages.nsh:266                 MUI_INTERNAL_LOADANDASPECTSTRETCHIMAGETOCONTROLHEIGHT
+macro    MUI_INTERNAL_LOADANDSIZEIMAGE                                                       Pages.nsh:206                 MUI_INTERNAL_LOADANDSIZEIMAGE
+macro    MUI_INTERNAL_LOADANDXALIGNIMAGE                                                     Pages.nsh:232                 MUI_INTERNAL_LOADANDXALIGNIMAGE
+setting  MUI_LANGDLL_ALLLANGUAGES                              doc                           Localization.nsh:110          MUI_LANGDLL_DISPLAY
+setting  MUI_LANGDLL_ALWAYSSHOW                                doc                           Localization.nsh:103          MUI_LANGDLL_DISPLAY
+macro    MUI_LANGDLL_DISPLAY                                   doc                           Localization.nsh:74           MUI_LANGDLL_DISPLAY
+setting  MUI_LANGDLL_INFO                                      default doc                   Localization.nsh:86           MUI_LANGDLL_DISPLAY
+setting  MUI_LANGDLL_LANGUAGES                                 set                           Localization.nsh:49           MUI_LANGUAGEEX
+setting  MUI_LANGDLL_LANGUAGES_CP                              set                           Localization.nsh:52           MUI_LANGUAGEEX
+setting  MUI_LANGDLL_REGISTRY_KEY                              doc                           Localization.nsh:13           MUI_LANGDLL_VARIABLES
+setting  MUI_LANGDLL_REGISTRY_ROOT                             doc                           Localization.nsh:13           MUI_LANGDLL_VARIABLES
+setting  MUI_LANGDLL_REGISTRY_VALUENAME                        doc                           Localization.nsh:13           MUI_LANGDLL_VARIABLES
+setting  MUI_LANGDLL_REGISTRY_VARIABLES                        set                           Localization.nsh:14           MUI_LANGDLL_VARIABLES
+macro    MUI_LANGDLL_SAVELANGUAGE                                                            Localization.nsh:136          MUI_LANGDLL_SAVELANGUAGE
+macro    MUI_LANGDLL_VARIABLES                                                               Localization.nsh:11           MUI_LANGDLL_VARIABLES
+setting  MUI_LANGDLL_WINDOWTITLE                               default doc                   Localization.nsh:85           MUI_LANGDLL_DISPLAY
+macro    MUI_LANGUAGE                                          doc                           Localization.nsh:60           MUI_LANGUAGE
+macro    MUI_LANGUAGEEX                                                                      Localization.nsh:29           MUI_LANGUAGEEX
+setting  MUI_LICENSEPAGE                                       set un                        Pages/License.nsh:35          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_BGCOLOR                               default doc once              Pages/License.nsh:21          MUI_LICENSEPAGE_INTERFACE
+setting  MUI_LICENSEPAGE_BUTTON                                default doc page              Pages/License.nsh:39          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_CHECKBOX                              doc page                      Pages/License.nsh:53          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_CHECKBOX_TEXT                         default doc page              Pages/License.nsh:40          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_CHECKBOX_TEXT_ACCEPT                  page                          Pages/License.nsh:80          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_CHECKBOX_TEXT_DECLINE                 page                          Pages/License.nsh:81          MUI_PAGEDECLARATION_LICENSE
+both     MUI_LICENSEPAGE_INTERFACE                             once set                      Pages/License.nsh:11          MUI_LICENSEPAGE_INTERFACE
+setting  MUI_LICENSEPAGE_RADIOBUTTONS                          doc page                      Pages/License.nsh:53          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_RADIOBUTTONS_TEXT_ACCEPT              default doc                   Pages/License.nsh:41          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_RADIOBUTTONS_TEXT_DECLINE             default doc                   Pages/License.nsh:42          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_TEXT_BOTTOM                           doc page                      Pages/License.nsh:52          MUI_PAGEDECLARATION_LICENSE
+setting  MUI_LICENSEPAGE_TEXT_TOP                              default doc page              Pages/License.nsh:38          MUI_PAGEDECLARATION_LICENSE
+macro    MUI_LOADANDASPECTSTRETCHIMAGETOCONTROLHEIGHT                                        Pages.nsh:262                 MUI_LOADANDASPECTSTRETCHIMAGETOCONTROLHEIGHT
+macro    MUI_LOADANDXALIGNIMAGE                                                              Pages.nsh:228                 MUI_LOADANDXALIGNIMAGE
+setting  MUI_OPTIMIZE_ALWAYSLTR                                                              Interface.nsh:162             MUI_HEADERIMAGE_INITHELPER_LOADIMAGEWITHMACRO
+macro    MUI_PAGEDECLARATION_COMPONENTS                                                      Pages/Components.nsh:53       MUI_PAGEDECLARATION_COMPONENTS
+macro    MUI_PAGEDECLARATION_CONFIRM                                                         Pages/UninstallConfirm.nsh:28 MUI_PAGEDECLARATION_CONFIRM
+macro    MUI_PAGEDECLARATION_DIRECTORY                                                       Pages/Directory.nsh:33        MUI_PAGEDECLARATION_DIRECTORY
+macro    MUI_PAGEDECLARATION_FINISH                                                          Pages/Finish.nsh:147          MUI_PAGEDECLARATION_FINISH
+macro    MUI_PAGEDECLARATION_INSTFILES                                                       Pages/InstallFiles.nsh:39     MUI_PAGEDECLARATION_INSTFILES
+macro    MUI_PAGEDECLARATION_LICENSE                                                         Pages/License.nsh:33          MUI_PAGEDECLARATION_LICENSE
+macro    MUI_PAGEDECLARATION_STARTMENU                                                       Pages/StartMenu.nsh:35        MUI_PAGEDECLARATION_STARTMENU
+macro    MUI_PAGEDECLARATION_WELCOME                                                         Pages/Welcome.nsh:64          MUI_PAGEDECLARATION_WELCOME
+macro    MUI_PAGE_COMPONENTS                                   doc                           Pages/Components.nsh:84       MUI_PAGE_COMPONENTS
+setting  MUI_PAGE_CUSTOMFUNCTION_DESTROYED                     doc page                      Pages/Welcome.nsh:164         MUI_FUNCTION_WELCOMEPAGE
+setting  MUI_PAGE_CUSTOMFUNCTION_LEAVE                         doc page                      Pages/Welcome.nsh:177         MUI_FUNCTION_WELCOMEPAGE
+setting  MUI_PAGE_CUSTOMFUNCTION_PRE                           doc page                      Pages/Welcome.nsh:122         MUI_FUNCTION_WELCOMEPAGE
+setting  MUI_PAGE_CUSTOMFUNCTION_SHOW                          doc page                      Pages/Welcome.nsh:162         MUI_FUNCTION_WELCOMEPAGE
+macro    MUI_PAGE_DIRECTORY                                    doc                           Pages/Directory.nsh:68        MUI_PAGE_DIRECTORY
+macro    MUI_PAGE_FINISH                                       doc                           Pages/Finish.nsh:210          MUI_PAGE_FINISH
+setting  MUI_PAGE_FUNCTION_ABORTWARNING                        set un                        Interface.nsh:329             MUI_FUNCTION_ABORTWARNING
+macro    MUI_PAGE_FUNCTION_CUSTOM                                                            Pages.nsh:105                 MUI_PAGE_FUNCTION_CUSTOM
+both     MUI_PAGE_FUNCTION_FULLWINDOW                          set un                        Pages.nsh:118                 MUI_PAGE_FUNCTION_FULLWINDOW
+setting  MUI_PAGE_FUNCTION_GUIINIT                             set un                        Interface.nsh:295             MUI_FUNCTION_GUIINIT
+setting  MUI_PAGE_HEADER_SUBTEXT                               doc page                      Pages.nsh:62                  MUI_HEADER_TEXT_PAGE
+setting  MUI_PAGE_HEADER_TEXT                                  doc page                      Pages.nsh:62                  MUI_HEADER_TEXT_PAGE
+macro    MUI_PAGE_INIT                                                                       Pages.nsh:11                  MUI_PAGE_INIT
+macro    MUI_PAGE_INSTFILES                                    doc                           Pages/InstallFiles.nsh:61     MUI_PAGE_INSTFILES
+macro    MUI_PAGE_LICENSE                                      doc                           Pages/License.nsh:85          MUI_PAGE_LICENSE
+macro    MUI_PAGE_STARTMENU                                    doc                           Pages/StartMenu.nsh:78        MUI_PAGE_STARTMENU
+setting  MUI_PAGE_UNINSTALLER                                  page set                      Localization.nsh:140          MUI_LANGDLL_SAVELANGUAGE
+setting  MUI_PAGE_UNINSTALLER_FUNCPREFIX                       page set                      Pages.nsh:23                  MUI_PAGE_INIT
+setting  MUI_PAGE_UNINSTALLER_PREFIX                           once page set                 Localization.nsh:33           MUI_LANGUAGEEX
+macro    MUI_PAGE_WELCOME                                      doc                           Pages/Welcome.nsh:90          MUI_PAGE_WELCOME
+macro    MUI_RESERVEFILE_LANGDLL                               doc                           Localization.nsh:189          MUI_RESERVEFILE_LANGDLL
+macro    MUI_SET                                                                             MUI2.nsh:46                   MUI_SET
+setting  MUI_STARTMENUPAGE                                     set un                        Pages/StartMenu.nsh:37        MUI_PAGEDECLARATION_STARTMENU
+setting  MUI_STARTMENUPAGE_BGCOLOR                             doc                           Pages/StartMenu.nsh:138       MUI_FUNCTION_STARTMENUPAGE
+setting  MUI_STARTMENUPAGE_CURRENT_ID                          page set                      Pages/StartMenu.nsh:203       MUI_STARTMENU_WRITE_BEGIN
+setting  MUI_STARTMENUPAGE_DEFAULTFOLDER                       default doc page              Pages/StartMenu.nsh:40        MUI_PAGEDECLARATION_STARTMENU
+both     MUI_STARTMENUPAGE_INTERFACE                           once set                      Pages/StartMenu.nsh:11        MUI_STARTMENUPAGE_INTERFACE
+setting  MUI_STARTMENUPAGE_NODISABLE                           doc page                      Pages/StartMenu.nsh:71        MUI_PAGEDECLARATION_STARTMENU
+setting  MUI_STARTMENUPAGE_REGISTRY_KEY                        doc once page                 Pages/StartMenu.nsh:22        MUI_STARTMENUPAGE_INTERFACE
+setting  MUI_STARTMENUPAGE_REGISTRY_ROOT                       doc once page                 Pages/StartMenu.nsh:22        MUI_STARTMENUPAGE_INTERFACE
+setting  MUI_STARTMENUPAGE_REGISTRY_VALUENAME                  doc once page                 Pages/StartMenu.nsh:22        MUI_STARTMENUPAGE_INTERFACE
+setting  MUI_STARTMENUPAGE_REGISTRY_VARIABLES                  once set                      Pages/StartMenu.nsh:23        MUI_STARTMENUPAGE_INTERFACE
+setting  MUI_STARTMENUPAGE_TEXTCOLOR                           default                       Pages/StartMenu.nsh:139       MUI_FUNCTION_STARTMENUPAGE
+setting  MUI_STARTMENUPAGE_TEXT_CHECKBOX                       default doc page              Pages/StartMenu.nsh:42        MUI_PAGEDECLARATION_STARTMENU
+setting  MUI_STARTMENUPAGE_TEXT_TOP                            default doc page              Pages/StartMenu.nsh:41        MUI_PAGEDECLARATION_STARTMENU
+setting  MUI_STARTMENUPAGE_VARIABLE                            page set                      Pages/StartMenu.nsh:44        MUI_PAGEDECLARATION_STARTMENU
+macro    MUI_STARTMENU_GETFOLDER                               doc                           Pages/StartMenu.nsh:167       MUI_STARTMENU_GETFOLDER
+macro    MUI_STARTMENU_WRITE_BEGIN                             doc                           Pages/StartMenu.nsh:195       MUI_STARTMENU_WRITE_BEGIN
+macro    MUI_STARTMENU_WRITE_END                               doc                           Pages/StartMenu.nsh:219       MUI_STARTMENU_WRITE_END
+setting  MUI_SYSVERSION                                        set                           MUI2.nsh:12                   
+setting  MUI_TEXTCOLOR                                         default doc once              Interface.nsh:52              MUI_INTERFACE
+setting  MUI_UI                                                default doc once              Interface.nsh:46              MUI_INTERFACE
+setting  MUI_UI_COMPONENTSPAGE_NODESC                          default doc once              Pages/Components.nsh:33       MUI_COMPONENTSPAGE_INTERFACE
+setting  MUI_UI_COMPONENTSPAGE_SMALLDESC                       default doc once              Pages/Components.nsh:32       MUI_COMPONENTSPAGE_INTERFACE
+setting  MUI_UI_HEADERIMAGE                                    default doc once              Interface.nsh:47              MUI_INTERFACE
+setting  MUI_UI_HEADERIMAGE_RIGHT                              default doc once              Interface.nsh:48              MUI_INTERFACE
+both     MUI_UNABORTWARNING                                    doc                           Interface.nsh:142             MUI_UNABORTWARNING
+setting  MUI_UNABORTWARNING_CANCEL_DEFAULT                     doc                           Interface.nsh:144             MUI_UNABORTWARNING
+setting  MUI_UNABORTWARNING_TEXT                               default doc once              Interface.nsh:101             MUI_INTERFACE
+setting  MUI_UNCONFIRMPAGE                                     set                           Pages/UninstallConfirm.nsh:30 MUI_PAGEDECLARATION_CONFIRM
+both     MUI_UNCONFIRMPAGE_INTERFACE                           once set                      Pages/UninstallConfirm.nsh:11 MUI_UNCONFIRMPAGE_INTERFACE
+setting  MUI_UNCONFIRMPAGE_TEXT_LOCATION                       default doc page              Pages/UninstallConfirm.nsh:34 MUI_PAGEDECLARATION_CONFIRM
+setting  MUI_UNCONFIRMPAGE_TEXT_TOP                            default doc page              Pages/UninstallConfirm.nsh:33 MUI_PAGEDECLARATION_CONFIRM
+setting  MUI_UNCONFIRMPAGE_VARIABLE                            doc                           Pages/UninstallConfirm.nsh:44 MUI_PAGEDECLARATION_CONFIRM
+macro    MUI_UNFUNCTION_CONFIRMPAGE                                                          Pages/UninstallConfirm.nsh:73 MUI_UNFUNCTION_CONFIRMPAGE
+macro    MUI_UNFUNCTION_DESCRIPTION_BEGIN                      doc                           Pages/Components.nsh:217      MUI_UNFUNCTION_DESCRIPTION_BEGIN
+macro    MUI_UNFUNCTION_DESCRIPTION_END                        doc                           Pages/Components.nsh:229      MUI_UNFUNCTION_DESCRIPTION_END
+macro    MUI_UNFUNCTION_GUIINIT                                                              Interface.nsh:307             MUI_UNFUNCTION_GUIINIT
+macro    MUI_UNGETLANGUAGE                                     doc                           Localization.nsh:154          MUI_UNGETLANGUAGE
+setting  MUI_UNICON                                            default doc once              Interface.nsh:50              MUI_INTERFACE
+setting  MUI_UNINSTALLER                                       set                           MUI2.nsh:107                  MUI_INSERT
+setting  MUI_UNIQUEID                                          page set                      Pages.nsh:29                  MUI_PAGE_INIT
+macro    MUI_UNPAGE_COMPONENTS                                 doc                           Pages/Components.nsh:96       MUI_UNPAGE_COMPONENTS
+macro    MUI_UNPAGE_CONFIRM                                    doc                           Pages/UninstallConfirm.nsh:57 MUI_UNPAGE_CONFIRM
+macro    MUI_UNPAGE_DIRECTORY                                  doc                           Pages/Directory.nsh:80        MUI_UNPAGE_DIRECTORY
+macro    MUI_UNPAGE_FINISH                                     doc                           Pages/Finish.nsh:222          MUI_UNPAGE_FINISH
+setting  MUI_UNPAGE_FUNCTION_ABORTWARNING                                                    Interface.nsh:349             MUI_FUNCTION_UNABORTWARNING
+setting  MUI_UNPAGE_FUNCTION_GUIINIT                                                         Interface.nsh:313             MUI_UNFUNCTION_GUIINIT
+macro    MUI_UNPAGE_INIT                                                                     Pages.nsh:34                  MUI_UNPAGE_INIT
+macro    MUI_UNPAGE_INSTFILES                                  doc                           Pages/InstallFiles.nsh:73     MUI_UNPAGE_INSTFILES
+macro    MUI_UNPAGE_LICENSE                                    doc                           Pages/License.nsh:97          MUI_UNPAGE_LICENSE
+macro    MUI_UNPAGE_WELCOME                                    doc                           Pages/Welcome.nsh:102         MUI_UNPAGE_WELCOME
+macro    MUI_UNSET                                                                           MUI2.nsh:55                   MUI_UNSET
+setting  MUI_VERBOSE                                           set                           MUI2.nsh:18                   
+setting  MUI_WELCOMEFINISHPAGE_BITMAP                          default doc once un           Pages/Welcome.nsh:26          MUI_WELCOMEPAGE_INTERFACE
+setting  MUI_WELCOMEFINISHPAGE_BITMAP_NOSTRETCH                un                            Pages.nsh:172                 MUI_INTERNAL_FULLWINDOW_LOADWIZARDIMAGE
+setting  MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH                  default doc un                Pages.nsh:173                 MUI_INTERNAL_FULLWINDOW_LOADWIZARDIMAGE
+setting  MUI_WELCOMEFINISHPAGE_GUINIT                          set un                        Pages/Finish.nsh:87           MUI_FINISHPAGE_GUIINIT
+setting  MUI_WELCOMEPAGE                                       set un                        Pages/Welcome.nsh:66          MUI_PAGEDECLARATION_WELCOME
+macro    MUI_WELCOMEPAGE_GUIINIT                                                             Pages/Welcome.nsh:37          MUI_WELCOMEPAGE_GUIINIT
+both     MUI_WELCOMEPAGE_INTERFACE                             once set                      Pages/Welcome.nsh:11          MUI_WELCOMEPAGE_INTERFACE
+setting  MUI_WELCOMEPAGE_TEXT                                  default doc page              Pages/Welcome.nsh:72          MUI_PAGEDECLARATION_WELCOME
+setting  MUI_WELCOMEPAGE_TEXT_TOP                              page set                      Pages/Welcome.nsh:146         MUI_FUNCTION_WELCOMEPAGE
+setting  MUI_WELCOMEPAGE_TITLE                                 default doc page              Pages/Welcome.nsh:71          MUI_PAGEDECLARATION_WELCOME
+setting  MUI_WELCOMEPAGE_TITLE_3LINES                          doc page                      Pages/Welcome.nsh:85          MUI_PAGEDECLARATION_WELCOME
+setting  MUI_WELCOMEPAGE_TITLE_HEIGHT                          page set                      Pages/Welcome.nsh:139         MUI_FUNCTION_WELCOMEPAGE
+setting  MUI_WELCOMEWELCOMEPAGE_GUINIT                         set un                        Pages/Welcome.nsh:39          MUI_WELCOMEPAGE_GUIINIT

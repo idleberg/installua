@@ -65,7 +65,11 @@ pub struct Module {
     /// page before every uninstaller page, whatever order the two blocks were
     /// written in (§15.3).
     pub unpages: Vec<Page>,
-    /// `!insertmacro MUI_LANGUAGE`, which has to come after every page.
+    /// `!insertmacro MUI_LANGUAGE` and the `LangString` lines under it, which
+    /// have to come after every page — the macro `!warning`s otherwise, and a
+    /// language string can only be filed against a language already loaded.
+    /// One list rather than two because they are one run of output, in the one
+    /// position both are legal in (§15.26).
     pub languages: Vec<Instruction>,
     /// `InstType` lines, in the order they were written — which is the whole of
     /// what an install type *is* to NSIS, since a section names one by its
@@ -74,6 +78,11 @@ pub struct Module {
     pub inst_types: Vec<String>,
     pub uninst_types: Vec<String>,
     pub sections: Vec<SectionItem>,
+    /// The components page's hover text, one block per half. After the sections
+    /// because a `MUI_DESCRIPTION_TEXT` reads the `!define` a `Section` line
+    /// makes, and the preprocessor is textual — the same rule that puts the
+    /// functions last.
+    pub descriptions: Vec<Descriptions>,
     pub functions: Vec<Function>,
 }
 
@@ -161,6 +170,25 @@ pub struct Page {
     pub defines: Vec<Define>,
     pub insert: Instruction,
     pub undefines: Vec<String>,
+}
+
+/// One half's `.onMouseOverSection`, which MUI2 writes from three macros and
+/// this compiler never lets a script spell.
+///
+/// A block rather than a per-section define, because that is the shape MUI2
+/// gives it: `MUI_FUNCTION_DESCRIPTION_BEGIN` opens a `Function` and an
+/// `${if}`, each text is an `${elseif}` on a section's index, and `…_END`
+/// closes both. Nothing in it is optional and nothing in it is ordered by the
+/// user, so the compiler owns all three lines.
+#[derive(Clone, Debug)]
+pub struct Descriptions {
+    /// The uninstaller's, which is the `UN` in `MUI_UNFUNCTION_DESCRIPTION_*`
+    /// and the `un.` on the function those macros write (§15.3).
+    pub un: bool,
+    /// `(index define, text)`, in section order. Empty is legal and reachable:
+    /// an `onMouseOverSection` with no described section still needs the block,
+    /// because MUI2 calls the hook from inside it and from nowhere else.
+    pub texts: Vec<(String, Arg)>,
 }
 
 #[derive(Clone, Debug)]

@@ -419,7 +419,7 @@ fn colours_are_one_field_because_they_are_one_instruction() {
     let output = build(&page(
         "local tag = label { \"hi\", y = 0, height = 12 }",
         "tag,",
-        "tag.colors = { text = \"FF0000\", back = \"transparent\" }",
+        "tag.colors = { text = \"FF0000\", background = \"transparent\" }",
     ));
     assert!(
         output.contains("SetCtlColors $__GENERATED_ctl_tag FF0000 transparent"),
@@ -439,7 +439,7 @@ fn colours_are_one_field_because_they_are_one_instruction() {
     let named = errors(&page(
         "local tag = label { \"hi\", y = 0, height = 12 }",
         "tag,",
-        "tag.colors = { text = \"red\", back = \"transparent\" }",
+        "tag.colors = { text = \"red\", background = \"transparent\" }",
     ));
     assert!(
         named.iter().any(|(code, _)| *code == Code::BadFieldValue),

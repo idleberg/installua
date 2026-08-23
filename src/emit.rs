@@ -159,6 +159,31 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
         }
     }
 
+    // 9b. The description blocks, between the sections and the functions: each
+    //     `MUI_DESCRIPTION_TEXT` expands a section index, which is a `!define`
+    //     the `Section` line above made.
+    for block in &module.descriptions {
+        out.blank();
+        let un = if block.un { "UN" } else { "" };
+        out.line(
+            format!("!insertmacro MUI_{un}FUNCTION_DESCRIPTION_BEGIN"),
+            Origin::Emitted("description"),
+        );
+        for (index, text) in &block.texts {
+            out.line(
+                format!(
+                    "{INDENT}!insertmacro MUI_DESCRIPTION_TEXT ${{{index}}} {}",
+                    argument(text)
+                ),
+                Origin::Emitted("description"),
+            );
+        }
+        out.line(
+            format!("!insertmacro MUI_{un}FUNCTION_DESCRIPTION_END"),
+            Origin::Emitted("description"),
+        );
+    }
+
     // 10. Functions, last: see the note above the sections.
     for function in &module.functions {
         out.blank();

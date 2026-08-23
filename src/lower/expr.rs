@@ -27,7 +27,7 @@ use crate::cfg::{self, BlockId, CmpOp, Terminator, Test};
 use crate::diag::{Code, Diagnostic, Span};
 use crate::ir;
 use crate::regs::Slot;
-use crate::resolve::ConstValue;
+use crate::resolve::{ConstValue, DeferredKind};
 use crate::table;
 use crate::types::{Sign, Ty};
 
@@ -149,6 +149,22 @@ impl BodyLowerer<'_, '_> {
                 let rhs = self.simple(rhs)?;
                 Some(Typed {
                     arg: lhs.arg.concat(rhs.arg),
+                    ty: Ty::Str,
+                })
+            }
+
+            // `lang.greeting` — a `LangString` read, which is `$(greeting)`
+            // and nothing else: NSIS resolves it against `$LANGUAGE` at run
+            // time, so there is no register and no instruction. Folded here
+            // rather than in `field_read` so that it concatenates like any
+            // other piece; an unknown name falls through to `field_read`,
+            // which is where the diagnostic lives.
+            Expr::Field { base, name, .. }
+                if matches!(&**base, Expr::Name(base) if base.text == "lang")
+                    && self.lang_strings.contains(&name.text) =>
+            {
+                Some(Typed {
+                    arg: ir::Arg::var(format!("$({})", name.text)),
                     ty: Ty::Str,
                 })
             }
@@ -567,6 +583,21 @@ impl BodyLowerer<'_, '_> {
                 return self.inst_types_call(&name, args, dest, span);
             }
             _ => {}
+        }
+
+        // `menu.write(function() … end)` — the shortcut-writing region, which is
+        // a method on a start menu page and not a call to anything.
+        if let Some((base, method)) = name.split_once('.')
+            && self
+                .resolved
+                .deferred
+                .get(base)
+                .map(|deferred| deferred.kind)
+                == Some(DeferredKind::StartMenu)
+        {
+            let (base, method) = (base.to_string(), method.to_string());
+            self.start_menu_write(&base, &method, args, dest, span);
+            return None;
         }
 
         if let Some((base, method)) = name.split_once('.')

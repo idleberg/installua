@@ -240,6 +240,17 @@ pub enum TableField {
     Positional { value: Expr },
 }
 
+impl TableField {
+    /// Where the entry is, whichever kind it is — the name for a named one,
+    /// since that is what a diagnostic about the *field* wants to point at.
+    pub fn span(&self) -> Span {
+        match self {
+            TableField::Named { name, .. } => name.span,
+            TableField::Positional { value } => value.span(),
+        }
+    }
+}
+
 /// Every operator that survives §6. `/` and `^` are absent because they are
 /// rejected at the operator, not lowered to something close enough.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

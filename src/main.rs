@@ -21,6 +21,8 @@ usage:
   installua stubs [dir]                  .installua/meta/*.lua and the selene std
   installua table <cmdhelp.txt>          regenerate the instruction skeletons
   installua language <cmdhelp.txt>       regenerate LANGUAGE.md's table (§14)
+  installua mui <nsis dir>               regenerate the MUI2 snapshot (§14)
+  installua locales <nsis dir>           regenerate the NLF snapshot (§15.26)
 
 options:
   -o <file.nsi>   write here instead of alongside the input
@@ -49,6 +51,8 @@ fn main() -> ExitCode {
         Some((&"stubs", rest)) => stubs(rest),
         Some((&"table", rest)) => table(rest),
         Some((&"language", rest)) => language(rest),
+        Some((&"mui", rest)) => mui(rest),
+        Some((&"locales", rest)) => locales(rest),
         Some((other, _)) => usage_error(&format!("unknown command `{other}`")),
     }
 }
@@ -345,4 +349,38 @@ fn report(diags: &Diagnostics, path: &Path) {
 fn usage_error(message: &str) -> ExitCode {
     eprintln!("installua: {message}\n\n{USAGE}");
     ExitCode::from(2)
+}
+
+/// `installua locales <nsis dir>`: the NLF names, listed (§15.26).
+fn locales(args: &[&str]) -> ExitCode {
+    let [root] = args else {
+        return usage_error("`locales` needs exactly one NSIS directory");
+    };
+    match installua::locale::scan(Path::new(root)) {
+        Ok(text) => {
+            print!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("installua: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `installua mui <Modern UI 2 dir>`: the MUI inventory's snapshot half.
+fn mui(args: &[&str]) -> ExitCode {
+    let [root] = args else {
+        return usage_error("`mui` needs exactly one NSIS directory");
+    };
+    match installua::mui::scan::scan(Path::new(root)) {
+        Ok(text) => {
+            print!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("installua: {error}");
+            ExitCode::from(2)
+        }
+    }
 }

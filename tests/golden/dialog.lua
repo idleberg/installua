@@ -73,7 +73,7 @@ installer {
 		-- the way a section does.
 		show = function()
 			serial.font = { face = "Tahoma", size = 8, bold = true }
-			serial.colors = { text = "800000", back = "transparent" }
+			serial.colors = { text = "800000", background = "transparent" }
 			agree.checked = true
 
 			-- MUI2's own Cancel button, addressed the only way Windows offers.

@@ -642,6 +642,12 @@ pub fn coverage() -> String {
         }
     }
 
+    // The second surface, in the same file. Two censuses and one golden,
+    // because "what of NSIS can be written" and "what of MUI2 can be written"
+    // are one question to anybody writing an installer, and a number that lives
+    // in a document of its own is a number that goes stale in one (§14).
+    out.push_str(&crate::mui::coverage());
+
     out
 }
 

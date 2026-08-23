@@ -56,7 +56,7 @@ No Rust. This phase produces the artifacts every later phase is measured against
 **Falls out of this phase, and is why it comes first:**
 
 - the frozen v1 **exposed-command list** — the definition of scope
-- the `MUI_*` subset that is actually needed, out of roughly seventy
+- the `MUI_*` subset that is actually needed, out of the 255 names `installua coverage` now counts
 - §15.14's open empirical question: how often the type lattice really lands on `unknown`
 - the first five goldens
 
@@ -215,7 +215,7 @@ was designed against the whole `-CMDHELP` set rather than against the twelve the
 | --- | --- |
 | Commands with their own control-flow shape | `MessageBox` took a whole ruling (§15.18) — statement, flag set and jump table at once |
 | The `Section*` family | `SectionGetFlags`/`SetFlags` address sections **by index**, a real compile-time ↔ install-time name binding (§13) |
-| The ~70 `MUI_*` settings | data-shaped, but each needs a *home* (`installer {}` vs `page {}`), and page-scoped ones carry §15.7's sequential-`!define` hazard |
+| The `MUI_*` settings | data-shaped, but each needs a *home* (`installer {}` vs `page {}`), and page-scoped ones carry §15.7's sequential-`!define` hazard. Counted since batch 33: 255 names, 12 `todo` |
 | Custom pages / nsDialogs | no design exists — plugin calls, callbacks and a layout model |
 | New kind-2 stdlib adapters | `string.sub`/`format`/`math.*` are hand-written lowerings onto instructions, not declarations (§15.21) |
 | A fifth lattice type | four is a closed set; a fifth touches every rule in §15.14 |
@@ -272,7 +272,7 @@ argument, so none closes a door.
 | `sar(a, b)` | probably never | NSIS's arithmetic `>>` has no Lua operator; `raw` covers it |
 | `Name` accelerator opt-out | a second field | nobody has asked; auto-doubling on a constant name covers the real case |
 | Section index output | `local id = section("Main", fn)` returning a compile-time symbol | needed only once a program reaches `SectionSetFlags` |
-| ~70 `MUI_*` settings | overlay rows in `installer {}` / `page {}` | pure data entry → `Class::Todo`; v1 carries what the five programs reach |
+| The 12 `todo` `MUI_*` names | overlay rows in `installer {}` / `page {}` | pure data entry → `mui::Class::Todo`; v1 carries what the five programs reach |
 | Multi-file code splitting | `include` (§15.28) | decided, but only `languages {}` forces it in v1 |
 | Module form of the API | LuaCATS supports naming a meta file so it is also `require`-able | §15.13 — additive, for the embedded case |
 | `System::Call` signature parsing | narrows the opaque-clobber set | §15.11 — a later optimisation, tractable once liveness exists |
@@ -302,8 +302,11 @@ boundary cases rather than a formula, and explicitly says those tests are the de
 NSIS's negative `maxlen`/`startoffset` are *close to but not identical to* Lua's, so this is
 a silent-wrong-answer surface inside an adapter users will reach for constantly.
 
-**`MUI_*` volume.** Roughly seventy defines, each needing a home and an overlay row. Not
-design work, but not small, and it is the most likely thing to make v1 feel incomplete.
+**`MUI_*` volume.** Counted rather than estimated since batch 33: `tables/mui-3.12.txt`
+has **255** names, of which 120 are exposed, 107 are MUI2's own state, 16 are refused and
+**12 are `todo`**. Not design work, but not small, and it is the most likely thing to make
+v1 feel incomplete. The estimate this replaces was "roughly seventy", which was low by a
+factor of nearly four once MUI2's macros and its uninstaller halves were counted too.
 
 **Silent string truncation** (§15.31). NSIS truncates over-long strings with **no
 diagnostic at all** — verified: an 1100-character literal compiles clean under `-WX` and

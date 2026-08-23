@@ -2027,6 +2027,631 @@ as one instruction each, the events, `getDlgItem`, and why these seven rows are 
 Of the 20 rows left, fourteen are in six groups and six are one-offs. The `hwnd` group,
 which was 12 rows when Phase 6 opened, is empty.
 
+## Batch 33 — the MUI surface is counted, not estimated
+
+`PLAN.md` said "roughly seventy `MUI_*` settings" from Phase 0 to here, and nothing
+checked it. A MUI2 setting is a `!define`, so no `-CMDHELP` line exists for it and no
+census row tracked one: the burndown said 20 while an entire second surface sat outside
+it. *Still open* asked for an inventory of its own, and this is it.
+
+The shape is §15.23's, one level over: `tables/mui-3.12.txt` is the snapshot, `mui::rows`
+is the judgement, and they join at first use. What the snapshot records is only what MUI2's
+text *does* with a name — `default`, `page`, `once`, `set`, `un` — plus one bit from
+outside the headers:
+
+| tag | where it comes from | what it settles |
+| --- | --- | --- |
+| `page` | `!undef` / `MUI_UNSET` after the page | page-scoped, so a second page does not inherit it |
+| `once` | inside an `!ifndef`-guarded `*_INTERFACE` macro | a block field, because the first page of its type wins |
+| `doc` | `Docs/Modern UI 2/Readme.html` | whether the define is **yours to write or MUI2's to keep** |
+
+That last one is the whole reason the count is trustworthy. A define MUI2 sets for itself
+looks exactly like one it expects from you, and no amount of reading `Interface.nsh` tells
+them apart — MUI2's own readme does, and it is shipped, so it is a fact rather than a
+judgement. 104 of the 255 names are internal on its authority.
+
+**255 names, not ~70.** The estimate was low by nearly four times, because it counted
+neither MUI2's macros nor its uninstaller halves:
+
+```
+installua MUI coverage -- Modern UI 2, 255 names
+
+  exposed           43
+  internal        104
+  rejected         11
+  todo             97
+```
+
+Four buckets and not seven: a `!define` cannot be a directive, a language construct or a
+lowering target. `internal` is printed rather than subtracted, because *MUI2 has 255 names
+and 104 of them are its own* is the fact, and a denominator quietly adjusted is how a
+coverage number stops meaning anything.
+
+**Nothing deprecated is in it.** `Deprecated.nsh` is not read at all — every macro in it is
+a `!error` MUI2 raises on purpose, so a row for one would be an Installua spelling for
+something MUI2 refuses to compile. The eleven names are printed in the snapshot's header,
+because a file skipped in silence is indistinguishable from one nobody found, and
+`tests/mui.rs` asserts none of them ever reappears. The one legacy name that leaks out of
+that file — `MUI_WELCOMEFINISHPAGE_BITMAP_NOSTRETCH`, which `Pages.nsh` still reads — is
+`rejected` with the name to write instead.
+
+**The cross-check found a bug in the first draft.** `mui_defines()` lists every `MUI_*` the
+lowerer writes, and the test asserts it is *exactly* the `Exposed` set. The first run
+disagreed by one: `MUI_LICENSEPAGE_TEXT_TOP` was recorded as exposed and no `PageField`
+writes it — the only `TEXT_TOP` of the seven pages without a field. A burndown that
+over-reports by claiming a setting is done is the one failure a coverage number cannot
+survive, and it was caught in the first minute the two halves were compared.
+
+What the 97 want, in groups: the header image (nine defines, one nested field), the finish
+page (its two checkboxes each take *either* a path or a function — the keyword-or-tuple
+shape `BGGradient` also asks for), the start menu page (its macro takes an id and a
+variable, so the page has to **return** its folder the way `section(…)` returns its
+handle), section descriptions, the language-selection dialog, the abort prompt, and the
+colours. None of them is design nobody has done; three of them want a shape the table does
+not have, and they are the same three shapes the instruction census is already waiting on.
+
+## Batch 34 — a colour pair is one field, at every level
+
+The first group off the new burndown, and the smallest: four names, `todo` 97 → **93**.
+
+```lua
+installer {
+  headerColors = { text = "000000", background = "FFFFFF" },
+  page.directory { colors = { text = "112233", background = "445566" } },
+}
+```
+
+**One field holding two, three times over.** §15.32 already ruled it for a control —
+`SetCtlColors` writes the text colour and the background in *one* instruction, so
+`textColor` and `backColor` as separate fields would let a write to either silently replace
+the other. MUI2 spends its colours through that same instruction, so the same shape holds
+one and two levels up, and `Holds::Colors` is the page-field variant that says so.
+
+It also answers a cross-field constraint without a cross-field check. `Directory.nsh` reads
+`MUI_DIRECTORYPAGE_TEXTCOLOR` **only inside an `!ifdef`** on `…_BGCOLOR`, so a text colour
+written alone is read by nothing — and a shape that asks for both cannot express the case
+that does nothing. That is the third time a *shape* has retired a check this table has no
+way to state.
+
+**The third and fourth holes in MUI2's cleanup.** `Directory.nsh` clears neither colour, so
+both are `sticky` and the compiler writes the `!undef`s: without them a second directory
+page is painted in the first one's colours. Two holes were known (`MUI_UNCONFIRMPAGE_VARIABLE`
+and `License.nsh`'s misspelled clear); these are two more, and the pattern is now that
+MUI2's cleanup is *incomplete by default* rather than complete with exceptions.
+
+**`back` became `background`, everywhere.** The control field shipped as `back`, and there
+is already a `buttonText { back = … }` on the attributes block that means the Back *button* —
+one word for two unrelated things, in a language whose whole argument is that the user
+should not have to know which is which. One spelling now, and the rename is in the goldens.
+
+**Two things the inventory caught that a reading would not have.** MUI2's Readme documents
+`MUI_DIRECTORYPAGE_BGCOLOR` and **not** the `TEXTCOLOR` its own header reads on the next
+line; `tests/mui.rs` refuses to expose an undocumented name, so that asymmetry is an
+allow-list of one with the reason written beside it. And `MUI_STARTMENUPAGE_BGCOLOR` and
+`…_TEXTCOLOR` are not in this batch at all — the page they belong to does not exist yet, so
+their reason is now the start menu group's rather than a colour group that would have gone
+on looking cheap.
+
+Shared between the two lowerers through `lower::fields::Fields`, a two-method trait: a
+declaration and a statement need the same parse, and neither lowerer should own the other.
+
+## Batch 35 — the abort prompt is one field holding three defines
+
+Second group off the MUI burndown, and the cheapest: six names, `todo` 93 → **87**.
+
+```lua
+installer  { abortPrompt = { text = "Really quit?", default = "cancel" } }
+uninstaller { abortPrompt = true }
+```
+
+**The same argument batch 34 made, one shape further.** MUI2 reads
+`MUI_ABORTWARNING_TEXT` and `MUI_ABORTWARNING_CANCEL_DEFAULT` **only inside an `!ifdef
+MUI_ABORTWARNING`**, so three flat fields would let a script write a message that nothing
+ever shows — the same silent nothing `MUI_DIRECTORYPAGE_TEXTCOLOR` alone produces. Here the
+field's *presence* is the enable, so the invalid state has no spelling. Fourth check retired
+by a shape rather than stated.
+
+**`true` and a table, and `false` is the switch.** `abortPrompt = true` takes MUI2's own
+wording, which is translated in every language file it ships; a literal `text` is one
+language's wording in all of them, so the plain spelling is the one that keeps the
+translations. `abortPrompt = false` writes nothing at all, which gives a build that turns
+the prompt off a spelling that is not deleting a line — the `verifyOnLeave` precedent from
+batch 20.
+
+**Per half, unlike `headerColors`.** `MUI_ABORTWARNING` and `MUI_UNABORTWARNING` are two
+names MUI2 reads in two places, so `uninstaller { abortPrompt = … }` is real rather than a
+redefinition, and the field is in `V1_INSTALLER_FIELDS` and *not* in `ONCE_GLOBAL_FIELDS`.
+
+**`default = "cancel"`, and `"ok"` writes nothing.** Which button Enter presses, named
+rather than numbered. `"ok"` is what MUI2 already does, so a define for it would be a line
+whose only effect is to exist — and a field that accepts the default without emitting it is
+what lets a build script pass either value without branching.
+
+**The inventory's cross-check needed one word.** `MUI_ABORTWARNING` is `kind = both` — a
+define the script writes *and* a macro MUI2 inserts by the same name — and the test that
+compares the emitter's defines against the `Exposed` rows filtered on `kind == "setting"`
+alone. `both` counts as a setting, because that is what `both` means; thirteen names carry
+it and this is the first one exposed.
+
+## Batch 36 — the finish page, minus its three widgets
+
+Fourteen names, `todo` 87 → **73** — the biggest single move of Phase 6, and only the
+*data* half of the largest MUI2 page. The two checkboxes and the link are batch 37.
+
+```lua
+installer {
+  autoClose = false,
+  page.finish {
+    title  = { text = "Foo is installed", lines = 3 },
+    text   = { text = "Thanks for installing Foo.", large = true },
+    button = "Done",
+    cancelEnabled = true,
+    reboot = { text = "Windows must restart.", later = "Restart later", default = "later" },
+  },
+}
+```
+
+**`Holds::Roomy` — a string and the room it is drawn in.** `MUI_FINISHPAGE_TITLE_3LINES`
+and `…_TEXT_LARGE` are geometry for the string beside them: 28u versus 38u, 40u versus
+60u. A field apiece would let a script make space and never say what goes in it, so both
+are the second half of the string's own field — and `title = "Foo is installed"` stays the
+plain string it was. The two spell their switch differently because MUI2's two *are*
+different: the title box is two lines or three (`lines = 3`, and `lines = 4` is an error
+rather than the nearest height MUI2 can draw), while the text box is tall or not
+(`large = true`).
+
+**`Holds::Off` — `Nested` inverted, because MUI2 is inverted.** The field's own define is
+`MUI_FINISHPAGE_NOREBOOTSUPPORT`, an opt-*out*, and the three reboot strings and
+`REBOOTLATER_DEFAULT` are read only inside the `!ifndef` on it. So `reboot = false` writes
+the opt-out and a table writes nothing but its parts: wording the reboot question and
+having turned the reboot question off is a state with no spelling. Fifth check retired by a
+shape.
+
+**`Holds::Word` — two names, one define.** `default = "later"` writes
+`MUI_FINISHPAGE_REBOOTLATER_DEFAULT`; `default = "now"` is MUI2's own choice and writes
+nothing. Same reasoning as `abortPrompt`'s `default = "cancel"` in batch 35, now a variant
+the table can hold rather than a hand-written arm.
+
+**`autoClose` is a block field.** MUI2 reads `MUI_FINISHPAGE_NOAUTOCLOSE` in
+`MUI_FINISHPAGE_GUIINIT`, behind an `!ifndef` on the half's own
+`WELCOMEFINISHPAGE_GUINIT` — first welcome-or-finish page of that half and never again.
+The same rule that put `checkBitmap` on the block, applied to a name that *looks* like a
+page setting. It is also the only exposed name MUI2 spells with its uninstaller prefix, so
+one inventory row covers `MUI_FINISHPAGE_NOAUTOCLOSE` and `MUI_UNFINISHPAGE_NOAUTOCLOSE`
+both — the `un` tag §15.23's snapshot already carried.
+
+**Two names that are not exposures.** `MUI_FINISHPAGE_ABORTWARNING` is `internal`: MUI2's
+own guard define plus a macro of the same name. `MUI_FINISHPAGE_ABORTWARNINGCHECK` is
+**rejected** — MUI2 only `!undef`s it, and its sole reader is `Modern UI/System.nsh`, which
+is MUI **1**. Exposing it would have written a define nothing in MUI2 reads, and the
+snapshot's file column is what caught it.
+
+**One refactor came with it.** `page_field`'s `define` closure became a free function so
+`Nested` and `Off` can lower their parts by calling `page_field` again — nested parts now
+carry their own `Holds` instead of being strings by assumption, which is what let `default`
+live inside `reboot`.
+
+## Batch 37 — the finish page's three widgets
+
+Twelve names, `todo` 73 → **61**, and the finish page is finished: every `MUI_FINISHPAGE_*`
+name in the snapshot is now exposed, internal or refused, with none left `todo`.
+
+```lua
+page.finish {
+  run    = { path = INSTDIR .. "/foo.exe", parameters = "--first-run",
+             text = "Run Foo now", checked = false },
+  readme = INSTDIR .. "/README.txt",
+  link   = { text = "Visit foo.org", url = "https://foo.org", color = "0000FF" },
+}
+```
+
+**`Holds::Widget` — the spelling picks the fields.** A checkbox is a path to `Exec` *or* a
+function to `Call`, and those are two `Form`s with two part lists rather than one list with
+two optional members. That is the whole argument: `parameters` is a member of the path
+spelling and of no other, so `run = { call = f, parameters = "--x" }` is not a wrong
+combination the lowerer has to catch — it is an unknown field, caught by the same loop that
+catches a typo. MUI2 expands `MUI_FINISHPAGE_RUN_PARAMETERS` only in the branch where there
+is no function, so the state the shape cannot say is exactly the state that would have
+written a define nothing reads. Sixth check retired by a shape, and the first one retired
+by *choosing between two shapes* rather than by nesting.
+
+Which key is present picks the form, so exactly one of `path` and `call` must be there:
+none is "says nothing to do", both is "says two things to do at once". The short spelling
+`run = "…"` is the first form's key on its own, offered only where that form needs nothing
+else — which is why `link` has none.
+
+**`Holds::Calls` — `Holds::Text` for a function.** `call = function() … end` writes
+`MUI_FINISHPAGE_RUN ""` *and* `…_RUN_FUNCTION "mui.finish.run"`, because MUI2 draws the
+checkbox from an `!ifdef` on the first and calls the second when it is ticked. The variant
+carries a stem as well as the define, since `call` is the same word under `run` and under
+`readme` and the two must not be the same function: they come out `mui.finish.run` and
+`mui.finish.readme`, with `un.` in front on the uninstaller's half.
+
+**`Holds::Not` — `Holds::Flag` the other way round.** MUI2's box is ticked when the page
+opens and `…_NOTCHECKED` is how a script says otherwise, so `checked = false` writes and
+`checked = true` writes nothing.
+
+**`link` needs both halves.** MUI2 writes a click handler that `ExecShell`s
+`MUI_FINISHPAGE_LINK_LOCATION` under `!ifdef MUI_FINISHPAGE_LINK`, so a label with no `url`
+is a link to nowhere and a `url` with no label is a define nothing reads. `Form::needs`
+says so in the table: one required companion, checked where the form is picked.
+
+**`readme`, not `showReadme`.** The define names what ticking the box *does*; the field
+names the thing itself, and the census row records the mapping.
+
+## Batch 38 — the three pages left with holes
+
+Eleven names, `todo` 61 → **50**: nine exposed and two refused. No new machinery — every
+row is a `PageField` in a table that already existed, which is what the batch was for.
+
+```lua
+page.welcome {
+  title = { text = "Welcome to Foo", lines = 3 },
+  text  = "This wizard will install Foo.",
+  destroyed = function() … end,
+},
+page.license { topText = "Press Page Down to see the rest." },
+page.instFiles {
+  finishHeaderText = "Installation complete", finishHeaderSubText = "Foo is installed.",
+  abortHeaderText  = "Installation aborted",  abortHeaderSubText  = "Setup was not completed.",
+},
+```
+
+**The welcome page is the finish page's title and not its text.** `MUI_WELCOMEPAGE_TITLE`
+takes `Holds::Roomy(…_TITLE_3LINES, Lines)`, the same variant batch 36 built. `text` is a
+plain `Str`: MUI2 draws this box at a fixed 130u and has no `…_LARGE` for it, so
+`text = { text = "…", large = true }` is an error rather than a define nothing reads.
+
+**`destroyed` is a page field and not a common one.** `Pages.nsh` writes the fourth hook
+exactly like `pre`, `show` and `leave` — `!ifdef`, `Call`, `!undef` — but only the
+nsDialogs pages insert `MUI_PAGE_FUNCTION_CUSTOM DESTROYED`: welcome, finish and the start
+menu. So it is a `DESTROYED_FIELD` const named in those pages' own lists rather than a
+fourth row in `COMMON_FIELDS`, and `page.directory { destroyed = … }` is an unknown field.
+The start menu gets it when the start menu lands.
+
+**MUI2 forgets to clear the abort headers.** `InstallFiles.nsh` unsets
+`FINISHHEADER_TEXT`/`SUBTEXT` and `ABORTWARNING_TEXT`/`SUBTEXT`, and never unsets
+`ABORTHEADER_*` — the pair it actually reads. So the abort two are `sticky` and the
+compiler writes their `!undef`, or a second instfiles page is headed with the first one's
+abort wording. Third hole of this shape found in MUI2's own cleanup, after
+`UninstallConfirm.nsh`'s missing `!undef` and `License.nsh`'s misspelled one.
+
+**And the pair beside them is refused.** `MUI_INSTFILESPAGE_ABORTWARNING_TEXT` and
+`…_SUBTEXT` appear in MUI2 only as `MUI_UNSET` lines; the one file that reads that spelling
+is MUI 1's `Modern UI/System.nsh`. Same reason as `FINISHPAGE_ABORTWARNINGCHECK` in batch
+36, and the second time the snapshot's file column has caught a name that looks like a
+setting and is a leftover.
+
+## Batch 39 — the two images
+
+Thirteen names, `todo` 50 → **37**. Both are block fields with a half apiece, hand-written
+beside `abortPrompt` and `headerColors` rather than `PageField` rows, because neither
+belongs to a page.
+
+```lua
+installer {
+  headerImage = {
+    file    = "header.bmp",
+    stretch = "AspectFitHeight",
+    rtl     = { file = "header-rtl.bmp", stretch = "NoStretchNoCrop" },
+    right           = true,
+    transparentText = true,
+  },
+  wizardImage = { file = "wizard.bmp", stretch = "FitControl" },
+},
+uninstaller { headerImage = "header-un.bmp", wizardImage = "wizard-un.bmp" },
+```
+
+**The field's presence is `MUI_HEADERIMAGE`.** `Interface.nsh` reads every other name in
+the group inside `!ifdef MUI_HEADERIMAGE`, so `abortPrompt`'s shape applies exactly: a
+bitmap with no enable is a define nothing reads, and it has no spelling. `= true` is the
+enable on its own, which is a real configuration — MUI2 then draws the header it ships.
+
+**The enable is written once and the bitmaps twice.** The half picks `…_BITMAP` or
+`…_UNBITMAP`, the way it picks `MUI_ICON` or `MUI_UNICON`. But `MUI_HEADERIMAGE` has no
+`UN` spelling, so both blocks carrying the field must not write it twice: a redefinition is
+a warning, and a warning is an error under `-WX` (§14 tier 3). `header_image_on` checks
+what is already there.
+
+**Two members are `installer {}`-only.** `MUI_HEADERIMAGE_RIGHT` and
+`MUI_HEADER_TRANSPARENT_TEXT` are script-wide with no `UN` half, so
+`uninstaller { headerImage = { right = true } }` is an unknown field whose note names the
+block to move it to — `ONCE_GLOBAL_FIELDS`'s rule, one level down inside a nested field.
+
+**`rtl` is a table whose `file` is required**, because MUI2 reads `…_RTL_STRETCH` only
+where `…_RTL` is defined. `wizardImage`'s `file` is required for the opposite reason: there
+is no enable to hold the table up, so a table without a file writes nothing at all.
+
+**`stretch` takes MUI2's four words.** `"FitControl"`, `"AspectFitHeight"`,
+`"NoStretchNoCrop"`, `"NoStretchNoCropNoAlign"` — not renamed, because they are opaque
+jargon whose only documentation is MUI2's own, unlike `readme` or `checked` where a better
+word was obvious. MUI2 answers an unknown mode with a `!warning` and a silent fall back to
+`FitControl`; here it is an error, since the fall back is a wrong image that assembles.
+
+**And `wizardImage` is the block's because it is two pages'.** Welcome and finish read the
+same define, so a page that carried it would be one of two places to write one setting.
+MUI2 builds the name through `${_un}`, so — like `MUI_FINISHPAGE_NOAUTOCLOSE` — a single
+`un`-tagged snapshot row covers `MUI_UNWELCOMEFINISHPAGE_BITMAP` as well.
+
+## Batch 40 — the descriptions, which are a section's and not a page's
+
+Eight names, and the first MUI surface that lives on neither a page nor a block. `todo` 37
+→ 29.
+
+```lua
+local docs = section { "Docs", description = "The manual, as PDF.", body = function() … end }
+
+installer {
+  section { "Core", description = "The program and its libraries.", body = function() … end },
+  docs,
+  group { "Tools", description = "Optional extras.", sections = { … } },
+
+  smallDescriptions  = true,
+  onMouseOverSection = function() … end,
+
+  page.components {
+    descriptionTitle = "Component",
+    descriptionText  = "Hover a component to read about it.",
+  },
+}
+```
+
+**The compiler owns all three macros.** `MUI_DESCRIPTION_BEGIN`, one `…_TEXT` per described
+section and `…_END` are a `Function .onMouseOverSection` with an `${if}` chain in it — a
+shape with no configuration in it at all, whose only inputs are which sections have text
+and what the text is. So `MUI_DESCRIPTION_BEGIN` and `…_END` join
+`MUI_FUNCTION_DESCRIPTION_*` as `internal`, and only `MUI_DESCRIPTION_TEXT` is `exposed`.
+
+**A description needs an index, and the compiler mints one.** MUI2 addresses a section by
+the `!define` its `Section` line makes, which until now existed only for a section bound to
+a `local` and listed by name (`SEC_docs`). Requiring the `local` would have charged the
+author for a fact about MUI2's macros; instead an inline described section gets
+`SEC.desc.N`. The dot is load-bearing: `index_name` builds `SEC_<local>` from a Lua local,
+and a Lua local cannot contain one, so the two namespaces cannot meet. Where a real name
+exists it is used — one section is one index.
+
+**A group takes the field too.** `SectionGroup "Tools" SEC.desc.1` is an index like any
+other and the tree reports it on hover, so the same option works with no new machinery. Its
+text is recorded before its members', which is the order the tree lists them in.
+
+**The hook brings the block with it.** `MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION` is read
+inside `MUI_FUNCTION_DESCRIPTION_END` and nowhere else, so a program that sets the hook and
+describes nothing would get a function that is never called. Writing the hook therefore
+forces `BEGIN`/`END` around an empty `${if}`, which assembles clean.
+
+**And the three settings split the way MUI2's source splits them.** The two texts are
+`MUI_DEFAULT`ed inside `MUI_PAGEDECLARATION_COMPONENTS` and `MUI_UNSET` after, so they are
+`page.components` fields and two components pages may differ. `MUI_COMPONENTSPAGE_SMALLDESC`
+is a `ChangeUI IDD_SELCOM` inside the `!ifndef`-guarded interface macro — read once,
+script-wide — so it is a block field and `ONCE_GLOBAL_FIELDS` makes it the installer's
+alone.
+
+`MUI_COMPONENTSPAGE_NODESC` is read by `Components.nsh:39` and defined by nothing, so it is
+not a snapshot row and this compiler does not write it: a define outside the table is a
+define the census cannot count.
+
+## Batch 41 — the callbacks a script cannot write
+
+Four names, and a correction to the batch before it. `todo` 29 → 25.
+
+```lua
+installer {
+  onInit(function() … end),                -- NSIS's, written directly
+  onGUIInit(function() … end),             -- MUI_CUSTOMFUNCTION_GUIINIT
+  onUserAbort(function() … end),           -- MUI_CUSTOMFUNCTION_ABORT
+  onMouseOverSection(function() … end),    -- MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION
+}
+```
+
+**The define is the only door in.** `MUI2.nsh:103–109` writes `.onGUIInit`, `.onUserAbort`
+and (through the description block) `.onMouseOverSection` itself, so a script that wrote one
+of those functions would be redefining MUI2's. Each hook is therefore a generated function
+plus a define naming it — `mui.onGUIInit`, `un.mui.onGUIInit` — and never the callback
+itself. `onInit` stays what it was: NSIS's `.onInit` belongs to nobody else, so the compiler
+writes it directly.
+
+**They are entries, not fields — and batch 40's hook moved to match.** A block's positional
+entries are its declarations of code (`section(…)`, `onInit(…)`); its named fields are its
+settings (`icon = …`). A hook is code. Batch 40 had shipped `onMouseOverSection = fn`, which
+put one hook on the settings side of a line the surface otherwise keeps; it is
+`onMouseOverSection(fn)` now, and all four read alike. Nothing was committed, so the
+correction cost one test line.
+
+**An uninstaller hook with no uninstaller page is an error.** `MUI_INSERT` writes the `un.`
+halves behind `!ifdef MUI_UNINSTALLER`, and `MUI_UNPAGE_INIT` is the only thing that sets
+it — so `uninstaller { onGUIInit(…) }` in a script with sections and no pages emits a
+define and a function that nothing calls, silently. Checked in `finish` rather than where
+the hook is written, because §15.6 lets the page be written below it. `onMouseOverSection`
+is exempt: the block *it* is called from is the compiler's own, so it exists whenever the
+hook does.
+
+**And `onUserAbort` runs after the prompt, not instead of it.**
+`MUI_FUNCTION_ABORTWARNING` inserts `MUI_ABORTWARNING` first, and that macro `Abort`s —
+cancelling the cancel — when the user says no. So the hook is reached only on a confirmed
+quit, which is what decides whether a body belongs in it.
+
+There is no `onGUIEnd`: NSIS has the callback, MUI2 has no hook for it, and a name absent
+from the census is a name this compiler does not invent.
+
+## Batch 42 — the page that is a declaration
+
+Thirteen names: eleven exposed, and two refused for a typo in MUI2. `todo` 25 → 12.
+
+```lua
+local menu = page.startMenu {
+  defaultFolder = "MyApp",
+  topText       = "Pick a Start Menu folder.",
+  checkbox      = "Do not create shortcuts",
+  registry      = { root = "HKCU", key = "Software\\MyApp", value = "StartMenuFolder" },
+}
+
+installer {
+  menu,                                     -- the page, in page order
+  section("Core", function()
+    menu.write(function()                   -- MUI_STARTMENU_WRITE_BEGIN / _END
+      createShortcut(SMPROGRAMS .. "/" .. menu.folder .. "/MyApp.lnk", INSTDIR .. "/app.exe")
+    end)
+  end),
+}
+
+uninstaller {
+  section("Remove", function()
+    rmDir(SMPROGRAMS .. "/" .. menu.folder) -- MUI_STARTMENU_GETFOLDER
+  end),
+}
+```
+
+**The eighth page is the first one bound to a `local`.** `MUI_PAGE_STARTMENU ID VAR` takes
+two arguments, and a user has no reason to invent either: the id is a name only MUI2's own
+macros read, and the variable is storage the page writes into. So both are the compiler's —
+the id *is* the local, which resolution already guarantees is unique, and the `Var` is
+minted from it and declared ahead of the page that names it. What the local buys is the
+other two macros: `menu.folder` and `menu.write` are the only two places that id appears,
+and neither spells it. A start menu page written inline is refused rather than assembled,
+because it would ask the user a question whose answer nothing can reach.
+
+This is `local core = section { … }` one construct over, and the same rule falls out of it:
+the block's order is the page order and the declaration's is nothing.
+
+**`menu.folder` is one spelling and two lowerings, and the half decides.** In the installer
+the page filled the `Var` in and the read is a `StrCpy`. In the uninstaller there was no
+page — MUI2 defines no `MUI_UNPAGE_STARTMENU` — and `MUI_STARTMENU_GETFOLDER` is MUI2's own
+answer to that: it reads the registry key the page wrote and falls back to
+`MUI_STARTMENUPAGE_DEFAULTFOLDER`. It lowers straight into the destination register rather
+than into the `Var`, which is not a detail: in the installer, writing the `Var` would replace
+the user's choice with the default.
+
+This is the one declaration claim rule 4 does not apply to. Every other handle read from the
+wrong half names something that is not in that executable; this one names the thing MUI2
+wrote a macro to reach across the seam. A read in a `func` is refused instead — a `func` is
+called by both halves, the two lowerings are not the same code, and guessing wrong is silent.
+
+**`menu.write` is lowered inline, not into a function.** The closure is written inside a
+section body and reads that body's locals; a generated `Function` would put them out of
+scope. Inline is safe because of reverse postorder: `MUI_STARTMENU_WRITE_BEGIN` lands at the
+tail of the current block and `…_WRITE_END` at the head of the join, and every block the body
+creates reaches that join, so all of them are laid out between the two lines. Checked with a
+fixture whose region holds an `if`/`else` and a `for`.
+
+The two macros are one construct because they are useless apart — `BEGIN` opens an `${if}`
+that `END` closes — and the region is the installer's: `END` writes the chosen folder back to
+the registry, which is the half of the bargain the uninstaller has no page to have kept.
+
+**Two more one-field-holding-N, and both are MUI2's own guards read back.** `registry` is
+three defines because `StartMenu.nsh` reads all three inside a single
+`!ifdef ROOT & KEY & VALUENAME`, so any subset is a define nothing reads — spelled as a
+[`Form`] whose `needs` names the other two, which is the same machinery `link = { text, url }`
+already used. `checkbox` is two defines and three states because MUI2 expands
+`…_TEXT_CHECKBOX` only inside the `!ifndef …_NODISABLE` branch: `checkbox = "…"` words the
+box, `checkbox = false` takes it away, and `true` is MUI2's own box with MUI2's own words.
+Two fields would let a script word a box it had just removed.
+
+**`MUI_STARTMENUPAGE_BGCOLOR` and `…_TEXTCOLOR` are refused, and the reason is a bug.**
+`StartMenu.nsh:141` paints `$mui.StartMenuMenu.FolderList`; the variable the same file
+declares at line 17 and fills at line 136 is `$mui.StartMenuPage.FolderList`. The line is
+reached only when the background is defined, so a coloured start menu page raises
+`warning 6000: unknown variable/constant` — fatal under `-WX`, which is how this compiler
+assembles. Found by building the fixture, not by reading the header. It is the first census
+entry refused for being *unusable* rather than undesigned, and the reason on file names the
+line, so a fixed MUI2 makes it a two-line change.
+
+## Batch 43 — the language, and the dialog that picks it
+
+Eleven names: ten exposed, one reclassified as MUI2's own. `todo` 12 → 1, which is `MUI_UI`
+and is deliberate. The MUI census is finished.
+
+```lua
+languages {
+  ask = {
+    title      = "Installer Language",
+    info       = "Please select a language.",
+    alwaysShow = true,
+    remember   = { root = "HKCU", key = "Software\\MyApp", value = "Installer Language" },
+  },
+
+  locales = {
+    English      = { greeting = "Installing MyApp", farewell = "Removing MyApp" },
+    German       = { greeting = "MyApp wird installiert", farewell = "MyApp wird entfernt" },
+    PortugueseBR = { greeting = "Instalando o MyApp", farewell = "Removendo o MyApp" },
+  },
+}
+
+installer {
+  section("Core", function() detailPrint(lang.greeting) end),
+}
+```
+
+**A record with two fields, not one open map.** The shape this arrived as put the locales at
+the top level of the block and reserved `ask` among them. That reads as a Lua *mixed table* —
+a map keyed by data with one key that is not data — and `pairs()` over it would have to know
+the exception. `locales` costs one indent and has no exception in it. The locale key set is
+closed either way, so a locale written where a field goes is caught by name rather than by
+silence: *"`English` is a locale — it goes inside `locales = { … }`"*.
+
+**Locale-first in, name-first out.** A translator owns a locale, so the source groups by one;
+NSIS reads `LangString name ${LANG_X} "…"` one name at a time, so the output groups by the
+other. The transposition is the lowering. The one thing not sorted is the language lines
+themselves — NSIS takes the first `LoadLanguageFile` as the default, so source order is
+user-visible there and nowhere else in the block (§12).
+
+**The key set is 67 `.nlf` names, checked in.** `tables/locales-3.12.txt`, regenerated by
+`installua locales <nsis dir>`, for the reason §14 gives for the other two snapshots: a
+`Klingon` has to be rejected on a machine with no NSIS installed, and a list read from disk
+at compile time would make one source compile two ways. There is no overlay and no census
+beside it, because unlike a MUI2 name a locale has no semantics — the define is the name
+uppercased, and `PortugueseBR` → `${LANG_PORTUGUESEBR}` was verified against 3.12 rather
+than assumed.
+
+**Completeness is a compiler check, because NSIS has none.** A `LangString` with no entry for
+the running language expands to nothing at all. That is an empty label, on one machine, in
+one country — the failure that looks exactly like a translation that happens to be blank. A
+name in one locale and missing from another is an error naming both ends.
+
+**Four macros with one legal position each, and none of them written.** This is the include
+-order problem the block exists to make invisible, and it is why most of `tests/languages.rs`
+asserts *where* a line is rather than that it exists:
+
+| macro | where | why there |
+| --- | --- | --- |
+| `MUI_LANGUAGE` | after every page, both halves | it `!warning`s otherwise |
+| `MUI_RESERVEFILE_LANGDLL` | after the language lines | the plugin must be extractable before `.onInit` runs |
+| `MUI_LANGDLL_DISPLAY` | first line of `.onInit` | it reads the list the language lines accumulate |
+| `MUI_UNGETLANGUAGE` | first line of `un.onInit` | the uninstaller has no page to ask on |
+
+The last two are the second and third callback the compiler *invents*: `ask` in a program
+that wrote no `onInit` gets one anyway, and `un.onInit` is skipped entirely when there is no
+uninstaller, because a hook NSIS never calls is a plugin reservation defended by nothing.
+`MUI_LANGDLL_DISPLAY` goes in front of the global initialisers as well as the user's body —
+one of them may read `lang.greeting`, and until the dialog has run `$LANGUAGE` is whatever
+the machine's locale said.
+
+**`ask` is not a separate opt-in per half.** Asking in the installer means the uninstaller
+needs the same answer, and MUI2's own `MUI_UNGETLANGUAGE` already falls back to the dialog
+when the registry has nothing. `remember` is the third one-field-holding-three: MUI2 guards
+the stored answer with a single `!ifdef ROOT & KEY & VALUENAME`, so two out of three is the
+whole feature off without saying so — the same ruling, and the same shape, as the start menu
+page's `registry`.
+
+**`lang.greeting` is `$(greeting)` and nothing else.** No register, no instruction; it folds
+in `simple` so it concatenates like any other piece, and a name nothing declared is an error
+rather than a `$(…)` NSIS turns into blank text. Either half may read either string: §15.26's
+`un.` prefix is a size optimisation, not a boundary, verified both directions under
+`makensis -WX`.
+
+**One census correction, found by reading MUI2 rather than by a test.**
+`MUI_LANGDLL_SAVELANGUAGE` is not a setting and not a gap: `Pages/InstallFiles.nsh:145`
+inserts it, inside the page's own generated `FunctionEnd`. Neither a user nor this compiler
+has anywhere to write it, so it is `internal`. The instruction census moved too —
+`LangString` is a lowering target now, and `LoadLanguageFile` is `rejected` rather than
+`todo`, because `MUI_LANGUAGE` is what loads a language file *and* accumulates the list the
+dialog reads: a bare one would load a language the dialog cannot offer.
+
+**What is designed and not built: `un.` stripping.** §15.26 emits installer-only strings under
+an `un.` prefix so the other half's table does not carry them. Deferred deliberately — it is
+bytes, not correctness, it needs per-string whole-program reachability, and there is no safe
+over-strip: a wrongly stripped string compiles clean and renders empty at run time. Adding it
+later changes no source and no census row, only goldens.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -2059,9 +2684,11 @@ which was 12 rows when Phase 6 opened, is empty.
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.
 - **`MUI_STARTMENUPAGE` is newly expressible and not yet written.** It was unspellable
   under a bare list of page names, because its macro takes arguments; under `page.*` it is
-  another page with fields. The same goes for the settings with no NSIS command behind
-  them — `MUI_WELCOMEPAGE_TEXT`, `MUI_FINISHPAGE_*` — which no census row tracks, so they
-  are invisible to the burndown and want an inventory of their own.
+  another page with fields — and batch 33 found the rest of what it needs: the macro takes
+  an *id* and a *variable*, and its three registry defines only work as a set, which is the
+  same cross-field constraint `compressionLevel` wants. ~~The same goes for the settings
+  with no NSIS command behind them, which no census row tracks.~~ **Closed by batch 33**:
+  `installua coverage` now prints a second census, and there are 96 of them.
 - **`SubCaption` and `UninstallSubCaption` are still blocked, and not by the page world.**
   MUI2 blanks exactly one index of nine and leaves the rest free. The shape a table has no
   way to say is a row *owned for one argument value and open for the others*.

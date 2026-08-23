@@ -30,9 +30,10 @@ use crate::resolve::{ConstValue, DeferredKind};
 use crate::types::{Int, Sign, Ty, Width};
 
 use super::control::{self, ControlField};
+use super::fields::Fields;
 use super::{
-    Binding, BodyLowerer, HANDLE_FIELDS, HandleField, Where, control_var, handle_field, index_name,
-    list,
+    Binding, BodyLowerer, HANDLE_FIELDS, Half, HandleField, Where, control_var, handle_field,
+    index_name, list, start_menu_var,
 };
 
 /// A handle, resolved: the define it is addressed through and which of the two
@@ -59,6 +60,17 @@ pub(super) struct ControlHandle {
 pub(super) enum Addressed {
     Section(Handle),
     Control(ControlHandle),
+    /// `local menu = page.startMenu { … }`, addressed from either half — the
+    /// one handle claim rule 4 does not apply to, because MUI2 gives the
+    /// uninstaller a way to reach the installer's answer.
+    StartMenu(StartMenuHandle),
+}
+
+/// A start menu page, resolved: the id MUI2's macros take, and the `Var` the
+/// page stored the folder into.
+pub(super) struct StartMenuHandle {
+    id: String,
+    var: Slot,
 }
 
 /// A window message, in the hexadecimal every Windows reference writes it in.
@@ -103,6 +115,17 @@ impl BodyLowerer<'_, '_> {
             // Unclaimed. Claim rule 1 has already said so at the declaration,
             // and saying it again at every use would bury it.
             let claim = self.claims.get(name)?;
+
+            // The one declaration both halves may name. `MUI_STARTMENU_GETFOLDER`
+            // exists precisely so the uninstaller can find the folder the
+            // installer's page chose — MUI2 says so in `StartMenu.nsh` — so the
+            // rule below would refuse the use the macro was written for.
+            if kind == DeferredKind::StartMenu {
+                return Some(Addressed::StartMenu(StartMenuHandle {
+                    id: name.to_string(),
+                    var: Slot::Global(start_menu_var(name)),
+                }));
+            }
 
             // Claim rule 4. The name is in the file — one `.nsi` holds both
             // halves — so `${SEC_core}` in `un.onInit` compiles, addresses
@@ -222,9 +245,21 @@ impl BodyLowerer<'_, '_> {
 
     /// `a.b` as a value, whichever kind of handle `a` turns out to be.
     pub(super) fn field_read(&mut self, base: &Expr, field: &Name, dest: &Slot) -> Option<Ty> {
+        // A known `lang.greeting` never reaches here — `simple` folds it into
+        // `$(greeting)` — so one that does is a name no locale declared. Said
+        // here rather than there because `simple` is speculative and a
+        // diagnostic raised speculatively is a diagnostic raised twice.
+        if let Expr::Name(name) = base
+            && name.text == "lang"
+        {
+            self.unknown_lang_string(field);
+            return None;
+        }
+
         match self.addressed(base, base.span())? {
             Addressed::Section(handle) => self.handle_read(&handle, field, dest),
             Addressed::Control(handle) => self.control_read(&handle, field, dest),
+            Addressed::StartMenu(handle) => self.start_menu_read(&handle, field, dest),
         }
     }
 
@@ -233,8 +268,211 @@ impl BodyLowerer<'_, '_> {
         match self.addressed(base, base.span()) {
             Some(Addressed::Section(handle)) => self.handle_write(&handle, field, value),
             Some(Addressed::Control(handle)) => self.control_write(&handle, field, value),
+            // Read-only, and not for want of a `StrCpy`: the page reads the
+            // variable when it opens and writes it when it leaves, so a value
+            // put there by install-time code is either overwritten or too late.
+            // `defaultFolder` is where a script says what it wants.
+            Some(Addressed::StartMenu(_)) => self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    field.span,
+                    format!("`{}` is not something to assign to", field.text),
+                )
+                .note(
+                    "the start menu folder is the user's answer: write `defaultFolder` on the \
+                     page to choose what it starts as",
+                ),
+            ),
             None => {}
         }
+    }
+
+    /// `lang.nosuch` — a language string nothing declares.
+    ///
+    /// Worth an error rather than a pass-through, because NSIS does not raise
+    /// one: an undeclared `$(name)` is `warning 6000` at best and an empty
+    /// label at worst, and empty is exactly what a missing translation looks
+    /// like when it is working correctly.
+    fn unknown_lang_string(&mut self, field: &Name) {
+        let mut diagnostic = Diagnostic::error(
+            Code::UnknownField,
+            field.span,
+            format!("`{}` is not a language string", field.text),
+        );
+        diagnostic = if self.lang_strings.is_empty() {
+            diagnostic.note(
+                "nothing declares one: `languages { locales = { English = { … } } }` is where                  they live (§15.26)",
+            )
+        } else {
+            let names: Vec<&str> = self.lang_strings.iter().map(String::as_str).collect();
+            diagnostic.note(format!("the strings are {}", list(&names)))
+        };
+        self.diags.push(diagnostic);
+    }
+
+    /// `menu.write(function() … end)` — the region MUI2 wraps the shortcut
+    /// writing in.
+    ///
+    /// The two macros are one construct because they are useless apart.
+    /// `MUI_STARTMENU_WRITE_BEGIN` skips the region when the user ticked *do not
+    /// create shortcuts* and fills the variable from the registry when it is
+    /// empty; `…_WRITE_END` writes the folder back. A script that opened one and
+    /// not the other would leave an `${if}` hanging.
+    ///
+    /// Lowered **inline** rather than into a function of its own, which is the
+    /// choice that matters: the closure is written inside a section body and
+    /// reads that body's locals, and a generated `Function` would put them out
+    /// of scope. Reverse postorder is what makes it safe — the blocks the body
+    /// creates all reach the join, so they are laid out between the two lines
+    /// (§8-2).
+    pub(super) fn start_menu_write(
+        &mut self,
+        base: &str,
+        method: &str,
+        args: &[Expr],
+        dest: Option<&Slot>,
+        span: Span,
+    ) {
+        // Unclaimed: claim rule 1 has already said so at the declaration.
+        if self.claims.get(base).is_none() {
+            return;
+        }
+        if method != "write" {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    span,
+                    format!("`{method}` is not something a start menu page does"),
+                )
+                .note("the one is `write`, which wraps the code that creates the shortcuts"),
+            );
+            return;
+        }
+        if dest.is_some() {
+            self.diags.push(
+                Diagnostic::error(Code::TypeMismatch, span, "`write` produces no value")
+                    .note("it is a region of install-time code, not a question about the folder"),
+            );
+            return;
+        }
+        // The uninstaller has no page to have chosen a folder and no registry
+        // value to write back — `…_WRITE_END` would store the folder the
+        // installer already stored. Deleting shortcuts needs the folder and not
+        // the region, and `menu.folder` is that.
+        if self.half == Some(Half::Uninstaller) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    span,
+                    "`write` is the installer's, and this code runs in the uninstaller",
+                )
+                .note(
+                    "it writes the chosen folder back to the registry, which is the installer's \
+                     half of the bargain",
+                )
+                .note("read `menu.folder` here instead: it finds the folder the installer chose"),
+            );
+            return;
+        }
+        let [
+            Expr::Function {
+                params,
+                block,
+                span: at,
+            },
+        ] = args
+        else {
+            self.todo(span, "this `write` form");
+            return;
+        };
+        if !params.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    *at,
+                    "the function `write` takes has no parameters",
+                )
+                .note("it is a region of the section it is written in, not a callback"),
+            );
+            return;
+        }
+
+        self.emit(ir::Instruction::new(
+            "!insertmacro",
+            vec![
+                ir::Arg::raw("MUI_STARTMENU_WRITE_BEGIN"),
+                ir::Arg::raw(base.to_string()),
+            ],
+        ));
+        self.block(block);
+        self.emit(ir::Instruction::new(
+            "!insertmacro",
+            vec![ir::Arg::raw("MUI_STARTMENU_WRITE_END")],
+        ));
+    }
+
+    /// `menu.folder` — the folder the page chose, in whichever half is asking.
+    ///
+    /// Two lowerings for one spelling, and the half decides. In the installer
+    /// the page stored it in the `Var` and the read is a copy. In the
+    /// uninstaller there was no page: `MUI_STARTMENU_GETFOLDER` is MUI2's own
+    /// answer to that, reading the registry the page wrote and falling back to
+    /// `MUI_STARTMENUPAGE_DEFAULTFOLDER`. It lowers straight into the
+    /// destination rather than into the `Var`, because in the installer that
+    /// would overwrite the user's choice with the default.
+    fn start_menu_read(
+        &mut self,
+        handle: &StartMenuHandle,
+        field: &Name,
+        dest: &Slot,
+    ) -> Option<Ty> {
+        if field.text != "folder" {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    field.span,
+                    format!("`{}` is not a field of a start menu page", field.text),
+                )
+                .note("the field is `folder`"),
+            );
+            return None;
+        }
+        match self.half {
+            Some(Half::Installer) => self.emit(ir::Instruction::new(
+                "StrCpy",
+                vec![
+                    ir::Arg::dest(dest.clone()),
+                    ir::Arg::slot(handle.var.clone()),
+                ],
+            )),
+            Some(Half::Uninstaller) => self.emit(ir::Instruction::new(
+                "!insertmacro",
+                vec![
+                    ir::Arg::raw("MUI_STARTMENU_GETFOLDER"),
+                    ir::Arg::raw(handle.id.clone()),
+                    ir::Arg::dest(dest.clone()),
+                ],
+            )),
+            // A `func` either half may call, and the two lowerings are not the
+            // same code. Nothing here can pick one, and picking wrong is silent
+            // — the uninstaller would copy an empty `Var`.
+            None => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::NotYetImplemented,
+                        field.span,
+                        "a start menu folder read in a `func`",
+                    )
+                    .note(
+                        "the installer reads the variable the page filled in and the uninstaller \
+                         reads the registry, and a `func` is called by both (§15.3)",
+                    )
+                    .note("read `menu.folder` in the section or callback that needs it"),
+                );
+                return None;
+            }
+        }
+        Some(Ty::Str)
     }
 
     /// `core.selected` — a read, which is one `Section*Get` and, for a flag, the
@@ -674,7 +912,7 @@ impl BodyLowerer<'_, '_> {
                 self.emit(ir::Instruction::new("ShowWindow", vec![hwnd(), state]));
             }
             ControlField::Colors => {
-                let Some((text, back)) = self.colors(value) else {
+                let Some((text, back)) = self.colours(value, "colors") else {
                     return;
                 };
                 self.emit(ir::Instruction::new(
@@ -723,95 +961,6 @@ impl BodyLowerer<'_, '_> {
             return None;
         }
         Some(typed.arg)
-    }
-
-    /// `colors = { text = "000000", back = "FFFFFF" }`.
-    ///
-    /// One field holding two, because `SetCtlColors` is one instruction that
-    /// sets both: `textColor` and `backColor` as separate fields would mean a
-    /// write to either silently replacing the other, which is a bug that only
-    /// shows up on the screen.
-    fn colors(&mut self, value: &Expr) -> Option<(ir::Arg, ir::Arg)> {
-        let Expr::Table { fields, span } = value else {
-            self.bad_value(
-                value.span(),
-                "colors",
-                "a table of two colours",
-                "`SetCtlColors` sets the text and the background in one instruction, so the field \
-                 that is that instruction asks for both",
-            );
-            return None;
-        };
-
-        let mut colours: [Option<String>; 2] = [None, None];
-        for field in fields {
-            let TableField::Named { name, value } = field else {
-                self.bad_value(
-                    value.span(),
-                    "colors",
-                    "a table of two colours",
-                    "the two are named: `{ text = \"000000\", back = \"FFFFFF\" }`",
-                );
-                continue;
-            };
-            match name.text.as_str() {
-                "text" => colours[0] = self.colour(value, "text"),
-                "back" => colours[1] = self.colour(value, "back"),
-                other => {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::UnknownField,
-                            name.span,
-                            format!("`{other}` is not one of a control's colours"),
-                        )
-                        .note("the two are `text` and `back`"),
-                    );
-                }
-            }
-        }
-
-        let [Some(text), Some(back)] = colours else {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::MissingAttribute,
-                    *span,
-                    "`colors` wants both `text` and `back`",
-                )
-                .note(
-                    "one instruction writes both, so leaving one out would mean writing a colour \
-                     this compiler invented over the one the theme chose",
-                )
-                .note("`back = \"transparent\"` is the way to leave the background alone"),
-            );
-            return None;
-        };
-        Some((ir::Arg::raw(text), ir::Arg::raw(back)))
-    }
-
-    /// One colour: six hexadecimal digits, or `transparent` for a background
-    /// that is not painted at all.
-    ///
-    /// Checked rather than passed through, because `SetCtlColors` reads anything
-    /// else as black — a label that vanishes into its own background is the
-    /// failure a typo here produces.
-    fn colour(&mut self, value: &Expr, field: &str) -> Option<String> {
-        let text = match self.constant(value) {
-            Some(ConstValue::Str(text)) => text,
-            _ => String::new(),
-        };
-        let hex = text.len() == 6 && text.bytes().all(|byte| byte.is_ascii_hexdigit());
-        let unpainted = field == "back" && text == "transparent";
-        if !hex && !unpainted {
-            self.bad_value(
-                value.span(),
-                field,
-                "six hexadecimal digits",
-                "`\"FF0000\"` is red, in the order Windows writes it; `back = \"transparent\"` \
-                 leaves the background unpainted",
-            );
-            return None;
-        }
-        Some(text)
     }
 
     /// `font = { face = "Tahoma", size = 10, bold = true }`, as the handle

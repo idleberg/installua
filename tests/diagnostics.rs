@@ -119,9 +119,11 @@ const CASES: &[(Code, &str)] = &[
          if answer == \"OK\" then detailPrint(\"always\") end\n\
          end), }",
     ),
+    // `languages {}` used to be this case. It is the eighth block to land, so
+    // the honest backlog moved on to §15.27's.
     (
         Code::NotYetImplemented,
-        "attributes { outFile = \"a.exe\" }\nlanguages {}",
+        "attributes { outFile = \"a.exe\" }\nimport {}",
     ),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
     (Code::BadFieldValue, r#"attributes { unicode = "yes" }"#),

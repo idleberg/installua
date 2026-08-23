@@ -1098,10 +1098,10 @@ pub const ROWS: &[Row] = &[
         "local window = findWindow(\"Notepad\")\nif isWindow(window) then\n\tdetailPrint(\"still open\")\nend",
     ),
     lowering("Goto", "`if`, `while` and `break`"),
-    todo(
-        "LangString",
-        "§15.26's locale tables are designed and unimplemented",
-    ),
+    // Written by the compiler, never by a script: `languages {}` is keyed by
+    // locale because that is what a translator owns, and NSIS wants it keyed by
+    // name, so the transposition is the lowering (§15.26).
+    lowering("LangString", "`languages { locales = { … } }`"),
     rejected(
         "LangStringUP",
         "NSIS retired it: `langString` is the spelling",
@@ -1121,16 +1121,20 @@ pub const ROWS: &[Row] = &[
     ),
     todo(
         "LicenseLangString",
-        "§15.26's locale tables are designed and unimplemented",
+        "a license *file* per language, where §15.26's tables hold strings; the page takes one path and there is no per-locale shape for it yet",
     ),
     // `button` beside it.
     attribute("LicenseText", "page.license.bottomText", STR),
     // `MUI_LICENSEPAGE_INTERFACE`, once, on the first License page — so a block
     // field, like the other three of its kind.
     attribute("LicenseBkColor", "installer.licenseBkColor", STR),
-    todo(
+    // Not unimplemented any more, and not exposed either. `MUI_LANGUAGE` is
+    // what loads a language file, and it accumulates `MUI_LANGDLL_LANGUAGES`
+    // as it goes — the list `MUI_LANGDLL_DISPLAY` hands the plugin. A bare
+    // `LoadLanguageFile` would load a language the dialog cannot offer.
+    rejected(
         "LoadLanguageFile",
-        "§15.26's locale tables are designed and unimplemented",
+        "`languages { locales = { … } }` loads them through MUI2, which keeps the list the language dialog reads (§15.26)",
     ),
     // Tier 3, immediately: *"Error: LogSet specified, NSIS_CONFIG_LOG not
     // defined."* — not a warning, and not a runtime surprise either. The stock
@@ -1436,7 +1440,7 @@ pub const ROWS: &[Row] = &[
     // called from a page callback, which is the same missing design.
     lowering(
         "SetCtlColors",
-        "a control's `colors`: `serial.colors = { text = \"800000\", back = \"transparent\" }` \
+        "a control's `colors`: `serial.colors = { text = \"800000\", background = \"transparent\" }` \
          (§15.32)",
     ),
     // Its reason said page callbacks did not exist, and batch 20 gave every
