@@ -175,17 +175,22 @@ pub fn assemble(
     files: &Files,
     makensis: &str,
 ) -> std::io::Result<Assembly> {
+    // Relative `File` paths in the script resolve against the script, so
+    // `makensis` runs there. An empty parent means the script *is* in the
+    // current directory, and passing `""` as a working directory is an
+    // error rather than a no-op. Because the directory moves, the script
+    // has to be named relative to it -- a path like `dir/install.nsi` would
+    // otherwise be looked up as `dir/dir/install.nsi`.
+    let directory = match script.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let name = script.file_name().map_or(script, Path::new);
+
     let output = Command::new(makensis)
         .arg("-WX")
-        .arg(script)
-        // Relative `File` paths in the script resolve against the script, so
-        // `makensis` runs there. An empty parent means the script *is* in the
-        // current directory, and passing `""` as a working directory is an
-        // error rather than a no-op.
-        .current_dir(match script.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => parent,
-            _ => Path::new("."),
-        })
+        .arg(name)
+        .current_dir(directory)
         .output()?;
 
     let mut log = String::from_utf8_lossy(&output.stdout).into_owned();
