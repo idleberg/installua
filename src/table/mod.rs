@@ -344,6 +344,30 @@ pub enum Setting {
         /// looked only at what was written would miss.
         default: &'static str,
     },
+    /// One of these keywords, **or** a value of the shape behind them. The
+    /// alternation [`Setting::Enum`] cannot state, because its two sides are not
+    /// both keywords: `PERemoveResource … reslang|ALL` takes the word `ALL` or a
+    /// Windows language id, and no closed set contains both.
+    ///
+    /// [`Setting::Off`] is the same alternation with the branches fixed —
+    /// one named word against one table — and [`Param::open`] is the same
+    /// alternation with the second branch *unchecked*, which is what makes it
+    /// the wrong tool here: an open enum returns the text raw, so it buys
+    /// completion on the keywords and no diagnostic at all on everything else.
+    /// This one checks both branches, which is the only reason the row exists.
+    ///
+    /// The words are matched case-insensitively and emitted in the spelling
+    /// written here. NSIS compares them with `_tcsicmp`, so `all` and `ALL` are
+    /// one value to it and would be two spellings of one line here.
+    ///
+    /// The set is on the row and not read off the snapshot, unlike every other
+    /// closed set (§15.23). It has to be: `-CMDHELP` prints `reslang|ALL` and
+    /// the parse takes that for two keywords, when `reslang` is a metavariable
+    /// with no marker to say so — see [`cmdhelp::METAVARIABLES`].
+    Or {
+        words: &'static [&'static str],
+        of: &'static Setting,
+    },
     /// Shaped by the block's own lowering instead: `unicode` sets a field of
     /// the module rather than emitting a line, and `versionInfo` is a nested
     /// table. The analogue of [`Offer::Handled`] one level up, and it carries

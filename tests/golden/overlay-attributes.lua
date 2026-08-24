@@ -38,7 +38,7 @@ attributes {
 	completedText = "completedText",
 	allowSkipFiles = true,
 	portableExecutable = {
-		addResource = { { file = "assets/icon.ico", restype = "#100", resname = "#1", reslang = "1033" } },
+		addResource = { { file = "assets/icon.ico", restype = "#100", resname = "#1", reslang = 1033 } },
 		removeResource = { { restype = "#5", resname = "#105", reslang = "ALL" } },
 		dllCharacteristics = { add = 1, remove = 1 },
 		subsystemVersion = "5.1",

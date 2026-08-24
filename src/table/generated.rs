@@ -55,8 +55,8 @@ pub const SKELETONS: &[Skeleton] = &[
                 var: false,
                 req: true,
                 rep: Rep::One,
-                members: &["height", "width"],
-                open: false,
+                members: &[],
+                open: true,
             },
             Shape {
                 name: "padding",
@@ -5465,8 +5465,8 @@ pub const SKELETONS: &[Skeleton] = &[
                 var: false,
                 req: true,
                 rep: Rep::One,
-                members: &["reslang", "ALL"],
-                open: false,
+                members: &["ALL"],
+                open: true,
             },
         ],
         options: &[Opt {

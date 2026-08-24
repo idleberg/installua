@@ -2588,6 +2588,35 @@ impl<'p> Lowerer<'_, 'p> {
                     None
                 }
             },
+            // The keyword branch is tried first and only for a `string`, so the
+            // shape behind the words keeps every value it would have taken
+            // alone: `reslang = 1033` never meets the word list at all.
+            //
+            // A `string` that is not one of the words is *this* shape's error
+            // and not the inner one's. Delegating would report `an int`, naming
+            // one branch of an alternation the user wrote the other branch of —
+            // the error that sends someone looking for the wrong mistake.
+            table::Setting::Or { words, of } => match self.constant(value) {
+                Some(ConstValue::Str(text)) => {
+                    match words.iter().find(|word| word.eq_ignore_ascii_case(&text)) {
+                        // Emitted in the row's spelling: NSIS compares these with
+                        // `_tcsicmp`, so `all` and `ALL` are one value to it and
+                        // letting both through would make two scripts that differ
+                        // only in case emit two different lines.
+                        Some(word) => Some(ir::Arg::raw(*word)),
+                        None => {
+                            self.bad_value(
+                                value.span(),
+                                field,
+                                &format!("{} or {}", list(words), noun(*of)),
+                                &format!("it becomes `{line} <keyword>` or `{line} <value>`"),
+                            );
+                            None
+                        }
+                    }
+                }
+                _ => self.value_arg(*of, param, field, line, value),
+            },
             // An `Only` never reaches here: [`Self::setting`] unwraps it to the
             // shape it wraps before anything reads the value, because the
             // constraint is about which fields are written together and not
@@ -7540,6 +7569,23 @@ fn optional_parts(entry: &table::Instruction, parts: &[table::Part]) -> Vec<&'st
         })
         .map(|(_, part)| part.field)
         .collect()
+}
+
+/// What a [`table::Setting`] is called where a diagnostic names it *beside*
+/// something else, which is [`table::Setting::Or`]'s message and nowhere else.
+///
+/// Only the scalars are spelled out, because only a scalar can stand opposite a
+/// list of keywords: a table or an `Each` is more than one value and there is no
+/// alternation between "the word `ALL`" and three positions. The fallback is
+/// there so adding a shape does not have to touch this, and it says the true
+/// thing rather than a wrong specific one.
+fn noun(holds: table::Setting) -> &'static str {
+    match holds {
+        table::Setting::Int => "an `int`",
+        table::Setting::Str { .. } => "a `string`",
+        table::Setting::Bool { .. } => "a `bool`",
+        _ => "a value",
+    }
 }
 
 fn list(names: &[&str]) -> String {

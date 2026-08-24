@@ -480,6 +480,15 @@ fn bare_type(entry: &table::Instruction, field: &str, holds: table::Setting) -> 
         table::Setting::Off { parts, least, .. } => {
             format!("false|{}", inline_table(entry, parts, Some(least)))
         }
+        // The keywords as literal types beside the shape behind them, the way
+        // `Off` writes `false`: a union of string literals is what LuaCATS has
+        // for "one of these words", and it completes to exactly the set the
+        // compiler checks against.
+        table::Setting::Or { words, of } => {
+            let mut out: Vec<String> = words.iter().map(|word| format!("\"{word}\"")).collect();
+            out.push(bare_type(entry, field, *of));
+            out.join("|")
+        }
         // A list of whatever one line takes. The brackets go on the outside
         // because the repetition is of the *line*, which is the whole of what
         // the inner type describes.

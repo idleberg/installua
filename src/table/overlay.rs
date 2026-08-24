@@ -263,6 +263,37 @@ const fn part(field: &'static str, holds: Setting) -> Part {
 const STR: Setting = Setting::Str { path: false };
 const PATH: Setting = Setting::Str { path: true };
 
+/// The resource language of `PEAddResource` and `PERemoveResource`: a Windows
+/// language id, or one of the words `ParseResourceLangString` reads before it
+/// tries to parse a number.
+///
+/// Two constants and not one because the two commands disagree by exactly one
+/// word, and each says so with the same line of C:
+///
+/// ```text
+/// PEAddResource      rl == INVALIDLANGID || rl == ALLLANGID  ⇒ PRINTHELP()
+/// PERemoveResource   rl == INVALIDLANGID || rl == ANYLANGID  ⇒ PRINTHELP()
+/// ```
+///
+/// `Any` means *whichever language this resource is already in*, which is a
+/// question with an answer only when the resource exists — so adding cannot use
+/// it and removing can. `All` is its mirror and mirrors the reasoning.
+///
+/// `Neutral` and `Default` are in neither command's syntax line. They work in
+/// both, and the only place that says so is the function above.
+const RESLANG_ADD: Setting = Setting::Or {
+    words: &["Any", "Neutral", "Default"],
+    of: &Setting::Int,
+};
+
+/// `PERemoveResource`'s half of [`RESLANG_ADD`]. `ALL` is upper-case because
+/// `-CMDHELP` prints it that way and it is the one word of the four a reader
+/// will have seen before.
+const RESLANG_REMOVE: Setting = Setting::Or {
+    words: &["ALL", "Neutral", "Default"],
+    of: &Setting::Int,
+};
+
 /// A `bool` NSIS spells `on|off`, which is most of them.
 const ONOFF: Setting = Setting::Bool {
     on: "on",
@@ -338,12 +369,17 @@ pub const ROWS: &[Row] = &[
     // *styles* whatever it finds (`SetCtlColors $mui.Branding.Text /BRANDING`),
     // which is the opposite of owning it. So this is an ordinary attribute.
     //
-    // `size` is `STR` although the snapshot prints members for it. `(height|
-    // width)` there is a metavariable saying *which dimension the edge implies*
-    // and not a pair of keywords — the value NSIS reads is a number, optionally
-    // suffixed `u` for dialog units. Enumerating it would reject every legal
-    // value and complete to two illegal ones. The same trap as
-    // `PERemoveResource`, and the second row to hit it.
+    // `size` is `STR` because `(height|width)` in the syntax line is a
+    // metavariable saying *which dimension the edge implies* and not a pair of
+    // keywords: the value NSIS reads is a number, optionally suffixed `u` for
+    // dialog units, and the literal words are *Invalid number!*. Both are in
+    // `cmdhelp::METAVARIABLES` now, so the snapshot no longer prints members
+    // here and no shape could be tempted to enumerate them.
+    //
+    // The same trap as `PERemoveResource`, and *not* the same repair: there both
+    // branches are checkable, so the row names its keywords and gets a
+    // `Setting::Or`. Here every alternative is a metavariable, which leaves
+    // nothing to name and no second branch to check against.
     //
     // `padding` is `STR` for a second reason, found by running the line rather
     // than by reading it: the two numbers have to agree on their unit. `top 20u
@@ -1920,6 +1956,14 @@ pub const ROWS: &[Row] = &[
     // arbitrary word, and `Setting::Str` says only "a string". That narrowing is
     // NSIS's rather than this language's, so it lives in the example the way
     // `subsystemVersion`'s does and not on the row.
+    //
+    // `reslang` is `RESLANG_ADD` and not `STR` for the reason the row below
+    // spells out, with one keyword swapped: `-CMDHELP` prints a bare `[reslang]`
+    // here and mentions no keywords at all, but `ParseResourceLangString` is the
+    // same function both commands call and it takes all four words. What differs
+    // is which sentinel each command then throws out —
+    // `PEAddResource` rejects `All` and `PERemoveResource` rejects `Any`, each
+    // by name, so the two sets are near-mirrors and neither is `-CMDHELP`'s.
     attribute(
         "PEAddResource",
         "portableExecutable.addResource",
@@ -1928,20 +1972,31 @@ pub const ROWS: &[Row] = &[
             part("restype", STR),
             part("resname", STR),
             // Optional, and the snapshot is what says so.
-            part("reslang", STR),
+            part("reslang", RESLANG_ADD),
         ])),
     ),
-    // The language is `STR` and not `Setting::Enum` although the snapshot lists
-    // members for it: `-CMDHELP` prints `reslang|ALL`, and `reslang` there is a
-    // placeholder rather than a keyword. Offering it would complete to a word
-    // `makensis` rejects, which is worse than offering nothing.
+    // `reslang` is a Windows language id **or** one of four keywords, which is
+    // `Setting::Or` and was `STR` until this row got a shape to say it with.
+    //
+    // `STR` was right about `-CMDHELP` and wrong about NSIS. The syntax line
+    // reads `reslang|ALL`, where `reslang` is a metavariable with no marker —
+    // `makensis` rejects the literal word — so the snapshot recorded a keyword
+    // that cannot compile and `Setting::Enum` would have offered it. But the
+    // set is also not `{ALL}`: `ParseResourceLangString` takes `Any`, `All`,
+    // `Neutral` and `Default` before it tries to parse a number, and this
+    // command then rejects `Any` by name (`rl == ANYLANGID` ⇒ `PRINTHELP`).
+    // Three keywords survive, and none but `ALL` is anywhere in `-CMDHELP`.
+    //
+    // `Int` and not `Str` on the far side, which is the whole gain: `reslang =
+    // "nonsense"` used to reach `makensis` and come back as a usage line with no
+    // Lua position on it (§13).
     attribute(
         "PERemoveResource",
         "portableExecutable.removeResource",
         Setting::Each(&Setting::Table(&[
             part("restype", STR),
             part("resname", STR),
-            part("reslang", STR),
+            part("reslang", RESLANG_REMOVE),
         ])),
     ),
     // Two bit masks on one line. They are one field rather than two attributes

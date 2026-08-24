@@ -322,14 +322,16 @@ fn word_param(command: &mut Parsed, word: &str, required: bool) {
     } else {
         parenthesised
     };
-    let (members, open) = split_members(source);
+    let Alternation {
+        members,
+        open,
+        named,
+    } = split_members(source);
 
-    let name = if members.is_empty() {
+    let name = if named.is_empty() || !parenthesised.is_empty() {
         word.to_string()
-    } else if parenthesised.is_empty() {
-        members.join("_or_")
     } else {
-        word.to_string()
+        named.join("_or_")
     };
 
     push(
@@ -366,6 +368,50 @@ fn push(command: &mut Parsed, param: ParsedParam) {
     command.params.push(param);
 }
 
+/// The alternatives `-CMDHELP` writes as bare words that are not keywords.
+///
+/// A metavariable normally carries a marker — `{GUID}`, `$(user_var: …)`, a
+/// `[…]` for optional — and [`split_members`] reads the marker rather than the
+/// word. These three have none: they are spelled exactly like the keywords
+/// beside them, and only `makensis` can tell them apart. It does, by rejecting
+/// the literal word:
+///
+/// ```text
+/// PERemoveResource "#5" "#105" reslang   Usage: PERemoveResource …
+/// AddBrandingImage top height            Invalid number!
+/// AddBrandingImage top width             Invalid number!
+/// ```
+///
+/// Written out rather than inferred, because inference does not work here. The
+/// rule that catches all three — *a lowercase alternative beside one carrying a
+/// capital* — also fires on `PageEx custom|uninstConfirm|…` and on
+/// `ManifestSupportedOS none|all|WinVista|…`, where the lowercase words are real
+/// keywords. It would strip seven of them and silently open two closed sets,
+/// which trades this file's defect for a worse one: a check that no longer runs
+/// and says nothing about it (§13).
+///
+/// Kept short on purpose. A word belongs here once `makensis` has been run
+/// against it and rejected it, and not because a reader thought it looked like a
+/// placeholder — `SendMessage`'s `wparam|STR:wParam` is the same shape and is
+/// absent, because nothing lowers that row and an unverified entry is a guess
+/// this table cannot check.
+const METAVARIABLES: &[&str] = &["reslang", "height", "width"];
+
+/// What one alternation yields: the members worth checking against, whether the
+/// set is open, and the words the parameter is *named* after.
+///
+/// `named` is not `members` because a [`METAVARIABLES`] entry is dropped from
+/// one and kept in the other. `reslang|ALL` has one member and is the parameter
+/// `reslang`, and `(height|width)` has none and is still the parameter
+/// `height_or_width`: a metavariable is the best name a position has, which is
+/// what makes it a metavariable and not a keyword. A `{GUID}` is in neither —
+/// braces are not a name, and the row they appear on already has one.
+struct Alternation {
+    members: Vec<String>,
+    open: bool,
+    named: Vec<String>,
+}
+
 /// Splits an enum's members.
 ///
 /// Two separators, and which one is in use is decided by the text rather than
@@ -373,11 +419,16 @@ fn push(command: &mut Parsed, param: ParsedParam) {
 /// `OP=(+ - * / % | & ^ ~ ! || && << >> >>>)` separates with spaces *because
 /// `|` is itself a member*. Splitting the second on `|` loses the two operators
 /// a user is most likely to get wrong.
-fn split_members(text: &str) -> (Vec<String>, bool) {
+fn split_members(text: &str) -> Alternation {
     // The braces around `flag={smooth|colored}` wrap the whole list and mean
     // nothing; the ones around `{GUID}` wrap **one** alternative and mean it is
     // a placeholder. Trimming the outer pair first is what keeps the two apart,
     // since no annotation in 3.12 is a lone placeholder.
+    let empty = || Alternation {
+        members: Vec::new(),
+        open: false,
+        named: Vec::new(),
+    };
     let text = text.trim();
     let text = match text.chars().next() {
         Some('(') => text.strip_prefix('(').and_then(|t| t.strip_suffix(')')),
@@ -386,7 +437,7 @@ fn split_members(text: &str) -> (Vec<String>, bool) {
     }
     .unwrap_or(text);
     if text.is_empty() {
-        return (Vec::new(), false);
+        return empty();
     }
 
     // `mode=modeflag[|modeflag[...]]]` describes recursion, not a member list:
@@ -394,7 +445,7 @@ fn split_members(text: &str) -> (Vec<String>, bool) {
     // unparseable annotation is no annotation (§14) — the overlay says what
     // `MessageBox`'s flags are, and §15.18 already ruled on them.
     if text.contains("...") {
-        return (Vec::new(), false);
+        return empty();
     }
 
     let text = expand_families(text);
@@ -403,30 +454,42 @@ fn split_members(text: &str) -> (Vec<String>, bool) {
     } else if text.contains('|') {
         text.split('|').map(str::to_string).collect()
     } else {
-        return (Vec::new(), false);
+        return empty();
     };
 
     // `{GUID}` is not a keyword. NSIS wraps a **placeholder** in braces where a
     // keyword would go, and `makensis` rejects the literal word `GUID`, so
     // recording it as a member offers a completion that cannot compile and
     // — worse — makes the check reject the real GUIDs it stands for.
+    //
+    // [`METAVARIABLES`] is the same thing said without the braces, which is why
+    // it is a list and not a rule.
     let mut open = false;
-    let members = raw
-        .into_iter()
-        .filter(|member| {
-            let placeholder = member.trim().starts_with('{') && member.trim().ends_with('}');
-            open |= placeholder;
-            !placeholder
-        })
-        .map(|member| {
-            member
-                .trim()
-                .trim_matches(|c| "()[]".contains(c))
-                .to_string()
-        })
-        .filter(|member| !member.is_empty())
-        .collect();
-    (members, open)
+    let mut members = Vec::new();
+    let mut named = Vec::new();
+    for word in raw {
+        let word = word.trim();
+        let braced = word.starts_with('{') && word.ends_with('}');
+        let word = word.trim_matches(|c| "()[]".contains(c));
+        if word.is_empty() {
+            continue;
+        }
+        let bare = METAVARIABLES.contains(&word);
+        open |= braced || bare;
+        if !braced && !bare {
+            members.push(word.to_string());
+        }
+        // A braced placeholder is dropped from the name as well; see
+        // [`Alternation`] for why a bare one is not.
+        if !braced {
+            named.push(word.to_string());
+        }
+    }
+    Alternation {
+        members,
+        open,
+        named,
+    }
 }
 
 /// `HKLM[32|64]` is three registry roots written as one member, and `SHCTX`
@@ -477,7 +540,7 @@ fn continuation(command: &mut Parsed, line: &str) {
         return;
     }
 
-    let (members, open) = split_members(values);
+    let Alternation { members, open, .. } = split_members(values);
 
     // `root_key` annotates the parameter `-CMDHELP` spells `rootkey`, and
     // `OP` annotates `OP`. Both match once the punctuation and case are gone.

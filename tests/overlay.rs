@@ -276,6 +276,17 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
         // The value is whatever the shape it wraps takes; which *sibling* has to
         // stand beside it is [`REAL`]'s business, and the row it constrains is
         // in [`EXCLUSIVE`] precisely because one program cannot satisfy both.
+        // The first keyword the *row* names, for the reason the `Enum` arm takes
+        // the first the snapshot names: which value stands here is the table's
+        // to decide and not this file's. The other branch — a number where a
+        // keyword would go — is `PEAddResource`'s in [`REAL`], so the golden
+        // carries one row of each and neither is written twice.
+        table::Setting::Or { words, .. } => {
+            let word = words
+                .first()
+                .unwrap_or_else(|| panic!("`{field}` is an `Or` with no words"));
+            format!("\"{word}\"")
+        }
         table::Setting::Only { of, .. } => derived(entry, index, field, *of),
         table::Setting::Handled(_) => unreachable!("filtered above"),
     }
@@ -299,12 +310,15 @@ const REAL: &[(&str, &str, &str)] = &[
     ("PEAddResource", "file", "\"assets/icon.ico\""),
     ("PEAddResource", "restype", "\"#100\""),
     ("PEAddResource", "resname", "\"#1\""),
-    ("PEAddResource", "reslang", "\"1033\""),
+    // Bare, and the one place in this file where that matters: `reslang` is a
+    // `Setting::Or`, so a number and a keyword are both legal and the derived
+    // value would have taken the keyword. `1033` is en-US and exercises the
+    // branch the shape exists for — the row below takes the other one.
+    ("PEAddResource", "reslang", "1033"),
     // `#5` is `RT_DIALOG` and `#105` one of the stub's own, which is the only
     // resource this test can be sure exists.
     ("PERemoveResource", "restype", "\"#5\""),
     ("PERemoveResource", "resname", "\"#105\""),
-    ("PERemoveResource", "reslang", "\"ALL\""),
     ("ManifestAppendCustomString", "path", "\"/assembly\""),
     // `(height|width)` in the snapshot is a metavariable and not a pair of
     // keywords: NSIS reads a number here, suffixed `u` for dialog units. Both
@@ -574,6 +588,72 @@ fn a_repeating_setting_repeats() {
         ],
         "in:\n{built}"
     );
+}
+
+/// Both branches of a [`table::Setting::Or`] are taken, and neither is `STR`.
+///
+/// The golden writes one row of each — a keyword for `removeResource`, a number
+/// for `addResource` — so what is checked here and nowhere else is the third
+/// case: a value that is *neither*. That it is an error at all is the whole
+/// reason the shape exists; `reslang = "nonsense"` used to reach `makensis` and
+/// come back as a usage line with no Lua position on it (§13).
+///
+/// The keyword is written lower-case on purpose. NSIS compares these with
+/// `_tcsicmp`, so a script that spells it `all` means `ALL`, and letting the
+/// user's case through would make two programs that differ in nothing emit two
+/// different lines.
+#[test]
+fn a_keyword_or_value_setting_takes_both_and_refuses_a_third() {
+    let program = |written: &str| {
+        format!(
+            "attributes {{\n\
+            \toutFile = \"a.exe\",\n\
+            \tname = \"a\",\n\
+            \tportableExecutable = {{ removeResource = {{ {written} }} }},\n\
+            }}\n"
+        )
+    };
+
+    for (written, line) in [
+        (
+            "{ restype = \"#5\", resname = \"#105\", reslang = \"all\" }",
+            "PERemoveResource \"#5\" \"#105\" ALL",
+        ),
+        (
+            "{ restype = \"#5\", resname = \"#105\", reslang = \"Default\" }",
+            "PERemoveResource \"#5\" \"#105\" Default",
+        ),
+        (
+            "{ restype = \"#5\", resname = \"#105\", reslang = 1033 }",
+            "PERemoveResource \"#5\" \"#105\" 1033",
+        ),
+    ] {
+        let source = program(written);
+        let mut diags = Diagnostics::new();
+        let built = installua::build(&source, &mut diags).unwrap_or_default();
+        assert!(!diags.has_errors(), "{}", diags.render("or.lua"));
+        assert!(built.contains(line), "no `{line}` in:\n{built}");
+    }
+
+    // `Any` is the one word of the four `PERemoveResource` refuses, and it
+    // refuses it *by name* — `rl == ANYLANGID` ⇒ `PRINTHELP()`. So it is not a
+    // stand-in for any wrong value here: it is the value a reader who knew
+    // `PEAddResource` would reach for, and the row is what knows the two
+    // commands disagree.
+    for refused in ["\"nonsense\"", "\"Any\"", "true"] {
+        let source = program(&format!(
+            "{{ restype = \"#5\", resname = \"#105\", reslang = {refused} }}"
+        ));
+        let mut diags = Diagnostics::new();
+        installua::build(&source, &mut diags);
+        let raised: Vec<_> = diags.iter().map(|diag| diag.code).collect();
+        assert_eq!(
+            raised,
+            [Code::BadFieldValue],
+            "`reslang = {refused}`:\n{}",
+            diags.render("or.lua")
+        );
+    }
 }
 
 /// Two values become **one** line, which is the whole of what separates a

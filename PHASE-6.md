@@ -3515,6 +3515,75 @@ The second is why the rejection reason in `mui::rows` is worth its length: it na
 variable, a file and a line, and all three still check out — so the row can be re-tested
 rather than believed. The page is now in `pages.lua` and assembles on every run.
 
+## Batch 62 — the alternation `-CMDHELP` describes wrong in both directions
+
+"Still open" said a metavariable with no marker is still a keyword, and named
+`PERemoveResource restype resname reslang|ALL`: the parse takes `reslang` for a keyword
+because nothing in the notation says otherwise, so the row paid `STR` to avoid completing to
+a word `makensis` rejects. The bullet called that *"the right trade and not a fix"* and asked
+for a shape — *one of these keywords, or any string* — to arrive with the second row wanting
+it.
+
+Two things were wrong with the bullet, and the second is the interesting one.
+
+**The shape it asked for already existed and does not do the job.** `Param::open` is
+*"a value outside the members is still legal"*, which is exactly "keywords, or any string" —
+`ManifestSupportedOS` has run on it since the `{GUID}` fix. But an open enum's lowering is
+`return Some(ir::Arg::raw(text))`: it buys completion on the keywords and gives up checking
+entirely. Under it, `reslang = "nonsense"` still reaches `makensis`, and comes back as a bare
+usage line with no Lua position on it — the §13 failure this language exists to remove, which
+the bullet had classified as a completion problem.
+
+**The set is not `{ALL}`.** `-CMDHELP` prints one keyword; `ResourceEditor.cpp`'s
+`ParseResourceLangString` reads four before it tries a number:
+
+| written | `PEAddResource` | `PERemoveResource` |
+| --- | --- | --- |
+| `Any` | accept | **Usage** (`rl == ANYLANGID` ⇒ `PRINTHELP`) |
+| `All` | **Usage** (`rl == ALLLANGID` ⇒ `PRINTHELP`) | accept |
+| `Neutral`, `Default` | accept | accept |
+| `1033`, `0x409`, `0` | accept | accept |
+| `nonsense`, `65534` | Usage | Usage |
+
+So the two commands are near-mirrors, each rejecting by name the sentinel the other allows,
+and `-CMDHELP` names one word of the seven facts in that table. `Any` and `All` are not
+arbitrary: *whichever language this resource is already in* is a question with an answer only
+where the resource exists, so adding cannot ask it and removing can.
+
+`Setting::Or { words, of }` is the shape — the keywords, or the shape behind them, **both
+checked**. `Setting::Off` is the same alternation with both branches fixed, so this is that
+generalised rather than a new idea. The far branch is `Int` and not `Str`, which is the whole
+gain: `reslang = "nonsense"` is now
+
+```text
+error[bad-field-value]: `reslang` wants `ALL`, `Neutral`, `Default` or an `int`
+  note: it becomes `PERemoveResource <keyword>` or `PERemoveResource <value>`
+```
+
+at the column the value was written in.
+
+The snapshot's bad member went too, and inference is not how. The rule that catches
+`reslang` — *a lowercase alternative beside one carrying a capital* — also fires on
+`PageEx custom|uninstConfirm|…` and on `ManifestSupportedOS none|all|WinVista|…`, where the
+lowercase words are keywords. It would have stripped seven real ones and silently opened two
+closed sets: a check that stops running and says nothing, which is worse than the defect. So
+`cmdhelp::METAVARIABLES` is three words, each one `makensis` has been run against and rejected
+— `reslang`, and `AddBrandingImage`'s `height` and `width`, which are *Invalid number!* as
+literals. `SendMessage`'s `wparam|STR:wParam` is the same shape and stayed out, because
+nothing lowers that row and an unverified entry is a guess this table cannot check.
+
+One thing the strip broke and the fix is worth naming: parameter names are built from the
+alternation, so dropping a member renamed `reslang_or_ALL` to `ALL` and `height_or_width` to
+`height|width`. A metavariable is the best *name* a position has — that is what makes it a
+metavariable — so `Alternation` now carries `named` beside `members`, and a bare placeholder
+is dropped from one and kept in the other. A braced one is in neither.
+
+The bullet's own gate — *one row wants it, so it should arrive with the second* — was met
+sideways. `PEAddResource` was the second row all along and nobody had looked: its `[reslang]`
+is bare in `-CMDHELP`, mentions no keywords at all, and takes the same four minus `All`. Both
+rows are `Setting::Or` now, and `tests/overlay.rs` derives a keyword for one and writes `1033`
+for the other, so the golden carries one row of each branch.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -3592,13 +3661,14 @@ rather than believed. The page is now in `pages.lua` and assembles on every run.
   `SectionGetInstTypes`, which would have to answer with a list value this language does
   not have.~~ **Closed outright by batch 51**: it does not have to answer with a list, because
   the question is membership and membership is one bit.
-- **A metavariable with no marker is still a keyword.** `PERemoveResource restype resname
-  reslang|ALL` reads `reslang` as a member beside `ALL`, and unlike `{GUID}` there is
-  nothing in the notation that says it is a placeholder — not a brace, not a case, not a
-  position. The row pays for it with a plain `STR` and no completion, which is the right
-  trade and not a fix. What would fix it is a shape this table does not have: *one of these
-  keywords, or any string*, which is `open` at the level of a value rather than of a set.
-  One row wants it, so it should arrive with the second.
+- ~~**A metavariable with no marker is still a keyword.**~~ **Closed by batch 62**, and the
+  bullet was wrong twice. The shape it asked for — *one of these keywords, or any string* —
+  is `Param::open`, which has existed since the `{GUID}` fix and does **not** fix this: an
+  open enum returns the text raw, so it buys completion and gives up checking, and
+  `reslang = "nonsense"` still reached `makensis` as a bare usage line. And the set was never
+  `{ALL}` — `ParseResourceLangString` takes four keywords, `PEAddResource` was the second row
+  the bullet was waiting for, and the two commands reject opposite sentinels by name.
+  `Setting::Or` is the shape that checks *both* branches.
 - ~~**A flag that takes one value and does not repeat has no spelling.**~~ **Closed by
   batch 27**, arriving with `SetBrandingImage`'s `/IMGID=` exactly as this bullet asked —
   with the first of those rows rather than before it. `Offer::Valued` is waiting for

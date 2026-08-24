@@ -38,7 +38,7 @@ SpaceTexts "required" "available"
 CompletedText "completedText"
 AllowSkipFiles on
 PEAddResource "assets\icon.ico" "#100" "#1" 1033
-PERemoveResource "#5" "#105" "ALL"
+PERemoveResource "#5" "#105" ALL
 PEDllCharacteristics 1 1
 PESubsysVer "5.1"
 ManifestAppendCustomString "/assembly" "string"
