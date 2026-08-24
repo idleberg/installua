@@ -52,6 +52,16 @@ by hand, line by line, against the intended lowering.
 
 When a golden fails, read the diff first: that diff is the finding.
 
+**A new language construct needs a docs entry**, in the same change:
+
+- a MUI2 name — page, page setting, block-level setting → `docs/mui-reference.md`
+- anything else → `docs/reference-map.md`
+
+Both are hand-written and both claim exhaustive coverage (276 NSIS commands, 255
+MUI2 names). **No test enforces that claim**, so `installua coverage` reads
+`todo 0` whether or not the docs are current — the census counts the tables, not
+the prose.
+
 **Tests are tiered.** Tier 2 compares emitted `.nsi` by exact equality
 (`assert!(out.contains(…))` is banned). Tier 3 hands it to real `makensis -WX`
 with an empty warning allowlist, skipping cleanly when `makensis` is absent.
