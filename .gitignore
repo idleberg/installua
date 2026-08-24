@@ -13,8 +13,26 @@ PREPLAN.md
 # never a foundation to inherit.
 proof-of-concept/target/
 
+# What `installua stubs` writes, run against this repo. Generated files with no
+# reader -- the stubs tests assert against `stubs::meta()` rather than the file,
+# so a committed copy is a snapshot nothing checks and everything outdates.
+# Named individually because `.installua/headers/*.toml` is hand-written and
+# belongs in a project's history.
+.installua/meta/
+.installua/installua.yml
+
 # Assembled installers, written by examples/assemble.sh and cleaned up by it.
 examples/**/*-setup.exe
+
+# `emit` writes beside its input, so running it on an example lands an
+# `install.nsi` next to the `install.lua` -- a byte-identical copy of the
+# `generated.nsi` golden already committed there. One was, once. The goldens
+# themselves are committed on purpose: tests/examples.rs diffs against them.
+examples/*/install.nsi
+
+# Tier 3 for the examples writes the script where the assets are and removes it
+# again; this is what an interrupted run leaves behind.
+examples/*/assembling.nsi
 
 # Opaque payload fixtures, written by examples/fixtures.py. Nothing reads their
 # bytes, so they are generated rather than vendored -- which also keeps NSIS's
