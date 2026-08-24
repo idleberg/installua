@@ -462,4 +462,3 @@ fn coverage_matches_its_golden() {
     let expected = include_str!("golden/coverage.txt");
     assert_eq!(table::coverage(), expected);
 }
-

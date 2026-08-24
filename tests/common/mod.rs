@@ -24,8 +24,8 @@ pub fn check_or_update(path: &str, generated: &str, hint: &str) {
         return;
     }
 
-    let snapshot = std::fs::read_to_string(path)
-        .unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
+    let snapshot =
+        std::fs::read_to_string(path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
     assert_eq!(
         generated, snapshot,
         "the local NSIS and {path} disagree: rerun with \
