@@ -219,17 +219,37 @@ this compiler refuses it instead, `error[ignored-setting]`. An absent
 
 ### The manifest
 
+The `Manifest*` commands are one table rather than eight prefixed fields: NSIS
+puts the word on every command, and this language puts it on the table once.
+
+**Usage** `manifest = { … }`
+
 | NSIS | Installua |
 | --- | --- |
 | `RequestExecutionLevel` | `requestExecutionLevel = "none" \| "user" \| "highest" \| "admin"` |
-| `ManifestSupportedOS` | `manifestSupportedOS = { … }` |
-| `ManifestMaxVersionTested` | `manifestMaxVersionTested` |
-| `ManifestDPIAware` | `manifestDpiAware` |
-| `ManifestDPIAwareness` | `manifestDpiAwareness` |
-| `ManifestLongPathAware` | `manifestLongPathAware` |
-| `ManifestGdiScaling` | `manifestGdiScaling` |
-| `ManifestDisableWindowFiltering` | `manifestDisableWindowFiltering` |
-| `ManifestAppendCustomString` | `manifestAppendCustomString = { { path = …, string = … }, … }` |
+| `ManifestSupportedOS` | `manifest.supportedOS = { … }` |
+| `ManifestMaxVersionTested` | `manifest.maxVersionTested` |
+| `ManifestDPIAware` | `manifest.dpiAware` |
+| `ManifestDPIAwareness` | `manifest.dpiAwareness` |
+| `ManifestLongPathAware` | `manifest.longPathAware` |
+| `ManifestGdiScaling` | `manifest.gdiScaling` |
+| `ManifestDisableWindowFiltering` | `manifest.disableWindowFiltering` |
+| `ManifestAppendCustomString` | `manifest.customStrings = { { path = …, string = … }, … }` |
+
+`requestExecutionLevel` lands in the manifest too and is written flat, because
+its NSIS name says nothing about a manifest: the groups are the prefixes NSIS
+itself uses, so the map from one to the other stays mechanical.
+
+```lua
+attributes {
+	requestExecutionLevel = "admin",
+	manifest = {
+		supportedOS = { "Win7", "Win10" },
+		dpiAwareness = "PerMonitorV2,system",
+		longPathAware = true,
+	},
+}
+```
 
 ### Version info
 
@@ -253,12 +273,27 @@ attributes {
 
 ### The PE image
 
+One table, for the reason [the manifest](#the-manifest) is one — and the group
+is spelled out, because `pe` is an abbreviation only someone who already works
+on Windows executables reads at a glance.
+
+**Usage** `portableExecutable = { … }`
+
 | NSIS | Installua |
 | --- | --- |
-| `PEAddResource` | `peAddResource = { { file = …, restype = …, resname = …, reslang = … }, … }` |
-| `PERemoveResource` | `peRemoveResource = { { restype = …, resname = …, reslang = … }, … }` |
-| `PEDllCharacteristics` | `peDllCharacteristics = { add = …, remove = … }` |
-| `PESubsysVer` | `peSubsysVer` |
+| `PEAddResource` | `portableExecutable.addResource = { { file = …, restype = …, resname = …, reslang = … }, … }` |
+| `PERemoveResource` | `portableExecutable.removeResource = { { restype = …, resname = …, reslang = … }, … }` |
+| `PEDllCharacteristics` | `portableExecutable.dllCharacteristics = { add = …, remove = … }` |
+| `PESubsysVer` | `portableExecutable.subsystemVersion` |
+
+```lua
+attributes {
+	portableExecutable = {
+		addResource = { { file = "assets/app.ico", restype = "#100", resname = "#1" } },
+		subsystemVersion = "5.1",
+	},
+}
+```
 
 ### Classic UI text and colours
 

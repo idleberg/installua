@@ -161,7 +161,7 @@
 ---| '"highest"'
 ---| '"admin"'
 
----@alias installua.Manifestsupportedos
+---@alias installua.SupportedOS
 ---| '"none"'
 ---| '"all"'
 ---| '"WinVista"'
@@ -183,6 +183,28 @@
 ---@field product? string
 ---@field file? string
 ---@field keys? table<string, string|table<string, string>>
+
+---@class (exact) installua.Installer
+---@field checkBitmap? string
+---@field installColors? string
+---@field progressBar? string[]
+---@field licenseBkColor? string
+
+---@class (exact) installua.PortableExecutable
+---@field addResource? { file: string, restype: string, resname: string, reslang?: string }[]
+---@field removeResource? { restype: string, resname: string, reslang: string }[]
+---@field dllCharacteristics? { add: integer, remove: integer }
+---@field subsystemVersion? string
+
+---@class (exact) installua.Manifest
+---@field customStrings? { path: string, string: string }[]
+---@field dpiAware? boolean
+---@field dpiAwareness? string
+---@field longPathAware? boolean
+---@field supportedOS? installua.SupportedOS[]
+---@field maxVersionTested? string
+---@field disableWindowFiltering? boolean
+---@field gdiScaling? boolean
 
 ---@class (exact) installua.Attributes
 ---@field brandingImage? { edge: installua.Toporleftorbottomorright, size: string, padding?: string }
@@ -216,19 +238,7 @@
 ---@field unicode? boolean
 ---@field uninstallCaption? string
 ---@field windowIcon? boolean
----@field peAddResource? { file: string, restype: string, resname: string, reslang?: string }[]
----@field peRemoveResource? { restype: string, resname: string, reslang: string }[]
----@field peDllCharacteristics? { add: integer, remove: integer }
----@field peSubsysVer? string
 ---@field requestExecutionLevel? installua.ExecutionLevel
----@field manifestAppendCustomString? { path: string, string: string }[]
----@field manifestDpiAware? boolean
----@field manifestDpiAwareness? string
----@field manifestLongPathAware? boolean
----@field manifestSupportedOS? installua.Manifestsupportedos[]
----@field manifestMaxVersionTested? string
----@field manifestDisableWindowFiltering? boolean
----@field manifestGdiScaling? boolean
 ---@field buttonText? { back?: string, next?: string, cancel?: string, close?: string }
 ---@field detailsButtonText? string
 ---@field uninstallButtonText? string
@@ -236,6 +246,9 @@
 ---@field spaceTexts? false|{ required: string, available?: string }
 ---@field completedText? string
 ---@field allowSkipFiles? boolean
+---@field installer? installua.Installer
+---@field portableExecutable? installua.PortableExecutable
+---@field manifest? installua.Manifest
 ---@field versionInfo? installua.VersionInfo
 
 ---@class (exact) installua.Installer

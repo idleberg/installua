@@ -3340,6 +3340,65 @@ Two tests, and the second matters as much as the first — the negative one woul
 well against a rule that refused both fields outright, so its twin asserts that the pairs
 NSIS *does* read are emitted, with `SetCompressor` ahead of them. 338 → 340.
 
+## Batch 58 — the prefix NSIS puts on twelve commands, put on one table instead
+
+`ManifestSupportedOS` and `PESubsysVer` had arrived as `manifestSupportedOS` and
+`peSubsysVer`, which is the NSIS name with the capitals moved. Two things are wrong with
+that and only one of them is cosmetic. The word is repeated on every field of a group that
+has eight — and `pe` is an abbreviation that reads instantly to whoever works on Windows
+executables and to nobody else.
+
+`versionInfo` already had the answer and it had never been generalised: a dotted field path
+in the overlay, a table in the source. It got that shape for reasons peculiar to it — its
+members are ordered against each other and `keys` is a free map — so the mechanism was
+written for one row family and stayed there.
+
+```lua
+manifest = { supportedOS = { "Win7", "Win10" }, dpiAwareness = "PerMonitorV2,system" }
+portableExecutable = { addResource = { … }, subsystemVersion = "5.1" }
+```
+
+Nothing in the compiler knows what a manifest is. A group's members are ordinary
+`Attribute` rows that share a prefix, so each goes through `setting` — the function the flat
+fields go through — and the grouping stays a *spelling* rather than a second place a shape
+is lowered. `versionInfo` remains the exception, because it is genuinely not one.
+
+### The group is derived, and that is what needed a decision
+
+A group is any `Attribute` row whose path is `group.field`, so a nested setting is one
+overlay line the way a flat one is. That derivation was wrong the first time it ran, and the
+test suite said so within a minute: `installer.checkBitmap` is also one dot, and it is a
+field of `installer {}` rather than a group inside `attributes {}`. The depth cannot tell
+those apart — `page.license.file` has two dots and tells itself apart — so something has to.
+`BLOCK_OWNERS` is three names, and `every_dotted_owner_is_a_block_or_a_group` is what makes
+it a decision rather than an omission: a fourth convention has to be classified before it
+can be written.
+
+### Both wrong spellings are answered with the right one
+
+The old names never shipped, and they are still the two things a user will type — one is
+what NSIS calls the command, the other is the field with the table left off:
+
+```
+error[unknown-field]: `manifestGdiScaling` is not an attribute
+  note: write `manifest = { gdiScaling = … }` — the settings NSIS prefixes are a table
+        here, once, rather than a prefix on every field
+```
+
+Answering either with the 48-name attribute list would be answering a question neither
+asked.
+
+### The generated halves came along, and one of them nearly did not
+
+`installua.Manifest` and `installua.PortableExecutable` are generated from the same rows,
+and the enum alias is named for the member rather than the path — `installua.SupportedOS`,
+not `installua.Manifestsupportedos`, which is what the old flat name had been producing.
+
+The test that generates a program from every attribute row skipped dotted paths, because the
+only dotted rows had been `versionInfo`'s `Handled` ones. Left alone it would have dropped
+twelve rows out of tiers 2 and 3 on the day they were nested, silently and while staying
+green. It now writes groups the way a user does. 340 → 343.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.

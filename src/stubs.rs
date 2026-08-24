@@ -24,7 +24,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use crate::builtins;
-use crate::lower::control;
+use crate::lower::{self, control};
 use crate::table::{self, Class, Param};
 use crate::types::Ty;
 
@@ -135,6 +135,11 @@ fn alias_table() -> Vec<(String, Vec<&'static str>, bool)> {
 /// the display form for the compounds a machine cannot split; everything else
 /// gets its first letter capitalised.
 fn alias_of(name: &str) -> String {
+    // A grouped field is named for its member and not for its path:
+    // `manifest.supportedOS` is `installua.SupportedOS`, because the group is
+    // already in the class the field is written on and a second copy of it in
+    // the alias is a longer name saying the same thing twice.
+    let name = name.rsplit('.').next().unwrap_or(name);
     let canonical: String = name
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
@@ -165,6 +170,7 @@ const SPELLINGS: &[(&str, &str)] = &[
     ("hotkey", "HotKey"),
     ("crccheck", "CrcCheck"),
     ("requestexecutionlevel", "ExecutionLevel"),
+    ("supportedos", "SupportedOS"),
 ];
 
 /// The four blocks (§15.10, §15.26).
@@ -183,9 +189,11 @@ fn blocks() -> String {
          ---@class (exact) installua.VersionInfo\n\
          ---@field product? string\n\
          ---@field file? string\n\
-         ---@field keys? table<string, string|table<string, string>>\n\n\
-         ---@class (exact) installua.Attributes\n",
+         ---@field keys? table<string, string|table<string, string>>\n\n",
     );
+
+    out.push_str(&group_classes());
+    out.push_str("---@class (exact) installua.Attributes\n");
 
     for (field, ty) in attribute_fields() {
         let optional = if field == "outFile" { "" } else { "?" };
@@ -357,8 +365,9 @@ page = {}\n\n";
 /// The top-level `attributes {}` fields and their Lua types.
 ///
 /// Derived from the census: every `Attribute` row whose field path is a plain
-/// name. The nested ones (`versionInfo.product`) are the `VersionInfo` class
-/// above, which is why the dot is in the overlay and not in a second list.
+/// name, followed by one field per group. A dotted path (`manifest.gdiScaling`)
+/// is a member of the group's own class and never a field here, which is why
+/// the dot is in the overlay and not in a second list.
 fn attribute_fields() -> Vec<(&'static str, String)> {
     table::table()
         .iter()
@@ -368,8 +377,73 @@ fn attribute_fields() -> Vec<(&'static str, String)> {
         })
         .filter(|(_, field, _)| !field.contains('.'))
         .map(|(entry, field, holds)| (field, setting_type(entry, field, holds)))
-        .chain([("versionInfo", "installua.VersionInfo".to_string())])
+        .chain(
+            lower::attribute_groups()
+                .into_iter()
+                .map(|group| (group, group_class(group))),
+        )
         .collect()
+}
+
+/// One `---@class` per nested group, from the same rows the compiler reads.
+///
+/// `versionInfo` is not here: its members are [`table::Setting::Handled`], which
+/// says the compiler shapes them by hand, and a class generated from `Handled`
+/// would offer `keys? table` where the hand-written one above offers what a key
+/// actually holds. A `Handled` member is the marker for both halves.
+fn group_classes() -> String {
+    let mut out = String::new();
+    for group in lower::attribute_groups() {
+        let members: Vec<(&'static table::Instruction, &'static str, table::Setting)> =
+            group_members(group);
+        if members
+            .iter()
+            .any(|(_, _, holds)| matches!(holds, table::Setting::Handled(_)))
+        {
+            continue;
+        }
+        let _ = writeln!(out, "---@class (exact) {}", group_class(group));
+        for (entry, field, holds) in members {
+            let member = field.rsplit('.').next().unwrap_or(field);
+            let _ = writeln!(
+                out,
+                "---@field {member}? {}",
+                setting_type(entry, field, holds)
+            );
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// The `Attribute` rows one group owns, in table order.
+fn group_members(
+    group: &str,
+) -> Vec<(&'static table::Instruction, &'static str, table::Setting)> {
+    table::table()
+        .iter()
+        .filter_map(|entry| match entry.class {
+            Class::Attribute(holds) => Some((entry, entry.installua?, holds)),
+            _ => None,
+        })
+        .filter(|(_, field, _)| {
+            field
+                .strip_prefix(group)
+                .and_then(|rest| rest.strip_prefix('.'))
+                .is_some_and(|member| !member.contains('.'))
+        })
+        .collect()
+}
+
+/// `manifest` ⇒ `installua.Manifest`. The group's own spelling, capitalised —
+/// not [`alias_of`], which lowercases the rest and would give
+/// `installua.Portableexecutable`.
+fn group_class(group: &str) -> String {
+    let mut chars = group.chars();
+    match chars.next() {
+        Some(first) => format!("installua.{}{}", first.to_ascii_uppercase(), chars.as_str()),
+        None => "installua.".to_string(),
+    }
 }
 
 /// The Lua type of one attribute, which is the row's [`table::Setting`] and

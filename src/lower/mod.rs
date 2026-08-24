@@ -44,8 +44,9 @@ use fields::Fields;
 /// name is an attribute exactly when a [`table::Class::Attribute`] row claims
 /// it, which is what makes a new setting one overlay line (§15.23).
 ///
-/// One exclusion: the dotted names are `versionInfo`'s members and are reached
-/// through it, never written flat.
+/// A dotted name is not one of these: it is a member of a group, and the
+/// *group* is the name written here — which is why [`attribute_groups`] is
+/// chained on rather than the dots being merely dropped.
 ///
 /// The overlap with [`V1_INSTALLER_FIELDS`] is not one. Every name in that list
 /// is a script-wide NSIS command that `installer {}` also accepts, so they
@@ -56,6 +57,88 @@ fn attribute_names() -> Vec<&'static str> {
         .filter(|entry| matches!(entry.class, table::Class::Attribute(_)))
         .filter_map(|entry| entry.installua)
         .filter(|field| !field.contains('.'))
+        .chain(attribute_groups())
+        .collect()
+}
+
+/// The nested `attributes {}` fields: `manifest = { … }`, `versionInfo = { … }`
+/// and whatever the table grows next.
+///
+/// A group is **derived** and never listed: a name is one exactly when some
+/// `Attribute` row's field path is `group.field`, which keeps a new nested
+/// setting one overlay line the way a flat one is (§15.23). The alternative was
+/// a `const` beside the rows, and a second place to add the same name is a
+/// second place to forget it.
+///
+/// One dot, not two. `page.license.file` is a page setting, reached through the
+/// page it names and never through `attributes {}` — the same dotted
+/// convention, one level deeper, and the depth is what tells the two apart.
+///
+/// [`BLOCK_OWNERS`] is the other half of that: a dotted name whose owner is a
+/// block belongs to the block, not to a group inside `attributes {}`.
+pub fn attribute_groups() -> Vec<&'static str> {
+    let mut groups: Vec<&'static str> = Vec::new();
+    for field in table::table().iter().filter_map(|entry| match entry.class {
+        table::Class::Attribute(_) => entry.installua,
+        _ => None,
+    }) {
+        let Some((group, member)) = field.split_once('.') else {
+            continue;
+        };
+        if !member.contains('.') && !BLOCK_OWNERS.contains(&group) && !groups.contains(&group) {
+            groups.push(group);
+        }
+    }
+    groups
+}
+
+/// The dotted owners that are **blocks**, and so never a group inside
+/// `attributes {}`.
+///
+/// `installer.checkBitmap` is a field of `installer {}`, written there and
+/// nowhere else; `manifest.gdiScaling` is a field of a table inside
+/// `attributes {}`. Both are one dot, so the depth cannot tell them apart and
+/// something has to. Three names, checked against the table by
+/// `every_dotted_owner_is_a_block_or_a_group`, which is what stops a fourth
+/// convention from quietly becoming a group in `attributes {}`.
+const BLOCK_OWNERS: &[&str] = &["installer", "uninstaller", "page"];
+
+/// The group a name belongs to, when the name is a member written outside it.
+///
+/// Two spellings reach here and both are the same mistake. `manifestGdiScaling`
+/// is the prefix NSIS puts on the command, carried into a language that puts it
+/// on the table instead; `gdiScaling` on its own is the member with the table
+/// left off. Neither is a name this language has, and the useful answer to both
+/// is where it does live.
+///
+/// A member claimed by two groups is answered with the first, which is the
+/// table's order. There are none today, and if there ever are, naming one place
+/// to write it beats naming none.
+fn flattened(name: &str) -> Option<(&'static str, &'static str)> {
+    attribute_groups().into_iter().find_map(|group| {
+        let member = group_fields(group).into_iter().find(|member| {
+            let mut capitalised = member.chars();
+            let tail = match capitalised.next() {
+                Some(first) => format!("{}{}", first.to_ascii_uppercase(), capitalised.as_str()),
+                None => return false,
+            };
+            name == *member || name == format!("{group}{tail}")
+        })?;
+        Some((group, member))
+    })
+}
+
+/// The members of one group, without the group and the dot.
+///
+/// In the order the table lists them, which is `-CMDHELP`'s: a group is a
+/// window onto rows that were always there, so the order a user reads in a
+/// diagnostic is the order they read in the reference.
+pub fn group_fields(group: &str) -> Vec<&'static str> {
+    table::table()
+        .iter()
+        .filter(|entry| matches!(entry.class, table::Class::Attribute(_)))
+        .filter_map(|entry| entry.installua?.strip_prefix(group)?.strip_prefix('.'))
+        .filter(|member| !member.contains('.'))
         .collect()
 }
 
@@ -2182,9 +2265,10 @@ impl<'p> Lowerer<'_, 'p> {
             };
 
             match name.text.as_str() {
-                // The two nested ones. `versionInfo` is a table of its own and
-                // `unicode` emits nothing — it sets a field the emitter reads
-                // first, so a later `raw` can override it (§15.16).
+                // The nested ones. `versionInfo` is hand-shaped — its members
+                // are ordered against each other and `keys` is a free map —
+                // and `unicode` emits nothing: it sets a field the emitter
+                // reads first, so a later `raw` can override it (§15.16).
                 "versionInfo" => self.version_info(value),
                 "unicode" => match self.constant(value) {
                     Some(ConstValue::Bool(value)) => self.module.unicode = value,
@@ -2196,6 +2280,9 @@ impl<'p> Lowerer<'_, 'p> {
                          local `makensis` was built, which is why it is always emitted (§15.16)",
                     ),
                 },
+                // Every other group is its rows and nothing else, so one
+                // function reads all of them — see [`Self::group`].
+                group if attribute_groups().contains(&group) => self.attribute_group(group, value),
                 other => match table::by_installua(other) {
                     Some(entry) => self.setting(entry, &name.text, value),
                     // A name that belongs to the other block is a five-second
@@ -2217,14 +2304,25 @@ impl<'p> Lowerer<'_, 'p> {
                         );
                     }
                     None => {
-                        self.diags.push(
-                            Diagnostic::error(
-                                Code::UnknownField,
-                                name.span,
-                                format!("`{other}` is not an attribute"),
-                            )
-                            .note(format!("the attributes are {}", list(&attribute_names()))),
+                        let diagnostic = Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is not an attribute"),
                         );
+                        // A flattened member reads as a plausible attribute and
+                        // is nothing but the group written wrong, so it is
+                        // answered with the group rather than with the list of
+                        // everything: `manifestGdiScaling` is
+                        // `manifest = { gdiScaling = … }` (§15.23).
+                        self.diags.push(match flattened(other) {
+                            Some((group, member)) => diagnostic.note(format!(
+                                "write `{group} = {{ {member} = … }}` — the settings NSIS \
+                                 prefixes are a table here, once, rather than a prefix on \
+                                 every field"
+                            )),
+                            None => diagnostic
+                                .note(format!("the attributes are {}", list(&attribute_names()))),
+                        });
                     }
                 },
             }
@@ -2496,7 +2594,7 @@ impl<'p> Lowerer<'_, 'p> {
         self.constant_string(value, field)
     }
 
-    /// `peAddResource = { { file = …, … }, { … } }`: one whole NSIS line per
+    /// `portableExecutable.addResource = { { file = …, … }, { … } }`: one whole NSIS line per
     /// element, in the order they were written.
     ///
     /// The elements are **positional** where the parts of a
@@ -2566,7 +2664,7 @@ impl<'p> Lowerer<'_, 'p> {
         }
     }
 
-    /// `manifestSupportedOS = { "Win7", "Win10" }`: one line, as many values as
+    /// `manifest.supportedOS = { "Win7", "Win10" }`: one line, as many values as
     /// were written.
     ///
     /// The third thing in this file that reads a Lua list, and the only one the
@@ -2649,7 +2747,7 @@ impl<'p> Lowerer<'_, 'p> {
     /// to preserve and NSIS counts arguments (§12).
     ///
     /// A part may be left out when its position is optional *and* nothing after
-    /// it was written — `peAddResource`'s `reslang` is the one that is. Which
+    /// it was written — `addResource`'s `reslang` is the one that is. Which
     /// positions those are is the snapshot's answer and not a part's, so a gap
     /// in the middle is the same error as a part nobody wrote: NSIS counts
     /// arguments, and a short line means a different thing rather than less.
@@ -2852,6 +2950,55 @@ impl<'p> Lowerer<'_, 'p> {
     // There is no `flag_attribute` helper any more, nor an `int_` or `enum_`
     // one: the shapes are [`Self::setting`]'s arms, and a helper per shape would
     // be a second place to look for the same four lines.
+
+    /// One nested group — `manifest = { … }`, `portableExecutable = { … }` —
+    /// which is its rows read through their own prefix.
+    ///
+    /// Nothing here knows what a manifest is. A group's members are ordinary
+    /// `Attribute` rows that happen to share a prefix, so each one goes through
+    /// [`Self::setting`], the same function the flat fields go through: the
+    /// grouping is a *spelling*, and a spelling must not become a second place
+    /// where a shape is lowered. `versionInfo` is the exception above precisely
+    /// because it is not one — its members are ordered against each other.
+    ///
+    /// The field is named to the user by its full path. `supportedOS` alone
+    /// would be ambiguous the moment a second group grows one, and the path is
+    /// what they wrote.
+    fn attribute_group(&mut self, group: &str, value: &Expr) {
+        let Expr::Table { fields, .. } = value else {
+            let fields = group_fields(group);
+            self.bad_value(
+                value.span(),
+                group,
+                "a table",
+                &format!(
+                    "write `{group} = {{ {} = … }}`; the fields are {}",
+                    fields.first().copied().unwrap_or("…"),
+                    list(&fields)
+                ),
+            );
+            return;
+        };
+
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                self.todo(value.span(), &format!("a positional entry in `{group}`"));
+                continue;
+            };
+            let path = format!("{group}.{}", name.text);
+            match table::by_installua(&path) {
+                Some(entry) => self.setting(entry, &path, value),
+                None => self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        name.span,
+                        format!("`{}` is not a `{group}` field", name.text),
+                    )
+                    .note(format!("the fields are {}", list(&group_fields(group)))),
+                ),
+            }
+        }
+    }
 
     /// `versionInfo = { product = "1.4.2.0", keys = { … } }`.
     ///

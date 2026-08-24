@@ -29,19 +29,7 @@ SilentUnInstall normal
 CPU x86
 UninstallCaption "uninstallCaption"
 WindowIcon on
-PEAddResource "assets\icon.ico" "#100" "#1" 1033
-PERemoveResource "#5" "#105" "ALL"
-PEDllCharacteristics 1 1
-PESubsysVer "5.1"
 RequestExecutionLevel none
-ManifestAppendCustomString "/assembly" "string"
-ManifestDPIAware true
-ManifestDPIAwareness "manifestDpiAwareness"
-ManifestLongPathAware true
-ManifestSupportedOS none
-ManifestMaxVersionTested "10.0.19041.0"
-ManifestDisableWindowFiltering true
-ManifestGdiScaling true
 MiscButtonText "back" "next" "cancel" "close"
 DetailsButtonText "detailsButtonText"
 UninstallButtonText "uninstallButtonText"
@@ -49,6 +37,18 @@ InstallButtonText "installButtonText"
 SpaceTexts "required" "available"
 CompletedText "completedText"
 AllowSkipFiles on
+PEAddResource "assets\icon.ico" "#100" "#1" 1033
+PERemoveResource "#5" "#105" "ALL"
+PEDllCharacteristics 1 1
+PESubsysVer "5.1"
+ManifestAppendCustomString "/assembly" "string"
+ManifestDPIAware true
+ManifestDPIAwareness "dpiAwareness"
+ManifestLongPathAware true
+ManifestSupportedOS none
+ManifestMaxVersionTested "10.0.19041.0"
+ManifestDisableWindowFiltering true
+ManifestGdiScaling true
 
 Section "Core"
   DetailPrint "installing"

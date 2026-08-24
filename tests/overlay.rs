@@ -112,32 +112,35 @@ fn attribute_program() -> String {
          attributes {\n",
     );
 
-    for entry in table::table() {
-        let table::Class::Attribute(holds) = entry.class else {
-            continue;
-        };
-        let Some(field) = entry.installua else {
-            continue;
-        };
-        // The dotted ones are `versionInfo`'s and are written through it; the
-        // rest of `Handled` is hand-shaped and has no value this can guess.
-        if field.contains('.') || matches!(holds, table::Setting::Handled(_)) {
-            continue;
+    // The flat fields, then one nested table per group. Grouped rows are
+    // written *through* their group here for the same reason a user writes them
+    // that way: a dotted path is not a name `attributes {}` accepts, and a test
+    // that skipped them would have quietly dropped twelve rows out of both
+    // tiers on the day the manifest settings were nested.
+    for (group, entries) in [(None, flat_attributes())]
+        .into_iter()
+        .chain(groups().into_iter().map(|group| (Some(group), grouped(group))))
+    {
+        if let Some(group) = group {
+            source.push_str(&format!("\t{group} = {{\n"));
         }
-        if EXCLUSIVE.contains(&entry.nsis) {
-            continue;
+        for (entry, field, holds) in entries {
+            let member = field.rsplit('.').next().unwrap_or(field);
+            // A position the snapshot repeats takes a list of what one value
+            // is. One element for the same reason a [`table::Setting::Each`]
+            // gets one: the golden is here to prove the shape emits, and that
+            // two become two is [`a_repeating_position_fills_one_line`].
+            let value = derived(entry, 0, member, holds);
+            let value = match entry.params.first() {
+                Some(param) if param.repeats() => format!("{{ {value} }}"),
+                _ => value,
+            };
+            let indent = if group.is_some() { "\t\t" } else { "\t" };
+            source.push_str(&format!("{indent}{member} = {value},\n"));
         }
-
-        // A position the snapshot repeats takes a list of what one value is.
-        // One element for the same reason a [`table::Setting::Each`] gets one:
-        // the golden is here to prove the shape emits, and that two become two
-        // is [`a_repeating_position_fills_one_line`].
-        let value = derived(entry, 0, field, holds);
-        let value = match entry.params.first() {
-            Some(param) if param.repeats() => format!("{{ {value} }}"),
-            _ => value,
-        };
-        source.push_str(&format!("\t{field} = {value},\n"));
+        if group.is_some() {
+            source.push_str("\t},\n");
+        }
     }
 
     source.push_str(
@@ -145,6 +148,54 @@ fn attribute_program() -> String {
          \t\tdetailPrint(\"installing\")\n\tend),\n}\n",
     );
     source
+}
+
+/// One entry per `Attribute` row this program can write, as
+/// `(row, field path, shape)`.
+///
+/// `Handled` is left out because it is hand-shaped and has no value a table can
+/// derive, and [`EXCLUSIVE`] because another field in this same program forbids
+/// it.
+fn writable(dotted: bool) -> Vec<(&'static table::Instruction, &'static str, table::Setting)> {
+    table::table()
+        .iter()
+        .filter_map(|entry| match entry.class {
+            table::Class::Attribute(holds) => Some((entry, entry.installua?, holds)),
+            _ => None,
+        })
+        .filter(|(entry, field, holds)| {
+            field.contains('.') == dotted
+                && !matches!(holds, table::Setting::Handled(_))
+                && !EXCLUSIVE.contains(&entry.nsis)
+        })
+        .collect()
+}
+
+fn flat_attributes() -> Vec<(&'static table::Instruction, &'static str, table::Setting)> {
+    writable(false)
+}
+
+fn grouped(group: &str) -> Vec<(&'static table::Instruction, &'static str, table::Setting)> {
+    writable(true)
+        .into_iter()
+        .filter(|(_, field, _)| {
+            field
+                .strip_prefix(group)
+                .and_then(|rest| rest.strip_prefix('.'))
+                .is_some_and(|member| !member.contains('.'))
+        })
+        .collect()
+}
+
+/// The groups with something to write in them. `versionInfo` has not: all three
+/// of its members are `Handled`, which is what sends it through the compiler's
+/// own hand-written arm — and an empty `versionInfo = {}` in the golden would
+/// say nothing about either half.
+fn groups() -> Vec<&'static str> {
+    installua::lower::attribute_groups()
+        .into_iter()
+        .filter(|group| !grouped(group).is_empty())
+        .collect()
 }
 
 /// The Lua a field of this shape can be written with, derived from the shape.
@@ -170,11 +221,13 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
         // Two settings take a *shaped* string — `major.minor` and
         // `maj.min.bld.rev` — and [`table::Setting::Str`] says only "a
         // string". The narrowing is real and the table cannot state it, so
-        // the compiler does not check it either: `peSubsysVer = "hello"`
+        // the compiler does not check it either: `subsystemVersion = "hello"`
         // reaches `makensis` and is rejected there. The values are here
         // rather than in the row because a row is not an example.
-        table::Setting::Str { path: false } if field == "peSubsysVer" => "\"5.1\"".to_string(),
-        table::Setting::Str { path: false } if field == "manifestMaxVersionTested" => {
+        table::Setting::Str { path: false } if field == "subsystemVersion" => {
+            "\"5.1\"".to_string()
+        }
+        table::Setting::Str { path: false } if field == "maxVersionTested" => {
             "\"10.0.19041.0\"".to_string()
         }
         table::Setting::Str { path: true } => format!("\"{field}.out\""),
@@ -237,10 +290,10 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
 /// compile time, `PERemoveResource` names a resource that must already be in the
 /// stub, and a manifest path is an XPath rooted at `/`. Every one of those is a
 /// narrowing the table cannot state, which is why they are examples rather than
-/// rows — the same reason `peSubsysVer`'s `"5.1"` is below.
+/// rows — the same reason `subsystemVersion`'s `"5.1"` is below.
 const REAL: &[(&str, &str, &str)] = &[
     // Three `RRGGBB` colours. `Setting::Str` says "a string" and NSIS reads six
-    // hex digits, which is the same narrowing `peSubsysVer` has below.
+    // hex digits, which is the same narrowing `subsystemVersion` has below.
     ("BGGradient", "top", "\"000000\""),
     ("BGGradient", "bottom", "\"0000FF\""),
     ("BGGradient", "text", "\"FFFFFF\""),
@@ -296,6 +349,86 @@ fn every_attribute_row_emits() {
         "{}",
         diags.render("overlay-attributes.lua")
     );
+}
+
+/// Every dotted field path belongs to a block or to a group, and nothing else.
+///
+/// One dot means two different things — `installer.checkBitmap` is a field of
+/// `installer {}`, `manifest.gdiScaling` a field of a table inside
+/// `attributes {}` — and the compiler tells them apart by a list of three block
+/// names. This is what makes that list a decision rather than an omission: a
+/// fourth owner has to be classified here before it can be written anywhere.
+#[test]
+fn every_dotted_owner_is_a_block_or_a_group() {
+    let groups = installua::lower::attribute_groups();
+
+    for entry in table::table() {
+        let table::Class::Attribute(_) = entry.class else {
+            continue;
+        };
+        let Some((owner, member)) = entry.installua.and_then(|field| field.split_once('.')) else {
+            continue;
+        };
+        // Two dots is a page setting, which the page owns and `attributes {}`
+        // never sees.
+        if member.contains('.') {
+            continue;
+        }
+        assert!(
+            groups.contains(&owner) || ["installer", "uninstaller", "page"].contains(&owner),
+            "`{}` is owned by `{owner}`, which is neither a block nor a group",
+            entry.installua.unwrap_or(entry.nsis)
+        );
+    }
+}
+
+/// The three ways a nested group can be written wrong, and the fourth that is
+/// not wrong at all until you see where it was written.
+///
+/// The last two are the whole reason the grouping is worth a diagnostic:
+/// `manifestGdiScaling` is what NSIS calls the command and `gdiScaling` is what
+/// this language calls the field, so both are things a user will type, and
+/// neither is a name. Answering them with the 48-name attribute list would be
+/// answering the wrong question.
+#[test]
+fn a_group_written_wrong_says_where_the_field_lives() {
+    const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
+
+    for (what, written, expected) in [
+        (
+            "not a table at all",
+            "manifest = true",
+            "the fields are",
+        ),
+        (
+            "a member that is not one",
+            "manifest = { dpiAwear = true }",
+            "`dpiAwear` is not a `manifest` field",
+        ),
+        (
+            "a member of another group",
+            "manifest = { subsystemVersion = \"5.1\" }",
+            "`subsystemVersion` is not a `manifest` field",
+        ),
+        (
+            "the NSIS prefix carried into the field name",
+            "manifestGdiScaling = true",
+            "write `manifest = { gdiScaling = … }`",
+        ),
+        (
+            "the member with the group left off",
+            "gdiScaling = true",
+            "write `manifest = { gdiScaling = … }`",
+        ),
+    ] {
+        let source = format!("{PRELUDE}{written} }}");
+        let mut diags = Diagnostics::new();
+        let _ = installua::build(&source, &mut diags);
+
+        let rendered = diags.render("group.lua");
+        assert!(diags.has_errors(), "`{what}` compiled: {rendered}");
+        assert!(rendered.contains(expected), "`{what}`: {rendered}");
+    }
 }
 
 /// The three ways a [`table::Setting::Table`] can be written wrong.
@@ -422,9 +555,11 @@ fn a_repeating_setting_repeats() {
     let source = "attributes {\n\
         \toutFile = \"a.exe\",\n\
         \tname = \"a\",\n\
-        \tmanifestAppendCustomString = {\n\
-        \t\t{ path = \"/assembly\", string = \"<first/>\" },\n\
-        \t\t{ path = \"/assembly\", string = \"<second/>\" },\n\
+        \tmanifest = {\n\
+        \t\tcustomStrings = {\n\
+        \t\t\t{ path = \"/assembly\", string = \"<first/>\" },\n\
+        \t\t\t{ path = \"/assembly\", string = \"<second/>\" },\n\
+        \t\t},\n\
         \t},\n\
         }\n";
 
@@ -449,7 +584,7 @@ fn a_repeating_setting_repeats() {
 /// Two values become **one** line, which is the whole of what separates a
 /// repeating *position* from a repeating line.
 ///
-/// `manifestSupportedOS` and `manifestAppendCustomString` are both a Lua list of
+/// `manifest.supportedOS` and `manifest.customStrings` are both a Lua list of
 /// what one value is, and the golden only ever writes one element of either, so
 /// the difference between them is checked here or nowhere.
 #[test]
@@ -457,7 +592,7 @@ fn a_repeating_position_fills_one_line() {
     let source = "attributes {\n\
         \toutFile = \"a.exe\",\n\
         \tname = \"a\",\n\
-        \tmanifestSupportedOS = { \"Win7\", \"Win10\" },\n\
+        \tmanifest = { supportedOS = { \"Win7\", \"Win10\" } },\n\
         }\n";
 
     let mut diags = Diagnostics::new();
@@ -635,7 +770,7 @@ fn an_open_enum_takes_what_it_does_not_list() {
         "attributes {{\n\
          \toutFile = \"a.exe\",\n\
          \tname = \"a\",\n\
-         \tmanifestSupportedOS = {{ \"Win10\", \"{GUID}\" }},\n\
+         \tmanifest = {{ supportedOS = {{ \"Win10\", \"{GUID}\" }} }},\n\
          }}\n"
     );
 
@@ -661,9 +796,9 @@ fn an_open_enum_takes_what_it_does_not_list() {
 fn a_repeating_position_wants_a_list() {
     const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
     for (what, written) in [
-        ("not a list at all", "manifestSupportedOS = \"Win10\""),
-        ("an empty list", "manifestSupportedOS = {}"),
-        ("a named entry", "manifestSupportedOS = { os = \"Win10\" }"),
+        ("not a list at all", "manifest = { supportedOS = \"Win10\" }"),
+        ("an empty list", "manifest = { supportedOS = {} }"),
+        ("a named entry", "manifest = { supportedOS = { os = \"Win10\" } }"),
         (
             "a value it cannot reach",
             "fileErrorText = { withoutIgnore = \"x\" }",
@@ -686,15 +821,15 @@ fn a_repeating_setting_wants_a_list() {
     for (what, written) in [
         (
             "not a list at all",
-            "manifestAppendCustomString = \"/assembly\"",
+            "manifest = { customStrings = \"/assembly\" }",
         ),
         (
             "the parts of one line where the lines go",
-            "manifestAppendCustomString = { path = \"/assembly\", string = \"<x/>\" }",
+            "manifest = { customStrings = { path = \"/assembly\", string = \"<x/>\" } }",
         ),
         (
             "an element that is not a table",
-            "manifestAppendCustomString = { \"/assembly\" }",
+            "manifest = { customStrings = { \"/assembly\" } }",
         ),
     ] {
         let source = format!("{PRELUDE}{written} }}");

@@ -363,6 +363,46 @@ fn the_version_info_fields_are_the_ones_the_compiler_takes() {
 }
 
 #[test]
+fn every_nested_group_the_stub_offers_is_the_one_the_compiler_reads() {
+    // The class per group and the field that points at it, both ways. A group
+    // is the one construct where a stub can be *plausible* and wrong — the
+    // fields all exist, and only the table they are written in is different —
+    // so a rename that reached the overlay and not the stub would look right in
+    // an editor and fail at the compiler.
+    let meta = meta();
+    for group in installua::lower::attribute_groups() {
+        let mut chars = group.chars();
+        let class = format!(
+            "installua.{}{}",
+            chars.next().expect("a group has a name").to_ascii_uppercase(),
+            chars.as_str()
+        );
+
+        assert!(
+            inherited(&meta, "installua.Attributes")
+                .iter()
+                .any(|field| field == group),
+            "`{group} = {{ … }}` compiles and `installua.Attributes` does not offer it"
+        );
+
+        let offered = inherited(&meta, &class);
+        assert!(!offered.is_empty(), "`{class}` is offered by nothing");
+        for field in installua::lower::group_fields(group) {
+            assert!(
+                offered.iter().any(|name| name == field),
+                "`{group}.{field}` compiles and `{class}` does not offer it"
+            );
+        }
+        for field in &offered {
+            assert!(
+                installua::lower::group_fields(group).contains(&field.as_str()),
+                "`{class}` offers `{field}` and there is no `{group}.{field}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn every_control_field_and_option_the_stub_offers_is_one_the_compiler_accepts() {
     // The two control classes, from the tables the lowering reads. Nothing had
     // drifted here — which is the point of checking: this is the surface a

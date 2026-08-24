@@ -1919,10 +1919,10 @@ pub const ROWS: &[Row] = &[
     // `restype` and `resname` are `#N` or a type NSIS knows by name, never an
     // arbitrary word, and `Setting::Str` says only "a string". That narrowing is
     // NSIS's rather than this language's, so it lives in the example the way
-    // `peSubsysVer`'s does and not on the row.
+    // `subsystemVersion`'s does and not on the row.
     attribute(
         "PEAddResource",
-        "peAddResource",
+        "portableExecutable.addResource",
         Setting::Each(&Setting::Table(&[
             part("file", PATH),
             part("restype", STR),
@@ -1937,7 +1937,7 @@ pub const ROWS: &[Row] = &[
     // `makensis` rejects, which is worse than offering nothing.
     attribute(
         "PERemoveResource",
-        "peRemoveResource",
+        "portableExecutable.removeResource",
         Setting::Each(&Setting::Table(&[
             part("restype", STR),
             part("resname", STR),
@@ -1949,12 +1949,12 @@ pub const ROWS: &[Row] = &[
     // has to say that nothing is removed — and a table makes that one write.
     attribute(
         "PEDllCharacteristics",
-        "peDllCharacteristics",
+        "portableExecutable.dllCharacteristics",
         Setting::Table(&[part("add", Setting::Int), part("remove", Setting::Int)]),
     ),
     // `major.minor`, which is a string and not a number: `5.1` as a Lua number
     // would round-trip through a float and arrive as `5.1` only by luck.
-    attribute("PESubsysVer", "peSubsysVer", STR),
+    attribute("PESubsysVer", "portableExecutable.subsystemVersion", STR),
     // MUI2 emits `XPStyle On` unconditionally, from inside `MUI_INTERFACE`, so
     // the only value a user could want is `off` and it is exactly the one that
     // cannot work: whichever line lands last wins, silently, and `-WX` sees
@@ -1979,27 +1979,27 @@ pub const ROWS: &[Row] = &[
     // and NSIS would reject the line the compiler built.
     attribute(
         "ManifestAppendCustomString",
-        "manifestAppendCustomString",
+        "manifest.customStrings",
         Setting::Each(&Setting::Table(&[part("path", STR), part("string", STR)])),
     ),
-    attribute("ManifestDPIAware", "manifestDpiAware", TRUEFALSE),
+    attribute("ManifestDPIAware", "manifest.dpiAware", TRUEFALSE),
     // A comma-separated list in one string, which NSIS parses and this compiler
     // does not: `"PerMonitorV2,system"` is one argument to both.
-    attribute("ManifestDPIAwareness", "manifestDpiAwareness", STR),
-    attribute("ManifestLongPathAware", "manifestLongPathAware", TRUEFALSE),
+    attribute("ManifestDPIAwareness", "manifest.dpiAwareness", STR),
+    attribute("ManifestLongPathAware", "manifest.longPathAware", TRUEFALSE),
     // The row says `Enum` and nothing else. That the position repeats is
     // `-CMDHELP`'s `[...]`, and that the seven names do not close the set is its
-    // `{GUID}` — so `manifestSupportedOS = { "Win7", "Win10" }` and
+    // `{GUID}` — so `manifest.supportedOS = { "Win7", "Win10" }` and
     // `{ "{e2011457-1546-43c5-a5fe-008deee3d3f0}" }` are both this one line.
-    attribute("ManifestSupportedOS", "manifestSupportedOS", Setting::Enum),
+    attribute("ManifestSupportedOS", "manifest.supportedOS", Setting::Enum),
     // `maj.min.bld.rev`, a string for the same reason as `PESubsysVer`.
-    attribute("ManifestMaxVersionTested", "manifestMaxVersionTested", STR),
+    attribute("ManifestMaxVersionTested", "manifest.maxVersionTested", STR),
     attribute(
         "ManifestDisableWindowFiltering",
-        "manifestDisableWindowFiltering",
+        "manifest.disableWindowFiltering",
         NOTSET,
     ),
-    attribute("ManifestGdiScaling", "manifestGdiScaling", NOTSET),
+    attribute("ManifestGdiScaling", "manifest.gdiScaling", NOTSET),
     directive("!packhdr"),
     directive("!finalize"),
     directive("!uninstfinalize"),
