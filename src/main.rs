@@ -46,12 +46,24 @@ enum Command {
     Emit {
         #[command(flatten)]
         args: BuildArgs,
+
+        /// Write to stdout
+        #[arg(long)]
+        stdout: bool,
     },
 
     /// Compile, then run `makensis -WX`
     Build {
         #[command(flatten)]
         args: BuildArgs,
+
+        /// Declared, so the refusal below can explain itself rather than
+        /// leaving clap to say "unexpected argument"; hidden, so `build --help`
+        /// never offers a flag `build` will not honour. `hide` keeps it out of
+        /// the help and nothing else — it still parses, which is the whole
+        /// point.
+        #[arg(long, hide = true)]
+        stdout: bool,
     },
 
     /// `-CMDHELP` bucket counts (§14)
@@ -78,11 +90,9 @@ enum Command {
 
 /// The arguments `emit` and `build` share.
 ///
-/// Shared rather than written twice so the two cannot drift, and `--stdout`
-/// stays declared on `build` even though `build` refuses it: refusing it with
-/// the reason (there is no file for `makensis` to read) is a better answer than
-/// clap's "unexpected argument", and clap can only give that answer for a flag
-/// it knows about.
+/// Shared rather than written twice so the two cannot drift. `--stdout` is
+/// *not* here: it is the one argument the two commands treat differently, so
+/// each declares its own and the difference is visible where it is decided.
 #[derive(Args)]
 struct BuildArgs {
     /// The program to compile
@@ -92,10 +102,6 @@ struct BuildArgs {
     /// Write here instead of alongside the input
     #[arg(short, long, value_name = "FILE.NSI")]
     output: Option<PathBuf>,
-
-    /// Write to stdout (`emit` only)
-    #[arg(long)]
-    stdout: bool,
 }
 
 /// `installua generate`: the maintainer's half, kept out of the help.
@@ -125,8 +131,8 @@ enum Generate {
 fn main() -> ExitCode {
     match Cli::parse().command {
         Command::Check { files } => check(&files),
-        Command::Emit { args } => build(&args, false),
-        Command::Build { args } => build(&args, true),
+        Command::Emit { args, stdout } => build(&args, stdout, false),
+        Command::Build { args, stdout } => build(&args, stdout, true),
         Command::Coverage => coverage(),
         Command::Init { dir } => init(&dir),
         Command::Stubs { dir } => stubs(&dir),
@@ -167,11 +173,11 @@ fn check(files: &[PathBuf]) -> ExitCode {
     }
 }
 
-fn build(args: &BuildArgs, assemble: bool) -> ExitCode {
+fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
     // Before the compile, not after it: the invocation is wrong whatever the
     // program says, and reporting a program's diagnostics first would bury the
     // one message that is actually actionable.
-    if args.stdout && assemble {
+    if stdout && assemble {
         return usage_error("`--stdout` has no script for `makensis` to read; use `emit`");
     }
 
@@ -193,7 +199,7 @@ fn build(args: &BuildArgs, assemble: bool) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    if args.stdout {
+    if stdout {
         print!("{nsi}");
         return ExitCode::SUCCESS;
     }
