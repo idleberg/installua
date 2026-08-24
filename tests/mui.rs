@@ -7,6 +7,8 @@
 
 use installua::mui::{self, Class};
 
+mod common;
+
 #[test]
 fn every_snapshot_name_has_an_inventory_row() {
     let missing: Vec<&str> = mui::inventory()
@@ -143,12 +145,17 @@ fn the_defines_the_compiler_writes_are_exactly_the_exposed_ones() {
 }
 
 /// The snapshot against a local NSIS, the way `tests/census.rs` checks
-/// `-CMDHELP` against a local `makensis`.
+/// `-CMDHELP` against a local `makensis` — and, with `UPDATE_SNAPSHOTS` set,
+/// the thing that writes it.
 ///
 /// Keyed on `NSISDIR` and skipped when it is unset, because MUI2 is a directory
 /// of headers rather than a program that can be asked where it is: there is no
 /// `makensis` flag that prints its own `$NSISDIR`, so the one thing this test
 /// cannot do is find it for you.
+///
+/// ```text
+/// NSISDIR=… UPDATE_SNAPSHOTS=1 cargo test --test mui
+/// ```
 #[test]
 fn the_snapshot_matches_the_local_mui2() {
     let Ok(nsis) = std::env::var("NSISDIR") else {
@@ -162,10 +169,9 @@ fn the_snapshot_matches_the_local_mui2() {
             return;
         }
     };
-    let snapshot = std::fs::read_to_string("tables/mui-3.12.txt").expect("the snapshot");
-    assert_eq!(
-        local, snapshot,
-        "the local Modern UI 2 and tables/mui-3.12.txt disagree: regenerate the \
-         snapshot and classify whatever is new"
+    common::check_or_update(
+        "tables/mui-3.12.txt",
+        &local,
+        "classify whatever is new in `mui::rows`",
     );
 }

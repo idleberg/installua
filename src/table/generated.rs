@@ -2,7 +2,7 @@
 //!
 //!
 //! ```text
-//! cargo run -q -- table tables/cmdhelp-3.12.txt > /tmp/generated.rs
+//! cargo run -q -- generate table tables/cmdhelp-3.12.txt > /tmp/generated.rs
 //! mv /tmp/generated.rs src/table/generated.rs
 //! ```
 //!

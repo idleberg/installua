@@ -1,7 +1,7 @@
 # Installua — build plan
 
 `PREPLAN.md` is the design: 31 rulings, most of them verified against real `makensis`.
-`LANGUAGE.md` is the surface reference. **This file is the build order**, and nothing here
+`docs/reference-map.md` is the surface reference. **This file is the build order**, and nothing here
 re-argues a decision — where a phase depends on a ruling it cites the section and moves on.
 
 Provisional name. §15.19 made generated labels carry a neutral prefix rather than a product
@@ -358,7 +358,7 @@ at the moment they need it, with the semantic trap named where it would have bit
 ## 6. Repo
 
 Same repository. Commit the PoC as-is first so it stays recoverable by tag, then rename the
-crate and rebuild `src/`. `examples/`, `tests/golden/`, `PREPLAN.md` and `LANGUAGE.md` stay.
+crate and rebuild `src/`. `examples/`, `tests/golden/` and `PREPLAN.md` stay.
 The PoC becomes a reference to diff against, never a foundation to inherit — §9-2's warning
 is that nsL's architecture *was* the bug, and incremental refactor tends to preserve the
 shape you are trying to escape.

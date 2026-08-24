@@ -664,7 +664,7 @@ fn a_callback_carries_the_half_that_owns_it() {
 /// The seven instructions the fields and the events write are `lowering-target`
 /// rows and not `todo` ones, which is §5's retired-instruction diagnostic
 /// rather than a census entry: a user who reaches for `SendMessage` is told the
-/// field to write, and gets it in the compiler rather than in `LANGUAGE.md`.
+/// field to write, and gets it in the compiler rather than in a document.
 ///
 /// None of them could have been `exposed`. A call needs a handle, and every
 /// handle there is belongs to a control this compiler drew — so the field *is*

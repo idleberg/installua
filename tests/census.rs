@@ -17,7 +17,6 @@ use std::process::Command;
 use installua::table::{self, Class, Dir, Kind, Note, overlay};
 
 const SNAPSHOT: &str = include_str!("../tables/cmdhelp-3.12.txt");
-const LANGUAGE: &str = include_str!("../LANGUAGE.md");
 
 #[test]
 fn every_command_is_classified() {
@@ -183,7 +182,7 @@ fn the_generated_table_matches_the_snapshot() {
         parsed.len(),
         generated.len(),
         "src/table/generated.rs has {} rows, the snapshot has {}: regenerate it \
-         with `cargo run -q -- table tables/cmdhelp-3.12.txt`",
+         with `cargo run -q -- generate table tables/cmdhelp-3.12.txt`",
         generated.len(),
         parsed.len()
     );
@@ -464,15 +463,3 @@ fn coverage_matches_its_golden() {
     assert_eq!(table::coverage(), expected);
 }
 
-#[test]
-fn language_md_is_the_census() {
-    // `LANGUAGE.md` is generated, and a generated document nobody regenerates
-    // is worse than none: it reads as current. So the checked-in file is the
-    // golden, and adding an overlay row without refreshing it fails here.
-    assert_eq!(
-        table::doc::language(SNAPSHOT),
-        LANGUAGE,
-        "LANGUAGE.md is stale: regenerate it with \
-         `cargo run -q -- language tables/cmdhelp-3.12.txt > LANGUAGE.md`"
-    );
-}

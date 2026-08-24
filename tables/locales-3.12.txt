@@ -5,7 +5,7 @@
 # writes — `PortugueseBR` is `${LANG_PORTUGUESEBR}`, verified against 3.12.
 # Regenerate with:
 #
-#     cargo run -q -- locales "$NSISDIR" > tables/locales-3.12.txt
+#     NSISDIR="..." UPDATE_SNAPSHOTS=1 cargo test --test locales
 
 Afrikaans
 Albanian

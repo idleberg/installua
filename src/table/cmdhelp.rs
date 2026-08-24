@@ -604,7 +604,7 @@ pub fn generate(snapshot: &str) -> String {
          //!\n\
          //!\n\
          //! ```text\n\
-         //! cargo run -q -- table tables/cmdhelp-3.12.txt > /tmp/generated.rs\n\
+         //! cargo run -q -- generate table tables/cmdhelp-3.12.txt > /tmp/generated.rs\n\
          //! mv /tmp/generated.rs src/table/generated.rs\n\
          //! ```\n\
          //!\n\

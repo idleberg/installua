@@ -102,9 +102,8 @@ their replacement, rather than names that silently do nothing.
 | [docs/lua-shaped-not-lua.md](docs/lua-shaped-not-lua.md) | If you know Lua: what this language does not have, and why. |
 | [examples/](examples/) | Five complete programs, each with the `.nsi` it must produce. |
 
-`LANGUAGE.md` is the generated checklist — one row per NSIS command, sorted
-alphabetically. It answers *is this done yet*; the reference answers *how do I
-write this*.
+The reference answers *how do I write this*; `installua coverage` answers *is
+this done yet*, one line per bucket over all 276 NSIS commands.
 
 ## Status
 

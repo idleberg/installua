@@ -5,10 +5,10 @@
 
 # Installua Reference
 
-The user-facing half of [LANGUAGE.md](../LANGUAGE.md). Where that file is a
-checklist — one row per NSIS command, sorted alphabetically, answering *is it
-done* — this one is a reference: things grouped by what a person is trying to
-do, each with a description, a signature and something you can paste.
+The surface reference. Where `installua coverage` is a census — bucket counts
+over every NSIS command, answering *is it done* — this one is a reference:
+things grouped by what a person is trying to do, each with a description, a
+signature and something you can paste.
 
 **Reading an entry.** The heading is the NSIS or MUI2 name, because that is what
 you already know and what search engines have indexed. Everything under it is
@@ -1281,7 +1281,7 @@ document must not stay. Most of it is already in the tables:
 | Part of an entry | Where it comes from today |
 | --- | --- |
 | Heading (NSIS name) | `Row::nsis` |
-| Signature | `table::doc::call`, the same function `LANGUAGE.md`'s third column uses |
+| Signature | a call renderer over `Instruction`, the shape `src/table/doc.rs` used to print before it was retired with `LANGUAGE.md` |
 | Return type | `Instruction::outputs()` and the `Ty` of each |
 | Options list | `Row::options`, the `Offer` names |
 | Example | `Row::example` — already written, already compiled |
@@ -1292,8 +1292,8 @@ document must not stay. Most of it is already in the tables:
 | **Group** | **new: `Row::group`** |
 | **Description** | **new: `Row::blurb`, one or two sentences** |
 
-So the generator is `src/table/reference.rs` beside `doc.rs`, a
-`cargo run -q -- reference > docs/reference-map.md` arm beside `language`, and two
+So the generator is `src/table/reference.rs`, a
+`cargo run -q -- generate reference > docs/reference-map.md` arm beside `generate table`, and two
 new fields the census can require exactly the way it requires a class today — a
 command with no group is a census failure, which is what stops a new NSIS
 version quietly adding an undocumented command.

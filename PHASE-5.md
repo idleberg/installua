@@ -26,7 +26,7 @@ compiler rather than listing the ones somebody remembered.
 cargo test                                   # 79 tests
 cargo run -q -- coverage
 cargo run -q -- init my-installer && cargo run -q -- stubs my-installer
-cargo run -q -- table tables/cmdhelp-3.12.txt > /tmp/g.rs && mv /tmp/g.rs src/table/generated.rs
+cargo run -q -- generate table tables/cmdhelp-3.12.txt > /tmp/g.rs && mv /tmp/g.rs src/table/generated.rs
 ```
 
 The census as it stands:

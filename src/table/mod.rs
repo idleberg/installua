@@ -22,7 +22,6 @@
 //! update (§14).
 
 pub mod cmdhelp;
-pub mod doc;
 pub mod generated;
 pub mod overlay;
 
@@ -235,8 +234,7 @@ pub enum Kind {
     /// numbering to keep in step with the first.
     ///
     /// A row with one is reached through the name rather than called, which is
-    /// what [`crate::table::doc`] prints and what keeps `handle.text` out of the
-    /// generated function stubs.
+    /// what keeps `handle.text` out of the generated function stubs.
     Bound,
 }
 

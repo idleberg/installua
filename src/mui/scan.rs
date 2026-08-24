@@ -124,7 +124,7 @@ fn header(deprecated: &[String], constructed: &BTreeSet<String>) -> String {
 # Columns: what the name is, the name, what MUI2's text does with it, where it
 # is first seen, and the `!macro` that line sits in. Regenerate with:
 #
-#     cargo run -q -- mui \"$NSISDIR\" > tables/mui-3.12.txt
+#     NSISDIR=\"...\" UPDATE_SNAPSHOTS=1 cargo test --test mui
 #
 # Tags, each a fact about the text and none of them a judgement:
 #

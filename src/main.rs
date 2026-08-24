@@ -19,10 +19,6 @@ usage:
   installua coverage                     `-CMDHELP` bucket counts (§14)
   installua init [dir]                   installua.toml, .luarc.json, selene.toml
   installua stubs [dir]                  .installua/meta/*.lua and the selene std
-  installua table <cmdhelp.txt>          regenerate the instruction skeletons
-  installua language <cmdhelp.txt>       regenerate LANGUAGE.md's table (§14)
-  installua mui <nsis dir>               regenerate the MUI2 snapshot (§14)
-  installua locales <nsis dir>           regenerate the NLF snapshot (§15.26)
 
 options:
   -o <file.nsi>   write here instead of alongside the input
@@ -32,6 +28,30 @@ options:
 `emit` is for wiring Installua into an existing build; `build` owns the
 `makensis` invocation, which is what lets it rewrite `makensis`\'s diagnostics
 back onto the Lua source (\u{a7}15.22).";
+
+/// `installua generate`: the maintainer's half, kept out of [`USAGE`].
+///
+/// One arm, where there were four. Two were NSIS scrapers and moved into the
+/// drift tests that already read what they write; the third generated
+/// `LANGUAGE.md`, which `docs/reference-map.md` and `installua coverage`
+/// between them had already replaced.
+///
+/// What is left is the one that generates *Rust*, and it stays a command for
+/// the reason the others could stop being one: its output has to compile before
+/// the test that checks it can run, so it cannot live inside that test.
+///
+/// Hidden rather than removed, because `cargo test` fails when
+/// `src/table/generated.rs` and the snapshot drift, and the failure has to name
+/// the command that fixes it.
+const GENERATE_USAGE: &str = "\
+usage:
+  installua generate table <cmdhelp.txt>      src/table/generated.rs
+
+Prints to stdout; the workflow is a redirect into the file named above.
+
+The NSIS scrapers are not here: `tables/mui-3.12.txt` and
+`tables/locales-3.12.txt` are written by the drift tests that already read them,
+with `NSISDIR=... UPDATE_SNAPSHOTS=1 cargo test`.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -49,11 +69,28 @@ fn main() -> ExitCode {
         Some((&"coverage", rest)) => coverage(rest),
         Some((&"init", rest)) => init(rest),
         Some((&"stubs", rest)) => stubs(rest),
-        Some((&"table", rest)) => table(rest),
-        Some((&"language", rest)) => language(rest),
-        Some((&"mui", rest)) => mui(rest),
-        Some((&"locales", rest)) => locales(rest),
+        Some((&"generate", rest)) => generate(rest),
         Some((other, _)) => usage_error(&format!("unknown command `{other}`")),
+    }
+}
+
+/// The `generate` arms, dispatched one level down.
+///
+/// An unknown name here reports against [`GENERATE_USAGE`] and not [`USAGE`]:
+/// someone who typed `generate` has already found the hidden half, and showing
+/// them the user-facing commands instead would be the one answer that cannot
+/// help.
+fn generate(args: &[&str]) -> ExitCode {
+    match args.split_first() {
+        None => generate_usage_error("`generate` needs a command"),
+        Some((&"-h" | &"--help", _)) => {
+            println!("{GENERATE_USAGE}");
+            ExitCode::SUCCESS
+        }
+        Some((&"table", rest)) => table(rest),
+        Some((other, _)) => {
+            generate_usage_error(&format!("unknown `generate` command `{other}`"))
+        }
     }
 }
 
@@ -311,32 +348,19 @@ fn stubs(args: &[&str]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `installua table <cmdhelp.txt>`: the generator half of §15.23's join.
+/// `installua generate table <cmdhelp.txt>`: the generator half of §15.23's join.
 ///
 /// Prints Rust source; the workflow is a shell redirect into
 /// `src/table/generated.rs`, and `cargo test` fails if the checked-in file and
 /// the snapshot ever disagree.
 fn table(args: &[&str]) -> ExitCode {
     let [snapshot] = args else {
-        return usage_error("`table` needs exactly one snapshot file");
+        return generate_usage_error("`generate table` needs exactly one snapshot file");
     };
     let Some(text) = read(Path::new(snapshot)) else {
         return ExitCode::from(2);
     };
     print!("{}", installua::table::cmdhelp::generate(&text));
-    ExitCode::SUCCESS
-}
-
-/// `installua language`: the §14 census as the correspondence table
-/// `LANGUAGE.md` is, so the document cannot outlive the rows it describes.
-fn language(args: &[&str]) -> ExitCode {
-    let [snapshot] = args else {
-        return usage_error("`language` needs exactly one snapshot file");
-    };
-    let Some(text) = read(Path::new(snapshot)) else {
-        return ExitCode::from(2);
-    };
-    print!("{}", installua::table::doc::language(&text));
     ExitCode::SUCCESS
 }
 
@@ -362,36 +386,7 @@ fn usage_error(message: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
-/// `installua locales <nsis dir>`: the NLF names, listed (§15.26).
-fn locales(args: &[&str]) -> ExitCode {
-    let [root] = args else {
-        return usage_error("`locales` needs exactly one NSIS directory");
-    };
-    match installua::locale::scan(Path::new(root)) {
-        Ok(text) => {
-            print!("{text}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("installua: {error}");
-            ExitCode::from(2)
-        }
-    }
-}
-
-/// `installua mui <Modern UI 2 dir>`: the MUI inventory's snapshot half.
-fn mui(args: &[&str]) -> ExitCode {
-    let [root] = args else {
-        return usage_error("`mui` needs exactly one NSIS directory");
-    };
-    match installua::mui::scan::scan(Path::new(root)) {
-        Ok(text) => {
-            print!("{text}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("installua: {error}");
-            ExitCode::from(2)
-        }
-    }
+fn generate_usage_error(message: &str) -> ExitCode {
+    eprintln!("installua: {message}\n\n{GENERATE_USAGE}");
+    ExitCode::from(2)
 }

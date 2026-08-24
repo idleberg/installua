@@ -4,7 +4,7 @@
 # installed (§14). Regenerate with:
 #
 #     makensis -CMDHELP > tables/cmdhelp-3.12.txt   # then re-add this header
-#     cargo run -q -- table tables/cmdhelp-3.12.txt > src/table/generated.rs
+#     cargo run -q -- generate table tables/cmdhelp-3.12.txt > src/table/generated.rs
 #
 # `tests/census.rs` diffs both directions: the generated file against this
 # snapshot, and this snapshot against whatever `makensis` is on PATH (skipped

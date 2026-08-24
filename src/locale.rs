@@ -85,7 +85,7 @@ fn edit_distance(left: &str, right: &str) -> usize {
     previous[right.len()]
 }
 
-/// `installua locales <nsis dir>`: the snapshot, regenerated.
+/// The snapshot, regenerated: `tests/locales.rs` under `UPDATE_SNAPSHOTS`.
 ///
 /// The scan is a directory listing, so unlike [`crate::mui::scan`] there is
 /// nothing to parse and nothing that can be misread — the only failure is a
@@ -126,6 +126,6 @@ const HEADER: &str = "\
 # writes — `PortugueseBR` is `${LANG_PORTUGUESEBR}`, verified against 3.12.
 # Regenerate with:
 #
-#     cargo run -q -- locales \"$NSISDIR\" > tables/locales-3.12.txt
+#     NSISDIR=\"...\" UPDATE_SNAPSHOTS=1 cargo test --test locales
 
 ";
