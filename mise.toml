@@ -1,0 +1,63 @@
+[tools]
+hk = "latest"
+pkl = "latest"
+python = "3.14"
+
+# `rust` is deliberately absent: rust-toolchain.toml pins 1.97 with clippy and
+# rustfmt, and rustup honours it. A `rust` entry here would shadow that pin and
+# the two would drift.
+
+[env]
+HK_MISE = 1
+NSISDIR = '''{{ exec(command="makensis -HDRINFO 2>/dev/null | tr ',' '\n' | grep '^NSISDIR=' | cut -d= -f2 || true") }}'''
+
+[hooks]
+postinstall = "hk install --mise"
+
+[tasks.build]
+description = "Builds the project in release mode"
+depends = ["build:release", "build:dll"]
+
+[tasks."build:release"]
+description = "Builds the project in release mode"
+run = "cargo build --release"
+
+[tasks."build:dll"]
+description = "Builds DLL with a version resource"
+dir = "tests/fixtures"
+run = "python3 make-version-dll.py"
+
+[tasks.check]
+description = "The three gates, in the order a failure is cheapest to read"
+depends = "build:dll"
+run = ["cargo test", "mise run lint", "cargo fmt --check"]
+
+# The two halves hk drives (see hk.pkl): `format` is its `fix`, `lint` its
+# `check`. Split out so the pre-commit hook and `check` cannot drift apart.
+
+[tasks.format]
+description = "cargo fmt — hk's pre-commit fix step"
+run = "cargo fmt"
+
+[tasks.lint]
+description = "cargo clippy — hk's pre-commit check step"
+run = "cargo clippy --all-targets -- --deny warnings"
+
+[tasks.coverage]
+description = "tests/golden/coverage.txt — the §14 census"
+run = "cargo run -q -- coverage > tests/golden/coverage.txt"
+
+[tasks.goldens]
+description = "tests/golden/overlay-{examples,attributes}.{lua,nsi}"
+run = "cargo test --test overlay -- --ignored write_the_golden"
+
+[tasks.snapshot]
+description = "src/table/generated.rs — the -CMDHELP skeletons"
+run = [
+  "cargo run -q -- generate table tables/cmdhelp-3.12.txt > target/generated.rs",
+  "mv target/generated.rs src/table/generated.rs",
+  # The generator writes one `Shape` per line and `rustfmt` explodes each into
+  # eight; the committed file is the formatted one, so leaving this out makes the
+  # task look like it rewrote 4,500 lines every time it ran.
+  "cargo fmt",
+]
