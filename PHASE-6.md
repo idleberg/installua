@@ -3271,6 +3271,75 @@ fifteenth control kind, not for today.
 
 Five more tests, mutation-checked the same way. 329 → 338.
 
+## Batch 57 — a setting whose sibling decides whether NSIS reads it at all
+
+The bullet asked for a `Setting` that could say *"meaningful only when a sibling holds one
+value"*, and the row it was written about carried a comment saying the opposite: NSIS reads
+`SetCompressorDictSize` for LZMA only, *"which is a fact about the value and not a shape"*.
+
+Measuring is what overturned that. `makensis` does not ignore it silently:
+
+```
+SetCompressor zlib
+SetCompressorDictSize 64     warning 8026: compressor is not set to LZMA. Effectively ignored.
+
+SetCompressor lzma
+SetCompressionLevel 9        warning 8025: compressor is set to LZMA. Effectively ignored.
+```
+
+A fact `makensis` states by name, at build time, is a shape. Two further measurements
+decided what the shape has to carry. The two settings **partition** the compressors between
+them, which is why neither was worth a variant alone and both are worth one together. And
+with no `SetCompressor` at all, the dictionary size still warns — NSIS's default is zlib, so
+the sibling's absence is a *value* rather than a third state, and a check that read only what
+was written would miss the case a user would least expect to be wrong.
+
+```rust
+Only {
+    of: &'static Setting,
+    sibling: &'static str,
+    holds: &'static [&'static str],
+    default: &'static str,
+}
+```
+
+It wraps another `Setting`, the way `Each` does, because the constraint says nothing about
+what the value *is*: the field is still an `Int` wherever it is read. And `holds` is the
+enumerated complement rather than a negation with an `is not` flag — the sibling's enum is
+closed, so the row that wants zlib and bzip2 names them.
+
+### Checked where the siblings are
+
+`ignored_settings` runs over the block's fields before any of them is emitted, and
+`setting` unwraps the `Only` to the shape it wraps before anything reads the value. That
+split is the whole of it: this is the first constraint in the table that cannot be decided
+from the field, because every case is a legal `Int` beside a legal compressor.
+
+```
+error[ignored-setting]: `compressorDictSize` is read only when `compressor` is `lzma`
+  note: no `compressor` is set, so it is `zlib` — NSIS's own default
+  note: NSIS accepts `SetCompressorDictSize` here and ignores it, which is a warning and
+        so an error under `-WX`
+```
+
+**Ordering was already handled and was never enough.** `compressor` has sorted to the front
+of `attributes {}` since the batch that found `SetCompressor` cannot follow a changed header
+— and NSIS reads the compressor *as of the line*, so `SetCompressorDictSize` written above
+`SetCompressor lzma` is ignored even though the pair is right. The sort is what makes the
+correct pairing correct; `Only` is what makes the incorrect one refusable.
+
+### The test suite already knew
+
+`EXCLUSIVE` and the `REAL` entry beside it both existed, both explained warnings 8025 and
+8026 in prose, and both said the dependency *"is deferred to `makensis`, which states it by
+name"*. It is not deferred any more, and the two comments were the first thing to fix: the
+derived program that writes every attribute now stays legal because the compiler says so,
+not because `-WX` would have caught it.
+
+Two tests, and the second matters as much as the first — the negative one would pass just as
+well against a rule that refused both fields outright, so its twin asserts that the pairs
+NSIS *does* read are emitted, with `SetCompressor` ahead of them. 338 → 340.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -3311,9 +3380,12 @@ Five more tests, mutation-checked the same way. 329 → 338.
   ordinary: a reason that restates the **input** — two alternatives, one of them a DLL — and
   never says what the compiler cannot do about it. One of its two clauses named a mechanism
   built to handle exactly that, already handling it for the row above.
-- **A `Setting` cannot say "meaningful only when a sibling holds one value".**
-  `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
-  `makensis` is the only thing that knows. Third cross-field constraint in two batches.
+- ~~**A `Setting` cannot say "meaningful only when a sibling holds one value".**~~
+  **Closed by batch 57.** `Setting::Only` is the shape, and the reason it took three
+  appearances to arrive is on the row itself: the comment there called the LZMA dependency
+  *"a fact about the value and not a shape"*, and nobody had run `makensis` to find that it
+  says so by name at build time. The bullet was right that `makensis` was the only thing
+  that knew; what it did not say is that asking it was a two-minute job.
 - **`MUI_STARTMENUPAGE` is newly expressible and not yet written.** It was unspellable
   under a bare list of page names, because its macro takes arguments; under `page.*` it is
   another page with fields — and batch 33 found the rest of what it needs: the macro takes

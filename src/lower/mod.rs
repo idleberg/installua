@@ -2169,6 +2169,12 @@ impl<'p> Lowerer<'_, 'p> {
             _ => 1,
         });
 
+        // The cross-field constraints, before anything is emitted — see
+        // [`Self::ignored_settings`]. Ordering the block was never enough for
+        // these two: `SetCompressorDictSize` beside `SetCompressor zlib` is
+        // ignored in whichever order the two lines are written.
+        self.ignored_settings(&fields);
+
         for field in fields {
             let TableField::Named { name, value } = field else {
                 self.todo(span, "a positional entry in `attributes {}`");
@@ -2225,6 +2231,87 @@ impl<'p> Lowerer<'_, 'p> {
         }
     }
 
+    /// The settings NSIS would read and then ignore, refused before they are
+    /// emitted.
+    ///
+    /// A [`table::Setting::Only`] is read only when a sibling field holds one of
+    /// a few values. `makensis` says so itself — *warning 8026:
+    /// SetCompressorDictSize: compressor is not set to LZMA. Effectively
+    /// ignored.* — which means the failure is already caught by tier 3, but only
+    /// for a program somebody wrote a fixture for, and with the NSIS command's
+    /// name on it rather than the field's. §11's rule is that a user does not
+    /// meet this at all.
+    ///
+    /// Here rather than in [`Self::setting`] because the constraint is about the
+    /// **block**: it is the one per-field fact that cannot be decided from the
+    /// field. The page world already has this shape one level down — a `Form`'s
+    /// `needs`, which is what makes the start menu page's registry triple
+    /// unspellable as a pair.
+    fn ignored_settings(&mut self, fields: &[&TableField]) {
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                continue;
+            };
+            let Some(entry) = table::by_installua(&name.text) else {
+                continue;
+            };
+            let table::Class::Attribute(table::Setting::Only {
+                sibling,
+                holds,
+                default,
+                ..
+            }) = entry.class
+            else {
+                continue;
+            };
+
+            let written = fields.iter().find_map(|field| match field {
+                TableField::Named { name, value } if name.text == sibling => Some(value),
+                _ => None,
+            });
+            // The sibling's value, or NSIS's default for it. An absent
+            // `compressor` is `zlib` and not "no compressor", which is why the
+            // field that wants LZMA is as wrong on its own as it is beside
+            // `bzip2` — and is the case a check that read only what was written
+            // would let through.
+            let effective = match written {
+                // Not a constant, or not a string: the sibling's own row says so
+                // with `bad-field-value`, and a second diagnostic about a value
+                // nobody could read would be noise on top of it.
+                Some(expr) => match self.constant(expr) {
+                    Some(value) => value.text(),
+                    None => continue,
+                },
+                None => default.to_string(),
+            };
+            if holds.contains(&effective.as_str()) {
+                continue;
+            }
+
+            let diagnostic = Diagnostic::error(
+                Code::IgnoredSetting,
+                value.span(),
+                format!(
+                    "`{}` is read only when `{sibling}` is {}{}",
+                    name.text,
+                    if holds.len() > 1 { "one of " } else { "" },
+                    list(holds)
+                ),
+            );
+            let diagnostic = match written {
+                Some(_) => diagnostic.note(format!("`{sibling}` is `{effective}` here")),
+                None => diagnostic.note(format!(
+                    "no `{sibling}` is set, so it is `{effective}` — NSIS's own default"
+                )),
+            };
+            self.diags.push(diagnostic.note(format!(
+                "NSIS accepts `{}` here and ignores it, which is a warning and so an error \
+                 under `-WX`",
+                entry.nsis
+            )));
+        }
+    }
+
     /// One `attributes {}` field, lowered from its row.
     ///
     /// The whole of the per-field knowledge is [`table::Setting`], so this is
@@ -2246,6 +2333,14 @@ impl<'p> Lowerer<'_, 'p> {
                 )),
             );
             return;
+        };
+
+        // The cross-field constraint has already been checked, in
+        // [`Self::ignored_settings`] where the siblings are; what is left of the
+        // shape is the one it wraps, which is what the value has to be.
+        let holds = match holds {
+            table::Setting::Only { of, .. } => *of,
+            other => other,
         };
 
         match holds {
@@ -2365,6 +2460,11 @@ impl<'p> Lowerer<'_, 'p> {
                     None
                 }
             },
+            // An `Only` never reaches here: [`Self::setting`] unwraps it to the
+            // shape it wraps before anything reads the value, because the
+            // constraint is about which fields are written together and not
+            // about what any one of them holds.
+            table::Setting::Only { of, .. } => self.value_arg(*of, param, field, line, value),
             // All four are shapes rather than values: a table, an `Off` and an
             // `Each` are more than one of these, and `Handled` is not lowered
             // here at all.

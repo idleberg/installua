@@ -246,6 +246,12 @@ pub enum Code {
     DuplicateBlock,
     /// A required attribute that no block supplied.
     MissingAttribute,
+    /// A setting NSIS would accept and then ignore, because a sibling field
+    /// decides whether it is read at all: `compressorDictSize` is LZMA's, and
+    /// beside any other compressor it is a line that does nothing. `makensis`
+    /// warns rather than refusing, which is a diagnostic naming the NSIS command
+    /// and arriving only under `-WX`.
+    IgnoredSetting,
 
     // -- loading (§15.28)
     /// An `include` whose file is missing, unreadable, or has no directory to
@@ -312,6 +318,7 @@ impl Code {
         Code::BadFieldValue,
         Code::DuplicateBlock,
         Code::MissingAttribute,
+        Code::IgnoredSetting,
         Code::IncludeNotFound,
         Code::IncludeCycle,
         Code::IncludeForm,
@@ -357,6 +364,7 @@ impl Code {
             Code::BadFieldValue => "bad-field-value",
             Code::DuplicateBlock => "duplicate-block",
             Code::MissingAttribute => "missing-attribute",
+            Code::IgnoredSetting => "ignored-setting",
             Code::IncludeNotFound => "include-not-found",
             Code::IncludeCycle => "include-cycle",
             Code::IncludeForm => "include-form",

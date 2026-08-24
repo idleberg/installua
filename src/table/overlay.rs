@@ -1564,13 +1564,39 @@ pub const ROWS: &[Row] = &[
     // that exists would be withholding the common case for the rare one.
     attribute("SetCompress", "compress", Setting::Enum),
     attribute("SetCompressor", "compressor", Setting::Enum),
-    // `dict_size_mb`, so an `Int` in megabytes. NSIS reads it for LZMA only and
-    // ignores it otherwise, which is a fact about the value and not a shape.
-    attribute("SetCompressorDictSize", "compressorDictSize", Setting::Int),
+    // `dict_size_mb`, so an `Int` in megabytes — and LZMA's alone. The comment
+    // that stood here called that "a fact about the value and not a shape", and
+    // measuring is what overturned it: `makensis` emits *warning 8026:
+    // SetCompressorDictSize: compressor is not set to LZMA. Effectively
+    // ignored.*, which this compiler's own `-WX` turns into an error naming the
+    // NSIS command rather than the field.
+    attribute(
+        "SetCompressorDictSize",
+        "compressorDictSize",
+        Setting::Only {
+            of: &Setting::Int,
+            sibling: "compressor",
+            holds: &["lzma"],
+            default: "zlib",
+        },
+    ),
     // `level_0-9` in the snapshot, which is an `Int` with a range no `Setting`
     // can state. `makensis` states it — *Invalid compression level* — and by
     // name, so deferring costs a worse message and nothing else.
-    attribute("SetCompressionLevel", "compressionLevel", Setting::Int),
+    //
+    // The exact complement of the row above, and warning 8025 is its exact
+    // mirror: the two settings partition the compressors between them, which is
+    // why neither is worth a shape alone and both are worth one together.
+    attribute(
+        "SetCompressionLevel",
+        "compressionLevel",
+        Setting::Only {
+            of: &Setting::Int,
+            sibling: "compressor",
+            holds: &["zlib", "bzip2"],
+            default: "zlib",
+        },
+    ),
     attribute("SetDateSave", "dateSave", ONOFF),
     exposed(
         "SetDetailsView",

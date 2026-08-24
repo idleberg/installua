@@ -137,6 +137,13 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\nattributes { name = \"b\" }",
     ),
     (Code::MissingAttribute, r#"attributes { name = "Spine" }"#),
+    // The sibling is absent rather than wrong, which is the case that reads
+    // least like an error: `compressor` defaults to zlib, and zlib does not read
+    // a dictionary size.
+    (
+        Code::IgnoredSetting,
+        r#"attributes { outFile = "a.exe", compressorDictSize = 64 }"#,
+    ),
     (
         Code::IncludeNotFound,
         "attributes { outFile = \"a.exe\" }\ninclude(\"missing.lua\")",

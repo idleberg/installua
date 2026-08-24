@@ -18,7 +18,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use installua::diag::Diagnostics;
+use installua::diag::{Code, Diagnostics};
 use installua::table::{self, Class};
 
 /// The whole exposed surface, as one installer.
@@ -221,6 +221,10 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
         // lines naming the same resource is an error the second time. That a
         // list of two becomes two lines is [`a_repeating_setting_repeats`].
         table::Setting::Each(one) => format!("{{ {} }}", derived(entry, index, field, *one)),
+        // The value is whatever the shape it wraps takes; which *sibling* has to
+        // stand beside it is [`REAL`]'s business, and the row it constrains is
+        // in [`EXCLUSIVE`] precisely because one program cannot satisfy both.
+        table::Setting::Only { of, .. } => derived(entry, index, field, *of),
         table::Setting::Handled(_) => unreachable!("filtered above"),
     }
 }
@@ -261,8 +265,9 @@ const REAL: &[(&str, &str, &str)] = &[
     // LZMA, and NSIS says so — `warning 8026: compressor is not set to LZMA.
     // Effectively ignored.` — which `-WX` turns into a failure. The first
     // keyword the snapshot lists is `zlib`, so this test has to name the
-    // compressor its own dictionary size implies. The dependency is real for
-    // authors too and is deferred to `makensis`, which states it by name.
+    // compressor its own dictionary size implies. It is no longer only
+    // `makensis` that says so: `Setting::Only` is that dependency in the table,
+    // so this line is now what keeps the derived program compiling at all.
     ("SetCompressor", "compressor", "\"lzma\""),
 ];
 
@@ -275,6 +280,10 @@ const REAL: &[(&str, &str, &str)] = &[
 /// script can carry both. The one left out is covered by
 /// [`compression_level_assembles_against_a_compressor_that_reads_it`], because
 /// skipping it here must not mean skipping it.
+///
+/// Since `Setting::Only`, the exclusion is the compiler's own: a program that
+/// wrote both would not reach `makensis` to be warned at. This list is what
+/// keeps the derived program on the legal side of a rule it now states itself.
 const EXCLUSIVE: &[&str] = &["SetCompressionLevel"];
 
 #[test]
@@ -315,6 +324,89 @@ fn a_table_setting_wants_every_part() {
             diags.has_errors(),
             "`{what}` compiled: {}",
             diags.render("table-setting.lua")
+        );
+    }
+}
+
+/// The pair NSIS accepts and ignores, refused instead.
+///
+/// `Setting::Only` is the first constraint in this table that is about **two**
+/// fields, so it is the first that cannot be checked from the field's own value:
+/// every case below is a legal `Int` beside a legal compressor. Three, and the
+/// third is the one that matters — an absent `compressor` is `zlib` and not
+/// "no compressor", so `compressorDictSize` written alone is the case a user
+/// would least expect to be wrong and the one `makensis` warns about anyway.
+#[test]
+fn a_setting_the_compressor_would_have_nsis_ignore_is_refused() {
+    const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
+
+    for (what, written, expected) in [
+        (
+            "a dictionary size beside a compressor that does not read it",
+            "compressor = \"bzip2\", compressorDictSize = 64",
+            "`compressor` is `bzip2` here",
+        ),
+        (
+            "a level beside the one compressor that does not read it",
+            "compressor = \"lzma\", compressionLevel = 9",
+            "`compressor` is `lzma` here",
+        ),
+        (
+            "a dictionary size with no compressor at all",
+            "compressorDictSize = 64",
+            "no `compressor` is set, so it is `zlib`",
+        ),
+    ] {
+        let source = format!("{PRELUDE}{written} }}");
+        let mut diags = Diagnostics::new();
+        let _ = installua::build(&source, &mut diags);
+
+        let rendered = diags.render("only.lua");
+        assert!(
+            diags
+                .iter()
+                .any(|diagnostic| diagnostic.code == Code::IgnoredSetting),
+            "`{what}` compiled: {rendered}"
+        );
+        // The note is the half a user acts on: the message says what is needed
+        // and this says what is there instead.
+        assert!(rendered.contains(expected), "`{what}`: {rendered}");
+    }
+}
+
+/// And the pairs NSIS does read are emitted, in the order it reads them.
+///
+/// The negative test above would pass just as well against a rule that refused
+/// the two fields outright, which is why this one is beside it. `SetCompressor`
+/// leads because NSIS reads the compressor **as of the line** — the dictionary
+/// size written first is ignored even when the compressor below it is LZMA —
+/// and a Lua table has no order to get right (§12).
+#[test]
+fn a_setting_the_compressor_reads_is_emitted_after_it() {
+    for (written, line) in [
+        (
+            "compressorDictSize = 64, compressor = \"lzma\"",
+            "SetCompressorDictSize 64",
+        ),
+        (
+            "compressionLevel = 9, compressor = \"bzip2\"",
+            "SetCompressionLevel 9",
+        ),
+    ] {
+        let source = format!("attributes {{ outFile = \"a.exe\", name = \"a\", {written} }}\n");
+        let mut diags = Diagnostics::new();
+        let built = installua::build(&source, &mut diags).unwrap_or_default();
+        assert!(!diags.has_errors(), "{}", diags.render("only.lua"));
+
+        let compressor = built
+            .find("SetCompressor ")
+            .unwrap_or_else(|| panic!("no `SetCompressor` in:\n{built}"));
+        let dependent = built
+            .find(line)
+            .unwrap_or_else(|| panic!("no `{line}` in:\n{built}"));
+        assert!(
+            compressor < dependent,
+            "`{line}` is written before the compressor it depends on:\n{built}"
         );
     }
 }

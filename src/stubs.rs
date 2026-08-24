@@ -412,6 +412,13 @@ fn bare_type(entry: &table::Instruction, field: &str, holds: table::Setting) -> 
         // because the repetition is of the *line*, which is the whole of what
         // the inner type describes.
         table::Setting::Each(one) => format!("{}[]", bare_type(entry, field, *one)),
+        // The type the field has where it is read at all. LuaCATS cannot say
+        // "only beside this sibling" — there is no annotation for a constraint
+        // between two fields of one table — so the editor offers the name and
+        // the compiler is where the pairing is checked. A `---@field` that
+        // withheld the type instead would lose completion on the case that
+        // works, to describe the case that does not.
+        table::Setting::Only { of, .. } => bare_type(entry, field, *of),
     }
 }
 

@@ -318,6 +318,34 @@ pub enum Setting {
     /// in NSIS's prose, so it is a variant here rather than a bit read off the
     /// skeleton.
     Each(&'static Setting),
+    /// Read by NSIS only when a **sibling** field holds one of these values.
+    ///
+    /// `SetCompressorDictSize` is LZMA's and `SetCompressionLevel` is the other
+    /// two compressors', and `makensis` says so at build time — *"compressor is
+    /// not set to LZMA. Effectively ignored."* — as a warning, which under this
+    /// compiler's own `-WX` is an error with the NSIS command's name on it and
+    /// not the field's. The row above these two used to call that *"a fact about
+    /// the value and not a shape"*; a fact `makensis` states by name at build
+    /// time is a shape.
+    ///
+    /// Wrapping another [`Setting`] the way [`Setting::Each`] does, because the
+    /// constraint says nothing about what the value *is* — the field is still an
+    /// `Int` in the case where it is read at all.
+    ///
+    /// The sibling's enum is closed, so the negative case is written as the
+    /// enumerated complement and there is no "is not" flag to read: the row that
+    /// wants zlib and bzip2 names them rather than naming LZMA and negating.
+    Only {
+        of: &'static Setting,
+        sibling: &'static str,
+        holds: &'static [&'static str],
+        /// What the sibling means when nobody wrote it, which is a **value** and
+        /// not a third state: NSIS's default compressor is zlib, so the field
+        /// that wants LZMA is as wrong alone as it is beside `bzip2`. This is
+        /// the case a user would least expect, and the only one a check that
+        /// looked only at what was written would miss.
+        default: &'static str,
+    },
     /// Shaped by the block's own lowering instead: `unicode` sets a field of
     /// the module rather than emitting a line, and `versionInfo` is a nested
     /// table. The analogue of [`Offer::Handled`] one level up, and it carries
