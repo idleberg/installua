@@ -138,6 +138,32 @@ installer {
 }
 ```
 
+The page is installer-only, but `menu.folder` is **not**. MUI2 defines no
+`MUI_UNPAGE_STARTMENU`, so the uninstaller never ran a page and has nothing to
+read a variable from — it reads the folder back out of the registry instead.
+One spelling, two lowerings, and the block decides which:
+
+```lua
+uninstaller {
+	page.instFiles {},
+	section("Shortcuts", function()
+		delete(SMPROGRAMS .. "/" .. menu.folder .. "/Example.lnk")
+		rmDir(SMPROGRAMS .. "/" .. menu.folder)
+	end),
+}
+```
+
+Two consequences. `registry` is what makes that read return the folder the user
+actually picked: without it `MUI_STARTMENU_GETFOLDER` falls back to
+`defaultFolder`, so an uninstaller for a program installed anywhere else removes
+a directory nobody created and leaves the real one behind. It is the field that
+makes the two halves agree, not decoration. And `menu.write` is the installer's
+alone — the uninstaller had no page and so never chose a folder to write back.
+
+A `menu.folder` read inside a `func` is refused rather than guessed: a `func`
+can be called from either half, the two lowerings are different code, and
+picking wrong is silent because an empty variable copies without complaint.
+
 ### MUI_PAGE_INSTFILES
 
 **Usage** `page.instFiles { finishHeaderText = …, finishHeaderSubText = …, abortHeaderText = …, abortHeaderSubText = … }`

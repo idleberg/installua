@@ -63,6 +63,3 @@ tests/fixtures/emit-*.nsi
 
 # lua-language-server scratch (--logpath, --check_out_path)
 verification/**/.out*
-
-mise.*
-rust-toolchain.toml

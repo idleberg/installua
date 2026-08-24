@@ -3484,6 +3484,37 @@ two of the three hazards are only reachable with `cpu = "amd64"`, and a cross-ar
 stub is not on every machine that runs this suite — this one does not have it. Mutation-checked
 by dropping the two new ranks: the ordering test and both goldens fail. 347 → 348.
 
+## Batch 61 — the page that was finished and never assembled
+
+"Still open" said `MUI_STARTMENUPAGE` was *not yet written*. It was written: `page.startMenu`
+has a `local` binding, a three-field registry `Form`, a `Checkbox`, both halves of
+`menu.folder`, ten tests in `tests/pages.rs`, an entry in `docs/mui-reference.md` and a
+`---@class` in the stubs. The bullet outlived its own subject by twenty-eight batches, which
+is the same failure batch 55 opened this thread on — **something hand-written that nobody was
+checking** — applied for once to the prose rather than to the code.
+
+The real gap was underneath it. Every one of those ten tests is a string assertion, and
+`tests/golden/pages.lua` — the one golden that carries the page surface through tier 2 *and*
+real `makensis -WX` — listed all eight pages except this one. The most intricate page in the
+system, the only one bound to a `local` and the only one that lowers differently per half,
+had **never been assembled**.
+
+It assembles. Clean, exit 0, no warnings, in both configurations tried by hand first
+(`checkbox` as a string with a registry, and `checkbox = false` with none). So this batch
+found no bug — it found that the thing nobody had checked was fine, which is the outcome a
+check is supposed to be allowed to have.
+
+Two things were worth confirming while the probe was up:
+
+| claim | what `makensis` 3.12 says |
+| --- | --- |
+| the folder is a `Var` copy in one half and a registry read in the other | `StrCpy $0 $__GENERATED_sm_menu` under `…_WRITE_BEGIN`, `MUI_STARTMENU_GETFOLDER menu $0` in the uninstaller — both assemble |
+| `colors` is refused because MUI2 3.12 has a typo | `warning 6000: unknown variable/constant "mui.StartMenuMenu.FolderList" (macro:MUI_FUNCTION_STARTMENUPAGE:48)`, fatal under `-WX` |
+
+The second is why the rejection reason in `mui::rows` is worth its length: it names a
+variable, a file and a line, and all three still check out — so the row can be re-tested
+rather than believed. The page is now in `pages.lua` and assembles on every run.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -3530,11 +3561,15 @@ by dropping the two new ranks: the ordering test and both goldens fail. 347 → 
   *"a fact about the value and not a shape"*, and nobody had run `makensis` to find that it
   says so by name at build time. The bullet was right that `makensis` was the only thing
   that knew; what it did not say is that asking it was a two-minute job.
-- **`MUI_STARTMENUPAGE` is newly expressible and not yet written.** It was unspellable
+- ~~**`MUI_STARTMENUPAGE` is newly expressible and not yet written.**~~ **Closed by batch 61**,
+  and it had been closed by batch 33 for some time — the page was built, tested and documented
+  while the bullet describing it as unwritten sat here unstruck. It was unspellable
   under a bare list of page names, because its macro takes arguments; under `page.*` it is
   another page with fields — and batch 33 found the rest of what it needs: the macro takes
   an *id* and a *variable*, and its three registry defines only work as a set, which is the
-  same cross-field constraint `compressionLevel` wants. ~~The same goes for the settings
+  same cross-field constraint `compressionLevel` wants. What batch 61 found is that the
+  bullet was wrong about the noun: the gap was never the writing, it was the *checking*.
+  ~~The same goes for the settings
   with no NSIS command behind them, which no census row tracks.~~ **Closed by batch 33**:
   `installua coverage` now prints a second census, and there are 96 of them.
 - ~~**`SubCaption` and `UninstallSubCaption` are still blocked, and not by the page world.**~~

@@ -23,7 +23,7 @@ description = "Builds the project in release mode"
 run = "cargo build --release"
 
 [tasks."build:dll"]
-description = "Builds DLL with a version resource"
+description = "Builds fixture DLL with a version resource"
 dir = "tests/fixtures"
 run = "python3 make-version-dll.py"
 
