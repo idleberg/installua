@@ -1,7 +1,7 @@
 [tools]
 hk = "latest"
 pkl = "latest"
-python = "3.14"
+python = "latest"
 
 # `rust` is deliberately absent: rust-toolchain.toml pins 1.97 with clippy and
 # rustfmt, and rustup honours it. A `rust` entry here would shadow that pin and
