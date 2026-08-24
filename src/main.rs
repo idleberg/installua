@@ -5,31 +5,100 @@
 //! `installua::` call that an editor could make just as well.
 //!
 //! Exit codes: 0 success, 1 the source was rejected, 2 the invocation was.
+//! `clap` exits 2 on a bad invocation of its own accord, which is the same
+//! number this file used before it parsed its own arguments.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use clap::{Args, Parser, Subcommand};
+
 use installua::diag::Diagnostics;
 
-const USAGE: &str = "\
-usage:
-  installua check <file.lua>...          everything `build` would say, writing nothing
-  installua emit  <file.lua> [options]   compile to .nsi and stop
-  installua build <file.lua> [options]   compile, then run `makensis -WX`
-  installua coverage                     `-CMDHELP` bucket counts (§14)
-  installua init [dir]                   installua.toml, .luarc.json, selene.toml
-  installua stubs [dir]                  .installua/meta/*.lua and the selene std
+#[derive(Parser)]
+#[command(
+    name = "installua",
+    about = "A Lua-shaped language that compiles to NSIS.",
+    version,
+    // No command is not an error worth a bare message: the list of commands is
+    // the answer to what someone typing `installua` wanted to know.
+    arg_required_else_help = true,
+    after_help = "\
+`emit` is for wiring Installua into an existing build; `build` owns the \
+`makensis` invocation, which is what lets it rewrite `makensis`'s diagnostics \
+back onto the Lua source (§15.22)."
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
 
-options:
-  -o <file.nsi>   write here instead of alongside the input
-  --stdout        write to stdout (`emit` only)
-  -h, --help      this
+#[derive(Subcommand)]
+enum Command {
+    /// Everything `build` would say, writing nothing
+    Check {
+        /// The programs to check
+        #[arg(required = true, value_name = "FILE.LUA")]
+        files: Vec<PathBuf>,
+    },
 
-`emit` is for wiring Installua into an existing build; `build` owns the
-`makensis` invocation, which is what lets it rewrite `makensis`\'s diagnostics
-back onto the Lua source (\u{a7}15.22).";
+    /// Compile to .nsi and stop
+    Emit {
+        #[command(flatten)]
+        args: BuildArgs,
+    },
 
-/// `installua generate`: the maintainer's half, kept out of [`USAGE`].
+    /// Compile, then run `makensis -WX`
+    Build {
+        #[command(flatten)]
+        args: BuildArgs,
+    },
+
+    /// `-CMDHELP` bucket counts (§14)
+    Coverage,
+
+    /// installua.toml, .luarc.json, selene.toml
+    Init {
+        /// Where to write them
+        #[arg(value_name = "DIR", default_value = ".")]
+        dir: PathBuf,
+    },
+
+    /// .installua/meta/*.lua and the selene std
+    Stubs {
+        /// The project to read
+        #[arg(value_name = "DIR", default_value = ".")]
+        dir: PathBuf,
+    },
+
+    /// The maintainer's half, kept out of the help (see [`Generate`]).
+    #[command(hide = true, subcommand)]
+    Generate(Generate),
+}
+
+/// The arguments `emit` and `build` share.
+///
+/// Shared rather than written twice so the two cannot drift, and `--stdout`
+/// stays declared on `build` even though `build` refuses it: refusing it with
+/// the reason (there is no file for `makensis` to read) is a better answer than
+/// clap's "unexpected argument", and clap can only give that answer for a flag
+/// it knows about.
+#[derive(Args)]
+struct BuildArgs {
+    /// The program to compile
+    #[arg(value_name = "FILE.LUA")]
+    input: PathBuf,
+
+    /// Write here instead of alongside the input
+    #[arg(short, long, value_name = "FILE.NSI")]
+    output: Option<PathBuf>,
+
+    /// Write to stdout (`emit` only)
+    #[arg(long)]
+    stdout: bool,
+}
+
+/// `installua generate`: the maintainer's half, kept out of the help.
 ///
 /// One arm, where there were four. Two were NSIS scrapers and moved into the
 /// drift tests that already read what they write; the third generated
@@ -43,69 +112,32 @@ back onto the Lua source (\u{a7}15.22).";
 /// Hidden rather than removed, because `cargo test` fails when
 /// `src/table/generated.rs` and the snapshot drift, and the failure has to name
 /// the command that fixes it.
-const GENERATE_USAGE: &str = "\
-usage:
-  installua generate table <cmdhelp.txt>      src/table/generated.rs
-
-Prints to stdout; the workflow is a redirect into the file named above.
-
-The NSIS scrapers are not here: `tables/mui-3.12.txt` and
-`tables/locales-3.12.txt` are written by the drift tests that already read them,
-with `NSISDIR=... UPDATE_SNAPSHOTS=1 cargo test`.";
+#[derive(Subcommand)]
+enum Generate {
+    /// src/table/generated.rs, printed to stdout
+    Table {
+        /// `makensis -CMDHELP`, as checked in
+        #[arg(value_name = "CMDHELP.TXT")]
+        snapshot: PathBuf,
+    },
+}
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let args: Vec<&str> = args.iter().map(String::as_str).collect();
-
-    match args.split_first() {
-        None => usage_error("no command"),
-        Some((&"-h" | &"--help", _)) => {
-            println!("{USAGE}");
-            ExitCode::SUCCESS
-        }
-        Some((&"check", rest)) => check(rest),
-        Some((&"emit", rest)) => build(rest, false),
-        Some((&"build", rest)) => build(rest, true),
-        Some((&"coverage", rest)) => coverage(rest),
-        Some((&"init", rest)) => init(rest),
-        Some((&"stubs", rest)) => stubs(rest),
-        Some((&"generate", rest)) => generate(rest),
-        Some((other, _)) => usage_error(&format!("unknown command `{other}`")),
+    match Cli::parse().command {
+        Command::Check { files } => check(&files),
+        Command::Emit { args } => build(&args, false),
+        Command::Build { args } => build(&args, true),
+        Command::Coverage => coverage(),
+        Command::Init { dir } => init(&dir),
+        Command::Stubs { dir } => stubs(&dir),
+        Command::Generate(Generate::Table { snapshot }) => table(&snapshot),
     }
 }
 
-/// The `generate` arms, dispatched one level down.
-///
-/// An unknown name here reports against [`GENERATE_USAGE`] and not [`USAGE`]:
-/// someone who typed `generate` has already found the hidden half, and showing
-/// them the user-facing commands instead would be the one answer that cannot
-/// help.
-fn generate(args: &[&str]) -> ExitCode {
-    match args.split_first() {
-        None => generate_usage_error("`generate` needs a command"),
-        Some((&"-h" | &"--help", _)) => {
-            println!("{GENERATE_USAGE}");
-            ExitCode::SUCCESS
-        }
-        Some((&"table", rest)) => table(rest),
-        Some((other, _)) => {
-            generate_usage_error(&format!("unknown `generate` command `{other}`"))
-        }
-    }
-}
-
-fn check(args: &[&str]) -> ExitCode {
-    if args.is_empty() {
-        return usage_error("`check` needs at least one file");
-    }
-
+fn check(files: &[PathBuf]) -> ExitCode {
     let mut failed = false;
-    for arg in args {
-        if arg.starts_with('-') {
-            return usage_error(&format!("`check` takes no options, got `{arg}`"));
-        }
-        let path = PathBuf::from(arg);
-        let Some(source) = read(&path) else {
+    for path in files {
+        let Some(source) = read(path) else {
             return ExitCode::from(2);
         };
 
@@ -123,8 +155,8 @@ fn check(args: &[&str]) -> ExitCode {
         // included file declares is not an error, and a `check` that said it
         // was would be worse than no `check` at all (§15.28).
         let mut diags = Diagnostics::new();
-        installua::compile_with(&source, &installua::Options::for_file(&path), &mut diags);
-        report(&diags, &path);
+        installua::compile_with(&source, &installua::Options::for_file(path), &mut diags);
+        report(&diags, path);
         failed |= diags.has_errors();
     }
 
@@ -135,56 +167,41 @@ fn check(args: &[&str]) -> ExitCode {
     }
 }
 
-fn build(args: &[&str], assemble: bool) -> ExitCode {
-    let mut input: Option<PathBuf> = None;
-    let mut output: Option<PathBuf> = None;
-    let mut to_stdout = false;
-
-    let mut args = args.iter();
-    while let Some(arg) = args.next() {
-        match *arg {
-            "--stdout" => to_stdout = true,
-            "-o" => match args.next() {
-                Some(path) => output = Some(PathBuf::from(path)),
-                None => return usage_error("`-o` needs a path"),
-            },
-            other if other.starts_with('-') => {
-                return usage_error(&format!("unknown option `{other}`"));
-            }
-            other if input.is_none() => input = Some(PathBuf::from(other)),
-            other => return usage_error(&format!("unexpected argument `{other}`")),
-        }
+fn build(args: &BuildArgs, assemble: bool) -> ExitCode {
+    // Before the compile, not after it: the invocation is wrong whatever the
+    // program says, and reporting a program's diagnostics first would bury the
+    // one message that is actually actionable.
+    if args.stdout && assemble {
+        return usage_error("`--stdout` has no script for `makensis` to read; use `emit`");
     }
 
-    let Some(input) = input else {
-        return usage_error("`build` needs an input file");
-    };
-    let Some(source) = read(&input) else {
+    let input = &args.input;
+    let Some(source) = read(input) else {
         return ExitCode::from(2);
     };
 
     // Relative paths in the source resolve against the *source's* directory,
     // not the shell's: a `glob` means the same thing wherever the build is run
     // from, which is what makes the output reproducible (§14).
-    let options = installua::Options::for_file(&input);
+    let options = installua::Options::for_file(input);
 
     let mut diags = Diagnostics::new();
     let result = installua::build_mapped(&source, &options, &mut diags);
-    report(&diags, &input);
+    report(&diags, input);
 
     let Some((nsi, map)) = result else {
         return ExitCode::FAILURE;
     };
 
-    if to_stdout {
-        if assemble {
-            return usage_error("`--stdout` has no script for `makensis` to read; use `emit`");
-        }
+    if args.stdout {
         print!("{nsi}");
         return ExitCode::SUCCESS;
     }
 
-    let output = output.unwrap_or_else(|| input.with_extension("nsi"));
+    let output = args
+        .output
+        .clone()
+        .unwrap_or_else(|| input.with_extension("nsi"));
     if let Err(error) = std::fs::write(&output, nsi) {
         eprintln!("installua: cannot write {}: {error}", output.display());
         return ExitCode::from(2);
@@ -195,7 +212,7 @@ fn build(args: &[&str], assemble: bool) -> ExitCode {
 
     // The invocation is ours because the map cannot travel with the artifact:
     // NSIS can read its own line number and cannot be told a different one
-    // (\u{a7}15.22).
+    // (§15.22).
     let makensis = std::env::var("MAKENSIS").unwrap_or_else(|_| "makensis".to_string());
     let source_name = input.display().to_string();
     match installua::assemble::assemble(&output, &map, &source_name, diags.files(), &makensis) {
@@ -226,10 +243,7 @@ fn build(args: &[&str], assemble: bool) -> ExitCode {
 /// `todo` shows exactly which twelve in its diff. That is the whole reason the
 /// names are printed and not only the counts — a count going down says work
 /// happened, a name disappearing says which work.
-fn coverage(args: &[&str]) -> ExitCode {
-    if !args.is_empty() {
-        return usage_error("`coverage` takes no arguments");
-    }
+fn coverage() -> ExitCode {
     print!("{}", installua::table::coverage());
     ExitCode::SUCCESS
 }
@@ -239,13 +253,7 @@ fn coverage(args: &[&str]) -> ExitCode {
 /// Nothing is overwritten. A `.luarc.json` a user has edited is worth more than
 /// a fresh one, and `init` being safe to re-run is what makes "run init again
 /// after upgrading" reasonable advice.
-fn init(args: &[&str]) -> ExitCode {
-    let root = match args {
-        [] => PathBuf::from("."),
-        [dir] => PathBuf::from(dir),
-        _ => return usage_error("`init` takes at most one directory"),
-    };
-
+fn init(root: &Path) -> ExitCode {
     let name = root
         .canonicalize()
         .ok()
@@ -284,13 +292,7 @@ fn init(args: &[&str]) -> ExitCode {
 /// project* rather than about the language: `lua-language-server` cannot follow
 /// `include`, so the names a project's own sources declare have to be generated
 /// too (§15.28).
-fn stubs(args: &[&str]) -> ExitCode {
-    let root = match args {
-        [] => PathBuf::from("."),
-        [dir] => PathBuf::from(dir),
-        _ => return usage_error("`stubs` takes at most one directory"),
-    };
-
+fn stubs(root: &Path) -> ExitCode {
     let meta = root.join(".installua/meta");
     if let Err(error) = std::fs::create_dir_all(&meta) {
         eprintln!("installua: cannot create {}: {error}", meta.display());
@@ -298,7 +300,7 @@ fn stubs(args: &[&str]) -> ExitCode {
     }
 
     let mut sources: Vec<(String, String)> = Vec::new();
-    match std::fs::read_dir(&root) {
+    match std::fs::read_dir(root) {
         Ok(entries) => {
             let mut paths: Vec<PathBuf> = entries
                 .flatten()
@@ -353,11 +355,8 @@ fn stubs(args: &[&str]) -> ExitCode {
 /// Prints Rust source; the workflow is a shell redirect into
 /// `src/table/generated.rs`, and `cargo test` fails if the checked-in file and
 /// the snapshot ever disagree.
-fn table(args: &[&str]) -> ExitCode {
-    let [snapshot] = args else {
-        return generate_usage_error("`generate table` needs exactly one snapshot file");
-    };
-    let Some(text) = read(Path::new(snapshot)) else {
+fn table(snapshot: &Path) -> ExitCode {
+    let Some(text) = read(snapshot) else {
         return ExitCode::from(2);
     };
     print!("{}", installua::table::cmdhelp::generate(&text));
@@ -381,12 +380,9 @@ fn report(diags: &Diagnostics, path: &Path) {
     }
 }
 
+/// The one invocation error clap cannot raise, because it is about which
+/// subcommand a legal flag was given to.
 fn usage_error(message: &str) -> ExitCode {
-    eprintln!("installua: {message}\n\n{USAGE}");
-    ExitCode::from(2)
-}
-
-fn generate_usage_error(message: &str) -> ExitCode {
-    eprintln!("installua: {message}\n\n{GENERATE_USAGE}");
+    eprintln!("installua: {message}");
     ExitCode::from(2)
 }
