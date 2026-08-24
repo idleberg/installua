@@ -6,6 +6,7 @@ OutFile "pages.exe"
 Name "Pages"
 
 Var dataDir
+Var __GENERATED_sm_menu
 
 !define MUI_COMPONENTSPAGE_CHECKBITMAP "check.bmp"
 !define MUI_INSTFILESPAGE_COLORS "FFFFFF 000000"
@@ -37,6 +38,14 @@ Var dataDir
 !define MUI_DIRECTORYPAGE_TEXT_TOP "And where the data goes."
 !define MUI_DIRECTORYPAGE_VARIABLE $dataDir
 !insertmacro MUI_PAGE_DIRECTORY
+
+!define MUI_STARTMENUPAGE_DEFAULTFOLDER "Pages"
+!define MUI_STARTMENUPAGE_TEXT_TOP "Choose a Start Menu folder."
+!define MUI_STARTMENUPAGE_TEXT_CHECKBOX "Do not create shortcuts"
+!define MUI_STARTMENUPAGE_REGISTRY_ROOT "HKCU"
+!define MUI_STARTMENUPAGE_REGISTRY_KEY "Software/Pages"
+!define MUI_STARTMENUPAGE_REGISTRY_VALUENAME "StartMenuFolder"
+!insertmacro MUI_PAGE_STARTMENU menu $__GENERATED_sm_menu
 Page custom mui.custom.create mui.custom.leave "Registration"
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -51,9 +60,15 @@ UninstPage custom un.mui.custom.create
 
 Section "Core"
   WriteUninstaller "$INSTDIR\un.exe"
+  !insertmacro MUI_STARTMENU_WRITE_BEGIN menu
+  StrCpy $0 $__GENERATED_sm_menu
+  CreateDirectory "$SMPROGRAMS\$0"
+  !insertmacro MUI_STARTMENU_WRITE_END
 SectionEnd
 
 Section "un.Core"
+  !insertmacro MUI_STARTMENU_GETFOLDER menu $0
+  RMDir "$SMPROGRAMS\$0"
   Delete "$INSTDIR\un.exe"
 SectionEnd
 

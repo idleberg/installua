@@ -17,6 +17,21 @@ attributes {
 -- the chosen directory into it (§15.24).
 dataDir = ""
 
+-- The one page bound to a `local`, and the only one whose lowering differs
+-- between the two halves. `MUI_PAGE_STARTMENU` takes an id and a variable, so
+-- the page has a *name* install-time code addresses it by: the installer reads
+-- the `Var` the page filled, and the uninstaller — which has no page, since
+-- MUI2 defines no `MUI_UNPAGE_STARTMENU` — reads the registry back through
+-- `MUI_STARTMENU_GETFOLDER`. Both spellings are `menu.folder` below.
+local menu = page.startMenu {
+	defaultFolder = "Pages",
+	topText = "Choose a Start Menu folder.",
+	checkbox = "Do not create shortcuts",
+	-- One field holding three: `StartMenu.nsh` reads all three inside a single
+	-- `!ifdef … & … & …`, so any subset is a define nothing reads.
+	registry = { root = "HKCU", key = "Software/Pages", value = "StartMenuFolder" },
+}
+
 installer {
 	-- The four settings MUI2 writes inside an `!ifndef` interface guard, which
 	-- runs on the first page of its type and never again. They are the block's
@@ -62,6 +77,8 @@ installer {
 		variable = dataDir,
 	},
 
+	menu,
+
 	-- The eighth page, and the only one whose body is the compiler's: `Page
 	-- custom` names a creator and a leave function, so `pre` and `show` are
 	-- inlined either side of the dialog and `leave` becomes the second name on
@@ -87,6 +104,13 @@ installer {
 
 	section("Core", function()
 		writeUninstaller(INSTDIR .. "/un.exe")
+		-- `…_WRITE_BEGIN` skips the region when the user ticked *do not create
+		-- shortcuts*, and `…_WRITE_END` writes the chosen folder back to the
+		-- registry. Both are the installer's: the uninstaller has no page to
+		-- have chosen a folder with.
+		menu.write(function()
+			createDirectory(SMPROGRAMS .. "/" .. menu.folder)
+		end)
 	end),
 }
 
@@ -105,6 +129,10 @@ uninstaller {
 	page.instFiles {},
 
 	section("Core", function()
+		-- The other half of `menu.folder`: no page ever ran here, so this
+		-- lowers to `MUI_STARTMENU_GETFOLDER` reading the registry rather than
+		-- to a `Var` copy.
+		rmDir(SMPROGRAMS .. "/" .. menu.folder)
 		delete(INSTDIR .. "/un.exe")
 	end),
 }
