@@ -13,7 +13,7 @@ use installua::diag::Diagnostics;
 
 const USAGE: &str = "\
 usage:
-  installua check <file.lua>...          parse and check, emit nothing
+  installua check <file.lua>...          everything `build` would say, writing nothing
   installua emit  <file.lua> [options]   compile to .nsi and stop
   installua build <file.lua> [options]   compile, then run `makensis -WX`
   installua coverage                     `-CMDHELP` bucket counts (§14)
@@ -72,11 +72,21 @@ fn check(args: &[&str]) -> ExitCode {
             return ExitCode::from(2);
         };
 
-        // Following `include` here rather than checking the one file: a name
-        // an included file declares is not an error, and a `check` that said it
+        // Compiled and thrown away, rather than parsed and checked. Half the
+        // language's diagnostics are raised by the lowering — every unknown
+        // field, every retired instruction, every page and control error — so
+        // a `check` that stopped at the frontend exited 0 on programs `build`
+        // rejects, which is the one thing a check must never do.
+        //
+        // The cost is the lowering, which is the cheap half of a build: what
+        // `build` spends its time on is `makensis`, and that is exactly what
+        // this does not run.
+        //
+        // Following `include` for the same reason it always did: a name an
+        // included file declares is not an error, and a `check` that said it
         // was would be worse than no `check` at all (§15.28).
         let mut diags = Diagnostics::new();
-        installua::check_with(&source, &installua::Options::for_file(&path), &mut diags);
+        installua::compile_with(&source, &installua::Options::for_file(&path), &mut diags);
         report(&diags, &path);
         failed |= diags.has_errors();
     }

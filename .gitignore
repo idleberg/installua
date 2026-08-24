@@ -30,6 +30,13 @@ examples/*/assets/*.exe
 tests/fixtures/assembling.nsi
 tests/fixtures/*.exe
 
+# The same for tests/cli.rs, which writes a program where a relative path would
+# resolve from, runs the binary against it and removes it again.
+tests/fixtures/check-*.lua
+tests/fixtures/emit-*.lua
+tests/fixtures/check-*.nsi
+tests/fixtures/emit-*.nsi
+
 # `version.dll` is a fixture and not a build product: `GetDLLVersionLocal` needs
 # a real PE carrying a version resource, and `make-version-dll.py` beside it is
 # how this one was made. Named explicitly because a global excludes file that

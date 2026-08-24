@@ -103,6 +103,45 @@ pub fn attribute_groups() -> Vec<&'static str> {
 /// convention from quietly becoming a group in `attributes {}`.
 const BLOCK_OWNERS: &[&str] = &["installer", "uninstaller", "page"];
 
+/// What `attributes {}` has to emit before what, measured rather than guessed.
+///
+/// NSIS has no general rule here. A handful of commands refuse to run once
+/// something ahead of them has changed the header or chosen the stub, and every
+/// other attribute is indifferent — so the only honest way to find the handful
+/// was to ask `makensis`: each attribute line the overlay can write, moved to
+/// the front of the block and then to the back, assembled under `-WX`. Three
+/// fields answered, and the third was not a refusal at all:
+///
+/// | field | what `makensis` 3.12 says when it comes later |
+/// | --- | --- |
+/// | `cpu` | *Can't change target architecture after data already got compressed or header already changed!* — `brandingImage` and the `portableExecutable` rows all change the header. |
+/// | `compressor` | the same error, and *warning 8026: SetCompressorDictSize … Effectively ignored* when `compressorDictSize` is read first. |
+/// | `brandingImage` | nothing: `PERemoveResource` before `AddBrandingImage` **segfaults** `makensis`, exit −11, no diagnostic and no installer. |
+///
+/// That last one is why this is a list and not a rule of thumb. The other two
+/// announce themselves the first time somebody writes the table the wrong way
+/// round; a crash announces nothing, and a build that dies with no message is
+/// the one failure a user cannot act on.
+///
+/// `unicode` is absent because it is not a line the lowering places: it sets a
+/// field the emitter reads first (§15.16), so it is already ahead of everything
+/// here. Every field absent from this list ranks [`LATE`] and keeps the order
+/// it was written in, which a stable sort preserves.
+const ORDERED: &[(&str, u8)] = &[("cpu", 0), ("compressor", 1), ("brandingImage", 2)];
+
+/// The rank of an attribute with no ordering constraint.
+const LATE: u8 = 3;
+
+fn attribute_rank(field: &TableField) -> u8 {
+    let TableField::Named { name, .. } = field else {
+        return LATE;
+    };
+    ORDERED
+        .iter()
+        .find(|(ordered, _)| *ordered == name.text)
+        .map_or(LATE, |(_, rank)| *rank)
+}
+
 /// The group a name belongs to, when the name is a member written outside it.
 ///
 /// Two spellings reach here and both are the same mistake. `manifestGdiScaling`
@@ -2238,19 +2277,10 @@ impl<'p> Lowerer<'_, 'p> {
     // -- attributes -------------------------------------------------------
 
     fn attributes(&mut self, fields: &[TableField], span: Span) {
-        // `SetCompressor` first, whatever the author wrote first. NSIS refuses
-        // it *after the header has changed* — "can't change compressor after
-        // data already got compressed or header already changed!" — and
-        // `AddBrandingImage` changes the header, so `{ brandingImage = …,
-        // compressor = "lzma" }` would fail and the same table written the
-        // other way round would not. A Lua table has no order (§12), so the
-        // order is the compiler's, exactly as `VIProductVersion` before
-        // `VIAddVersionKey` is in [`Self::version_info`].
+        // A Lua table has no order (§12), so the order is the compiler's —
+        // see [`ORDERED`] for which fields need one and how that was measured.
         let mut fields: Vec<&TableField> = fields.iter().collect();
-        fields.sort_by_key(|field| match field {
-            TableField::Named { name, .. } if name.text == "compressor" => 0,
-            _ => 1,
-        });
+        fields.sort_by_key(|field| attribute_rank(field));
 
         // The cross-field constraints, before anything is emitted — see
         // [`Self::ignored_settings`]. Ordering the block was never enough for

@@ -2,9 +2,9 @@ Unicode true
 
 !include "TextFunc.nsh"
 
+AddBrandingImage top "20u"
 Name "Overlay examples"
 OutFile "examples.exe"
-AddBrandingImage top "20u"
 
 InstType "Full"
 InstType "Minimal"

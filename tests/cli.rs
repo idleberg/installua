@@ -97,7 +97,10 @@ fn check_says_what_emit_says() {
 #[test]
 fn check_passes_a_program_that_compiles() {
     let (passed, output) = run("check-clean.lua", CLEAN, "check");
-    assert!(passed, "`check` rejected a program that compiles:\n{output}");
+    assert!(
+        passed,
+        "`check` rejected a program that compiles:\n{output}"
+    );
     assert!(output.is_empty(), "`check` said something:\n{output}");
 }
 

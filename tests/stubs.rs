@@ -374,7 +374,10 @@ fn every_nested_group_the_stub_offers_is_the_one_the_compiler_reads() {
         let mut chars = group.chars();
         let class = format!(
             "installua.{}{}",
-            chars.next().expect("a group has a name").to_ascii_uppercase(),
+            chars
+                .next()
+                .expect("a group has a name")
+                .to_ascii_uppercase(),
             chars.as_str()
         );
 

@@ -1,5 +1,6 @@
 Unicode true
 
+CPU x86
 SetCompressor lzma
 AddBrandingImage top "20u" "2u"
 AutoCloseWindow true
@@ -26,7 +27,6 @@ ShowInstDetails hide
 ShowUninstDetails hide
 SilentInstall normal
 SilentUnInstall normal
-CPU x86
 UninstallCaption "uninstallCaption"
 WindowIcon on
 RequestExecutionLevel none

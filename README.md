@@ -74,6 +74,7 @@ install.lua:3:15: warning[dollar-in-literal]: `$INSTDIR` is emitted as literal t
 | Command | What it does |
 | --- | --- |
 | `installua build <file.lua>` | compile, then run `makensis -WX`. Exits non-zero on any error. |
+| `installua check <file.lua>...` | everything `build` would say, writing nothing and running no `makensis` — the fast gate for CI and editors |
 | `installua emit <file.lua>` | compile to `.nsi` and stop — for wiring into an existing build |
 | `installua stubs` | regenerate the editor meta files. Run it after adding a `func` or a global. |
 

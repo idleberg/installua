@@ -52,6 +52,13 @@ A file is a Lua program, read top to bottom, with no preprocessor. Declaration
 order does not matter (§15.6): every top-level name is resolved before any body
 is lowered, so a `func` may call one declared below it.
 
+The order of the fields *inside* `attributes {}` does not matter either, and for
+a different reason: NSIS has a handful of commands that refuse to run — or, in
+one case, crash — once something ahead of them has changed the header, so the
+compiler emits the block in an order it chose rather than the one you typed.
+Which fields those are was measured against `makensis` rather than reasoned
+about; the list is `ORDERED` in `src/lower/mod.rs`.
+
 ### Function / FunctionEnd
 
 Declares a function. Parameters and returns are ordinary Lua; the compiler

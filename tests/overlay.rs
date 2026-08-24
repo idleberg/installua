@@ -117,10 +117,11 @@ fn attribute_program() -> String {
     // that way: a dotted path is not a name `attributes {}` accepts, and a test
     // that skipped them would have quietly dropped twelve rows out of both
     // tiers on the day the manifest settings were nested.
-    for (group, entries) in [(None, flat_attributes())]
-        .into_iter()
-        .chain(groups().into_iter().map(|group| (Some(group), grouped(group))))
-    {
+    for (group, entries) in [(None, flat_attributes())].into_iter().chain(
+        groups()
+            .into_iter()
+            .map(|group| (Some(group), grouped(group))),
+    ) {
         if let Some(group) = group {
             source.push_str(&format!("\t{group} = {{\n"));
         }
@@ -224,9 +225,7 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
         // the compiler does not check it either: `subsystemVersion = "hello"`
         // reaches `makensis` and is rejected there. The values are here
         // rather than in the row because a row is not an example.
-        table::Setting::Str { path: false } if field == "subsystemVersion" => {
-            "\"5.1\"".to_string()
-        }
+        table::Setting::Str { path: false } if field == "subsystemVersion" => "\"5.1\"".to_string(),
         table::Setting::Str { path: false } if field == "maxVersionTested" => {
             "\"10.0.19041.0\"".to_string()
         }
@@ -395,11 +394,7 @@ fn a_group_written_wrong_says_where_the_field_lives() {
     const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
 
     for (what, written, expected) in [
-        (
-            "not a table at all",
-            "manifest = true",
-            "the fields are",
-        ),
+        ("not a table at all", "manifest = true", "the fields are"),
         (
             "a member that is not one",
             "manifest = { dpiAwear = true }",
@@ -796,9 +791,15 @@ fn an_open_enum_takes_what_it_does_not_list() {
 fn a_repeating_position_wants_a_list() {
     const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
     for (what, written) in [
-        ("not a list at all", "manifest = { supportedOS = \"Win10\" }"),
+        (
+            "not a list at all",
+            "manifest = { supportedOS = \"Win10\" }",
+        ),
         ("an empty list", "manifest = { supportedOS = {} }"),
-        ("a named entry", "manifest = { supportedOS = { os = \"Win10\" } }"),
+        (
+            "a named entry",
+            "manifest = { supportedOS = { os = \"Win10\" } }",
+        ),
         (
             "a value it cannot reach",
             "fileErrorText = { withoutIgnore = \"x\" }",
@@ -854,6 +855,65 @@ fn the_attributes_match_their_golden() {
         built, expected,
         "regenerate with:\n  cargo test --test overlay -- --ignored write_the_golden"
     );
+}
+
+/// The order of the block is the compiler's, and the author's order does not
+/// reach the output.
+///
+/// Written here in the worst order there is — every ordering-sensitive field
+/// after the field it has to precede — because the golden above proves only
+/// that *one* order assembles, and the one it records is already the safe one.
+/// A Lua table has no order (§12), so the order the author happened to type is
+/// not something the compiler may pass through.
+///
+/// The three constraints are `installua::lower`'s `ORDERED`, and each was
+/// measured against `makensis` rather than reasoned about. This asserts
+/// positions in the emitted text rather than assembling: two of the three are
+/// only reachable with `cpu = "amd64"`, and a cross-architecture stub is not on
+/// every machine that runs this suite.
+#[test]
+fn the_block_is_emitted_in_the_compilers_order_and_not_the_authors() {
+    let source = "\
+attributes {
+\tportableExecutable = { removeResource = { { restype = \"#5\", resname = \"#105\", reslang = \"ALL\" } } },
+\tbrandingImage = { edge = \"top\", size = \"20u\", padding = \"2u\" },
+\tcompressorDictSize = 1,
+\tcompressor = \"lzma\",
+\tcpu = \"amd64\",
+\tname = \"A\",
+\toutFile = \"a.exe\",
+}
+
+installer {
+\tsection(\"Core\", function()
+\t\tdetailPrint(\"installing\")
+\tend),
+}
+";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags)
+        .unwrap_or_else(|| panic!("{}", diags.render("ordering.lua")));
+
+    let at = |needle: &str| {
+        built
+            .find(needle)
+            .unwrap_or_else(|| panic!("`{needle}` is not in the output:\n{built}"))
+    };
+
+    // *Can't change target architecture after data already got compressed or
+    // header already changed!*
+    assert!(at("CPU amd64") < at("AddBrandingImage"), "{built}");
+    assert!(at("CPU amd64") < at("PERemoveResource"), "{built}");
+    // The same, plus warning 8026 when the dictionary size is read first.
+    assert!(at("SetCompressor lzma") < at("AddBrandingImage"), "{built}");
+    assert!(
+        at("SetCompressor lzma") < at("SetCompressorDictSize"),
+        "{built}"
+    );
+    // And the one that says nothing at all: `PERemoveResource` ahead of
+    // `AddBrandingImage` crashes `makensis` 3.12.
+    assert!(at("AddBrandingImage") < at("PERemoveResource"), "{built}");
 }
 
 #[test]

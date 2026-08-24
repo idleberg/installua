@@ -417,9 +417,7 @@ fn group_classes() -> String {
 }
 
 /// The `Attribute` rows one group owns, in table order.
-fn group_members(
-    group: &str,
-) -> Vec<(&'static table::Instruction, &'static str, table::Setting)> {
+fn group_members(group: &str) -> Vec<(&'static table::Instruction, &'static str, table::Setting)> {
     table::table()
         .iter()
         .filter_map(|entry| match entry.class {

@@ -87,8 +87,13 @@ impl Options {
     }
 }
 
-/// Parses and checks `source` without lowering it — what `installua check`
-/// runs, and what an editor would call on every keystroke.
+/// Parses and checks `source` without lowering it — what an editor would call
+/// on every keystroke.
+///
+/// **Not** what `installua check` runs: half the language's diagnostics come
+/// from the lowering, so the command runs [`compile_with`] and discards the
+/// module. What this is for is the caller that has to answer between
+/// keystrokes and can afford to be told the rest a moment later.
 ///
 /// Returns the checked tree even when diagnostics were raised, as long as the
 /// source parsed: a caller that wants the errors reads `diags`, and one that

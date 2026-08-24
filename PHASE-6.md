@@ -3399,6 +3399,91 @@ only dotted rows had been `versionInfo`'s `Handled` ones. Left alone it would ha
 twelve rows out of tiers 2 and 3 on the day they were nested, silently and while staying
 green. It now writes groups the way a user does. 340 → 343.
 
+## Batch 59 — the command whose name was a promise it did not keep
+
+`installua check` ran the frontend and the resolver and stopped. Its own usage line said
+*"parse and check, emit nothing"*, which is an accurate description of the implementation
+and a misleading one of the command: half this language's diagnostics are raised by the
+lowering, so `check` exited **0** on programs `build` rejects.
+
+```
+check rc=0   (silent)
+emit  rc=1   error[unknown-field]: `manifestGdiScaling` is not an attribute
+```
+
+Everything in that half passed it: every unknown field, every `nsis-retired` instruction,
+every `ignored-setting`, every page and every control error. A check that exits 0 on a
+program that does not compile is worse than no check, because it is the one a CI job gets
+wired to.
+
+The fix is one call — `compile_with` and discard the module — and the cost is the lowering,
+which is the cheap half of a build. What `build` spends its time on is `makensis`, and that
+is exactly what `check` still does not run.
+
+`installua::check_with` stays what it was, and its doc comment now says so out loud: it is
+for the caller that has to answer between keystrokes and can afford the rest a moment later.
+The command and the library function had the same name and were never the same promise.
+
+### The first test that runs the binary
+
+Every other test in this suite calls the library, which is the right level for a question
+about the language. This is a question about the *shell*: which pass a command runs is
+decided in `src/main.rs` and is visible nowhere else, and no library test could have caught
+this. `tests/cli.rs` writes a program where a relative path would resolve from, runs
+`CARGO_BIN_EXE_installua` against it and removes it again — the same shape tier 3 already
+uses for `makensis`.
+
+Four tests, and two of them exist because the obvious one is not enough. That `check` fails
+on a lowering error would pass against a `check` that failed on everything, so its twin
+asserts a clean program still exits 0 and says nothing. And *"everything `build` would
+say"* is a claim about **agreement**, so it is checked by running both and diffing the
+output rather than by remembering a string. Mutation-checked by putting `check_with` back:
+exactly the two intended tests failed. 343 → 347.
+
+## Batch 60 — the order of a block nobody wrote an order for
+
+`attributes {}` is a Lua table and a Lua table has no order (§12), so the order of the
+emitted block is the compiler's. Until now that order was **one hardcoded comparison** —
+`compressor` first, everything else in the order it was written — put there in batch 1
+because a golden went red, and never widened. "Still open" had said since then that there
+was no inventory and that a third hazard would be found by luck.
+
+Taking the inventory cost eight minutes, and it is the same method the `Setting::Only`
+question turned out to want in batch 57: **ask `makensis`**. Every attribute line the
+overlay golden can write, plus the two version-info lines, moved to the front of the block
+and then to the back — 108 assemblies under `-WX`. Three fields answered:
+
+| field | what `makensis` 3.12 says when it comes later |
+| --- | --- |
+| `cpu` | *Can't change target architecture after data already got compressed or header already changed!* |
+| `compressor` | the same error, and *warning 8026: SetCompressorDictSize … Effectively ignored* |
+| `brandingImage` | **nothing.** `PERemoveResource` before `AddBrandingImage` segfaults `makensis`: exit −11, no diagnostic, no installer. |
+
+`cpu` is the one that was already broken. It is an ordinary row emitted in table order —
+line 29 of the golden, *after* `AddBrandingImage` on line 4 — and the golden passed anyway
+because its value is `x86`, which is the default, and setting a thing to what it already is
+changes no header. `cpu = "amd64"` beside a branding image is a build that has never worked.
+A golden is a claim about one program, and the value that program happens to use is not
+part of the claim.
+
+`brandingImage` is why this is a list and not a rule of thumb. The other two hazards
+announce themselves the first time somebody writes the table the wrong way round; a
+**crash** announces nothing, and the probe found it only because it counted exit codes
+rather than reading messages. Three of the four "still open" ordering bullets in this file
+were written from an error message, which is a way of finding hazards that can only ever
+find the ones that speak.
+
+The mechanism is `ORDERED`, a three-row list in `src/lower/mod.rs` keyed by Installua field
+name, and a stable sort — so an unranked field keeps the order it was written in, which is
+what the goldens record. `unicode` is deliberately absent: it sets a field the emitter reads
+first (§15.16) and is already ahead of everything.
+
+The test writes the block in the **worst** order there is, every hazardous field after the
+field it must precede, and asserts positions in the emitted text rather than assembling:
+two of the three hazards are only reachable with `cpu = "amd64"`, and a cross-architecture
+stub is not on every machine that runs this suite — this one does not have it. Mutation-checked
+by dropping the two new ranks: the ordering test and both goldens fail. 347 → 348.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -3461,10 +3546,11 @@ green. It now writes groups the way a user does. 340 → 343.
   `Setting::Off` is the shape, and it arrived with the second row exactly as the
   metavariable bullet below asks a shape to: `BGGradient` and `SpaceTexts` were one
   backlog entry written twice, and neither was worth a shape alone.
-- **The attributes block has ordering hazards and no inventory.** Two are now handled —
-  `VIProductVersion` before `VIAddVersionKey`, `SetCompressor` before anything that touches
-  the header — and both were found by a golden failing rather than by looking. A third would
-  be found the same way, which is to say by luck.
+- ~~**The attributes block has ordering hazards and no inventory.**~~ **Closed by batch 60**,
+  and the inventory took eight minutes to take: every attribute line the overlay can write,
+  moved to the front of the block and then to the back, assembled under `-WX`. The bullet
+  was right that a third would be found by luck and wrong about what luck would have found —
+  the third hazard emits nothing at all.
 - ~~**A running program cannot name a section.**~~ **Closed by batches 22–26**, with the
   first of the three answers and its premise dropped: `section(…)` returns the handle, so
   there is no name for the compiler to invent. ~~What is left of the family is one row —
