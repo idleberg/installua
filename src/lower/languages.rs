@@ -199,6 +199,7 @@ impl Lowerer<'_, '_> {
             }
         }
         self.lang_strings = names.iter().map(|name| (*name).to_string()).collect();
+        self.locales = locales.iter().map(|locale| locale.name.clone()).collect();
     }
 
     /// `locales = { English = { … }, German = { … } }`.
@@ -526,7 +527,7 @@ impl Lowerer<'_, '_> {
         out
     }
 
-    fn unknown_locale(&mut self, name: &str, span: Span) {
+    pub(super) fn unknown_locale(&mut self, name: &str, span: Span) {
         let mut diagnostic = Diagnostic::error(
             Code::UnknownField,
             span,

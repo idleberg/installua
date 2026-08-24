@@ -407,6 +407,7 @@ page = {}
 ---@field required? boolean Always installed, with no box to untick.
 ---@field installTypes? string[] Which of the block's `installTypes` this belongs to.
 ---@field size? integer Extra kilobytes to charge, beyond the files installed.
+---@field description? string The words the components page shows on hover.
 local SectionOptions = {}
 
 ---@param name string
@@ -419,6 +420,7 @@ function section(name, body) end
 ---@field [1] string The group's heading, written first and without a key.
 ---@field sections table The sections it holds.
 ---@field expanded? boolean Opens the heading in the components tree.
+---@field description? string The words the components page shows on hover.
 local GroupOptions = {}
 
 ---@param name string
@@ -430,18 +432,23 @@ function group(name, sections) end
 -- What a bound `section` is at install time: the handle §13's binding
 -- produces. Every field is readable and writable, and the section index
 -- NSIS reads is the compiler's — it appears in no Installua source.
----@class (exact) installua.Section
+---@class (exact) installua.Selectable
 ---@field selected boolean Ticked in the components tree (`SF_SELECTED`).
 ---@field readOnly boolean Installed with no box to untick (`SF_RO`).
 ---@field bold boolean Drawn bold in the components tree (`SF_BOLD`).
 ---@field text string The row the tree draws; `""` draws none.
+local Selectable = {}
+
+---@class (exact) installua.Section : installua.Selectable
 ---@field size integer Kilobytes charged beyond the files installed.
 ---@field installTypes string[] Which of the block's `installTypes` it belongs to.
 local Section = {}
 
 -- A group is a section to NSIS — one index, one flags word — plus the
--- one bit only a heading has.
----@class (exact) installua.Group : installua.Section
+-- one bit only a heading has, and minus the two only a section has: a
+-- group is charged no space and belongs to no install type, because
+-- what it holds is sections and each of those answers for itself.
+---@class (exact) installua.Group : installua.Selectable
 ---@field expanded boolean Opens the heading in the components tree (`SF_EXPAND`).
 local Group = {}
 
@@ -504,13 +511,39 @@ function fileOpen(path, mode) end
 ---@class installua.File
 local File = {}
 
+function File:close() end
+
+---@param maxlen? integer
 ---@return string
-function File:read() end
+function File:read(maxlen) end
 
 ---@param text string
 function File:write(text) end
 
-function File:close() end
+---@return integer
+function File:readByte() end
+
+---@param bytevalue integer
+function File:writeByte(bytevalue) end
+
+---@param maxlen? integer
+---@return string
+function File:readUtf16Le(maxlen) end
+
+---@param text string
+---@param options? { bom: boolean }
+function File:writeUtf16Le(text, options) end
+
+---@return integer
+function File:readWord() end
+
+---@param wordvalue integer
+function File:writeWord(wordvalue) end
+
+---@param offset integer
+---@param mode? installua.Mode
+---@return integer
+function File:seek(offset, mode) end
 
 -- The controls a `page.custom` draws (§15.32), in §15.23's table form: the
 -- array part is the text the control is drawn with and the hash part is

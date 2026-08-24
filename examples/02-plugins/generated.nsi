@@ -16,6 +16,8 @@ Var gitDescribe
 
 !insertmacro MUI_LANGUAGE "English"
 
+ReserveFile /plugin UserInfo.dll
+
 Section "Core"
   SetOutPath $INSTDIR
   File "assets\tool.exe"

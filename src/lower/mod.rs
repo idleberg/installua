@@ -416,6 +416,45 @@ fn handle_field(name: &str) -> Option<HandleField> {
     })
 }
 
+/// Which of the seven a section has and which a group has, for the stub.
+///
+/// A group is a section to NSIS — one index, one flags word — and the two it
+/// does not have are the two only a section answers for: it is charged no space
+/// and belongs to no install type. The editor offered both for as long as its
+/// class simply inherited the other's.
+pub fn handle_field_surface() -> Vec<(&'static str, bool, bool)> {
+    HANDLE_FIELDS
+        .iter()
+        .map(|name| {
+            let on = match handle_field(name) {
+                Some(HandleField::Flag { on, .. }) => on,
+                Some(HandleField::Size | HandleField::InstallTypes) => Where::Sections,
+                _ => Where::Both,
+            };
+            (
+                *name,
+                on.accepts(DeferredKind::Section),
+                on.accepts(DeferredKind::Group),
+            )
+        })
+        .collect()
+}
+
+/// The `section(…)` options, and the `group(…)` options, which are the note the
+/// two errors read out — and the list a stub can be checked against.
+pub const SECTION_OPTIONS: &[&str] = &[
+    "optional",
+    "required",
+    "installTypes",
+    "size",
+    "description",
+];
+
+pub const GROUP_OPTIONS: &[&str] = &["expanded", "description"];
+
+/// The `versionInfo = { … }` fields, for the same reason.
+pub const VERSION_INFO_FIELDS: &[&str] = &["product", "file", "keys"];
+
 /// The field names, for the error that has to list them.
 const HANDLE_FIELDS: &[&str] = &[
     "selected",
@@ -1267,6 +1306,33 @@ impl Page {
     }
 }
 
+/// The page surface as names: each page's spelling, the halves it exists in,
+/// and every field it accepts.
+///
+/// Public for the stub's sake, and for the same reason [`mui_defines`] is public
+/// for the inventory's: the editor's page classes are hand-written — a block's
+/// value is an expression in a table and the parameter model has nothing to say
+/// about it — so the only thing keeping them from drifting away from this table
+/// is a test that can read both. It drifted once, and the whole of `startMenu`
+/// went missing from completion for as long as nobody looked.
+pub fn v1_page_surface() -> Vec<(&'static str, [bool; 2], Vec<&'static str>)> {
+    V1_PAGES
+        .iter()
+        .map(|page| {
+            (
+                page.installua,
+                page.halves,
+                page.fields().map(|field| field.installua).collect(),
+            )
+        })
+        .collect()
+}
+
+/// The `installer {}` and `uninstaller {}` field names, for the same reason.
+pub fn v1_installer_fields() -> &'static [&'static str] {
+    V1_INSTALLER_FIELDS
+}
+
 /// The block-level `MUI_*` defines, listed beside the arms of `block_field`
 /// that write them.
 ///
@@ -1444,17 +1510,157 @@ pub fn lower(
         }
     }
 
-    // 3. The call graph, built once and read twice here (§15.11).
+    // 3. The call graph, built once and read three times here (§15.11).
     let graph = callgraph::build(&module);
     let clobbers = graph.clobbers(&direct);
     graph.lint_recursion(diags);
+    reserved(&mut module, &graph);
 
     // 4. `live ∩ clobbered`, at last.
     for (index, (_, body)) in module.bodies_mut().into_iter().enumerate() {
         alloc::insert_saves(body, &across[index], &clobbers);
     }
 
+    // 5. `InitPluginsDir`, last, because it is the one line here that reads the
+    //    finished body rather than building one: it takes no register, saves
+    //    nothing across itself and touches no call site, so running it after
+    //    allocation keeps it out of every pass that counts steps.
+    plugins_dir(&mut module);
+
     module
+}
+
+/// `ReserveFile /plugin X.dll`, for every plugin an init callback can reach.
+///
+/// **The second alternative of `ReserveFile`, and not a surface row.** A plugin
+/// DLL lives in the compressed data block like any other file, and `.onInit`
+/// runs before a byte of it has been extracted — so a plugin called from there
+/// works or does not work depending on the compressor, which is the include-order
+/// hazard wearing a different hat. MUI2 makes it the user's problem and hands
+/// them `MUI_RESERVEFILE_LANGDLL` to insert in the right place; the compiler
+/// already knows every call site and every edge between bodies, so it does not
+/// have to ask.
+///
+/// **Reachability, not presence.** A reserved file is excluded from solid
+/// compression, so reserving a plugin only a section calls would cost size for
+/// nothing. The roots are the two init callbacks and the graph answers the rest
+/// — which is why [`crate::cfg::Body::plugins`] is per body rather than a
+/// module-wide set.
+pub fn reserved(module: &mut ir::Module, graph: &callgraph::CallGraph) {
+    let mut queue: Vec<usize> = graph
+        .names
+        .iter()
+        .enumerate()
+        .filter(|(_, name)| matches!(name.as_str(), ".onInit" | "un.onInit"))
+        .map(|(node, _)| node)
+        .collect();
+    let mut seen: BTreeSet<usize> = queue.iter().copied().collect();
+    let mut plugins: BTreeSet<&str> = BTreeSet::new();
+    while let Some(node) = queue.pop() {
+        plugins.extend(
+            module.functions[node]
+                .body
+                .plugins
+                .iter()
+                .map(String::as_str),
+        );
+        for callee in &graph.edges[node] {
+            if seen.insert(*callee) {
+                queue.push(*callee);
+            }
+        }
+    }
+
+    // The DLL is the namespace and nothing else: `nsExec.execToStack` becomes
+    // `nsExec::ExecToStack` out of `nsExec.dll`, which is the same lookup
+    // `!addplugindir` does and the reason a plugin's declaration needs no
+    // separate file name (§11).
+    module.reserved = plugins
+        .into_iter()
+        .map(|plugin| {
+            ir::Instruction::new(
+                "ReserveFile",
+                vec![
+                    ir::Arg::raw("/plugin"),
+                    ir::Arg::raw(format!("{plugin}.dll")),
+                ],
+            )
+        })
+        .collect();
+}
+
+/// The NSIS spelling of `$PLUGINSDIR`.
+const PLUGINS_DIR: &str = "$PLUGINSDIR";
+
+/// `InitPluginsDir`, at the top of every body that names `$PLUGINSDIR`.
+///
+/// **The line whose absence NSIS never mentions.** `$PLUGINSDIR` is not a
+/// constant the way `$WINDIR` is — it is a temporary directory that does not
+/// exist until something creates it, and until then the variable expands to
+/// nothing at all. So `SetOutPath "$PLUGINSDIR"` without the init is
+/// `SetOutPath ""`, which `makensis -WX` assembles without a word and which
+/// puts the files somewhere else on a user's machine. That is the include-order
+/// hazard again with a different name (PLAN §11): a line that costs nothing to
+/// omit until the day it costs everything.
+///
+/// **Per body, at the top, and not hoisted.** A body is the smallest unit that
+/// is correct without a reachability argument — a mention in one arm of an `if`
+/// is covered by the same line as a mention in the other — and NSIS defines the
+/// instruction as a no-op when the directory already exists, so a caller and a
+/// callee both having one is not a bug to be optimised away. Hoisting to
+/// `.onInit` instead would create the directory on every run of every installer
+/// whose one plugin section is never selected, and would mean writing an
+/// `.onInit` for programs that have none.
+///
+/// **Textual, over the lowered lines.** A `raw` block is the user's own text
+/// and it is the one place a `$PLUGINSDIR` can arrive without having passed
+/// through [`crate::builtins::CONSTANTS`], so the scan reads the instruction
+/// names too — an escape hatch that skipped this would be an escape hatch into
+/// the exact failure the pass exists to prevent.
+pub fn plugins_dir(module: &mut ir::Module) {
+    for (_, body) in module.bodies_mut() {
+        let named = body
+            .blocks
+            .iter()
+            .flat_map(|block| &block.steps)
+            .any(|step| match step {
+                ir::Step::Instruction(line) => mentions(line),
+                ir::Step::Saves(_) | ir::Step::Call(_) => false,
+            })
+            || body.calls.iter().any(|site| {
+                site.args.iter().any(arg_mentions)
+                    || match &site.kind {
+                        ir::CallKind::Opaque { lines, .. } => lines.iter().any(mentions),
+                        ir::CallKind::Function => false,
+                    }
+            });
+        if named {
+            body.blocks[cfg::Body::ENTRY.0].steps.insert(
+                0,
+                ir::Step::Instruction(ir::Instruction::new("InitPluginsDir", Vec::new())),
+            );
+        }
+    }
+}
+
+/// Whether a line names the plugins directory, in its arguments or — for a
+/// `raw` block, whose whole line is the name — in the name itself.
+fn mentions(line: &ir::Instruction) -> bool {
+    line.name.contains(PLUGINS_DIR) || line.args.iter().any(arg_mentions)
+}
+
+fn arg_mentions(arg: &ir::Arg) -> bool {
+    match arg {
+        // [`ir::Piece::Text`] is deliberately not here. A `$` in text is five
+        // dollars and the emitter doubles it (§15.1), so a literal
+        // `"$PLUGINSDIR"` in a Lua string ships as `$$PLUGINSDIR` and reads the
+        // directory no more than any other sentence does.
+        ir::Arg::Data { pieces, .. } => pieces
+            .iter()
+            .any(|piece| matches!(piece, ir::Piece::Var(var) if var == PLUGINS_DIR)),
+        ir::Arg::Raw(text) => text.contains(PLUGINS_DIR),
+        ir::Arg::Dest(_) => false,
+    }
 }
 
 fn lower_once(
@@ -1485,6 +1691,8 @@ fn lower_once(
         on_init: [false, false],
         init_prelude: [Vec::new(), Vec::new()],
         lang_strings: BTreeSet::new(),
+        locales: Vec::new(),
+        license_tables: 0,
         descriptions: [Vec::new(), Vec::new()],
         hover: [false, false],
         minted: 0,
@@ -1534,6 +1742,15 @@ struct Lowerer<'a, 'p> {
     /// The `LangString` names `languages {}` declared, so `lang.greeting` is a
     /// resolved read rather than a `$(…)` nobody checked (§15.26).
     lang_strings: BTreeSet<String>,
+    /// The locales `languages {}` declared, in the order it listed them — read
+    /// by the license page, which has to check its own per-locale table against
+    /// exactly this set (§15.26). Declaration order rather than a set, because
+    /// the first one is the default language and a diagnostic that has to name
+    /// *some* locale should name that one.
+    locales: Vec<String>,
+    /// How many per-locale license tables have been lowered, so the second one
+    /// gets a name the first did not.
+    license_tables: usize,
     /// Each half's components-page hover texts, as `(index define, text)` in
     /// section order — the block MUI2 spells with three macros.
     descriptions: [Vec<(String, ir::Arg)>; 2],
@@ -2559,7 +2776,8 @@ impl<'p> Lowerer<'_, 'p> {
         let mut fields: Vec<&TableField> = fields.iter().collect();
         fields.sort_by_key(|field| match field {
             TableField::Named { name, .. } if name.text == "product" => 0,
-            _ => 1,
+            TableField::Named { name, .. } if name.text == "file" => 1,
+            _ => 2,
         });
 
         for field in fields {
@@ -2568,11 +2786,21 @@ impl<'p> Lowerer<'_, 'p> {
                 continue;
             };
             match name.text.as_str() {
-                "product" => {
-                    // `VIProductVersion` takes four unquoted numbers, and
-                    // `makensis` rejects anything else — which is why this is a
-                    // checked shape rather than a string passed through.
-                    let Some(text) = self.constant_string(value, "product") else {
+                // `VIProductVersion` and `VIFileVersion` take four unquoted
+                // numbers, and `makensis` rejects anything else — which is why
+                // this is a checked shape rather than a string passed through.
+                //
+                // Two fields because Windows shows two versions: the product's,
+                // which every installer needs, and the file's, which is this
+                // build of it. NSIS defaults the second to the first, so
+                // `file` alone is the shape that has nothing to default from —
+                // and it is `makensis` that says so, not this compiler.
+                field @ ("product" | "file") => {
+                    let nsis = match field {
+                        "product" => "VIProductVersion",
+                        _ => "VIFileVersion",
+                    };
+                    let Some(text) = self.constant_string(value, field) else {
                         continue;
                     };
                     let quads = text.split('.').count() == 4
@@ -2582,17 +2810,17 @@ impl<'p> Lowerer<'_, 'p> {
                     if !quads {
                         self.bad_value(
                             value.span(),
-                            "product",
+                            field,
                             "four dotted numbers",
-                            "`VIProductVersion` wants `x.y.z.w` and `makensis` rejects any other \
-                             shape",
+                            &format!(
+                                "`{nsis}` wants `x.y.z.w` and `makensis` rejects any other shape"
+                            ),
                         );
                         continue;
                     }
-                    self.module.attributes.push(ir::Instruction::new(
-                        "VIProductVersion",
-                        vec![ir::Arg::raw(text)],
-                    ));
+                    self.module
+                        .attributes
+                        .push(ir::Instruction::new(nsis, vec![ir::Arg::raw(text)]));
                 }
                 "keys" => {
                     let Expr::Table { fields, .. } = value else {
@@ -2629,7 +2857,7 @@ impl<'p> Lowerer<'_, 'p> {
                             name.span,
                             format!("`{other}` is not a `versionInfo` field"),
                         )
-                        .note("the fields are `product` and `keys`"),
+                        .note(format!("the fields are {}", list(VERSION_INFO_FIELDS))),
                     );
                 }
             }
@@ -3459,22 +3687,29 @@ impl<'p> Lowerer<'_, 'p> {
             macro_args.push(ir::Arg::var(format!("${}", start_menu_var(local))));
         }
         if page.installua == "license" {
-            let file = named
-                .iter()
-                .find(|(name, _)| name.text == "file")
-                .and_then(|(_, value)| self.constant_arg(value, "file"));
-            match file {
-                Some(arg) => macro_args.push(arg.into_path()),
+            let file = named.iter().find(|(name, _)| name.text == "file");
+            let arg = match file {
+                // A table is one file per locale, which NSIS spells
+                // `LicenseLangString` — the same transposition `languages {}`
+                // does, arriving from the other direction.
+                Some((_, value @ Expr::Table { .. })) => self.license_langstring(value),
+                Some((_, value)) => self.constant_arg(value, "file").map(ir::Arg::into_path),
+                None => None,
+            };
+            match arg {
+                Some(arg) => macro_args.push(arg),
                 None => {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::MissingAttribute,
-                            which.span,
-                            "a `license` page needs a `file`",
-                        )
-                        .note("write `page.license { file = \"LICENSE.txt\" }`")
-                        .note("`MUI_PAGE_LICENSE` takes the file as its argument"),
-                    );
+                    if file.is_none() {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::MissingAttribute,
+                                which.span,
+                                "a `license` page needs a `file`",
+                            )
+                            .note("write `page.license { file = \"LICENSE.txt\" }`")
+                            .note("`MUI_PAGE_LICENSE` takes the file as its argument"),
+                        );
+                    }
                     return;
                 }
             }
@@ -3525,6 +3760,138 @@ impl<'p> Lowerer<'_, 'p> {
             Half::Uninstaller => self.module.unpages.push(lowered),
         }
         self.mui = true;
+    }
+
+    /// `file = { English = "en.txt", German = "de.txt" }` — one license per
+    /// locale, which is `LicenseLangString` (§15.26).
+    ///
+    /// The name it files them under is the compiler's, so it collides with no
+    /// `LangString` a translator wrote, and what the page macro gets back is a
+    /// `$(…)` read rather than a path. Everything else about the page is
+    /// unchanged: this is a second shape for one field, not a second field and
+    /// not a block of its own — a license page with translated text is still
+    /// one page with one license on it.
+    ///
+    /// **The set has to match `languages { locales }` exactly.** Both halves of
+    /// that are the same failure with different symptoms. A declared locale with
+    /// no file leaves `$(…)` expanding to nothing, which is a blank license page
+    /// on one machine in one country — the failure hardest to find and cheapest
+    /// to prevent, and the same argument [`Self::completeness`] makes about
+    /// `LangString`s. A file for an undeclared locale names a `${LANG_…}` that
+    /// no `MUI_LANGUAGE` defined, which NSIS reports against a line the user
+    /// never wrote.
+    fn license_langstring(&mut self, value: &Expr) -> Option<ir::Arg> {
+        let Expr::Table { fields, span } = value else {
+            return None;
+        };
+        let span = *span;
+
+        if self.locales.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    span,
+                    "a license file per locale needs a `languages {}` block",
+                )
+                .note(
+                    "each entry becomes `LicenseLangString name ${LANG_…} path`, and the \
+                     `${LANG_…}` is defined by the `MUI_LANGUAGE` that `languages {}` emits",
+                )
+                .note("one license for every language is `file = \"LICENSE.txt\"`"),
+            );
+            return None;
+        }
+
+        let mut files: BTreeMap<String, ir::Arg> = BTreeMap::new();
+        let mut bad = false;
+        for field in fields {
+            let TableField::Named { name, value } = field else {
+                self.bad_value(
+                    field.span(),
+                    "file",
+                    "a table keyed by language",
+                    "every entry is `<Language> = \"path\"`",
+                );
+                bad = true;
+                continue;
+            };
+            if !crate::locale::is_locale(&name.text) {
+                self.unknown_locale(&name.text, name.span);
+                bad = true;
+                continue;
+            }
+            if !self.locales.contains(&name.text) {
+                let (text, at) = (name.text.clone(), name.span);
+                let declared = list(&self.locales.iter().map(String::as_str).collect::<Vec<_>>());
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        at,
+                        format!("`{text}` is not one of this program's languages"),
+                    )
+                    .note(format!("`languages {{ locales }}` declares {declared}"))
+                    .note(format!(
+                        "`${{LANG_{}}}` is defined by `!insertmacro MUI_LANGUAGE \"{text}\"`, \
+                         which nothing here emits",
+                        text.to_uppercase()
+                    )),
+                );
+                bad = true;
+                continue;
+            }
+            match self.constant_arg(value, &name.text) {
+                Some(arg) => {
+                    files.insert(name.text.clone(), arg.into_path());
+                }
+                None => bad = true,
+            }
+        }
+
+        // The other direction, reported against the locale that is missing
+        // rather than against the table, so the message names the language a
+        // translator has to go and find.
+        let first = self.locales[0].clone();
+        for locale in self.locales.clone() {
+            if files.contains_key(&locale) {
+                continue;
+            }
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    span,
+                    format!("`{locale}` has no license file"),
+                )
+                .note(format!("`{first}` has one"))
+                .note(
+                    "NSIS expands a license string with no entry for the running language to \
+                     nothing at all, so the gap would be a blank license page rather than an \
+                     error",
+                ),
+            );
+            bad = true;
+        }
+        if bad {
+            return None;
+        }
+
+        self.license_tables += 1;
+        let name = match self.license_tables {
+            1 => "licenseData".to_string(),
+            n => format!("licenseData{n}"),
+        };
+        // Emitted in declaration order, which is the order the `MUI_LANGUAGE`
+        // lines above them run in — the first is NSIS's default language.
+        for locale in &self.locales {
+            self.module.license_data.push(ir::Instruction::new(
+                "LicenseLangString",
+                vec![
+                    ir::Arg::raw(name.clone()),
+                    ir::Arg::raw(format!("${{{}}}", crate::locale::define(locale))),
+                    files[locale].clone(),
+                ],
+            ));
+        }
+        Some(ir::Arg::var(format!("$({name})")))
     }
 
     /// Every field a page was given, checked against the ones it has.
@@ -5200,7 +5567,7 @@ impl<'p> Lowerer<'_, 'p> {
                             name.span,
                             format!("`{other}` is not a `group` option"),
                         )
-                        .note("the options are `expanded` and `description`"),
+                        .note(format!("the options are {}", list(GROUP_OPTIONS))),
                     );
                 }
             }
@@ -5380,10 +5747,7 @@ impl<'p> Lowerer<'_, 'p> {
                             name.span,
                             format!("`{other}` is not a `section` option"),
                         )
-                        .note(
-                            "the options are `optional`, `required`, `installTypes`, `size` and \
-                             `description`",
-                        ),
+                        .note(format!("the options are {}", list(SECTION_OPTIONS))),
                     );
                 }
             }

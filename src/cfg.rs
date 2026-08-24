@@ -19,6 +19,8 @@
 //! boundary and a leading `.` makes a label global, so per-body construction
 //! makes that a non-issue — and [`crate::layout`] asserts it anyway.
 
+use std::collections::BTreeSet;
+
 use crate::diag::Span;
 use crate::ir;
 use crate::regs::Slot;
@@ -56,6 +58,12 @@ pub struct Body {
     /// Call sites, in creation order. [`ir::Step::Saves`] and
     /// [`ir::Step::Call`] index into this.
     pub calls: Vec<ir::CallSite>,
+    /// Plugins this body calls a method of, by namespace. Recorded here rather
+    /// than counted from the instructions because it is read *per body*: a DLL
+    /// has to be reserved when `.onInit` can reach the call, and reachability
+    /// is a question about bodies (§11). A set, since two calls to the same
+    /// plugin are one reservation.
+    pub plugins: BTreeSet<String>,
     /// The per-body construct counter (§15.25). It resets here rather than
     /// running monotonically over the program so that inserting an `if` early
     /// renumbers labels in that body only, which is what keeps §14's whole-file
@@ -72,6 +80,7 @@ impl Body {
             temps: 0,
             vregs: Vec::new(),
             calls: Vec::new(),
+            plugins: BTreeSet::new(),
             next_construct: 0,
         }
     }

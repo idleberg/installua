@@ -311,6 +311,13 @@ const fn directive(nsis: &'static str) -> Row {
 }
 
 /// Not yet done, with a one-line reason. The only honest backlog (§14).
+///
+/// Unused as of Phase 6, and kept for the reason the MUI census's twin is: an
+/// empty backlog is a state to be able to *lose*. `-CMDHELP` grows with every
+/// NSIS, and the first command nobody has read yet needs a bucket that is neither
+/// "exposed" nor "we decided against it" — which is why the join already files a
+/// skeleton with no row here on its own.
+#[allow(dead_code)]
 const fn todo(nsis: &'static str, why: &'static str) -> Row {
     row(nsis, None, Class::Todo(why))
 }
@@ -828,15 +835,29 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Path)],
         "flushIni(INSTDIR .. \"/app.ini\")",
     ),
-    // The last of what was once the "file surface beyond `file`/`delete`/
-    // `fileOpen`" group, and the only one of the four that was ever blocked.
-    // `[/nonfatal] [/r] [/x …] file [file…] | [/nonfatal] /plugin file.dll` is
-    // an alternation, and the second half is a plugin DLL — so it is
-    // `BGGradient`'s problem and §11's problem at once, not a missing row.
-    todo(
-        "ReserveFile",
-        "`file…` and `/plugin file.dll` are two alternatives in one line, and the second is a \
-         plugin DLL (§11)",
+    // `file`'s parameter list without `/a`, which is the whole of the first
+    // alternative — and the snapshot records exactly those three flags, because
+    // [`Note::Alternation`] keeps the first alternative and files the rest as
+    // mutual exclusion (§15.23).
+    //
+    // The second alternative, `/plugin file.dll`, is deliberately not offered
+    // and is not [`Offer::Unoffered`] either: a plugin the program calls before
+    // the data block can be reached is reserved *by the compiler*, from the
+    // call sites it already has to know about. See [`crate::lower::reserved`].
+    // Writing it by hand is the include-order hazard in its purest form — a
+    // line whose absence costs nothing until the day compression changes.
+    flagged(
+        exposed(
+            "ReserveFile",
+            "reserveFile",
+            &[ann(Ty::Str, Kind::Path)],
+            "reserveFile(\"assets/icon.ico\", { exclude = { \"*.tmp\" } })",
+        ),
+        &[
+            named("nonFatal"),
+            named("recursive"),
+            list("exclude", Kind::Path),
+        ],
     ),
     exposed(
         "FileClose",
@@ -1169,9 +1190,14 @@ pub const ROWS: &[Row] = &[
         "page.license.checkbox",
         Setting::Handled("string"),
     ),
-    todo(
+    // The same transposition `LangString` is, arriving from the other side:
+    // `file` takes a table keyed by locale, and the compiler files each path
+    // under a name of its own so that the page macro reads `$(licenseData)`.
+    // Not a row of its own, because a license page with translated text is one
+    // page with one license on it — the plural is in the file, not the page.
+    lowering(
         "LicenseLangString",
-        "a license *file* per language, where §15.26's tables hold strings; the page takes one path and there is no per-locale shape for it yet",
+        "`page.license { file = { English = \"en.txt\", … } }`",
     ),
     // `button` beside it.
     attribute("LicenseText", "page.license.bottomText", STR),
@@ -2044,10 +2070,12 @@ pub const ROWS: &[Row] = &[
         "the address of the current instruction, which no Installua program has a name for (§3, §8)",
     ),
     directive("!addplugindir"),
-    todo(
-        "InitPluginsDir",
-        "the plugin directory and the DLL registration pair, neither of which `plugin` covers yet (§11)",
-    ),
+    // `ReserveFile /plugin`'s twin, and compiler-written for the same reason:
+    // `$PLUGINSDIR` expands to nothing until something creates it, and NSIS
+    // assembles the program that forgot without a word. Every body that names
+    // the directory opens with the line, which is a fact the compiler can see
+    // and a user has to remember. See [`crate::lower::plugins_dir`].
+    lowering("InitPluginsDir", "a body that names `PLUGINSDIR`"),
     attribute("AllowSkipFiles", "allowSkipFiles", ONOFF),
     language("Var", "a global is declared by assigning to it (§15.24)"),
     attribute(

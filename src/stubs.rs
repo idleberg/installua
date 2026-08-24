@@ -201,7 +201,13 @@ fn blocks() -> String {
          ---@field checkBitmap? string\n\
          ---@field installColors? string\n\
          ---@field progressBar? string\n\
-         ---@field licenseBkColor? string\n\n\
+         ---@field licenseBkColor? string\n\
+         ---@field headerColors? installua.Colors\n\
+         ---@field abortPrompt? boolean|{ text?: string, default?: string }\n\
+         ---@field autoClose? boolean\n\
+         ---@field headerImage? string|boolean|{ file?: string, stretch?: string, rtl?: string|{ file: string, stretch?: string }, right?: boolean, transparentText?: boolean }\n\
+         ---@field wizardImage? string|{ file: string, stretch?: string }\n\
+         ---@field smallDescriptions? boolean\n\n\
          ---@param options installua.Attributes\n\
          function attributes(options) end\n\n\
          ---@param options installua.Installer\n\
@@ -242,52 +248,106 @@ fn blocks() -> String {
 /// parameter model has nothing to say about it. `tests/stubs.rs` compiles every
 /// field against the compiler to keep the two honest.
 const PAGES: &str = "\
+-- The hooks every page has, and the header strip five of the eight draw into.\n\
+-- `welcome` and `finish` are full-window pages with no header, which is why\n\
+-- they inherit the bare class and the other six inherit the headed one.\n\
 ---@class (exact) installua.Page\n\
+---@field pre? fun()\n\
+---@field show? fun()\n\
+---@field leave? fun()\n\
+\n\
+---@class (exact) installua.Page.Headed : installua.Page\n\
 ---@field headerText? string\n\
 ---@field headerSubText? string\n\
----@field pre? fun()\n\
----@field show? fun()\n\
----@field leave? fun()\n\
 \n\
----@class (exact) installua.Page.Full\n\
----@field pre? fun()\n\
----@field show? fun()\n\
----@field leave? fun()\n\
+---@class (exact) installua.Page.Welcome : installua.Page\n\
+---@field title? string|{ text: string, lines: integer }\n\
+---@field text? string\n\
+---@field destroyed? fun()\n\
 \n\
----@class (exact) installua.Page.License : installua.Page\n\
+---@class (exact) installua.Page.License : installua.Page.Headed\n\
 ---@field file string\n\
+---@field subCaption? string\n\
+---@field topText? string\n\
 ---@field bottomText? string\n\
 ---@field button? string\n\
 ---@field checkbox? string\n\
 ---@field radioButtons? { accept?: string, decline?: string }\n\
 \n\
----@class (exact) installua.Page.Components : installua.Page\n\
+---@class (exact) installua.Page.Components : installua.Page.Headed\n\
+---@field subCaption? string\n\
 ---@field topText? string\n\
 ---@field instTypeText? string\n\
 ---@field listText? string\n\
+---@field descriptionTitle? string\n\
+---@field descriptionText? string\n\
 \n\
----@class (exact) installua.Page.Directory : installua.Page\n\
+---@class (exact) installua.Page.Directory : installua.Page.Headed\n\
+---@field subCaption? string\n\
 ---@field topText? string\n\
 ---@field destinationText? string\n\
 ---@field variable? string\n\
 ---@field verifyOnLeave? boolean\n\
+---@field colors? installua.Colors\n\
 \n\
----@class (exact) installua.Page.Confirm : installua.Page\n\
+-- `registry` is one field holding three because MUI2 reads the three only\n\
+-- together: any one of them alone is a define nothing looks at.\n\
+---@class (exact) installua.Page.StartMenu : installua.Page.Headed\n\
+---@field defaultFolder? string\n\
+---@field topText? string\n\
+---@field checkbox? boolean|string\n\
+---@field registry? { root: string, key: string, value: string }\n\
+---@field destroyed? fun()\n\
+\n\
+---@class (exact) installua.Page.InstFiles : installua.Page.Headed\n\
+---@field subCaption? string\n\
+---@field finishHeaderText? string\n\
+---@field finishHeaderSubText? string\n\
+---@field abortHeaderText? string\n\
+---@field abortHeaderSubText? string\n\
+\n\
+-- `run` and `readme` are each a program to start or a function to call, and\n\
+-- they are two shapes rather than one with optional members: MUI2 expands the\n\
+-- parameters only where there is no function to call.\n\
+---@class (exact) installua.Page.Finish : installua.Page\n\
+---@field title? string|{ text: string, lines: integer }\n\
+---@field text? string|{ text: string, large: boolean }\n\
+---@field button? string\n\
+---@field cancelEnabled? boolean\n\
+---@field reboot? boolean|{ text?: string, now?: string, later?: string, default?: string }\n\
+---@field run? { path: string, parameters?: string, text?: string, checked?: boolean }|{ call: fun(), text?: string, checked?: boolean }\n\
+---@field readme? { path: string, text?: string, checked?: boolean }|{ call: fun(), text?: string, checked?: boolean }\n\
+---@field link? { text: string, url: string, color?: string }\n\
+---@field destroyed? fun()\n\
+\n\
+---@class (exact) installua.Page.Confirm : installua.Page.Headed\n\
+---@field subCaption? string\n\
 ---@field topText? string\n\
 ---@field locationText? string\n\
 ---@field variable? string\n\
 \n\
----@class (exact) installua.Page.Custom : installua.Page\n\
+---@class (exact) installua.Page.Custom : installua.Page.Headed\n\
 ---@field [1]? string\n\
 ---@field controls? table\n\
 \n\
+-- The one page bound to a local — `local menu = page.startMenu { … }` — because\n\
+-- MUI2 names it from install-time code: the folder is read back through the id\n\
+-- and the shortcut writing is wrapped in it (§13).\n\
+---@class (exact) installua.StartMenu\n\
+---@field folder string The folder the page chose. Read-only.\n\
+local StartMenu = {}\n\n\
+--- Wraps the code that creates the shortcuts, so the chosen folder is written\n\
+--- back to the registry. The installer's; the uninstaller reads `folder`.\n\
+---@param body fun()\n\
+function StartMenu.write(body) end\n\n\
 ---@class installua.Pages\n\
----@field welcome fun(options?: installua.Page.Full)\n\
+---@field welcome fun(options?: installua.Page.Welcome)\n\
 ---@field license fun(options: installua.Page.License)\n\
 ---@field components fun(options?: installua.Page.Components)\n\
 ---@field directory fun(options?: installua.Page.Directory)\n\
----@field instFiles fun(options?: installua.Page)\n\
----@field finish fun(options?: installua.Page.Full)\n\
+---@field startMenu fun(options?: installua.Page.StartMenu): installua.StartMenu\n\
+---@field instFiles fun(options?: installua.Page.InstFiles)\n\
+---@field finish fun(options?: installua.Page.Finish)\n\
 ---@field confirm fun(options?: installua.Page.Confirm)\n\
 ---@field custom fun(options?: installua.Page.Custom)\n\
 \n\
@@ -391,7 +451,7 @@ fn inline_table(
 }
 
 fn declarations() -> String {
-    String::from(
+    let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
          -- Declarations (§15.10). These are language constructs rather than\n\
          -- instructions, so they are written here rather than generated.\n\
@@ -407,6 +467,7 @@ fn declarations() -> String {
          ---@field required? boolean Always installed, with no box to untick.\n\
          ---@field installTypes? string[] Which of the block's `installTypes` this belongs to.\n\
          ---@field size? integer Extra kilobytes to charge, beyond the files installed.\n\
+         ---@field description? string The words the components page shows on hover.\n\
          local SectionOptions = {}\n\n\
          ---@param name string\n\
          ---@param body fun()\n\
@@ -417,6 +478,7 @@ fn declarations() -> String {
          ---@field [1] string The group's heading, written first and without a key.\n\
          ---@field sections table The sections it holds.\n\
          ---@field expanded? boolean Opens the heading in the components tree.\n\
+         ---@field description? string The words the components page shows on hover.\n\
          local GroupOptions = {}\n\n\
          ---@param name string\n\
          ---@param sections table\n\
@@ -426,17 +488,21 @@ fn declarations() -> String {
          -- What a bound `section` is at install time: the handle §13's binding\n\
          -- produces. Every field is readable and writable, and the section index\n\
          -- NSIS reads is the compiler's — it appears in no Installua source.\n\
-         ---@class (exact) installua.Section\n\
+         ---@class (exact) installua.Selectable\n\
          ---@field selected boolean Ticked in the components tree (`SF_SELECTED`).\n\
          ---@field readOnly boolean Installed with no box to untick (`SF_RO`).\n\
          ---@field bold boolean Drawn bold in the components tree (`SF_BOLD`).\n\
          ---@field text string The row the tree draws; `\"\"` draws none.\n\
+         local Selectable = {}\n\n\
+         ---@class (exact) installua.Section : installua.Selectable\n\
          ---@field size integer Kilobytes charged beyond the files installed.\n\
          ---@field installTypes string[] Which of the block's `installTypes` it belongs to.\n\
          local Section = {}\n\n\
          -- A group is a section to NSIS — one index, one flags word — plus the\n\
-         -- one bit only a heading has.\n\
-         ---@class (exact) installua.Group : installua.Section\n\
+         -- one bit only a heading has, and minus the two only a section has: a\n\
+         -- group is charged no space and belongs to no install type, because\n\
+         -- what it holds is sections and each of those answers for itself.\n\
+         ---@class (exact) installua.Group : installua.Selectable\n\
          ---@field expanded boolean Opens the heading in the components tree (`SF_EXPAND`).\n\
          local Group = {}\n\n\
          -- The install type the user picked, by the name the block declared, and\n\
@@ -458,6 +524,16 @@ fn declarations() -> String {
          -- `lua-language-server` cannot follow the merge itself.\n\
          ---@param path string\n\
          function include(path) end\n\n\
+         -- The two iterators, and the halves they run in. `glob` is expanded on\n\
+         -- the build machine and its loop is unrolled, so the pattern has to be\n\
+         -- known there (§7); `lines` runs at install time, over a handle\n\
+         -- `fileOpen` returned.\n\
+         ---@param pattern string\n\
+         ---@return fun(): string\n\
+         function glob(pattern) end\n\n\
+         ---@param handle installua.File\n\
+         ---@return fun(): string\n\
+         function lines(handle) end\n\n\
          ---@param header string\n\
          ---@return table\n\
          function import(header) end\n\n\
@@ -474,13 +550,10 @@ fn declarations() -> String {
          ---@return installua.File\n\
          function fileOpen(path, mode) end\n\n\
          ---@class installua.File\n\
-         local File = {}\n\n\
-         ---@return string\n\
-         function File:read() end\n\n\
-         ---@param text string\n\
-         function File:write(text) end\n\n\
-         function File:close() end\n\n",
-    )
+         local File = {}\n\n",
+    );
+    out.push_str(&file_methods());
+    out
 }
 
 /// One `function` per `Exposed` row, from the joined table.
@@ -515,7 +588,7 @@ fn controls() -> String {
          -- Both are named because `SetCtlColors` writes both in one instruction.\n\
          ---@class (exact) installua.Colors\n\
          ---@field text string\n\
-         ---@field back string Or `\"transparent\"`, to leave it unpainted.\n\
+         ---@field background string Or `\"transparent\"`, to leave it unpainted.\n\
          local Colors = {}\n\n\
          ---@class (exact) installua.Font\n\
          ---@field face string A typeface name; Windows substitutes if it has none.\n\
@@ -573,45 +646,85 @@ fn instructions() -> String {
             continue;
         }
 
-        // The completion a reader gets is the call they can write, so the two
-        // shapes are said apart: an unambiguous trailing optional is a `?`
-        // parameter, and everything else optional is a named field below
-        // (§15.23).
-        let mut names = Vec::new();
-        for (index, param) in entry.positional().enumerate() {
-            let ident = identifier(param.shape.name);
-            let optional = if param.required() { "" } else { "?" };
-            let _ = writeln!(out, "---@param {ident}{optional} {}", union(name, index));
-            names.push(ident);
-        }
-        // Both halves of the options table, in one type: the optional positions
-        // that are named rather than counted, and the flags, which are mostly
-        // `boolean` because the compiler writes the `/FLAG` itself (§15.23).
-        let fields = entry
-            .fields()
-            .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)));
-        let options: Vec<String> = fields
-            .chain(
-                entry
-                    .flags()
-                    .filter_map(|(name, flag)| Some(format!("{name}: {}", flag_type(flag)?))),
-            )
-            .collect();
-        if !options.is_empty() {
-            let _ = writeln!(out, "---@param options? {{ {} }}", options.join(", "));
-            names.push("options".to_string());
-        }
-        for param in entry.outputs() {
-            let _ = writeln!(out, "---@return {}", lua_type(param));
-        }
-        // A predicate has no output *parameter* — the branch supplies the value
-        // — so its return type comes from the builtin rather than from the row
-        // (§15.20). The two tables meet here and nowhere else.
-        if builtins::lookup(name).is_some_and(|builtin| builtin.predicate) {
-            out.push_str("---@return boolean\n");
-        }
-        let _ = writeln!(out, "function {name}({}) end\n", names.join(", "));
+        out.push_str(&declaration(entry, name, name, 0));
     }
+    out
+}
+
+/// The file handle's methods, from the same rows as everything else.
+///
+/// `fileOpen` returns a handle and the rest of the file surface is methods on
+/// it, which is the one place a row's *first position* is not an argument: NSIS
+/// spells it `FileRead handle output` and a user writes `f:read()`, so the
+/// handle is the receiver and is dropped from the parameter list here.
+///
+/// Generated rather than written out, and that is the fix for how this drifted:
+/// three of the ten were declared by hand and the other seven — `readByte`,
+/// `seek`, the UTF-16 pair and the rest — compiled fine and completed nowhere.
+fn file_methods() -> String {
+    let mut out = String::new();
+    for entry in exposed() {
+        let Some(name) = entry.installua else {
+            continue;
+        };
+        let Some(method) = name.strip_prefix("f:") else {
+            continue;
+        };
+        out.push_str(&declaration(entry, name, &format!("File:{method}"), 1));
+    }
+    out
+}
+
+/// One `function`, annotated: the positions, the options table, the returns.
+///
+/// `skip` is how many leading positions the spelling has already accounted for
+/// — one for a method, whose receiver is its first — and the *index* passed to
+/// [`union`] is the true one either way, because the type comes from the row.
+fn declaration(
+    entry: &'static table::Instruction,
+    name: &str,
+    spelling: &str,
+    skip: usize,
+) -> String {
+    let mut out = String::new();
+    // The completion a reader gets is the call they can write, so the two
+    // shapes are said apart: an unambiguous trailing optional is a `?`
+    // parameter, and everything else optional is a named field below
+    // (§15.23).
+    let mut names = Vec::new();
+    for (index, param) in entry.positional().enumerate().skip(skip) {
+        let ident = identifier(param.shape.name);
+        let optional = if param.required() { "" } else { "?" };
+        let _ = writeln!(out, "---@param {ident}{optional} {}", union(name, index));
+        names.push(ident);
+    }
+    // Both halves of the options table, in one type: the optional positions
+    // that are named rather than counted, and the flags, which are mostly
+    // `boolean` because the compiler writes the `/FLAG` itself (§15.23).
+    let fields = entry
+        .fields()
+        .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)));
+    let options: Vec<String> = fields
+        .chain(
+            entry
+                .flags()
+                .filter_map(|(name, flag)| Some(format!("{name}: {}", flag_type(flag)?))),
+        )
+        .collect();
+    if !options.is_empty() {
+        let _ = writeln!(out, "---@param options? {{ {} }}", options.join(", "));
+        names.push("options".to_string());
+    }
+    for param in entry.outputs() {
+        let _ = writeln!(out, "---@return {}", lua_type(param));
+    }
+    // A predicate has no output *parameter* — the branch supplies the value
+    // — so its return type comes from the builtin rather than from the row
+    // (§15.20). The two tables meet here and nowhere else.
+    if builtins::lookup(name).is_some_and(|builtin| builtin.predicate) {
+        out.push_str("---@return boolean\n");
+    }
+    let _ = writeln!(out, "function {spelling}({}) end\n", names.join(", "));
     out
 }
 

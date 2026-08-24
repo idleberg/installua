@@ -2982,6 +2982,295 @@ assumed the answer had to take.
 
 Coverage: `todo` 4 → 3, `exposed` 103 → 104. 303 tests.
 
+## Batch 52 — one command, two alternatives, and only one of them is a row
+
+`ReserveFile`'s reason named two blockers: *"`file…` and `/plugin file.dll` are two
+alternatives in one line, and the second is a plugin DLL (§11)"*. Both are facts about the
+syntax line and neither is a blocker.
+
+**The first alternative was `file`'s parameter list all along.** `ReserveFile [/nonfatal]
+[/r] [/x spec…] file [file…]` is `File` minus `/a`, and the snapshot already records exactly
+those three flags — because `Note::Alternation` keeps the first alternative and hands the
+rest to the overlay as mutual exclusion (§15.23). That type's own doc comment says so, two
+files away from a `todo` that called the alternation the problem. `File`, the row directly
+above this one in `-CMDHELP` order, is itself an alternation row and has been `exposed`
+since batch 18.
+
+```lua
+reserveFile("data/*.pak", { recursive = true, exclude = { "*.tmp", "*.log" } })
+-- ReserveFile /r /x "*.tmp" /x "*.log" "data\*.pak"
+```
+
+One overlay row, no lowering code, and the flags reach the existing `Offer` machinery
+untouched.
+
+### The second alternative is not a surface row at all
+
+`ReserveFile /plugin nsExec.dll` puts a plugin's DLL at the head of the data block. It is
+needed because `.onInit` runs before a byte of that block has been extracted — so whether a
+plugin call from there works depends on the compressor, and the line that fixes it is one a
+user has to *know to write*. That is the include-order hazard wearing a different hat, and
+this project has a standing answer to those.
+
+MUI2's answer is to make it the user's problem and hand them `MUI_RESERVEFILE_LANGDLL` to
+insert in the right place. The compiler already knows every plugin call site, and since the
+call graph exists it knows which bodies `.onInit` reaches — so it does not have to ask:
+
+| the program | what the compiler writes |
+| --- | --- |
+| `onInit(function() UserInfo.getAccountType() end)` | `ReserveFile /plugin UserInfo.dll` |
+| `onInit` → `func` → `UserInfo.getAccountType()` | the same, one edge further out |
+| `section(…)` calls `nsExec.execToStack(…)` | nothing |
+
+**Reachability rather than presence**, because a reserved file is excluded from solid
+compression: reserving a plugin only a section calls would cost bytes for nothing. The roots
+are `.onInit` and `un.onInit`; the graph answers the rest. That is why
+`cfg::Body::plugins` is per body rather than a module-wide set — a module-wide set could
+answer *which plugins* and never *from where*.
+
+The line lands immediately after the language lines, which is where MUI2 puts its own and
+for the same reason. A `reserveFile(…)` the user wrote is an ordinary statement in a body
+and lands further down, which is the right order: nothing can be needed earlier than
+`.onInit` needs these.
+
+`/plugin` is therefore absent from the row's `options` on purpose, and is not
+`Offer::Unoffered` — the flag is *the compiler's*, the way `SEC_core` is the compiler's
+(§13).
+
+**Program 2 was already wrong and nothing had noticed.** `examples/02-plugins` calls
+`userInfo.getAccountType()` from `.onInit` and had no reservation; its generated golden grew
+one line and now assembles under `-WX` with it. Tier 3 could not have caught it — the script
+was always *legal*, and would have failed at run time on a solid-compressed build, which no
+test in this repository makes.
+
+**Seventh failure mode for a stale reason: a reason that describes the input rather than the
+obstacle.** Both clauses are true of the syntax line. Neither says what the compiler cannot
+do, and one of them — the alternation — names a mechanism that was built to handle exactly
+this and was already handling it for the row above.
+
+Coverage: `todo` 3 → 2, `exposed` 104 → 105. 311 tests.
+
+## Batch 53 — the plural is in the file, not in the page
+
+`LicenseLangString`'s reason was *"a license **file** per language, where §15.26's tables
+hold strings; the page takes one path and there is no per-locale shape for it yet"*. The
+first half is a true observation about NSIS — a `LangString` holds a string and a
+`LicenseLangString` holds a *path*, which is why they are two commands. The second half is
+the reason, and it says only that nobody had designed the shape. That is not an obstacle;
+it is the work.
+
+The shape is a second form for the field a license page already has:
+
+```lua
+page.license { file = { English = "en.txt", German = "de.txt" } }
+```
+
+```nsis
+!insertmacro MUI_PAGE_LICENSE $(licenseData)
+…
+!insertmacro MUI_LANGUAGE "English"
+!insertmacro MUI_LANGUAGE "German"
+LicenseLangString licenseData ${LANG_ENGLISH} "en.txt"
+LicenseLangString licenseData ${LANG_GERMAN} "de.txt"
+```
+
+**Not a new field and not a new block.** A license page with translated text is still one
+page with one license on it — the plural is in the file, not in the page — so `file` grows
+a second shape and nothing else moves. The name the paths are filed under is the
+compiler's, which is what makes this a `lowering` row rather than an `exposed` one: no
+surface spelling reaches `LicenseLangString`, the same way none reaches `LangString`, and
+for the same reason. A name minted here collides with nothing a translator wrote, and a
+second license page gets `licenseData2`.
+
+### The placement question, which only `makensis` could answer
+
+Every page macro has to precede every `MUI_LANGUAGE` — and every `LicenseLangString` has to
+*follow* the `MUI_LANGUAGE` that defines the `${LANG_…}` it names. So the page that reads
+`$(licenseData)` necessarily stands above the lines that define it, and whether NSIS
+accepts that is not a thing the compiler can reason about. It does: a language string is
+resolved when the tables are written rather than where it is mentioned. Checked with real
+`makensis` before any of this was designed — a 4 KB license file per locale moved the
+string table from 3402 to 19338 bytes, so the text is genuinely embedded and not silently
+dropped. `tests/license.rs` keeps that answer under tier 3 rather than in a comment.
+
+### The set has to match, in both directions
+
+Both halves of that are the same failure with different symptoms, and only one of them is
+loud:
+
+| the mistake | what NSIS does |
+| --- | --- |
+| a locale in `languages {}` with no license file | expands `$(…)` to nothing — a **blank license page**, in one country |
+| a license file for a locale `languages {}` never declared | an undefined `${LANG_…}`, against a line the user never wrote |
+
+The first is the argument `languages.rs::completeness` already makes about `LangString`s,
+arriving at a second place, so it gets the same wording and the same note. The second is
+reported against the key rather than the table. A key that is no language at all —
+`Deutsch` — gets the block's own endonym diagnostic, spelling suggestion included, because
+it is the same mistake in a second place and should not have a second message.
+
+Coverage: `todo` 2 → 1, `lowering-target` 26 → 27. 321 tests. The last one is
+`InitPluginsDir`.
+
+## Batch 54 — the last row, and it was a line nobody should have had to remember
+
+`InitPluginsDir`'s reason was *"the plugin directory and the DLL registration pair, neither
+of which `plugin` covers yet (§11)"*, and by the time it was read it was half stale:
+`RegDLL` and `UnRegDLL` were exposed batches ago, and the comment two rows above this one
+already said they never belonged in the group. What was left is the plugin directory, and
+that turned out not to be a surface question at all.
+
+`$PLUGINSDIR` is not a fact about the machine the way `$WINDIR` is. It names a temporary
+directory that does not exist until something creates it, and until then the variable
+expands to **nothing**. So this:
+
+```nsis
+Section "s"
+SetOutPath "$PLUGINSDIR"
+```
+
+is `SetOutPath ""`, and `makensis -WX` assembles it without a word. Measured before
+anything was designed: the script above compiles clean. The line whose absence costs
+nothing at compile time and puts a user's files somewhere else at run time is the
+include-order hazard with a different name (PLAN §11) — the class this language exists to
+close.
+
+So there is no surface spelling, and there is no new diagnostic either, because there is no
+wrong way to write it. There is only the line the compiler can see is needed:
+
+```lua
+section("Splash", function()
+  setOutPath(PLUGINSDIR)
+  file("assets/splash.bmp")
+end)
+```
+
+```nsis
+Section "Splash"
+  InitPluginsDir
+  SetOutPath $PLUGINSDIR
+  File "assets\splash.bmp"
+```
+
+### Per body, at the top, and not hoisted
+
+A body is the smallest unit that is correct **without a reachability argument**: a mention
+in one arm of an `if` is covered by the same line as a mention in the other, and the top of
+the body is the one position ahead of all of them. NSIS defines the instruction as a no-op
+when the directory already exists, so a caller and a callee both opening with one is not a
+duplicate to be optimised away — it is the same guarantee stated twice at ~28 bytes.
+
+Hoisting to `.onInit` instead was the alternative, and it loses twice: it creates the
+directory on every run of every installer whose one plugin section is never selected, and it
+means writing an `.onInit` for programs that have none. The line goes where the *mention*
+is, which also settles the two call directions — a caller that only calls a function naming
+the directory gets nothing, and a caller that passes `PLUGINSDIR` **to** a function has read
+it itself and gets the line, because the callee only ever sees a register.
+
+### What counts as naming it
+
+The scan reads `ir::Piece::Var` — and the instruction *names*, which is where a `raw` block
+lands. `raw` is the one place a `$PLUGINSDIR` arrives without passing through the constants
+table, and it is precisely the text nothing else in this compiler checked; an escape hatch
+that skipped this pass would be an escape hatch into the failure the pass exists to prevent.
+
+`ir::Piece::Text` is deliberately **not** read. A `$` in a string literal is five dollars and
+the emitter doubles it (§15.1), so `detailPrint("$PLUGINSDIR")` ships `$$PLUGINSDIR` and
+reads the directory no more than any other sentence does. The compiler already warns about
+that habit; what the pass must not do is agree with the mistake.
+
+### The backlog is empty
+
+`todo` 0 → 0 rows in both censuses — 276 commands and 255 MUI2 names, and not one of them
+is now waiting on anybody. `lowering-target` 27 → 28. 329 tests.
+
+`overlay::todo` is now unused, and kept, with the same note its MUI twin already carries: an
+empty backlog is a state to be able to **lose**. `-CMDHELP` grows with every NSIS, the join
+already files an unrecognised skeleton as a `Todo` on its own, and the first command nobody
+has read yet will want a bucket that is neither "exposed" nor "we decided against it".
+
+## Batch 55 — the editor's half was hand-written, and nobody was checking it
+
+`page.startMenu` compiled, emitted its two macros and had eight tests behind it, and no
+editor in the world would offer it: `installua.Pages` had never heard of the name. It was
+not alone. The pages, the `installer {}` block and the control classes are the part of the
+stub that is **hand-written** — a block's value is an expression in a table rather than an
+argument, and §15.23's parameter model has nothing to say about it — and the only test
+pointing at any of it went one way, stub → compiler, for `attributes {}` alone.
+
+Nothing ever asked the other question. So the count, once asked:
+
+| what | missing |
+| ------ | --------- |
+| `page.startMenu` | the page, its class and its handle |
+| the other seven pages | 31 fields — every `subCaption`, the whole finish page's `run`/`readme`/`link`/`reboot`, both components descriptions, the directory's `colors`, all four instfiles headers |
+| `installer {}` / `uninstaller {}` | `headerColors`, `abortPrompt`, `autoClose`, `headerImage`, `wizardImage`, `smallDescriptions` |
+| `glob` and `lines` | both iterators |
+| `installua.Colors` | nothing missing — it said `back` where the compiler says `background` |
+
+The last row is the different kind. A missing name is a warning on correct code (§1); a
+**wrong** name is completion that hands the user something that does not compile, from three
+places at once — a control, `page.directory { colors }` and `installer { headerColors }`.
+
+### The classes now inherit the way the pages do
+
+`installua.Page.Full` was one class for welcome and finish, holding the three hooks and
+nothing else — which is why neither page had a `title`. It is gone. The base is the three
+hooks, `installua.Page.Headed` adds the header strip, and the six pages that draw one
+inherit from it while welcome and finish do not. That is `Pages.nsh`'s own split — it calls
+`MUI_HEADER_TEXT_PAGE` from five pages and not from the two full-window ones — restated
+where an editor can read it.
+
+### Four tests, and they were mutation-checked
+
+`lower::v1_page_surface` and `lower::v1_installer_fields` are public for the same reason
+`mui_defines` already is: a hand-written second copy needs a test that can read both sides.
+Two of the four compare names in both directions; two **compile** each offered field and
+fail on `unknown-field`, which is what catches a spelling rather than an omission.
+
+Each was checked against the bug it exists for — reintroduce `back`, drop `defaultFolder`,
+drop `autoClose`, add a misspelling, and exactly one test fails with a message that names
+the field. A test nobody has seen fail is a test nobody knows the shape of.
+
+## Batch 56 — the same question, asked of everything else that is hand-written
+
+Batch 55 fixed the pages and the block and left the rest of the hand-written surface
+unasked. Asking it found four more, of three kinds.
+
+**A method surface with seven of ten missing.** `installua.File` declared `read`, `write`
+and `close`. The table has ten `f:` rows — `readByte`, `writeByte`, `readWord`, `writeWord`,
+`readUtf16Le`, `writeUtf16Le` and `seek` were the rest, all of them compiling, none of them
+completing. The hole was in `every_exposed_row_reaches_the_stub`, which skips any row whose
+spelling contains a `:` because a method is not a `function name(`. They are generated now,
+from the same rows and through the same annotation writer as every other instruction: the
+one difference is that a method's **first position is its receiver**, so `FileRead handle
+output` drops its handle and becomes `f:read()`.
+
+**A class that inherited what it does not have.** `installua.Group : installua.Section`
+offered a heading a `size` to charge and an install type to belong to. A group is a section
+to NSIS — one index, one flags word — but `Where::Sections` gates those two, because what a
+group holds is sections and each of those answers for itself. The shared four are
+`installua.Selectable` now, and neither class inherits the other.
+
+**Two options nobody could find.** `description` — the words the components page shows on
+hover — was missing from both `SectionOptions` and `GroupOptions`. This is the failure with
+no symptom: the field compiles, and a feature an editor never offers is a feature nobody
+uses. Both lists are `pub const` beside the arms that read them and are the note the errors
+print, so the next option is added in one place.
+
+**And one the other way round.** `versionInfo.file` was in the census as an attribute, in
+`REFERENCE_MAP.md` as documented, and in the stub as a completion — and the lowerer had
+never grown the arm, so the one name an editor offered here was the one that did not
+compile. `VIFileVersion` is a real command and the fix is to write it: `product` and `file`
+are one arm now, ordered ahead of `keys` because `VIAddVersionKey` before either is a
+`makensis` error.
+
+`ControlOptions`, `Control`, `Font`, `Colors`, `Ask`, `Languages` and `Section` were checked
+and had not drifted. That is worth as much as the four that had: the tests are there for the
+fifteenth control kind, not for today.
+
+Five more tests, mutation-checked the same way. 329 → 338.
+
 ## Still open
 
 - **`installua stubs` scans one directory** — carried over from Phase 5, unchanged.
@@ -2997,10 +3286,10 @@ Coverage: `todo` 4 → 3, `exposed` 103 → 104. 303 tests.
   designing the thing its reason asked for and then finding that six of its rows were not
   callable at all. Batch 45 emptied the *flattened alternation* pair and batch 46 the last
   one-off with a fixture behind it. Batch 47 read the last three groups and found that
-  none of them was a group of `todo`s at all, and batch 48 spent the last one. All **3** that
-  remain are one-offs. This bullet has now outlived the thing it describes: the
-  grouping was a way of noticing that one reason covered several rows, and every reason
-  that did has been spent.
+  none of them was a group of `todo`s at all, and batch 48 spent the last one. Batches 49–54
+  spent the one-offs that remained, and **none is left**. This bullet has now outlived the
+  thing it describes twice over: the grouping was a way of noticing that one reason covered
+  several rows, every reason that did has been spent, and so has every reason that did not.
 - **A group's reason is written once and never re-read.** Batch 17's five rows were
   unblocked from the moment `SetCompressor` became an attribute, and stayed `todo` for
   sixteen batches because the reason was true of the shape they were rejected as. Batch 18
@@ -3018,7 +3307,10 @@ Coverage: `todo` 4 → 3, `exposed` 103 → 104. 303 tests.
   and never its neighbours, so a row can sit two lines above its own answer indefinitely.
   Batch 51 is the sixth and the only one whose every clause was **true**: the blocker was a
   premise underneath the reason — that a read must answer with what its write took — and a
-  premise is not written down anywhere to be re-read.
+  premise is not written down anywhere to be re-read. Batch 52 is the seventh and the most
+  ordinary: a reason that restates the **input** — two alternatives, one of them a DLL — and
+  never says what the compiler cannot do about it. One of its two clauses named a mechanism
+  built to handle exactly that, already handling it for the row above.
 - **A `Setting` cannot say "meaningful only when a sibling holds one value".**
   `compressionLevel` and `compressorDictSize` exclude each other through `compressor`, and
   `makensis` is the only thing that knows. Third cross-field constraint in two batches.

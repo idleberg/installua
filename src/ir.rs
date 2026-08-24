@@ -71,6 +71,21 @@ pub struct Module {
     /// One list rather than two because they are one run of output, in the one
     /// position both are legal in (§15.26).
     pub languages: Vec<Instruction>,
+    /// `LicenseLangString` lines, one per locale per license page whose `file`
+    /// was written per locale (§15.26). Under the languages for the same reason
+    /// the `LangString`s are — the `${LANG_…}` a line names is defined by the
+    /// `MUI_LANGUAGE` above it — but a list of their own, because they are
+    /// gathered while the *pages* are lowered and the languages pass has long
+    /// since finished by then.
+    pub license_data: Vec<Instruction>,
+    /// `ReserveFile /plugin X.dll`, one per plugin `.onInit` can reach — the
+    /// compiler's half of `ReserveFile`, which no surface spelling reaches
+    /// (§11). After the languages because that is where MUI2 puts its own
+    /// (`MUI_RESERVEFILE_LANGDLL`) and the head of the data block is what both
+    /// are competing for; a `reserveFile(…)` the user wrote is an ordinary
+    /// statement in a body and lands further down, which is the right order —
+    /// nothing else can be needed earlier than `.onInit` needs these.
+    pub reserved: Vec<Instruction>,
     /// `InstType` lines, in the order they were written — which is the whole of
     /// what an install type *is* to NSIS, since a section names one by its
     /// one-based position and by nothing else (§13). The uninstaller's are the

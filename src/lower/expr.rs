@@ -1513,6 +1513,10 @@ impl BodyLowerer<'_, '_> {
             raw: false,
         };
         self.body.calls[site].results = results;
+        // Noted for the reservation pass: a DLL `.onInit` can reach has to be
+        // at the head of the data block, and nothing after lowering can tell
+        // `nsExec::ExecToStack` from any other opaque line (§11).
+        self.body.plugins.insert(entry.plugin.to_string());
         let current = self.current;
         self.body.push_step(current, ir::Step::Call(site));
         Some(outputs)

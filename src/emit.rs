@@ -111,6 +111,17 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
         }
     }
     out.section("language", module.languages.iter().map(line));
+    // 7a. The per-locale license files, after the `MUI_LANGUAGE` lines that
+    //     define the `${LANG_…}` each one names. The page macro that reads
+    //     `$(licenseData)` is *above* them and that is legal: a language string
+    //     is resolved when the tables are written, not where it is mentioned.
+    out.section("license", module.license_data.iter().map(line));
+
+    // 7b. The plugin reservations, immediately after the language lines — the
+    //     position MUI2 chose for `MUI_RESERVEFILE_LANGDLL`, and the same
+    //     argument: `.onInit` runs before anything has been extracted, so a DLL
+    //     it calls has to be at the head of the data block (§11).
+    out.section("reserve", module.reserved.iter().map(line));
 
     // 8. Install types, in the order they were declared. That order is their
     //    identity — a `SectionIn` names one by position — so like the pages and
