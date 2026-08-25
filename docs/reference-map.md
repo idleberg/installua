@@ -40,7 +40,7 @@ pending — the `todo` bucket of both censuses is empty.
 | [Strings and numbers](#strings-and-numbers)                       | `string.*`, arithmetic, comparison                                            |
 | [Flow, errors and messages](#flow-errors-and-messages)            | aborting, testing, telling the user                                           |
 | [Windows facts](#windows-facts)                                   | what the machine is: version, shell folders, registry view                    |
-| [Plugins and headers](#plugins-and-headers)                       | `plugin`, `import`, `raw`                                                     |
+| [Plugins and headers](#plugins-and-headers)                       | `plugin`, `import`, `raw`, declaring a third-party one                        |
 | [Constants](#constants)                                           | `INSTDIR`, `PROGRAMFILES64`, `HKLM`, …                                        |
 | [Not available](#not-available)                                   | what has no Installua spelling, and what to write instead                     |
 
@@ -1117,7 +1117,10 @@ reserves it when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
-Declared today: `nsExec.execToStack`, `UserInfo.getAccountType`, `System.call`.
+Ships declared: `nsExec.execToStack`, `UserInfo.getAccountType`, `System.call`.
+Anything else — every third-party DLL — is declared by the project in
+[`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header), which
+is what supplies the output count nothing can ask the DLL for.
 
 ```lua
 local nsExec = plugin "nsExec"
@@ -1137,8 +1140,11 @@ Brings a declared NSIS header's macros into scope. The `!include` and any
 
 **Usage** `local h = import(header)` · `h.macro(…)`
 
-Declared today: `FileFunc.getSize`, `FileFunc.driveSpace`,
-`WordFunc.versionCompare`.
+Ships declared: `FileFunc.getSize`, `FileFunc.driveSpace`,
+`WordFunc.versionCompare`. Any other header's macros are declared by the project
+in [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header).
+`import` itself needs no declaration: the `!include` is emitted for whatever name
+it is given, so a header reached only through `raw` still gets its line.
 
 ```lua
 local fileFunc = import "FileFunc"
@@ -1166,6 +1172,52 @@ raw [[
   SetRegView 64
 ]]
 ```
+
+### Declaring a third-party plugin or header
+
+One file per plugin or header in `.installua/headers/`, read by the compiler,
+the editor stubs and the linter alike. The file name is yours; the extension is
+`.toml`.
+
+```toml
+# .installua/headers/nsis7z.toml
+[[plugin]]
+name = "Nsis7z"                       # what `plugin "…"` is given
+method = "extractWithDetails"         # what you call it
+nsis = "Nsis7z::ExtractWithDetails"   # what NSIS is given
+params = ["path", "string"]           # positions, in order
+outputs = ["string"]                  # values pushed, in `Pop` order
+
+[[header]]
+name = "TextFunc"                     # what `import "…"` is given
+method = "trimNewLines"
+nsis = "TrimNewLines"                 # the macro name, without `${}`
+params = ["string"]
+outputs = ["string"]                  # trailing registers, in the order written
+```
+
+`name`, `method` and `nsis` are required. `nsis` is not derived from `method`,
+because `${StrCase} $0 "text" "L"` puts its destination _first_ and
+`${GetSize} "$dir" "" $0 $1 $2` puts it _last_: there is no convention to infer,
+and guessing emits NSIS that looks right and is not.
+
+**The types** are `string`, `path`, `int`, `uint`, `int64`, `intptr`, `bool`,
+`handle` and `any`. `path` is an input spelling — a `string` whose `/` becomes
+`\` on the way in — so it is rejected in `outputs`, where the callee has already
+written whatever it wrote. `uint` is worth reaching for on a count or a size:
+knowing a value cannot be negative is what elides the sign fixup on `//`.
+
+**`outputs` is the load-bearing line.** NSIS offers no way to ask a DLL how many
+values it pushes, so `local rc, out = …` is checked against this list and
+nothing else. A count that is too small unbalances the stack, with no diagnostic
+from NSIS or from anybody.
+
+Redeclaring one of the builtins is allowed and replaces it, so a count that
+ships wrong here is not a wall. Declaring the same method twice from two of your
+own files is a mistake, and says so.
+
+Run `installua stubs` after adding a declaration: the compiler reads the `.toml`
+on every build, but the editor reads the generated stub.
 
 ---
 

@@ -140,6 +140,25 @@ fn main() -> ExitCode {
     }
 }
 
+/// The options a command compiles under, or `None` when the project's own
+/// declarations are unreadable.
+///
+/// A malformed `.installua/headers/*.toml` stops the command rather than
+/// warning: the file exists to tell the compiler what a plugin's arity is, and
+/// a program checked without it would be checked against a language missing
+/// whatever it declared. Every diagnostic that followed would be about the
+/// wrong thing.
+fn options(input: &Path) -> Option<installua::Options> {
+    let (options, problems) = installua::Options::for_project(input);
+    if problems.is_empty() {
+        return Some(options);
+    }
+    for problem in &problems {
+        eprintln!("installua: {problem}");
+    }
+    None
+}
+
 fn check(files: &[PathBuf]) -> ExitCode {
     let mut failed = false;
     for path in files {
@@ -160,8 +179,12 @@ fn check(files: &[PathBuf]) -> ExitCode {
         // Following `include` for the same reason it always did: a name an
         // included file declares is not an error, and a `check` that said it
         // was would be worse than no `check` at all.
+        let Some(options) = options(path) else {
+            return ExitCode::from(2);
+        };
+
         let mut diags = Diagnostics::new();
-        installua::compile_with(&source, &installua::Options::for_file(path), &mut diags);
+        installua::compile_with(&source, &options, &mut diags);
         report(&diags, path);
         failed |= diags.has_errors();
     }
@@ -189,7 +212,9 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
     // Relative paths in the source resolve against the *source's* directory,
     // not the shell's: a `glob` means the same thing wherever the build is run
     // from, which is what makes the output reproducible.
-    let options = installua::Options::for_file(input);
+    let Some(options) = options(input) else {
+        return ExitCode::from(2);
+    };
 
     let mut diags = Diagnostics::new();
     let result = installua::build_mapped(&source, &options, &mut diags);
@@ -332,8 +357,24 @@ fn stubs(root: &Path) -> ExitCode {
         }
     }
 
+    // The project's own declarations, so a third-party plugin is typed in the
+    // editor by the same file that makes it compile. A malformed one stops the
+    // command for the reason it stops a build: stubs generated without it would
+    // quietly leave out whatever it declared.
+    let (declarations, problems) =
+        installua::headers::Declarations::load(&root.join(installua::headers::DIRECTORY));
+    if !problems.is_empty() {
+        for problem in &problems {
+            eprintln!("installua: {problem}");
+        }
+        return ExitCode::from(2);
+    }
+
     let files = [
-        (meta.join("installua.lua"), installua::stubs::meta()),
+        (
+            meta.join("installua.lua"),
+            installua::stubs::meta(&declarations),
+        ),
         (
             meta.join("project.lua"),
             installua::stubs::project_meta(&sources),

@@ -26,12 +26,19 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use crate::builtins;
+use crate::headers;
 use crate::lower::{self, control};
 use crate::table::{self, Class, Param};
 use crate::types::Ty;
 
 /// `.installua/meta/installua.lua`: the `---@meta` file.
-pub fn meta() -> String {
+///
+/// Takes the declarations rather than reading the builtins, because a
+/// third-party plugin is only *declared* in a project's own
+/// `.installua/headers/*.toml` — and a stub that stopped at the builtins would
+/// leave exactly the calls a user had to write down themselves untyped, which
+/// is the case the declaration file exists for.
+pub fn meta(declared: &headers::Declarations) -> String {
     let mut out = String::from(
         "---@meta\n\
          \n\
@@ -46,6 +53,7 @@ pub fn meta() -> String {
     out.push_str(&aliases());
     out.push_str(&blocks());
     out.push_str(&declarations());
+    out.push_str(&foreign(declared));
     out.push_str(&controls());
     out.push_str(&instructions());
     out.push_str(&constants());
@@ -342,13 +350,13 @@ const PAGES: &str = "\
 -- The one page bound to a local — `local menu = page.startMenu { … }` — because\n\
 -- MUI2 names it from install-time code: the folder is read back through the id\n\
 -- and the shortcut writing is wrapped in it.\n\
+-- `write` is a `---@field` and not a `function StartMenu.write`: the class is\n\
+-- `(exact)`, so a method declared beside it is a field being *injected* into a\n\
+-- closed class — which LuaLS reports, in the generated file, in every project.\n\
 ---@class (exact) installua.StartMenu\n\
 ---@field folder string The folder the page chose. Read-only.\n\
+---@field write fun(body: fun()) Wraps the code that creates the shortcuts, so the chosen folder is written back to the registry. The installer's; the uninstaller reads `folder`.\n\
 local StartMenu = {}\n\n\
---- Wraps the code that creates the shortcuts, so the chosen folder is written\n\
---- back to the registry. The installer's; the uninstaller reads `folder`.\n\
----@param body fun()\n\
-function StartMenu.write(body) end\n\n\
 ---@class installua.Pages\n\
 ---@field welcome fun(options?: installua.Page.Welcome)\n\
 ---@field license fun(options: installua.Page.License)\n\
@@ -360,8 +368,11 @@ function StartMenu.write(body) end\n\n\
 ---@field confirm fun(options?: installua.Page.Confirm)\n\
 ---@field custom fun(options?: installua.Page.Custom)\n\
 \n\
+-- `nil` and not `{}`: an empty table is a value with none of the fields the\n\
+-- type requires, and a `---@meta` global wants a declaration rather than an\n\
+-- initialiser — which is how every constant below is declared too.\n\
 ---@type installua.Pages\n\
-page = {}\n\n";
+page = nil\n\n";
 
 /// The top-level `attributes {}` fields and their Lua types.
 ///
@@ -623,12 +634,6 @@ fn declarations() -> String {
          ---@param handle installua.File\n\
          ---@return fun(): string\n\
          function lines(handle) end\n\n\
-         ---@param header string\n\
-         ---@return table\n\
-         function import(header) end\n\n\
-         ---@param name string\n\
-         ---@return table\n\
-         function plugin(name) end\n\n\
          ---@param text string\n\
          function raw(text) end\n\n\
          ---@param options string|table\n\
@@ -643,6 +648,108 @@ fn declarations() -> String {
     );
     out.push_str(&file_methods());
     out
+}
+
+/// `plugin` and `import`, and one class per declared plugin and header.
+///
+/// The class is what makes a third-party call *typed* rather than merely
+/// accepted: `plugin` returning a bare `table` — which is what it used to do —
+/// meant `nsExec.exectostack(…)` completed nowhere, checked nothing, and was
+/// reported by the compiler seconds later. The declaration already carries the
+/// arity, so the editor may as well have it.
+///
+/// The literal-typed `---@overload` is how a return type can depend on an
+/// argument's *value*: `lua-language-server` matches `'"nsExec"'` against the
+/// literal at the call site and picks that overload, falling back to the plain
+/// `table` for a name nobody declared — which is the honest answer there, since
+/// `raw` is all that is left for it.
+///
+/// Parameters are `a1`, `a2`, …: a declaration says what a position *is* and
+/// not what it is called, and inventing names that read like documentation
+/// would be inventing documentation.
+fn foreign(declared: &headers::Declarations) -> String {
+    let mut out = String::from(
+        "--------------------------------------------------------------------------------\n\
+         -- Foreign code: plugins and headers, from the builtin declarations and from\n\
+         -- this project's own `.installua/headers/*.toml`.\n\
+         --------------------------------------------------------------------------------\n\n",
+    );
+
+    for name in declared.plugin_names() {
+        let class = format!("installua.Plugin.{}", identifier(name));
+        let _ = writeln!(out, "---@class {class}\nlocal {} = {{}}\n", local(&class));
+        for entry in declared.all_plugins() {
+            if entry.plugin != name {
+                continue;
+            }
+            out.push_str(&foreign_method(
+                &format!("{}.{}", local(&class), entry.installua),
+                &entry.params,
+                &entry.outputs,
+                &entry.nsis,
+            ));
+        }
+    }
+
+    for name in declared.header_names() {
+        let class = format!("installua.Header.{}", identifier(name));
+        let _ = writeln!(out, "---@class {class}\nlocal {} = {{}}\n", local(&class));
+        for entry in declared.all_macros() {
+            if entry.header != name {
+                continue;
+            }
+            out.push_str(&foreign_method(
+                &format!("{}.{}", local(&class), entry.installua),
+                &entry.params,
+                &entry.outputs,
+                &format!("${{{}}}", entry.nsis),
+            ));
+        }
+    }
+
+    out.push_str("---@param name string\n---@return table\n");
+    for name in declared.plugin_names() {
+        let _ = writeln!(
+            out,
+            "---@overload fun(name: '\"{name}\"'): installua.Plugin.{}",
+            identifier(name)
+        );
+    }
+    out.push_str("function plugin(name) end\n\n---@param header string\n---@return table\n");
+    for name in declared.header_names() {
+        let _ = writeln!(
+            out,
+            "---@overload fun(header: '\"{name}\"'): installua.Header.{}",
+            identifier(name)
+        );
+    }
+    out.push_str("function import(header) end\n\n");
+    out
+}
+
+/// One declared method, as a `function` on its class. The NSIS line it becomes
+/// is the comment, because that is the one thing a reader cannot infer from the
+/// Lua spelling and the one thing they will search the NSIS docs for.
+fn foreign_method(spelling: &str, params: &[headers::Param], outputs: &[Ty], nsis: &str) -> String {
+    let mut out = format!("-- `{nsis}`\n");
+    let names: Vec<String> = (1..=params.len())
+        .map(|index| format!("a{index}"))
+        .collect();
+    for (name, param) in names.iter().zip(params) {
+        let _ = writeln!(out, "---@param {name} {}", lua_name(param.ty));
+    }
+    for output in outputs {
+        let _ = writeln!(out, "---@return {}", lua_name(*output));
+    }
+    let _ = writeln!(out, "function {spelling}({}) end\n", names.join(", "));
+    out
+}
+
+/// The `local` a `---@class` is attached to. LuaCATS needs a name to hang the
+/// class on and nobody ever writes this one, so it is derived rather than
+/// chosen: the dotted class name is not a Lua identifier.
+fn local(class: &str) -> String {
+    class.replace('.', "_")
 }
 
 /// One `function` per `Exposed` row, from the joined table.
@@ -716,7 +823,13 @@ fn instructions() -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
          -- Instructions, one per `Class::Exposed` row.\n\
-         --------------------------------------------------------------------------------\n\n",
+         --------------------------------------------------------------------------------\n\n\
+         -- `os` is disabled wholesale in `.luarc.json`, because nothing it offers\n\
+         -- exists at install time — and `os.exit` is the one name kept, so the table\n\
+         -- it hangs on has to be declared or it is an undefined global in this file.\n\
+         -- `string` needs no line: it is a builtin that stays, minus the members\n\
+         -- selene rejects.\n\
+         os = {}\n\n",
     );
 
     let mut seen: BTreeSet<&str> = BTreeSet::new();
@@ -1026,11 +1139,11 @@ pub fn selene_std() -> String {
         if name.contains(':') || entry.bound() {
             continue;
         }
-        let _ = writeln!(out, "  {name}:\n    args:");
+        let mut args = String::new();
         for param in entry.positional() {
-            let _ = writeln!(out, "      - type: {}", selene_type(param));
+            let _ = writeln!(args, "      - type: {}", selene_type(param));
             if !param.required() {
-                let _ = writeln!(out, "        required: false");
+                let _ = writeln!(args, "        required: false");
             }
         }
         // One trailing table for the named half — optional positions, flags, or
@@ -1038,8 +1151,30 @@ pub fn selene_std() -> String {
         // is as much as it can say; the field names are the language server's
         // job.
         if entry.takes_options() {
-            let _ = writeln!(out, "      - type: table\n        required: false");
+            let _ = writeln!(args, "      - type: table\n        required: false");
         }
+        out.push_str(&function(name, &args));
+    }
+
+    // The language constructs. Not in the table — `installer` is not an NSIS
+    // command — and so not generated from it: without these, selene calls
+    // `plugin`, `section` and `raw` undefined globals, which is the diagnostic
+    // this std exists to make impossible.
+    for (name, args) in LANGUAGE {
+        out.push_str(&function(name, args));
+    }
+    for control in control::CONTROLS {
+        out.push_str(&function(control.installua, "      - type: table\n"));
+    }
+    // `page.directory {}` is a call on a dotted name, and selene resolves the
+    // *root* — so without a `page.…` entry for each one, `page` is an undefined
+    // variable in every program that draws a page, which is all of them. From
+    // the compiler's own list, so a page added there is a page selene knows.
+    for (page, _, _) in lower::v1_page_surface() {
+        out.push_str(&function(
+            &format!("page.{page}"),
+            "      - type: table\n        required: false\n",
+        ));
     }
 
     // A `Kind::Bound` row is reached through a name rather than called. The
@@ -1062,6 +1197,51 @@ pub fn selene_std() -> String {
     }
     out
 }
+
+/// One global function, with its argument list.
+///
+/// `args: []` rather than a bare `args:` when there are none: selene reads the
+/// key as a null and refuses the whole file, so a single zero-argument
+/// function — `clearErrors`, `bringToFront`, `errors` — used to make the std
+/// unloadable and every name in it undefined.
+fn function(name: &str, args: &str) -> String {
+    if args.is_empty() {
+        format!("  {name}:\n    args: []\n")
+    } else {
+        format!("  {name}:\n    args:\n{args}")
+    }
+}
+
+/// The constructs the language has and NSIS does not, with what selene can
+/// check about them: how many arguments, and which are optional.
+///
+/// A `table` here is a block — `installer { … }` — and selene's argument model
+/// stops there. What the fields *are* is the language server's half, and both
+/// halves come out of this one file either way.
+const LANGUAGE: &[(&str, &str)] = &[
+    ("attributes", "      - type: table\n"),
+    ("installer", "      - type: table\n"),
+    ("uninstaller", "      - type: table\n"),
+    ("languages", "      - type: table\n"),
+    // Both take either `(name, body)` or a single options table, so the second
+    // position is optional and neither is typed more tightly than that.
+    (
+        "section",
+        "      - type: any\n      - type: any\n        required: false\n",
+    ),
+    (
+        "group",
+        "      - type: any\n      - type: any\n        required: false\n",
+    ),
+    ("func", "      - type: string\n      - type: function\n"),
+    ("onInit", "      - type: function\n"),
+    ("include", "      - type: string\n"),
+    ("glob", "      - type: string\n"),
+    ("lines", "      - type: any\n"),
+    ("import", "      - type: string\n"),
+    ("plugin", "      - type: string\n"),
+    ("raw", "      - type: string\n"),
+];
 
 /// The names `lua-language-server` keeps and Installua rejects. Each names its
 /// replacement, because a lint that only says no is a lint people disable.
@@ -1156,10 +1336,19 @@ pub fn project_toml(name: &str) -> String {
 /// the generated std's replacement text a failure rather than advice.
 pub fn selene_toml() -> String {
     String::from(
-        "std = \"installua\"\n\n\
+        "# The path form, not the bare name. A bare `std = \"installua\"` searches this\n\
+         # directory for `installua.toml` first — and that is the *project marker*,\n\
+         # which selene reads as a malformed standard library and refuses the run\n\
+         # over. The generated std has one home and this names it.\n\
+         std = \".installua/installua\"\n\n\
          # Warnings are failures. `deprecated` is how the generated std names a\n\
          # replacement for every rejection, so it must not be advisory.\n\
          [lints]\n\
-         deprecated = \"deny\"\n",
+         deprecated = \"deny\"\n\n\
+         # A block *is* a mixed table: `installer { installDir = …, section(…) }`\n\
+         # writes its settings as keys and its contents as the array part, which is\n\
+         # the shape the whole language is written in. selene's warning is about\n\
+         # iterating one, and nothing here iterates anything at build time.\n\
+         mixed_table = \"allow\"\n",
     )
 }

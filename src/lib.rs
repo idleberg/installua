@@ -72,6 +72,10 @@ pub struct Options {
     pub root: Option<PathBuf>,
     /// Where `include` reads from. [`Loader::Disk`] by default.
     pub loader: frontend::include::Loader,
+    /// What `import` and `plugin` may call: the builtins, plus whatever
+    /// `.installua/headers/*.toml` declared. Defaulting to the builtins alone
+    /// is what keeps an in-memory compile working with no directory to read.
+    pub declarations: headers::Declarations,
 }
 
 impl Options {
@@ -84,6 +88,31 @@ impl Options {
             root: Some(root),
             ..Options::default()
         }
+    }
+
+    /// [`Options::for_file`], plus the declarations in
+    /// `<base>/.installua/headers`.
+    ///
+    /// The problems come back rather than being folded into a [`Diagnostics`]:
+    /// a malformed declaration file has no span in any Lua source, and a caller
+    /// that compiled anyway would be checking the program against a language
+    /// missing whatever that file was supposed to add. The CLI prints them and
+    /// stops.
+    pub fn for_project(input: &std::path::Path) -> (Options, Vec<headers::Problem>) {
+        let options = Options::for_file(input);
+        let dir = options
+            .base
+            .clone()
+            .unwrap_or_default()
+            .join(headers::DIRECTORY);
+        let (declarations, problems) = headers::Declarations::load(&dir);
+        (
+            Options {
+                declarations,
+                ..options
+            },
+            problems,
+        )
     }
 }
 

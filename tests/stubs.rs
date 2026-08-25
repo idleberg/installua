@@ -6,10 +6,13 @@
 //! nothing a `LoweringTarget` would teach appears in it at all.
 
 use installua::diag::{Code, Diagnostics};
-use installua::{stubs, table};
+use installua::{headers, stubs, table};
 
+/// The stub a project with no declarations of its own gets. Everything these
+/// tests check about the language is in it; what a *declaration file* adds is
+/// checked in `tests/headers.rs`, against the same generator.
 fn meta() -> String {
-    stubs::meta()
+    stubs::meta(&headers::Declarations::builtin())
 }
 
 /// The `---@field` names of one `---@class`.

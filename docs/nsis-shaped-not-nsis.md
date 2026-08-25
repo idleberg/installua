@@ -172,7 +172,10 @@ and it costs exactly what you would expect:
   and mangle your `\` and `$\n`.
 
 Third-party headers and plugins are declared in `.installua/headers/*.toml`, which the
-compiler, the editor stubs and the linter all read. Declaring one is not ceremony:
+compiler, the editor stubs and the linter all read — five lines per method, and the call
+is then as ordinary as `detailPrint`. Declaring one is not ceremony:
 `${StrCase} $0 "text" "L"` puts its destination _first_ and `${GetSize} "$dir" "" $0 $1 $2`
 puts it _last_, so there is no convention to infer, and guessing emits NSIS that looks
-right and is not.
+right and is not. The format is in
+[the reference](reference-map.md#declaring-a-third-party-plugin-or-header); what stays
+`raw`'s work is `!addplugindir` and anything you have not declared yet.

@@ -1241,16 +1241,21 @@ impl BodyLowerer<'_, '_> {
             }
         };
 
-        let Some(entry) = crate::headers::lookup(&header, method) else {
+        // Cloned out of the options rather than borrowed from them: what
+        // follows raises diagnostics and lowers arguments, both of which want
+        // `&mut self`, and a declaration is three strings and two short lists.
+        let Some(entry) = self.options.declarations.lookup(&header, method).cloned() else {
             let mut diagnostic = Diagnostic::error(
                 Code::UndefinedName,
                 span,
                 format!("`{header}` declares no `{method}`"),
             );
-            diagnostic = if crate::headers::known(&header) {
+            diagnostic = if self.options.declarations.known(&header) {
                 diagnostic.note(format!(
                     "it declares {}",
-                    crate::headers::methods(&header)
+                    self.options
+                        .declarations
+                        .methods(&header)
                         .iter()
                         .map(|name| format!("`{name}`"))
                         .collect::<Vec<_>>()
@@ -1260,7 +1265,8 @@ impl BodyLowerer<'_, '_> {
                 diagnostic.note(format!(
                     "nothing is declared for `{header}` — a macro's parameter list says nothing \
                      about directions or counts, so the declaration is written rather than \
-                     discovered"
+                     discovered: put one in `{}/`",
+                    crate::headers::DIRECTORY
                 ))
             };
             self.diags.push(diagnostic);
@@ -1398,28 +1404,31 @@ impl BodyLowerer<'_, '_> {
         dests: &[Slot],
         span: Span,
     ) -> Option<Vec<Ty>> {
-        let Some(entry) = crate::headers::plugin(plugin, method) else {
+        let Some(entry) = self.options.declarations.plugin(plugin, method).cloned() else {
             self.diags.push(
                 Diagnostic::error(
                     Code::UndefinedName,
                     span,
                     format!("`{plugin}` declares no `{method}`"),
                 )
-                .note(match crate::headers::plugin_methods(plugin).as_slice() {
-                    [] => format!(
-                        "nothing is declared for `{plugin}` — a DLL cannot be asked how many \
-                         values it pushes, so the count is written down rather than discovered \
-                        "
-                    ),
-                    methods => format!(
-                        "it declares {}",
-                        methods
-                            .iter()
-                            .map(|name| format!("`{name}`"))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ),
-                }),
+                .note(
+                    match self.options.declarations.plugin_methods(plugin).as_slice() {
+                        [] => format!(
+                            "nothing is declared for `{plugin}` — a DLL cannot be asked how many \
+                         values it pushes, so the count is written down rather than discovered: \
+                         put one in `{}/`",
+                            crate::headers::DIRECTORY
+                        ),
+                        methods => format!(
+                            "it declares {}",
+                            methods
+                                .iter()
+                                .map(|name| format!("`{name}`"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    },
+                ),
             );
             return None;
         };

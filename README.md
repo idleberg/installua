@@ -92,6 +92,66 @@ The generated [selene](https://kampfkarren.github.io/selene/) config is the
 other half: the Lua names Installua rejects are lint errors that each name
 their replacement, rather than names that silently do nothing.
 
+selene has to be built for Lua 5.4, or it cannot parse the `<const>` a
+build-time constant is declared with — the published binary is not:
+
+```sh
+cargo install selene --features selene-lib/lua54
+```
+
+## Third-party plugins and headers
+
+Installua ships declarations for a handful of plugin methods and header macros —
+`nsExec::ExecToStack`, `UserInfo::GetAccountType`, `System::Call`, `${GetSize}`,
+`${DriveSpace}`, `${VersionCompare}` — and your installer will reach past them
+almost immediately. Anything else is **declared by your project**, in one small
+file per plugin or header:
+
+```toml
+# .installua/headers/nsis7z.toml
+[[plugin]]
+name = "Nsis7z"                       # what `plugin "…"` is given
+method = "extractWithDetails"         # what you call it
+nsis = "Nsis7z::ExtractWithDetails"   # what NSIS is given
+params = ["path", "string"]
+outputs = ["string"]                  # values pushed, in `Pop` order
+```
+
+```lua
+local sevenZip = plugin "Nsis7z"
+
+section("Core", function()
+	local details = sevenZip.extractWithDetails("data/payload.7z", "")
+	detailPrint(details)
+end)
+```
+
+That is the whole of it. The declaration is read by the compiler on every build,
+so the call is arity-checked and emitted like any other; run `installua stubs`
+and the editor gets it too, with completion, hover and the same argument
+checking it gives `detailPrint`. A method nobody declared is an error naming the
+directory that would declare it, rather than a stack imbalance NSIS finds no
+fault with.
+
+**Why a declaration and not a scan.** NSIS offers no way to ask a DLL how many
+values it pushes, and an `!insertmacro` parameter list carries no directions —
+`${StrCase} $0 "text" "L"` puts its destination first and
+`${GetSize} "$dir" "" $0 $1 $2` puts it last. There is nothing to discover and
+nothing to infer, so the one thing that cannot be guessed is the one thing you
+write down. `outputs` is the load-bearing line: `local rc, out = …` is checked
+against it and against nothing else.
+
+A header is the easier half. `import "AnyHeader"` emits the `!include` whatever
+the name is, so a header you only reach through `raw` needs no declaration at
+all — you only need one to call its macros as `header.macro(…)`.
+
+The full format, the type vocabulary and the rules for redeclaring a builtin are
+in [docs/reference-map.md](docs/reference-map.md#declaring-a-third-party-plugin-or-header).
+
+Two things are still yours where a plugin is concerned: `!addplugindir` for a
+DLL outside NSIS's own `Plugins/` tree, written through `raw`, and `raw` itself
+for anything with no declaration yet.
+
 ## Documentation
 
 | | |
