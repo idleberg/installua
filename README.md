@@ -76,7 +76,7 @@ install.lua:3:15: warning[dollar-in-literal]: `$INSTDIR` is emitted as literal t
 | `installua build <file.lua>` | compile, then run `makensis -WX`. Exits non-zero on any error. |
 | `installua check <file.lua>...` | everything `build` would say, writing nothing and running no `makensis` — the fast gate for CI and editors |
 | `installua emit <file.lua>` | compile to `.nsi` and stop — for wiring into an existing build |
-| `-D NAME=VALUE` | on any of the three: set a build parameter the source declared with `param(…)` |
+| `-D NAME=VALUE` | on any of the three: set a build parameter the source declared with `param(…)`. `--param NAME=VALUE` is the same flag spelled out. |
 | `installua stubs` | regenerate the editor meta files. Run it after adding a `func` or a global. |
 
 `installua --help` lists the rest.

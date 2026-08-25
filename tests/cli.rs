@@ -173,6 +173,30 @@ installer { page.instFiles {}, section(\"Core\", function() detailPrint(VERSION)
         assert!(passed, "{output}");
     }
 
+    /// `--param` is the same flag spelled out, on both the subcommand that
+    /// flattens `BuildArgs` and the one that declares its own. Two `#[arg]`
+    /// sites means two chances for the long name to be on one and not the
+    /// other, so both are covered.
+    #[test]
+    fn the_long_name_is_the_same_flag() {
+        let (passed, output) = run_with(
+            "param-long-emit.lua",
+            PARAMETERISED,
+            "emit",
+            &["--stdout", "--param", "VERSION=2.0.0"],
+        );
+        assert!(passed, "{output}");
+        assert!(output.contains("!define VERSION \"2.0.0\""), "{output}");
+
+        let (passed, output) = run_with(
+            "param-long-check.lua",
+            PARAMETERISED,
+            "check",
+            &["--param", "VERSION=2.0.0"],
+        );
+        assert!(passed, "{output}");
+    }
+
     /// A name nothing declares stops the build rather than being ignored —
     /// which is the entire reason parameters are declared in the source.
     #[test]

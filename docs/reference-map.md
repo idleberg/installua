@@ -175,7 +175,13 @@ local SIGNED  <const> = param("SIGNED", false)
 
 ```console
 $ installua build install.lua -D VERSION=2.0.0 -D SIGNED=true
+$ installua build install.lua --param VERSION=2.0.0 --param SIGNED=true
 ```
+
+`-D` is the spelling `makensis -D` teaches; `--param` is the same flag written
+out. It is not `--define` or `--declare` because the source is what *declares* a
+parameter and the invocation is what *sets* one — a flag named for the declaring
+half would read as doing the thing the `unknown-param` error says it does not.
 
 Three things follow from the declaration being written in the source rather
 than passed only on the command line:

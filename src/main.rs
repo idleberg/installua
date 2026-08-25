@@ -42,7 +42,7 @@ enum Command {
         files: Vec<PathBuf>,
 
         /// Set a build parameter, as `build` would
-        #[arg(short = 'D', value_name = "NAME=VALUE")]
+        #[arg(short = 'D', long = "param", value_name = "NAME=VALUE")]
         define: Vec<String>,
     },
 
@@ -111,7 +111,16 @@ struct BuildArgs {
     ///
     /// Repeatable. A name the program does not declare is an error, not a
     /// shrug — see the `unknown-param` diagnostic.
-    #[arg(short = 'D', value_name = "NAME=VALUE")]
+    //
+    // The long name is `--param`, not `--define` or `--declare`: the source
+    // declares a parameter and the invocation sets one, and a flag named for
+    // the declaring half would read as doing the thing `unknown-param` says it
+    // does not — "sets a parameter this program does not declare". `-D` stays
+    // for the `makensis -D` reflex, which is where the muscle memory comes
+    // from even though the semantics differ. Kept out of the doc comment
+    // because clap prints that in `--help`, and this is a note to whoever
+    // renames it next.
+    #[arg(short = 'D', long = "param", value_name = "NAME=VALUE")]
     define: Vec<String>,
 }
 
@@ -171,7 +180,11 @@ fn options(input: &Path, define: &[String]) -> Option<installua::Options> {
     Some(options)
 }
 
-/// `-D NAME=VALUE`, split.
+/// `-D NAME=VALUE` — equivalently `--param NAME=VALUE` — split.
+///
+/// The messages here name the short form whichever way it was written: `-D` is
+/// the shorter thing to read back, and the two spellings reach this function
+/// indistinguishably.
 ///
 /// Only the split is done here: whether `NAME` is declared and whether `VALUE`
 /// is the type the declaration wants are both questions about the program, so
