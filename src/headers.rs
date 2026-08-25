@@ -41,6 +41,25 @@ pub struct Param {
     pub ty: Ty,
     /// A path position: `/` is normalised to `\`.
     pub path: bool,
+    /// A function position: the macro takes an address here, and NSIS calls
+    /// back into it.
+    ///
+    /// **This says only that a function goes here.** It does not say how the
+    /// callback receives its arguments, because that is not a signature: NSIS
+    /// hands them over in named registers — `$R9` down to `$R6` for `Locate`,
+    /// `$9` down to `$6` for `TextCompare` — and the answer comes back as a
+    /// pushed sentinel, with `LineFind` writing `$R9` on the way out as well.
+    /// A register map is behaviour, and behaviour does not go in a declaration
+    /// file: one written down wrongly compiles, assembles, and hands the caller
+    /// a directory where it asked for a file name, with no diagnostic possible
+    /// from here or from NSIS.
+    ///
+    /// So the map lives in [`crate::lower::callback`], keyed by the `nsis`
+    /// name, and a declaration naming a macro that table does not know is an
+    /// error that says so. That costs third-party callback macros — there is no
+    /// way to declare one — and buys the guarantee that no register is ever
+    /// spelled outside the compiler.
+    pub callback: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -614,7 +633,7 @@ mod parse {
     }
 
     const VOCABULARY: &str = "the types are `string`, `path`, `int`, `uint`, `int64`, `intptr`, \
-                              `bool`, `handle` and `any`";
+                              `bool`, `handle`, `any` and `callback`";
 
     /// A type list, checked. An unreadable word is dropped rather than
     /// substituted: a `params` list one short is a wrong arity, and the CLI
@@ -636,6 +655,18 @@ mod parse {
                     line,
                     "`path` is an input spelling: it normalises `/` on the way in, and an \
                      output is whatever the callee already wrote"
+                        .to_string(),
+                );
+                continue;
+            }
+            // A macro that takes a callback pushes nothing back through the
+            // stack — everything the caller learns arrives as an argument to
+            // the callback, which is the whole shape of these six.
+            if output && param.callback {
+                complain(
+                    line,
+                    "`callback` is an input spelling: a macro that takes a function address \
+                     writes no output register"
                         .to_string(),
                 );
                 continue;
@@ -728,6 +759,13 @@ mod parse {
     /// spelled as a type because that is where a declaration puts it: the file
     /// says what a position *is*, and `/` becoming `\` follows from that.
     fn ty(word: &str) -> Option<Param> {
+        if word == "callback" {
+            return Some(Param {
+                ty: Ty::Unknown,
+                path: false,
+                callback: true,
+            });
+        }
         let (ty, path) = match word {
             "string" => (Ty::Str, false),
             "path" => (Ty::Str, true),
@@ -752,6 +790,10 @@ mod parse {
             "any" => (Ty::Unknown, false),
             _ => return None,
         };
-        Some(Param { ty, path })
+        Some(Param {
+            ty,
+            path,
+            callback: false,
+        })
     }
 }

@@ -6,11 +6,10 @@
 # since `${GetSize} "$dir" "" $0 $1 $2` and `${StrCase} $0 "text" "L"` disagree
 # about which end the destination is.
 #
-# Two of FileFunc's macros are missing here on purpose. `Locate` and `GetDrives`
-# take a **function address**, which `params` has no type for and which nothing
-# emits a `GetFunctionAddress` for. They are a language question rather than a
-# data one and are left undeclared until it is answered — see the `import`
-# section of `docs/reference-map.md`.
+# `Locate` and `GetDrives` are the two that take a **function address**. Their
+# `params` end in `callback`, which says a function goes there and nothing
+# else: which register each argument arrives in is behaviour, and behaviour
+# lives in `src/lower/callback.rs` where a test can reach it.
 #
 # Every `params` and `outputs` list below was read from the macro body in
 # `NSISDIR/Include/FileFunc.nsh` and checked against `Examples/FileFunc.nsi`,
@@ -131,6 +130,38 @@ method = "getExePath"
 nsis = "GetExePath"
 params = []
 outputs = ["string"]
+
+# ── Walking the target's disk ────────────────────────────────────────────────
+#
+# Both of these are `for … in` loops in Installua, because both answer only
+# "keep going" or "stop" — which is what a loop body says by running to the end
+# or hitting `break`.
+
+[[header]]
+name = "FileFunc"
+# `for path, directory, name, size in fileFunc.locate(INSTDIR, "/L=F")`.
+#
+# The options are the second argument and select what is walked: `/L=F` files
+# only, `/L=D` directories, `/M=*.tmp` a mask, `/S=1M-` a size bound, `/G=0` no
+# recursion. The default walks everything under the path, recursively.
+#
+# This is the one macro with no other spelling in the language. `glob` walks
+# the **build** machine and unrolls before anything ships; this walks the disk
+# the installer is standing on.
+method = "locate"
+nsis = "Locate"
+params = ["path", "string", "callback"]
+outputs = []
+
+[[header]]
+name = "FileFunc"
+# `for drive, kind in fileFunc.getDrives("HDD+CDROM")`, where `kind` is one of
+# `FDD`, `HDD`, `NET`, `CDROM` or `RAM`. The argument is a `+`-joined list of
+# those same words, or `ALL` for every drive letter regardless of type.
+method = "getDrives"
+nsis = "GetDrives"
+params = ["string", "callback"]
+outputs = []
 
 # ── Facts about a file on the target ─────────────────────────────────────────
 

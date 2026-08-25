@@ -15,6 +15,7 @@
 //! first is a five-second wait and the second is a five-second fix, and
 //! collapsing them is how a `todo` count stops predicting anything.
 
+pub mod callback;
 pub mod control;
 mod expr;
 mod fields;
@@ -2014,6 +2015,24 @@ pub struct Requirements {
     pub headers: BTreeSet<String>,
     /// `StrFunc` functions to declare, by macro name: `StrCase`, `StrLoc`.
     pub str_func: BTreeSet<String>,
+    /// Functions a body asked the compiler to write: the callback behind a
+    /// `for … in fileFunc.locate(…)`.
+    ///
+    /// A `Vec` rather than a set, and a channel out of a body rather than a
+    /// field on one, because a [`BodyLowerer`] has no module to push to — it
+    /// owns one `Body` and knows nothing about the program around it. The
+    /// [`Lowerer`] drains this after each body it builds, which keeps the
+    /// ordering deterministic without either half knowing the other's shape.
+    pub functions: Vec<ir::Function>,
+    /// How many the compiler has written so far, ever.
+    ///
+    /// Separate from `functions.len()` because that list is *drained* after
+    /// every body, so it would restart at zero in the next section — and two
+    /// sections that each walk a directory would then both name their callback
+    /// `…_locate_0`. NSIS rejects the duplicate rather than picking one, so it
+    /// is loud rather than silent, but a name that depends on how much of the
+    /// program has been emitted is not a name.
+    pub generated: usize,
 }
 
 impl Requirements {
@@ -6579,12 +6598,20 @@ impl<'p> Lowerer<'_, 'p> {
             body: Body::new(span),
             scopes: vec![Vec::new()],
             loops: Vec::new(),
+            callback: None,
             returns: Vec::new(),
             span,
             current: Body::ENTRY,
         };
         build(&mut lowerer);
-        lowerer.finish()
+        let finished = lowerer.finish();
+        // Whatever the body asked the compiler to write on its behalf. Drained
+        // here rather than inside the body because a callback is a sibling of
+        // the function that installs it, not a part of it, and this is the one
+        // place that holds both.
+        let generated = std::mem::take(&mut self.requires.functions);
+        self.module.functions.extend(generated);
+        finished
     }
 
     /// Every `return` in one body has to agree on how many values it leaves,
@@ -6746,6 +6773,18 @@ struct LoopTargets {
     continue_to: BlockId,
 }
 
+/// The two ways out of a callback body, as blocks that push before returning.
+///
+/// `break` reaches `stop` through [`LoopTargets`] like any other loop; `return`
+/// reaches `next` through here, because in a walk "I am done with this one" is
+/// what a bare `return` means and it is the same thing as falling off the end.
+#[derive(Clone, Copy)]
+struct CallbackExits {
+    protocol: &'static callback::Protocol,
+    next: BlockId,
+    stop: BlockId,
+}
+
 struct BodyLowerer<'a, 'p> {
     diags: &'a mut Diagnostics,
     resolved: &'a Resolved<'p>,
@@ -6780,6 +6819,13 @@ struct BodyLowerer<'a, 'p> {
     body: Body,
     scopes: Vec<Vec<(String, Binding)>>,
     loops: Vec<LoopTargets>,
+    /// Set while lowering a body NSIS will call back into, and what it means is
+    /// that **`return` is not a return here**. The walk reads a pushed string
+    /// to decide whether to carry on, so a path that leaves without pushing one
+    /// hands the caller's `Pop` whatever was underneath it — a wrong string in
+    /// an unrelated instruction, much later, with nothing to connect the two.
+    /// Every exit therefore goes through one of these blocks.
+    callback: Option<CallbackExits>,
     /// What each `return` in this body leaves on the stack.
     returns: Vec<(Vec<Ty>, Span)>,
     /// The statement being lowered, stamped onto every instruction it produces.
@@ -6980,6 +7026,10 @@ impl BodyLowerer<'_, '_> {
     /// `Pop` is the first return value — the mirror of the parameter rule, and
     /// the reason neither side needs an `Exch` (program 4).
     fn return_stmt(&mut self, values: &[Expr], span: Span) {
+        if let Some(exits) = self.callback {
+            self.callback_return(exits, values, span);
+            return;
+        }
         let mut lowered = Vec::with_capacity(values.len());
         for value in values {
             let Some(typed) = self.value(value) else {
@@ -7418,15 +7468,26 @@ impl BodyLowerer<'_, '_> {
 
     /// `for x in <iterator>`, where the iterator set is closed.
     ///
-    /// The two members run on **different machines**, and a reader has to be
-    /// able to tell which from the source alone: `glob` walks the build machine
-    /// and unrolls, so there is no loop in the output at all, and `lines` walks
-    /// a file the installer has in front of it, so there is.
+    /// Three kinds, and they run in three different places — a reader has to be
+    /// able to tell which from the source alone. `glob` walks the build machine
+    /// and unrolls, so there is no loop in the output at all. `lines` walks a
+    /// file the installer has in front of it, so there is one. And a declared
+    /// walker — `fileFunc.locate` and the three like it — walks the target's
+    /// disk *inside NSIS*, which puts the body in a function NSIS calls rather
+    /// than in a loop at all.
     fn generic_for(&mut self, names: &[Name], iterator: &Expr, block: &Block, span: Span) {
         let Expr::Call { callee, args, .. } = iterator else {
             self.todo(iterator.span(), "this iterator");
             return;
         };
+        // `fileFunc.locate(…)` and the rest: a method on a namespace a `local`
+        // bound. Checked before the arity rule below, because a walker yields
+        // as many values as its protocol has and the "one value" message would
+        // be wrong for every one of them.
+        if let Some((base, method)) = iterator.callee_field() {
+            self.walker_for(names, base, method, args, block, span);
+            return;
+        }
         let Some(kind) = callee.as_ref().name() else {
             self.todo(iterator.span(), "this iterator");
             return;
@@ -7605,6 +7666,444 @@ impl BodyLowerer<'_, '_> {
 
         self.terminate(Terminator::Jump(top), end);
         self.current = end;
+    }
+
+    /// `for path, name in fileFunc.locate(INSTDIR, "/L=F")` — the target's own
+    /// disk, walked by NSIS.
+    ///
+    /// There is no loop in the output. NSIS calls the script back once per
+    /// match, so the body becomes a **function**, and the loop's two exits
+    /// become the two strings that function can push: falling off the end
+    /// pushes the empty one and `break` pushes `StopLocate`. That inversion is
+    /// the whole reason this is not [`Self::lines_for`] with a different
+    /// instruction in it.
+    ///
+    /// The body sees **no enclosing local**. `${Locate}` uses `$0`–`$9` for its
+    /// own bookkeeping while the walk runs, so a register holding a section's
+    /// local does not survive to the callback — and a language that let one be
+    /// named here would be promising something NSIS takes away. Globals do
+    /// survive, and are the way out.
+    fn walker_for(
+        &mut self,
+        names: &[Name],
+        base: &str,
+        method: &Name,
+        args: &[Expr],
+        block: &Block,
+        span: Span,
+    ) {
+        let Some(entry) = self.walker(base, method, span) else {
+            return;
+        };
+        let Some(protocol) = callback::protocol(&entry.nsis) else {
+            return;
+        };
+        if protocol.shape != callback::Shape::Iterate {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnsupportedIterator,
+                    span,
+                    format!("`{base}.{}` is not a loop", method.text),
+                )
+                .note(
+                    "its callback answers with the line to write, and a loop body has nowhere \
+                     to put that — call it with a `function(…)` instead",
+                ),
+            );
+            return;
+        }
+        if names.len() > protocol.inputs.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{base}.{}` yields {} value(s), and {} names are bound",
+                        method.text,
+                        protocol.inputs.len(),
+                        names.len()
+                    ),
+                )
+                .note(format!(
+                    "they are {}",
+                    protocol
+                        .names
+                        .iter()
+                        .map(|name| format!("`{name}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
+            );
+            return;
+        }
+
+        let Some(mut lowered) = self.walker_arguments(base, method, args, &entry, span) else {
+            return;
+        };
+
+        let function = self.callback_body(names, protocol, block, span);
+        lowered.push(ir::Arg::raw(function));
+        self.requires.headers.insert(entry.header.clone());
+        self.emit(ir::Instruction::new(format!("${{{}}}", entry.nsis), lowered).atomic());
+    }
+
+    /// The declaration behind `base.method`, if it is a callback macro at all.
+    ///
+    /// Three ways to not be one, and each gets its own sentence: the name is
+    /// not a header, the header declares no such method, or the method takes no
+    /// function. The last is the one a reader hits by writing `for … in
+    /// fileFunc.getSize(…)`, and "that is not a walker" is more use than
+    /// "unsupported iterator".
+    fn walker(&mut self, base: &str, method: &Name, span: Span) -> Option<crate::headers::Macro> {
+        let namespace = self.resolved.namespaces.get(base).cloned();
+        let header = match namespace {
+            Some(crate::resolve::Namespace::Header(header)) => header,
+            Some(crate::resolve::Namespace::Plugin(_)) => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnsupportedIterator,
+                        span,
+                        format!("`{base}` is a plugin, and no plugin walks anything"),
+                    )
+                    .note("a plugin pushes its values and returns; only a header macro calls back"),
+                );
+                return None;
+            }
+            None => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UndefinedName,
+                        span,
+                        format!("`{base}` is not a header"),
+                    )
+                    .note("write `local fileFunc = import \"FileFunc\"` and iterate that"),
+                );
+                return None;
+            }
+        };
+        let entry = self.options.declarations.lookup(&header, &method.text)?;
+        if !entry.params.iter().any(|param| param.callback) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnsupportedIterator,
+                    span,
+                    format!("`{base}.{}` is not a walker", method.text),
+                )
+                .note(
+                    "only a macro declared with a `callback` parameter calls back, and only \
+                     those can be iterated",
+                ),
+            );
+            return None;
+        }
+        // A declaration may name a `callback` macro this compiler has no
+        // protocol for, which is exactly what a third-party one would be. The
+        // register map is not something a declaration can carry, so the honest
+        // answer is that the name is unknown rather than a guess at `$R9`.
+        if callback::protocol(&entry.nsis).is_none() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::NotYetImplemented,
+                    span,
+                    format!("`${{{}}}`'s callback protocol is not known", entry.nsis),
+                )
+                .note(format!(
+                    "a callback receives its arguments in named registers, which a declaration \
+                     cannot describe; the ones with a protocol are `{}`",
+                    callback::known()
+                )),
+            );
+            return None;
+        }
+        Some(entry.clone())
+    }
+
+    /// The arguments before the callback, lowered and checked against the
+    /// declaration — the same rules [`expr::Lowerer::namespaced`] applies, over
+    /// the `params` list with its last entry dropped.
+    fn walker_arguments(
+        &mut self,
+        base: &str,
+        method: &Name,
+        args: &[Expr],
+        entry: &crate::headers::Macro,
+        span: Span,
+    ) -> Option<Vec<ir::Arg>> {
+        let before: Vec<crate::headers::Param> = entry
+            .params
+            .iter()
+            .copied()
+            .filter(|param| !param.callback)
+            .collect();
+        if args.len() != before.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{base}.{}` takes {} argument(s) before its body, and {} were given",
+                        method.text,
+                        before.len(),
+                        args.len()
+                    ),
+                )
+                .note(format!("it becomes `${{{}}}`", entry.nsis)),
+            );
+            return None;
+        }
+
+        let mut lowered = Vec::with_capacity(entry.params.len());
+        for (argument, param) in args.iter().zip(before) {
+            let value = self.value(argument)?;
+            if param.ty != Ty::Unknown && value.ty != param.ty && value.ty != Ty::Unknown {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        argument.span(),
+                        format!(
+                            "`{base}.{}` wants a {}, and this is a {}",
+                            method.text, param.ty, value.ty
+                        ),
+                    )
+                    .note("types come from the declaration, never from an annotation"),
+                );
+                return None;
+            }
+            lowered.push(if param.path {
+                value.arg.into_path()
+            } else {
+                value.arg
+            });
+        }
+        Some(lowered)
+    }
+
+    /// The function NSIS calls, built and handed to the module.
+    ///
+    /// Its shape is the protocol and nothing else: read the inputs, run the
+    /// body, push a sentinel. Returns the name to write in the macro's last
+    /// argument — the macro takes the *name* and does its own
+    /// `GetFunctionAddress`, which is the one part of this that costs nothing.
+    fn callback_body(
+        &mut self,
+        names: &[Name],
+        protocol: &'static callback::Protocol,
+        block: &Block,
+        span: Span,
+    ) -> String {
+        let name = format!(
+            "{}{}callback_{}_{}",
+            cfg::LABEL_PREFIX,
+            self.half.map(Half::prefix).unwrap_or_default(),
+            protocol.nsis.to_lowercase(),
+            self.requires.generated
+        );
+        self.requires.generated += 1;
+
+        let body = self.nested_body(span, |lowerer| {
+            let next = lowerer.fresh("continue");
+            let stop = lowerer.fresh("stop");
+            lowerer.callback = Some(CallbackExits {
+                protocol,
+                next,
+                stop,
+            });
+
+            // Every input register is read **before** any of them is written.
+            // The slots below are virtual until `alloc` colours them, and it may
+            // well colour the first one onto the register the second one is
+            // still sitting in — so the reads go through the stack, where the
+            // order is the program's rather than the allocator's.
+            let bound: Vec<&u8> = protocol.inputs.iter().take(names.len()).collect();
+            for register in bound.iter().rev() {
+                lowerer.emit(ir::Instruction::new(
+                    "Push",
+                    vec![ir::Arg::slot(Slot::Reg(**register))],
+                ));
+            }
+            let mut scope = Vec::new();
+            for (index, name) in names.iter().enumerate() {
+                let slot = lowerer.claim_local(name.span);
+                lowerer.emit(ir::Instruction::new(
+                    "Pop",
+                    vec![ir::Arg::dest(slot.clone())],
+                ));
+                scope.push((
+                    name.text.clone(),
+                    Binding::Local {
+                        slot,
+                        ty: match protocol.types[index] {
+                            callback::Kind::Text => Ty::Str,
+                            callback::Kind::Count => Ty::nonneg(),
+                        },
+                    },
+                ));
+            }
+
+            lowerer.scopes.push(scope);
+            lowerer.loops.push(LoopTargets {
+                break_to: stop,
+                continue_to: next,
+            });
+            lowerer.block(block);
+            lowerer.loops.pop();
+            lowerer.scopes.pop();
+
+            // Falling off the end and `break`, as the two strings the walk
+            // reads. Nothing else may leave this function: a bare `return`
+            // would skip the push and the caller's `Pop` would take whatever
+            // was underneath, which `return_stmt` refuses for that reason.
+            lowerer.terminate(Terminator::Jump(next), next);
+            lowerer.emit(ir::Instruction::new("Push", vec![ir::Arg::str("")]));
+            lowerer.terminate(Terminator::Return, stop);
+            lowerer.emit(ir::Instruction::new(
+                "Push",
+                vec![ir::Arg::str(protocol.stop)],
+            ));
+        });
+
+        self.requires.functions.push(ir::Function {
+            name: name.clone(),
+            body,
+        });
+        name
+    }
+
+    /// `return` inside a body NSIS calls back into.
+    ///
+    /// It is not a return. The walk decides whether to continue by reading a
+    /// string this function pushes, so every exit has to go through a block
+    /// that pushes one — which is what the two [`CallbackExits`] blocks are.
+    ///
+    /// In a walker, a bare `return` means "done with this one", which is what
+    /// falling off the end already means, so it jumps to the same place.
+    fn callback_return(&mut self, exits: CallbackExits, values: &[Expr], span: Span) {
+        if exits.protocol.shape == callback::Shape::Iterate {
+            if !values.is_empty() {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::ReturnArity,
+                        span,
+                        "a walker's body returns nothing".to_string(),
+                    )
+                    .note(
+                        "it answers by running to the end or by `break`; there is no third \
+                         answer for a value to carry",
+                    ),
+                );
+                return;
+            }
+            let after = self.fresh("after_return");
+            self.terminate(Terminator::Jump(exits.next), after);
+            return;
+        }
+        self.rewrite_return(exits, values, span);
+    }
+
+    /// `return line` / `return skip` / `return stop`, inside `lineFind`.
+    ///
+    /// Three answers where a loop has two, which is the whole reason this macro
+    /// is not a loop. The line to write goes back through the register it
+    /// arrived in — `$R9`, read again by `${LineFind}` after the call — and the
+    /// sentinel says whether to write it at all.
+    ///
+    /// `skip` and `stop` are recognised as **bare words in this position** and
+    /// nowhere else, so they cost the program no name: anything with a value,
+    /// including a local called `stop`, is still the line to write everywhere
+    /// but here.
+    fn rewrite_return(&mut self, exits: CallbackExits, values: &[Expr], span: Span) {
+        let word = match values {
+            [Expr::Name(name)] => Some(name.text.as_str()),
+            _ => None,
+        };
+        match word {
+            Some("stop") => {
+                let after = self.fresh("after_return");
+                self.terminate(Terminator::Jump(exits.stop), after);
+                return;
+            }
+            Some("skip") => {
+                let Some(skip) = exits.protocol.skip else {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UndefinedName,
+                            span,
+                            format!("`${{{}}}` has no line to skip", exits.protocol.nsis),
+                        )
+                        .note("`skip` is `lineFind`'s alone: it is the one that writes a file"),
+                    );
+                    return;
+                };
+                self.emit(ir::Instruction::new("Push", vec![ir::Arg::str(skip)]));
+                let after = self.fresh("after_return");
+                self.terminate(Terminator::Return, after);
+                return;
+            }
+            _ => {}
+        }
+
+        // A value: the line that gets written. Into `$R9` last of all, because
+        // the slot holding it may well *be* `$R9` after allocation — a copy
+        // onto itself is a line NSIS is happy to run and this pass need not
+        // know about.
+        if let [value] = values {
+            let Some(typed) = self.value(value) else {
+                return;
+            };
+            let out = Slot::Reg(exits.protocol.inputs[0]);
+            self.emit(ir::Instruction::new(
+                "StrCpy",
+                vec![ir::Arg::dest(out), typed.arg],
+            ));
+        } else if !values.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::ReturnArity,
+                    span,
+                    format!(
+                        "this returns {} values, and a rewrite writes one line",
+                        values.len()
+                    ),
+                )
+                .note("return the line, or `skip`, or `stop`"),
+            );
+            return;
+        }
+
+        self.emit(ir::Instruction::new("Push", vec![ir::Arg::str("")]));
+        let after = self.fresh("after_return");
+        self.terminate(Terminator::Return, after);
+    }
+
+    /// A second body, lowered with this one's borrows.
+    ///
+    /// The scopes start empty on purpose — see [`Self::walker_for`] — and the
+    /// returns are dropped, because a callback's arity is the protocol's and
+    /// not something the body gets a say in.
+    fn nested_body(&mut self, span: Span, build: impl FnOnce(&mut BodyLowerer)) -> Body {
+        let mut lowerer = BodyLowerer {
+            diags: self.diags,
+            resolved: self.resolved,
+            options: self.options,
+            known: self.known,
+            learned: self.learned,
+            globals: self.globals,
+            requires: self.requires,
+            claims: self.claims,
+            lang_strings: self.lang_strings,
+            half: self.half,
+            place: self.place,
+            inst_types: self.inst_types.clone(),
+            body: Body::new(span),
+            scopes: vec![Vec::new()],
+            loops: Vec::new(),
+            callback: None,
+            returns: Vec::new(),
+            span,
+            current: Body::ENTRY,
+        };
+        build(&mut lowerer);
+        lowerer.finish().0
     }
 
     fn fresh(&mut self, hint: impl std::fmt::Display) -> BlockId {

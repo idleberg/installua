@@ -315,6 +315,19 @@ impl Lifter<'_> {
         };
 
         let iterator = self.expr(iterator, Position::Value)?;
+        // `for … in fileFunc.locate(…)` — a method on a header binding, which
+        // this pass cannot tell from any other `base.member(…)` call because it
+        // does not resolve names. Whether the method is one of the six that
+        // walks anything is decided where the declaration is known; here it is
+        // enough that the *form* exists.
+        if iterator.callee_field().is_some() {
+            return Some(Stmt::GenericFor {
+                names: node.names().iter().map(|token| self.name(token)).collect(),
+                iterator,
+                block: self.block(node.block()),
+                span,
+            });
+        }
         match iterator.callee_name() {
             Some(name) if ITERATORS.contains(&name) => {}
             Some(name) => {
@@ -812,11 +825,17 @@ impl Lifter<'_> {
 }
 
 fn iterator_list() -> String {
-    ITERATORS
+    let bare = ITERATORS
         .iter()
         .map(|name| format!("`{name}`"))
         .collect::<Vec<_>>()
-        .join(", ")
+        .join(", ");
+    // A header's walker is not in `ITERATORS` because it is not a bare name:
+    // `fileFunc.locate` is a declared method, and which methods walk is known
+    // only once declarations are read. It belongs in the message anyway — a
+    // reader looking for "how do I loop over files on the target" is reading
+    // this list, not the declaration files.
+    format!("{bare}, and a declared walker such as `fileFunc.locate`")
 }
 
 /// Lua integer literals, decimal and hexadecimal. Anything with a fraction or

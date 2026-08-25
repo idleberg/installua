@@ -758,6 +758,9 @@ fn foreign(declared: &headers::Declarations) -> String {
 /// is the comment, because that is the one thing a reader cannot infer from the
 /// Lua spelling and the one thing they will search the NSIS docs for.
 fn foreign_method(spelling: &str, params: &[headers::Param], outputs: &[Ty], nsis: &str) -> String {
+    if params.iter().any(|param| param.callback) {
+        return walker_method(spelling, params, nsis);
+    }
     let mut out = format!("-- `{nsis}`\n");
     let names: Vec<String> = (1..=params.len())
         .map(|index| format!("a{index}"))
@@ -769,6 +772,64 @@ fn foreign_method(spelling: &str, params: &[headers::Param], outputs: &[Ty], nsi
         let _ = writeln!(out, "---@return {}", lua_name(*output));
     }
     let _ = writeln!(out, "function {spelling}({}) end\n", names.join(", "));
+    out
+}
+
+/// A method NSIS calls back into, typed as what the program actually writes.
+///
+/// Two very different stubs from one declaration, and the difference is worth
+/// the branch: a walker is only ever spelled `for … in`, so LuaCATS is told it
+/// *returns an iterator* and completing it as a plain call is then the editor's
+/// error rather than a discovery made at compile time. `lineFind` keeps the
+/// call shape and gets its body typed instead.
+///
+/// The parameter names come from [`crate::lower::callback`], because they are
+/// the only names a reader has for values NSIS chose — a declaration has none.
+fn walker_method(spelling: &str, params: &[headers::Param], nsis: &str) -> String {
+    // `nsis` arrives spelled the way it will be *written* — `${Locate}` for a
+    // header, bare for a plugin — because that is what the comment above the
+    // stub says. The protocol table is keyed by the declaration's own `nsis`
+    // field, which has no braces, so they come off here.
+    let key = nsis.trim_start_matches("${").trim_end_matches('}');
+    let Some(protocol) = crate::lower::callback::protocol(key) else {
+        return String::new();
+    };
+    let yields: Vec<String> = protocol
+        .names
+        .iter()
+        .zip(protocol.types)
+        .map(|(name, kind)| {
+            let ty = match kind {
+                crate::lower::callback::Kind::Text => "string",
+                crate::lower::callback::Kind::Count => "integer",
+            };
+            format!("{name}: {ty}")
+        })
+        .collect();
+
+    let mut out = format!("-- `{nsis}`\n");
+    let names: Vec<String> = (1..params.len()).map(|index| format!("a{index}")).collect();
+    for (name, param) in names.iter().zip(params) {
+        let _ = writeln!(out, "---@param {name} {}", lua_name(param.ty));
+    }
+    match protocol.shape {
+        crate::lower::callback::Shape::Iterate => {
+            let _ = writeln!(
+                out,
+                "---@return fun(): {}",
+                yields
+                    .iter()
+                    .map(|pair| pair.split(": ").nth(1).unwrap_or("string"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            let _ = writeln!(out, "function {spelling}({}) end\n", names.join(", "));
+        }
+        crate::lower::callback::Shape::Rewrite => {
+            let _ = writeln!(out, "---@param body fun({}): string?", yields.join(", "));
+            let _ = writeln!(out, "function {spelling}({}, body) end\n", names.join(", "));
+        }
+    }
     out
 }
 

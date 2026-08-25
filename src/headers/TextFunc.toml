@@ -4,15 +4,60 @@
 # `glob` cannot do: `glob` walks the *build* machine and unrolls the result
 # before anything ships.
 #
-# Four of TextFunc's macros are missing here on purpose. `LineFind`,
-# `FileReadFromEnd`, `TextCompare` and `TextCompareS` take a **function
-# address**, which `params` has no type for and which nothing emits a
-# `GetFunctionAddress` for. They are a language question rather than a data one
-# — see the `import` section of `docs/reference-map.md`.
+# Four of these take a **function address**: `LineFind`, `FileReadFromEnd`,
+# `TextCompare` and `TextCompareS`. Their `params` end in `callback`, which
+# says a function goes there and nothing else — which register each argument
+# arrives in is behaviour, and behaviour lives in `src/lower/callback.rs`.
 #
-# `TextCompareS` is the reason the `S` pairs below have no flag joining them:
-# its case-sensitive half is deferred while its case-insensitive half is not,
-# and two methods can differ that way where one method with a flag could not.
+# Three of the four are `for … in` loops. `lineFind` is not, and that is the
+# one interesting difference in this file: its callback returns the line to
+# write, and "and this is the new value" is not something a loop body can say.
+
+[[header]]
+name = "TextFunc"
+# `textFunc.lineFind(input, output, "1:-1", function(line, number) … end)` —
+# the whole file, one line at a time, with the callback deciding what lands in
+# the output.
+#
+# Three answers rather than two, which is why this is not a loop: returning a
+# string writes it, returning `skip` drops the line, and returning `stop` ends
+# the walk. The range is `first:last`, negative counting from the end, and
+# `/NUL` as the output writes nothing at all — a read-only pass.
+method = "lineFind"
+nsis = "LineFind"
+params = ["path", "path", "string", "callback"]
+outputs = []
+
+[[header]]
+name = "TextFunc"
+# `for line, remaining, number in textFunc.fileReadFromEnd(log)` — backwards
+# from the last line. `remaining` counts down and `number` counts up from the
+# start of the file, so "the last ten" and "line 90" both have a name.
+method = "fileReadFromEnd"
+nsis = "FileReadFromEnd"
+params = ["path", "callback"]
+outputs = []
+
+[[header]]
+name = "TextFunc"
+# `for line, number, other, match in textFunc.textCompare(a, b, "FastDiff")`.
+# `other` is the second file's line and `match` its number, `0` when the line
+# matched nothing — the pair that makes this a diff and not a walk.
+#
+# The option picks what the callback is called for: `FastDiff` and `SlowDiff`
+# fire on lines that differ, `FastEqual` and `SlowEqual` on lines that agree.
+# Slow compares every line against every line; fast walks both in step.
+method = "textCompare"
+nsis = "TextCompare"
+params = ["path", "path", "string", "callback"]
+outputs = []
+
+[[header]]
+name = "TextFunc"
+method = "textCompareS"
+nsis = "TextCompareS"
+params = ["path", "path", "string", "callback"]
+outputs = []
 
 [[header]]
 name = "TextFunc"

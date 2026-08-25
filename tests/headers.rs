@@ -358,3 +358,152 @@ fn the_builtins_reach_the_stub_by_the_same_road() {
         "{meta}"
     );
 }
+
+// -- callbacks ---------------------------------------------------------------
+//
+// The six macros NSIS calls back into are the one case a declaration cannot
+// describe on its own: the arguments arrive in registers NSIS names, and that
+// map lives in `src/lower/callback.rs`. What follows checks the seam between
+// the two — that a declaration can say "a function goes here" and nothing
+// more, and that every way of getting it wrong says so.
+
+/// A walker's body becomes a `Function`, and the loop's two exits become the
+/// two strings that function pushes. There is no loop in the output at all,
+/// which is the whole shape of these and the thing a reader has to see once.
+#[test]
+fn a_walker_becomes_a_function_and_two_pushes() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local fileFunc = import \"FileFunc\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             for path in fileFunc.locate(INSTDIR, \"/L=F\") do\n\
+               if path == \"stop.txt\" then break end\n\
+               delete(path)\n\
+             end\n\
+           end),\n\
+         }\n",
+    );
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    assert!(
+        lines.iter().any(
+            |line| line.starts_with("${Locate} $INSTDIR \"/L=F\" __GENERATED_callback_locate_")
+        ),
+        "{output}"
+    );
+    // Read before written: the prologue goes through the stack because the
+    // allocator may colour a destination onto a register a later input is
+    // still sitting in.
+    assert!(lines.contains(&"Push $R9"), "{output}");
+    assert!(lines.contains(&"Push \"StopLocate\""), "{output}");
+    assert!(lines.contains(&"Push \"\""), "{output}");
+}
+
+/// `${LineFind}` keeps NSIS's call shape, because its body answers with a
+/// value. The line goes back through the register it arrived in, and the
+/// sentinel says whether to write it.
+#[test]
+fn a_rewriting_callback_writes_its_line_back_into_the_register() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local textFunc = import \"TextFunc\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             textFunc.lineFind(\"a.ini\", \"b.ini\", \"1:-1\", function(line)\n\
+               if line == \"x\" then return skip end\n\
+               return line\n\
+             end)\n\
+           end),\n\
+         }\n",
+    );
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    assert!(lines.contains(&"Push \"SkipWrite\""), "{output}");
+    assert!(
+        lines.iter().any(|line| line.starts_with("StrCpy $R9 $")),
+        "{output}"
+    );
+}
+
+/// The cost of keeping register maps out of declarations, stated as a test: a
+/// project may write `callback` in its own `.toml`, and the compiler will
+/// refuse the macro rather than guess which register holds what.
+#[test]
+fn a_callback_macro_nobody_has_a_protocol_for_is_refused() {
+    let mut declarations = Declarations::builtin();
+    let mut problems = Vec::new();
+    declarations.parse(
+        "test.toml",
+        "[[header]]\n\
+         name = \"Elsewhere\"\n\
+         method = \"walk\"\n\
+         nsis = \"ElsewhereWalk\"\n\
+         params = [\"path\", \"callback\"]\n\
+         outputs = []\n",
+        &mut problems,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+
+    let mut diags = Diagnostics::new();
+    installua::build_with(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local elsewhere = import \"Elsewhere\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             for path in elsewhere.walk(INSTDIR) do detailPrint(path) end\n\
+           end),\n\
+         }\n",
+        &Options {
+            declarations,
+            ..Options::default()
+        },
+        &mut diags,
+    );
+    let rendered = diags.render("<test>");
+    assert!(
+        rendered.contains("callback protocol is not known"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("named registers"), "{rendered}");
+}
+
+/// A walker's body has two answers and no room for a third, so a `return` with
+/// a value is refused rather than silently pushed — which would unbalance the
+/// stack for everything after the walk.
+#[test]
+fn returning_a_value_from_a_walker_is_an_error() {
+    let rendered = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local fileFunc = import \"FileFunc\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             for path in fileFunc.locate(INSTDIR, \"\") do return path end\n\
+           end),\n\
+         }\n",
+    );
+    assert!(rendered.contains("returns nothing"), "{rendered}");
+}
+
+/// The two shapes are not interchangeable, and each error names the other one:
+/// a walk written as a call, and a rewrite written as a loop.
+#[test]
+fn each_callback_shape_names_the_other_one() {
+    let call = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local fileFunc = import \"FileFunc\"\n\
+         installer {\n\
+           section(\"Core\", function() fileFunc.locate(INSTDIR, \"\") end),\n\
+         }\n",
+    );
+    assert!(call.contains("is a walk, not a call"), "{call}");
+
+    let loop_form = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local textFunc = import \"TextFunc\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             for line in textFunc.lineFind(\"a\", \"b\", \"\") do detailPrint(line) end\n\
+           end),\n\
+         }\n",
+    );
+    assert!(loop_form.contains("is not a loop"), "{loop_form}");
+}

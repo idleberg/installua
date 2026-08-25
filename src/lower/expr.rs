@@ -1292,6 +1292,15 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
 
+        // A macro that takes a function address is not called like the others:
+        // its last argument is a body, and the compiler writes the function
+        // NSIS will call. `locate` and the three like it are `for … in` loops
+        // and never reach here; `lineFind` does, because its callback answers
+        // with a value and a loop body has nowhere to put one.
+        if entry.params.iter().any(|param| param.callback) {
+            return self.rewriting_macro(base, method, args, dests, &entry, span);
+        }
+
         if args.len() != entry.params.len() {
             self.diags.push(
                 Diagnostic::error(
@@ -1361,6 +1370,136 @@ impl BodyLowerer<'_, '_> {
 
         self.emit(ir::Instruction::new(format!("${{{}}}", entry.nsis), lowered).atomic());
         Some(entry.outputs.to_vec())
+    }
+
+    /// `textFunc.lineFind(input, output, "1:-1", function(line) … end)`.
+    ///
+    /// The one callback macro that is not a loop. Its callback answers with the
+    /// line to write, which is a value, and a `for` body has no way to say
+    /// "and this is the new one" — so this keeps the shape NSIS gave it: a call
+    /// whose last argument is a function.
+    ///
+    /// The parameters are named here and typed by the protocol, not by a call
+    /// site: NSIS is the caller, and it has never heard of this program.
+    fn rewriting_macro(
+        &mut self,
+        base: &str,
+        method: &str,
+        args: &[Expr],
+        dests: &[Slot],
+        entry: &crate::headers::Macro,
+        span: Span,
+    ) -> Option<Vec<Ty>> {
+        let Some(protocol) = super::callback::protocol(&entry.nsis) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::NotYetImplemented,
+                    span,
+                    format!("`${{{}}}`'s callback protocol is not known", entry.nsis),
+                )
+                .note(format!(
+                    "a callback receives its arguments in named registers, which a declaration \
+                     cannot describe; the ones with a protocol are `{}`",
+                    super::callback::known()
+                )),
+            );
+            return None;
+        };
+        if protocol.shape != super::callback::Shape::Rewrite {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnsupportedIterator,
+                    span,
+                    format!("`{base}.{method}` is a walk, not a call"),
+                )
+                .note(format!(
+                    "write `for {} in {base}.{method}(…) do`",
+                    protocol.names.first().copied().unwrap_or("value")
+                )),
+            );
+            return None;
+        }
+        if !dests.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!("`{base}.{method}` writes a file, not a value"),
+                )
+                .note("what it produces is the output file named in its second argument"),
+            );
+            return None;
+        }
+        if args.len() != entry.params.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`{base}.{method}` takes {} argument(s), and {} were given",
+                        entry.params.len(),
+                        args.len()
+                    ),
+                )
+                .note("the last one is the body: `function(line, number) … end`"),
+            );
+            return None;
+        }
+
+        let (last, before) = args.split_last()?;
+        let Expr::Function { params, block, .. } = last else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    last.span(),
+                    format!("`{base}.{method}`'s last argument is a function"),
+                )
+                .note(
+                    "it is written where it runs: there is no name to pass, because NSIS is \
+                     what calls it",
+                ),
+            );
+            return None;
+        };
+        if params.len() > protocol.inputs.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    last.span(),
+                    format!(
+                        "the body takes {} parameter(s), and `{}` hands over {}",
+                        params.len(),
+                        entry.nsis,
+                        protocol.inputs.len()
+                    ),
+                )
+                .note(format!(
+                    "they are {}",
+                    protocol
+                        .names
+                        .iter()
+                        .map(|name| format!("`{name}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
+            );
+            return None;
+        }
+
+        let mut lowered = Vec::with_capacity(entry.params.len());
+        for (argument, param) in before.iter().zip(&entry.params) {
+            let value = self.value(argument)?;
+            lowered.push(if param.path {
+                value.arg.into_path()
+            } else {
+                value.arg
+            });
+        }
+        let function = self.callback_body(params, protocol, block, span);
+        lowered.push(ir::Arg::raw(function));
+        self.requires.headers.insert(entry.header.clone());
+        self.emit(ir::Instruction::new(format!("${{{}}}", entry.nsis), lowered).atomic());
+        Some(Vec::new())
     }
 
     /// `raw [[ … ]]` — the third opaque callee, and the escape hatch.

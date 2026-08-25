@@ -1272,14 +1272,8 @@ of [`==`](#strings-and-numbers). That is not an inconsistency — `==` is
 case-sensitive because Lua's is, and `import` is the NSIS-shaped surface, where
 the name you arrive with should be the one that works.
 
-**Six macros are deliberately absent**: `FileFunc.Locate`, `FileFunc.GetDrives`,
-`TextFunc.LineFind`, `TextFunc.FileReadFromEnd`, `TextFunc.TextCompare` and
-`TextFunc.TextCompareS` each take a **function address**, and their callbacks
-read and write named registers — `$R9` through `$R6` — which the compiler owns.
-That is behaviour rather than arity, so no `.toml` can carry it, and the
-question of whether the language grows a callback form for them is open rather
-than answered. Until it is, `glob` covers the build-time half of `Locate`'s job,
-and a `fileOpen`/`fileRead` loop covers `LineFind`'s.
+**Six of them call back into the script**, and those are written as loops
+rather than as calls — see [walkers](#walkers) below.
 
 Any other header's macros are declared by the project in
 [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header). A
@@ -1301,6 +1295,86 @@ if wordFunc.versionCompare(installed, "1.4.2") == "1" then
 	detailPrint("downgrade")
 end
 ```
+
+### walkers
+
+Six declared macros do not return a value — NSIS calls the script back, once
+per file or per line. Five of them are written as `for … in` loops:
+
+**Usage** `for a, b in header.method(…) do … end`
+
+```lua
+local fileFunc = import "FileFunc"
+
+for path, directory, name, size in fileFunc.locate(INSTDIR, "/L=F /M=*.tmp") do
+	if size > 1048576 then
+		detailPrint("large: " .. name .. " in " .. directory)
+	end
+	delete(path)
+end
+```
+
+| Walker | Yields | Ends with |
+| ------ | ------ | --------- |
+| `fileFunc.locate(path, options)` | `path`, `directory`, `name`, `size` | `StopLocate` |
+| `fileFunc.getDrives(types)` | `drive`, `kind` | `StopGetDrives` |
+| `textFunc.fileReadFromEnd(file)` | `line`, `remaining`, `number` | `StopFileReadFromEnd` |
+| `textFunc.textCompare(a, b, option)` | `line`, `number`, `other`, `match` | `StopTextCompare` |
+| `textFunc.textCompareS(a, b, option)` | the same, case-sensitively | `StopTextCompare` |
+
+Bind as few names as the body wants — `for path in fileFunc.locate(…)` is the
+common call, and the registers nothing bound are never read.
+
+**`break` is not a jump.** The walk belongs to NSIS, so ending it means pushing
+the sentinel in the table above and returning; falling off the end pushes the
+empty string and the walk carries on. A bare `return` means the same thing as
+falling off the end, and returning a *value* is an error — a walker's body has
+no third answer for one to carry.
+
+**The body sees no enclosing local.** `${Locate}` uses `$0`–`$9` for its own
+bookkeeping while the walk runs, so a register holding a section's local does
+not survive to the callback. Globals do, and are the way out.
+
+#### lineFind
+
+The sixth is not a loop, because its body answers with a **value**: the line to
+write. Three answers, where a loop has two.
+
+**Usage** `textFunc.lineFind(input, output, range, body)` → nothing
+
+```lua
+textFunc.lineFind(INSTDIR .. "/app.ini", INSTDIR .. "/app.new", "1:-1", function(line, number)
+	if number > 500 then
+		return stop      -- ends the walk
+	end
+	if line == "DEBUG=1" then
+		return skip      -- the line is not written
+	end
+	return line          -- what gets written; a changed string rewrites it
+end)
+```
+
+`stop` and `skip` are bare words **in this position only**, so a local called
+`stop` elsewhere is unaffected. `/NUL` as the output writes nothing at all,
+which makes the call a read-only pass over the file. The range is `first:last`,
+counting from the end when negative.
+
+#### Why these are not ordinary declarations
+
+Every other macro is described entirely by its `.toml`. These six are not: NSIS
+hands the callback its arguments in **registers it names** — `$R9` down to
+`$R6` in `FileFunc`, `$9` down to `$6` in `TextFunc` — and reads the answer off
+the stack, with `lineFind` reading `$R9` again on the way out. That is behaviour
+rather than arity, so the declaration says only `callback` and the register map
+lives in `src/lower/callback.rs`.
+
+The consequence is worth stating plainly: **a third-party callback macro cannot
+be declared.** `params = [… , "callback"]` naming a macro that table does not
+know is an error rather than a guess. A register map written into a `.toml` by
+hand would compile, assemble, and hand a caller a directory where it asked for
+a file name, with no diagnostic possible from anywhere — and that is the one
+shape of mistake this compiler exists to prevent. `raw` remains for anyone who
+needs it and is willing to write `$R9` themselves.
 
 ### raw
 
