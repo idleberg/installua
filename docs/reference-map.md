@@ -1241,7 +1241,10 @@ Brings a declared NSIS header's macros into scope. The `!include` and any
 
 Ships declared: `FileFunc.getSize`, `FileFunc.driveSpace`,
 `WordFunc.versionCompare`. Any other header's macros are declared by the project
-in [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header).
+in [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header). The
+shipped set is deliberately short: a declaration ships when the fact it records
+is undiscoverable *and* the caller is common, so a macro you can read off
+`NSISDIR/Include` in a minute is yours to declare, in the same format.
 `import` itself needs no declaration: the `!include` is emitted for whatever name
 it is given, so a header reached only through `raw` still gets its line.
 

@@ -144,6 +144,37 @@ impl std::fmt::Display for Problem {
 /// malformed file here would be a run-time surprise rather than a compile error
 /// — which `tests/headers.rs` turns back into a build failure by asserting that
 /// this parses clean.
+///
+/// # What earns a slot here
+///
+/// **Ship a declaration when the fact is undiscoverable and the caller is
+/// common.** Both halves are load-bearing, and each rules out a different kind
+/// of entry.
+///
+/// *Undiscoverable* is the sentence this module opens with: a plugin's output
+/// count is a fact nothing can recover — not the compiler, not the reader, not
+/// NSIS — and getting it wrong unbalances the stack with no diagnostic from
+/// anybody. That is why every plugin whose arity is the whole story belongs
+/// here even if few projects call it. `${GetParent}`'s
+/// one-string-in-one-register-out, by contrast, is rediscoverable from
+/// `FileFunc.nsh` in a minute; it earns its slot on the second half instead,
+/// because withholding something every `.onInit` needs is merely rude.
+///
+/// *Common* is what keeps this from becoming a mirror of `NSISDIR/Include`.
+/// A macro nobody reaches for is a project's own `.installua/headers/` file,
+/// and the format is identical precisely so that costs a project nothing.
+///
+/// The rule cuts one way that is easy to miss: a header whose value is
+/// **behaviour rather than arity** does not become a `.toml` however common it
+/// is. `Library.nsh` is the case — `SetOverwrite`, reference counting, the
+/// reboot flag and shared-DLL bookkeeping are not a signature, and a
+/// declaration that described only its parameter list would be a correct file
+/// documenting the wrong thing. Those are a compiler-owned lowering or nothing.
+///
+/// `FileFunc.getSize` predates the rule and does not quite meet it — its own
+/// comment says it is here because a byte count proved the `uint` lattice.
+/// It stays because it is now documented and called; the rule is what the
+/// *next* entry is measured against.
 const SHIPPED: &[(&str, &str)] = &[
     ("FileFunc.toml", include_str!("headers/FileFunc.toml")),
     ("System.toml", include_str!("headers/System.toml")),

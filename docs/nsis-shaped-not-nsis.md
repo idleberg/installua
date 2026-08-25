@@ -44,8 +44,8 @@ installer with wrong behaviour.
 | `Function .onInit`                                   | `onInit(function() … end)` — the leading `.` is emitted, never written                               |
 | `Section un.Main`, `Function un.Foo`                 | declare them inside `uninstaller {}`; `un.` has no spelling at all                                   |
 | `LangString`                                         | the `languages {}` block, keyed locale-first; `un.` is applied for you where it helps                |
-| `!include "WinVer.nsh"`                              | nothing — `getWinVer("MAJOR")` is a real instruction since NSIS 3, and returns a number               |
-| `!include "FileFunc.nsh"`                            | `local fileFunc = import "FileFunc"`, then `fileFunc.driveSpace("C:/", "/D=F /S=M")`                  |
+| `!include "WinVer.nsh"`                              | nothing — `getWinVer("MAJOR")` is a real instruction since NSIS 3, and returns a number              |
+| `!include "FileFunc.nsh"`                            | `local fileFunc = import "FileFunc"`, then `fileFunc.driveSpace("C:/", "/D=F /S=M")`                 |
 | `!define X 5`                                        | `local X <const> = 5`, used as `X`, emitted as `${X}`                                                |
 | `!insertmacro MUI_PAGE_DIRECTORY`                    | `installer { pages = { "Directory" } }`                                                              |
 | `!define MUI_PAGE_HEADER_TEXT` before a page macro   | a field of that page's `page { … }` table                                                            |
