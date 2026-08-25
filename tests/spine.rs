@@ -1,4 +1,4 @@
-//! The thin spine, end to end (PLAN Phase 1's second exit criterion).
+//! The thin spine, end to end (Phase 1's second exit criterion).
 //!
 //! Two tiers, both live from this phase on:
 //!

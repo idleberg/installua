@@ -28,7 +28,7 @@ estimate is pessimistic.
 **`freeMib // 1024` emits no fixup and `delta // 64` does**, from the same source
 construct, because the declaration types `driveSpace`'s output as `uint` and `delta` is an
 ordinary `int`. That is the lattice earning its keep on the first real program, and it
-is the answer to PLAN's open empirical question about how often `unknown` shows up: see
+is the answer to the open empirical question about how often `unknown` shows up: see
 below.
 
 **`lower(a) == lower(b)` really is a bare `StrCmp`.** No `${StrCase}`, no temporary, no

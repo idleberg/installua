@@ -59,7 +59,7 @@ pub struct Row {
     /// every `Exposed` row, and `tests/overlay.rs` compiles all of them into a
     /// single golden. Adding an instruction without its test is therefore
     /// unrepresentable rather than merely discouraged — which is what makes
-    /// PLAN's Phase 6 data entry instead of a debate.
+    /// Phase 6 data entry instead of a debate.
     pub example: Option<&'static str>,
     /// The Installua spelling, when there is one. An `Attribute` carries its
     /// *field path* — `versionInfo.product` — because that is where a user

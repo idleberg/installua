@@ -1,6 +1,6 @@
 //! The retired-instruction table, row by row.
 //!
-//! PLAN's exit criterion for it: *every retired-instruction row has a test
+//! The exit criterion for it: *every retired-instruction row has a test
 //! asserting its diagnostic.* Written as one table-driven test over
 //! [`installua::retired::all`] rather than as a list of cases, because a list
 //! is a thing to forget to add to — the same argument the census makes and for

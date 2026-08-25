@@ -1,6 +1,6 @@
 //! The frontend: source text in, a checked Installua AST out.
 //!
-//! Four steps, in the order PLAN Phase 1 names them:
+//! Four steps, in the order Phase 1 named them:
 //!
 //!   1. parse with `full-moon` (real Lua 5.4, no dialect of our own)
 //!   2. the whitelist pass — which Lua forms exist in this language

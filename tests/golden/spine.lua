@@ -1,4 +1,4 @@
--- The thin spine (PLAN Phase 1): the narrowest end-to-end path there is.
+-- The thin spine (Phase 1): the narrowest end-to-end path there is.
 --
 -- Everything here is one pass wide -- `attributes {}`, one section, and
 -- `detailPrint`. Its job is not to be a program anyone would write; it is to

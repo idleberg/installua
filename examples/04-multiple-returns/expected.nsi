@@ -1,4 +1,4 @@
-; Hand-written expected output for install.lua — PLAN Phase 0, program 4 of five.
+; Hand-written expected output for install.lua — Phase 0, program 4 of five.
 ;
 ; Calling convention, as this program pins it:
 ;   * arguments are pushed in **reverse source order**, so the callee's first

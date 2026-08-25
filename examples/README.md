@@ -1,6 +1,6 @@
 # The five programs
 
-PLAN Phase 0, tasks 2 and 3. Five complete Installua programs, each with the exact `.nsi`
+Phase 0, tasks 2 and 3. Five complete Installua programs, each with the exact `.nsi`
 wanted out of it, hand-written. **The `.nsi` files are the oracle** — `./assemble.sh` runs
 all five under `makensis -WX` with an empty warning allowlist, and if one does not
 assemble the expectation is wrong, not the compiler.
@@ -122,7 +122,7 @@ Ten, out of roughly seventy:
 `MUI_PAGE_INSTFILES` · `MUI_PAGE_FINISH` · `MUI_UNPAGE_CONFIRM` · `MUI_UNPAGE_INSTFILES` ·
 `MUI_LANGUAGE`
 
-PLAN calls the `MUI_*` volume the most likely thing to make v1 feel incomplete. Ten of
+The `MUI_*` volume is the most likely thing to make v1 feel incomplete. Ten of
 seventy is the number behind that.
 
 ## The lattice's open empirical question, answered weakly
@@ -137,7 +137,7 @@ for the breakdown and the caveat.
 
 ## Emission order, as the programs forced it
 
-PLAN's Phase 4 list is *"`Unicode`, remaining attributes, `!include`s and their init lines,
+The Phase 4 list was *"`Unicode`, remaining attributes, `!include`s and their init lines,
 `Var`s, functions, sections"*. Program 1 breaks it immediately: `Name "${APP}"` is an
 attribute that references a `!define`, and `!define` has to come first. The order all five
 goldens actually use:

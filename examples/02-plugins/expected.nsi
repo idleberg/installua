@@ -1,4 +1,4 @@
-; Hand-written expected output for install.lua — PLAN Phase 0, program 2 of five.
+; Hand-written expected output for install.lua — Phase 0, program 2 of five.
 
 Unicode true
 

@@ -1,6 +1,6 @@
 # Two runtime checks, because assembling is not correctness
 
-PLAN Phase 0. Both of these produce plausible-looking NSIS when wrong, which is exactly
+Phase 0. Both of these produce plausible-looking NSIS when wrong, which is exactly
 the failure mode `makensis -WX` cannot see. They are tier-4 tests — run under wine,
 skip cleanly without it.
 
@@ -73,7 +73,7 @@ Compare against `sign-fixup-result.txt` and `calling-convention-result.txt`.
 `calling-convention.nsi` needs `assets/payload.bin` from `examples/04-multiple-returns/`
 beside it.
 
-## The *generated* convention round-trips too — PLAN Phase 3
+## The *generated* convention round-trips too — Phase 3
 
 `calling-convention.nsi` above is hand-written: it proves the convention is sound, not
 that the compiler implements it. `returns-generated.nsi` is `installua build`'s own output

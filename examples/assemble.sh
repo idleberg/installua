@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PLAN Phase 0, task 3 — assemble all five hand-written `.nsi` under
+# Phase 0, task 3 — assemble all five hand-written `.nsi` under
 # `makensis -WX` with an empty warning allowlist.
 #
 # These files are the oracle. If one of them does not assemble, the expectation

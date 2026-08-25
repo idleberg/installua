@@ -1,8 +1,8 @@
-; Hand-written expected output for install.lua — PLAN Phase 0, program 1 of five.
+; Hand-written expected output for install.lua — Phase 0, program 1 of five.
 ; This file is the oracle: if it does not assemble under `makensis -WX`, the
 ; expectation is wrong, not the compiler.
 ;
-; Emission order, as this program forced it (see README — PLAN's Phase 4 list is
+; Emission order, as this program forced it (see README — the original list was
 ; incomplete): Unicode, !defines, !includes, attributes, MUI defines and pages,
 ; Vars, functions, sections.
 

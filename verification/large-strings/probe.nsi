@@ -1,4 +1,4 @@
-; PLAN Phase 0, task 1b — the large-string plugin hazard.
+; Phase 0, task 1b — the large-string plugin hazard.
 ;
 ; Built twice from this one file: once with vanilla makensis
 ; (NSIS_MAX_STRLEN=1024) and once with the official strlen_8192 special build.

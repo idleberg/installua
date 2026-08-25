@@ -1,4 +1,4 @@
-//! The five programs, end to end — PLAN Phase 4's exit criterion, as a test.
+//! The five programs, end to end — Phase 4's exit criterion, as a test.
 //!
 //! *"All five programs assemble under `-WX`, empty warning allowlist."* A phase
 //! is not done until its criterion is mechanically checkable and checked, so it

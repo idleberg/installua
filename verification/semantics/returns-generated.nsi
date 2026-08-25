@@ -1,4 +1,4 @@
-; **Compiler output**, not a hand-written expectation — PLAN Phase 3.
+; **Compiler output**, not a hand-written expectation — Phase 3.
 ;
 ; Produced by `installua build` from the source in this file's RESULTS.md entry,
 ; with three lines changed by hand so the answers land somewhere readable:

@@ -45,8 +45,8 @@ cares about.
 
 That is good news for output quality and bad news for test coverage: the clobber fixpoint
 is the riskiest code in the plan and the five programs exercise it **once**.
-Phase 3 needs synthetic tests that assert clobber sets at the IR boundary directly, which
-is what PLAN already says — this is the evidence for why.
+Phase 3 needs synthetic tests that assert clobber sets at the IR boundary directly. That
+was always the intent — this is the evidence for why.
 
 **A global's initialiser has no obvious home.** `gitDescribe = ""` at top level becomes
 `Var gitDescribe` plus a `StrCpy`, and the `StrCpy` has to go *somewhere*. Here it is the

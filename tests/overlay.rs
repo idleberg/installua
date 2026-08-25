@@ -10,7 +10,7 @@
 //! golden reads as a table of what each name emits and a wrong lowering shows
 //! up as three changed lines rather than as a changed file.
 //!
-//! This is the mechanism PLAN's Phase 6 depends on. "One overlay row plus its
+//! This is the mechanism Phase 6 depended on. "One overlay row plus its
 //! mandatory example pair" is only data entry if the *mandatory* half is
 //! enforced; otherwise it is a debate about whether this one needs a test.
 
