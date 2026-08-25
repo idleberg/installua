@@ -44,15 +44,15 @@ installer {
 
 ### Every page
 
-| MUI2 | Installua |
-| --- | --- |
-| `MUI_PAGE_HEADER_TEXT` | `headerText` |
-| `MUI_PAGE_HEADER_SUBTEXT` | `headerSubText` |
-| `MUI_PAGE_CUSTOMFUNCTION_PRE` | `pre = function() … end` |
-| `MUI_PAGE_CUSTOMFUNCTION_SHOW` | `show = function() … end` |
-| `MUI_PAGE_CUSTOMFUNCTION_LEAVE` | `leave = function() … end` |
-| `MUI_PAGE_CUSTOMFUNCTION_DESTROYED` | `destroyed = function() … end` (welcome and finish) |
-| `SubCaption` / `UninstallSubCaption` | `subCaption` |
+| MUI2                                 | Installua                                           |
+| ------------------------------------ | --------------------------------------------------- |
+| `MUI_PAGE_HEADER_TEXT`               | `headerText`                                        |
+| `MUI_PAGE_HEADER_SUBTEXT`            | `headerSubText`                                     |
+| `MUI_PAGE_CUSTOMFUNCTION_PRE`        | `pre = function() … end`                            |
+| `MUI_PAGE_CUSTOMFUNCTION_SHOW`       | `show = function() … end`                           |
+| `MUI_PAGE_CUSTOMFUNCTION_LEAVE`      | `leave = function() … end`                          |
+| `MUI_PAGE_CUSTOMFUNCTION_DESTROYED`  | `destroyed = function() … end` (welcome and finish) |
+| `SubCaption` / `UninstallSubCaption` | `subCaption`                                        |
 
 ### MUI_PAGE_WELCOME
 
@@ -211,22 +211,22 @@ uninstaller {
 Written on `installer {}` or `uninstaller {}`, because their scope is the whole
 half rather than one page.
 
-| MUI2 | Installua |
-| --- | --- |
-| `MUI_ICON` / `MUI_UNICON` | `icon = "app.ico"` |
+| MUI2                                     | Installua                                                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `MUI_ICON` / `MUI_UNICON`                | `icon = "app.ico"`                                                                                          |
 | `MUI_HEADERIMAGE` and its five relatives | `headerImage = "header.bmp"`, or `{ file = …, stretch = …, rtl = …, right = true, transparentText = true }` |
-| `MUI_WELCOMEFINISHPAGE_BITMAP` | `wizardImage = "wizard.bmp"`, or `{ file = …, stretch = … }` |
-| `MUI_BGCOLOR` / `MUI_TEXTCOLOR` | `headerColors = { text = …, background = … }` |
-| `MUI_ABORTWARNING` | `abortPrompt = true`, or `{ text = …, default = "cancel" }` |
-| `MUI_FINISHPAGE_NOAUTOCLOSE` | `autoClose = false` |
-| `MUI_COMPONENTSPAGE_SMALLDESC` | `smallDescriptions = true` |
-| `MUI_COMPONENTSPAGE_CHECKBITMAP` | `checkBitmap = "check.bmp"` |
-| `MUI_INSTFILESPAGE_COLORS` | `installColors = "…"` |
-| `MUI_INSTFILESPAGE_PROGRESSBAR` | `progressBar = "smooth"` |
-| `MUI_LICENSEPAGE_BGCOLOR` | `licenseBkColor = "…"` |
-| `MUI_CUSTOMFUNCTION_GUIINIT` | `onGUIInit(function() … end)` |
-| `MUI_CUSTOMFUNCTION_ABORT` | `onUserAbort(function() … end)` |
-| `MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION` | `onMouseOverSection(function() … end)` |
+| `MUI_WELCOMEFINISHPAGE_BITMAP`           | `wizardImage = "wizard.bmp"`, or `{ file = …, stretch = … }`                                                |
+| `MUI_BGCOLOR` / `MUI_TEXTCOLOR`          | `headerColors = { text = …, background = … }`                                                               |
+| `MUI_ABORTWARNING`                       | `abortPrompt = true`, or `{ text = …, default = "cancel" }`                                                 |
+| `MUI_FINISHPAGE_NOAUTOCLOSE`             | `autoClose = false`                                                                                         |
+| `MUI_COMPONENTSPAGE_SMALLDESC`           | `smallDescriptions = true`                                                                                  |
+| `MUI_COMPONENTSPAGE_CHECKBITMAP`         | `checkBitmap = "check.bmp"`                                                                                 |
+| `MUI_INSTFILESPAGE_COLORS`               | `installColors = "…"`                                                                                       |
+| `MUI_INSTFILESPAGE_PROGRESSBAR`          | `progressBar = "smooth"`                                                                                    |
+| `MUI_LICENSEPAGE_BGCOLOR`                | `licenseBkColor = "…"`                                                                                      |
+| `MUI_CUSTOMFUNCTION_GUIINIT`             | `onGUIInit(function() … end)`                                                                               |
+| `MUI_CUSTOMFUNCTION_ABORT`               | `onUserAbort(function() … end)`                                                                             |
+| `MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION`  | `onMouseOverSection(function() … end)`                                                                      |
 
 ```lua
 installer {

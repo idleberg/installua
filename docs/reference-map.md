@@ -6,7 +6,7 @@
 # Installua Reference
 
 The surface reference. Where `installua coverage` is a census — bucket counts
-over every NSIS command, answering *is it done* — this one is a reference:
+over every NSIS command, answering _is it done_ — this one is a reference:
 things grouped by what a person is trying to do, each with a description, a
 signature and something you can paste.
 
@@ -25,24 +25,24 @@ pending — the `todo` bucket of both censuses is empty.
 
 ## The groups
 
-| Group | Covers |
-| --- | --- |
-| [Program structure](#program-structure) | the blocks a file is made of, and the declarations inside them |
-| [Script attributes](#script-attributes) | the `attributes {}` block: name, output, compression, manifest, version info |
-| [Sections and install types](#sections-and-install-types) | what the components page offers and what each part costs |
-| [Pages and MUI](mui-reference.md) | `page.welcome`, `page.license`, … and everything drawn on them — its own file |
-| [Windows and controls](#windows-and-controls) | `page.custom`: controls, colours, fonts, events |
-| [Languages and locales](#languages-and-locales) | `languages { locales = { … } }` and the language dialog |
-| [Files and directories](#files-and-directories) | packing files in, and what happens to them on the target disk |
-| [Files on the target at runtime](#files-on-the-target-at-runtime) | `fileOpen` and the handle methods |
-| [Registry and INI](#registry-and-ini) | reading and writing `HKLM`, `HKCU`, and `.ini` files |
-| [Processes and the shell](#processes-and-the-shell) | `exec`, shortcuts, DLLs, reboot |
-| [Strings and numbers](#strings-and-numbers) | `string.*`, arithmetic, comparison |
-| [Flow, errors and messages](#flow-errors-and-messages) | aborting, testing, telling the user |
-| [Windows facts](#windows-facts) | what the machine is: version, shell folders, registry view |
-| [Plugins and headers](#plugins-and-headers) | `plugin`, `import`, `raw` |
-| [Constants](#constants) | `INSTDIR`, `PROGRAMFILES64`, `HKLM`, … |
-| [Not available](#not-available) | what has no Installua spelling, and what to write instead |
+| Group                                                             | Covers                                                                        |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Program structure](#program-structure)                           | the blocks a file is made of, and the declarations inside them                |
+| [Script attributes](#script-attributes)                           | the `attributes {}` block: name, output, compression, manifest, version info  |
+| [Sections and install types](#sections-and-install-types)         | what the components page offers and what each part costs                      |
+| [Pages and MUI](mui-reference.md)                                 | `page.welcome`, `page.license`, … and everything drawn on them — its own file |
+| [Windows and controls](#windows-and-controls)                     | `page.custom`: controls, colours, fonts, events                               |
+| [Languages and locales](#languages-and-locales)                   | `languages { locales = { … } }` and the language dialog                       |
+| [Files and directories](#files-and-directories)                   | packing files in, and what happens to them on the target disk                 |
+| [Files on the target at runtime](#files-on-the-target-at-runtime) | `fileOpen` and the handle methods                                             |
+| [Registry and INI](#registry-and-ini)                             | reading and writing `HKLM`, `HKCU`, and `.ini` files                          |
+| [Processes and the shell](#processes-and-the-shell)               | `exec`, shortcuts, DLLs, reboot                                               |
+| [Strings and numbers](#strings-and-numbers)                       | `string.*`, arithmetic, comparison                                            |
+| [Flow, errors and messages](#flow-errors-and-messages)            | aborting, testing, telling the user                                           |
+| [Windows facts](#windows-facts)                                   | what the machine is: version, shell folders, registry view                    |
+| [Plugins and headers](#plugins-and-headers)                       | `plugin`, `import`, `raw`                                                     |
+| [Constants](#constants)                                           | `INSTDIR`, `PROGRAMFILES64`, `HKLM`, …                                        |
+| [Not available](#not-available)                                   | what has no Installua spelling, and what to write instead                     |
 
 ---
 
@@ -52,7 +52,7 @@ A file is a Lua program, read top to bottom, with no preprocessor. Declaration
 order does not matter: every top-level name is resolved before any body
 is lowered, so a `func` may call one declared below it.
 
-The order of the fields *inside* `attributes {}` does not matter either, and for
+The order of the fields _inside_ `attributes {}` does not matter either, and for
 a different reason: NSIS has a handful of commands that refuse to run — or, in
 one case, crash — once something ahead of them has changed the header, so the
 compiler emits the block in an order it chose rather than the one you typed.
@@ -75,7 +75,7 @@ end)
 
 ### .onInit / un.onInit
 
-The callback NSIS runs before anything is shown. Written *inside* the block it
+The callback NSIS runs before anything is shown. Written _inside_ the block it
 belongs to, so the same spelling covers both halves and the `un.` prefix is the
 compiler's business.
 
@@ -179,36 +179,36 @@ attributes {
 
 ### Identity and output
 
-| NSIS | Installua | Holds |
-| --- | --- | --- |
-| `Name` | `name` | string |
-| `OutFile` | `outFile` | path — **required** |
-| `Caption` | `caption` | string |
-| `UninstallCaption` | `uninstallCaption` | string |
-| `Icon` | `icon` | path |
-| `UninstallIcon` | `icon`, inside `uninstaller {}` | path |
-| `WindowIcon` | `windowIcon` | boolean |
-| `BrandingText` | `brandingText` | string |
-| `InstallDir` | `installDir` | path |
-| `InstallDirRegKey` | `installDirRegKey = { root = …, key = …, name = … }` | table |
-| `AllowRootDirInstall` | `allowRootDirInstall` | boolean |
+| NSIS                  | Installua                                            | Holds               |
+| --------------------- | ---------------------------------------------------- | ------------------- |
+| `Name`                | `name`                                               | string              |
+| `OutFile`             | `outFile`                                            | path — **required** |
+| `Caption`             | `caption`                                            | string              |
+| `UninstallCaption`    | `uninstallCaption`                                   | string              |
+| `Icon`                | `icon`                                               | path                |
+| `UninstallIcon`       | `icon`, inside `uninstaller {}`                      | path                |
+| `WindowIcon`          | `windowIcon`                                         | boolean             |
+| `BrandingText`        | `brandingText`                                       | string              |
+| `InstallDir`          | `installDir`                                         | path                |
+| `InstallDirRegKey`    | `installDirRegKey = { root = …, key = …, name = … }` | table               |
+| `AllowRootDirInstall` | `allowRootDirInstall`                                | boolean             |
 
 ### Build and compression
 
-| NSIS | Installua | Holds |
-| --- | --- | --- |
-| `Unicode` | `unicode` | boolean — defaults `true`, always emitted first |
-| `CPU` | `cpu` | `"x86"` \| `"amd64"` |
-| `SetCompressor` | `compressor` | `"zlib"` \| `"bzip2"` \| `"lzma"` |
-| `SetCompressionLevel` | `compressionLevel` | int — read only when `compressor` is `"zlib"` or `"bzip2"` |
-| `SetCompressorDictSize` | `compressorDictSize` | int (MB) — read only when `compressor` is `"lzma"` |
-| `SetCompress` | `compress` | `"off"` \| `"auto"` \| `"force"` |
-| `SetDatablockOptimize` | `datablockOptimize` | boolean |
-| `SetDateSave` | `dateSave` | boolean |
-| `CRCCheck` | `crcCheck` | boolean |
-| `FileBufSize` | `fileBufSize` | int |
-| `SetOverwrite` | `overwrite` | `"on"` \| `"off"` \| `"try"` \| `"ifnewer"` \| `"ifdiff"` |
-| `AllowSkipFiles` | `allowSkipFiles` | boolean |
+| NSIS                    | Installua            | Holds                                                      |
+| ----------------------- | -------------------- | ---------------------------------------------------------- |
+| `Unicode`               | `unicode`            | boolean — defaults `true`, always emitted first            |
+| `CPU`                   | `cpu`                | `"x86"` \| `"amd64"`                                       |
+| `SetCompressor`         | `compressor`         | `"zlib"` \| `"bzip2"` \| `"lzma"`                          |
+| `SetCompressionLevel`   | `compressionLevel`   | int — read only when `compressor` is `"zlib"` or `"bzip2"` |
+| `SetCompressorDictSize` | `compressorDictSize` | int (MB) — read only when `compressor` is `"lzma"`         |
+| `SetCompress`           | `compress`           | `"off"` \| `"auto"` \| `"force"`                           |
+| `SetDatablockOptimize`  | `datablockOptimize`  | boolean                                                    |
+| `SetDateSave`           | `dateSave`           | boolean                                                    |
+| `CRCCheck`              | `crcCheck`           | boolean                                                    |
+| `FileBufSize`           | `fileBufSize`        | int                                                        |
+| `SetOverwrite`          | `overwrite`          | `"on"` \| `"off"` \| `"try"` \| `"ifnewer"` \| `"ifdiff"`  |
+| `AllowSkipFiles`        | `allowSkipFiles`     | boolean                                                    |
 
 ```lua
 attributes {
@@ -231,17 +231,17 @@ puts the word on every command, and this language puts it on the table once.
 
 **Usage** `manifest = { … }`
 
-| NSIS | Installua |
-| --- | --- |
-| `RequestExecutionLevel` | `requestExecutionLevel = "none" \| "user" \| "highest" \| "admin"` |
-| `ManifestSupportedOS` | `manifest.supportedOS = { … }` |
-| `ManifestMaxVersionTested` | `manifest.maxVersionTested` |
-| `ManifestDPIAware` | `manifest.dpiAware` |
-| `ManifestDPIAwareness` | `manifest.dpiAwareness` |
-| `ManifestLongPathAware` | `manifest.longPathAware` |
-| `ManifestGdiScaling` | `manifest.gdiScaling` |
-| `ManifestDisableWindowFiltering` | `manifest.disableWindowFiltering` |
-| `ManifestAppendCustomString` | `manifest.customStrings = { { path = …, string = … }, … }` |
+| NSIS                             | Installua                                                          |
+| -------------------------------- | ------------------------------------------------------------------ |
+| `RequestExecutionLevel`          | `requestExecutionLevel = "none" \| "user" \| "highest" \| "admin"` |
+| `ManifestSupportedOS`            | `manifest.supportedOS = { … }`                                     |
+| `ManifestMaxVersionTested`       | `manifest.maxVersionTested`                                        |
+| `ManifestDPIAware`               | `manifest.dpiAware`                                                |
+| `ManifestDPIAwareness`           | `manifest.dpiAwareness`                                            |
+| `ManifestLongPathAware`          | `manifest.longPathAware`                                           |
+| `ManifestGdiScaling`             | `manifest.gdiScaling`                                              |
+| `ManifestDisableWindowFiltering` | `manifest.disableWindowFiltering`                                  |
+| `ManifestAppendCustomString`     | `manifest.customStrings = { { path = …, string = … }, … }`         |
 
 `requestExecutionLevel` lands in the manifest too and is written flat, because
 its NSIS name says nothing about a manifest: the groups are the prefixes NSIS
@@ -286,12 +286,12 @@ on Windows executables reads at a glance.
 
 **Usage** `portableExecutable = { … }`
 
-| NSIS | Installua |
-| --- | --- |
-| `PEAddResource` | `portableExecutable.addResource = { { file = …, restype = …, resname = …, reslang = … }, … }` |
-| `PERemoveResource` | `portableExecutable.removeResource = { { restype = …, resname = …, reslang = … }, … }` |
-| `PEDllCharacteristics` | `portableExecutable.dllCharacteristics = { add = …, remove = … }` |
-| `PESubsysVer` | `portableExecutable.subsystemVersion` |
+| NSIS                   | Installua                                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `PEAddResource`        | `portableExecutable.addResource = { { file = …, restype = …, resname = …, reslang = … }, … }` |
+| `PERemoveResource`     | `portableExecutable.removeResource = { { restype = …, resname = …, reslang = … }, … }`        |
+| `PEDllCharacteristics` | `portableExecutable.dllCharacteristics = { add = …, remove = … }`                             |
+| `PESubsysVer`          | `portableExecutable.subsystemVersion`                                                         |
 
 ```lua
 attributes {
@@ -307,24 +307,24 @@ attributes {
 These configure the window MUI2 draws into. The per-page text lives on the page
 instead — see [Pages and MUI](mui-reference.md).
 
-| NSIS | Installua |
-| --- | --- |
-| `AddBrandingImage` | `brandingImage = { edge = …, size = …, padding = … }` |
-| `AutoCloseWindow` | `autoCloseWindow` |
-| `BGFont` | `bgFont = { face = …, height = …, weight = … }` |
-| `BGGradient` | `bgGradient = false` or `{ top = …, bottom = …, text = … }` |
-| `SetFont` | `font = { face = …, size = … }` |
-| `MiscButtonText` | `buttonText = { back = …, next = …, cancel = …, close = … }` |
-| `InstallButtonText` | `installButtonText` |
-| `UninstallButtonText` | `uninstallButtonText` |
-| `DetailsButtonText` | `detailsButtonText` |
-| `CompletedText` | `completedText` |
-| `FileErrorText` | `fileErrorText = { text = …, withoutIgnore = … }` |
-| `SpaceTexts` | `spaceTexts = false` or `{ required = …, available = … }` |
-| `ShowInstDetails` | `showInstDetails = "hide" \| "show" \| "nevershow"` |
-| `ShowUninstDetails` | `showUninstDetails` |
-| `SilentInstall` | `silentInstall = "normal" \| "silent" \| "silentlog"` |
-| `SilentUnInstall` | `silentUninstall = "normal" \| "silent"` |
+| NSIS                  | Installua                                                    |
+| --------------------- | ------------------------------------------------------------ |
+| `AddBrandingImage`    | `brandingImage = { edge = …, size = …, padding = … }`        |
+| `AutoCloseWindow`     | `autoCloseWindow`                                            |
+| `BGFont`              | `bgFont = { face = …, height = …, weight = … }`              |
+| `BGGradient`          | `bgGradient = false` or `{ top = …, bottom = …, text = … }`  |
+| `SetFont`             | `font = { face = …, size = … }`                              |
+| `MiscButtonText`      | `buttonText = { back = …, next = …, cancel = …, close = … }` |
+| `InstallButtonText`   | `installButtonText`                                          |
+| `UninstallButtonText` | `uninstallButtonText`                                        |
+| `DetailsButtonText`   | `detailsButtonText`                                          |
+| `CompletedText`       | `completedText`                                              |
+| `FileErrorText`       | `fileErrorText = { text = …, withoutIgnore = … }`            |
+| `SpaceTexts`          | `spaceTexts = false` or `{ required = …, available = … }`    |
+| `ShowInstDetails`     | `showInstDetails = "hide" \| "show" \| "nevershow"`          |
+| `ShowUninstDetails`   | `showUninstDetails`                                          |
+| `SilentInstall`       | `silentInstall = "normal" \| "silent" \| "silentlog"`        |
+| `SilentUnInstall`     | `silentUninstall = "normal" \| "silent"`                     |
 
 ---
 
@@ -426,13 +426,13 @@ section { "Offline map data",
 A running program addresses a section through the handle `section(…)` returns,
 not through an index. `group(…)` returns the same kind of handle.
 
-| NSIS | Installua |
-| --- | --- |
-| `SectionGetText` / `SectionSetText` | `handle.text` — read and write |
-| `SectionGetFlags` / `SectionSetFlags` | `handle.selected` — read and write, a boolean |
-| `SectionGetSize` / `SectionSetSize` | `handle.size` — read and write |
-| `SectionGetInstTypes` | `handle.installTypes(name)` → `boolean` — a membership question, because NSIS stores it as a bit field and this language has no list to decode it into |
-| `SectionSetInstTypes` | `handle.installTypes = { … }` |
+| NSIS                                  | Installua                                                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SectionGetText` / `SectionSetText`   | `handle.text` — read and write                                                                                                                         |
+| `SectionGetFlags` / `SectionSetFlags` | `handle.selected` — read and write, a boolean                                                                                                          |
+| `SectionGetSize` / `SectionSetSize`   | `handle.size` — read and write                                                                                                                         |
+| `SectionGetInstTypes`                 | `handle.installTypes(name)` → `boolean` — a membership question, because NSIS stores it as a bit field and this language has no list to decode it into |
+| `SectionSetInstTypes`                 | `handle.installTypes = { … }`                                                                                                                          |
 
 ```lua
 local core = section("Core", function()
@@ -516,16 +516,16 @@ installer {
 
 ### A control's fields
 
-| NSIS | Installua | Direction |
-| --- | --- | --- |
-| `SendMessage` | `handle.value` — its text | read and write |
-| `SendMessage` | `handle.checked` — a `checkbox`'s or `radioButton`'s tick | read and write |
-| `EnableWindow` | `handle.enabled` | write only |
-| `ShowWindow` | `handle.visible` | write only |
-| `SetCtlColors` | `handle.colors = { text = …, background = … }` | write only |
-| `CreateFont` | `handle.font = { face = …, size = …, bold = … }` | write only |
-| `LoadAndSetImage` | `handle.image = "check.bmp"` | write only |
-| `GetFunctionAddress` | `onClick` / `onChange` on the declaration | — |
+| NSIS                 | Installua                                                 | Direction      |
+| -------------------- | --------------------------------------------------------- | -------------- |
+| `SendMessage`        | `handle.value` — its text                                 | read and write |
+| `SendMessage`        | `handle.checked` — a `checkbox`'s or `radioButton`'s tick | read and write |
+| `EnableWindow`       | `handle.enabled`                                          | write only     |
+| `ShowWindow`         | `handle.visible`                                          | write only     |
+| `SetCtlColors`       | `handle.colors = { text = …, background = … }`            | write only     |
+| `CreateFont`         | `handle.font = { face = …, size = …, bold = … }`          | write only     |
+| `LoadAndSetImage`    | `handle.image = "check.bmp"`                              | write only     |
+| `GetFunctionAddress` | `onClick` / `onChange` on the declaration                 | —              |
 
 Five of the seven are write-only because Windows offers no instruction that
 reports them: NSIS can set a control's colours and cannot ask what they are.
@@ -541,11 +541,11 @@ agree.enabled = false
 Reaching a window Installua did not draw — MUI2's own Cancel button, or another
 process's.
 
-| NSIS | Installua |
-| --- | --- |
-| `GetDlgItem` | `getDlgItem(dialog, itemId)` → `handle` |
+| NSIS         | Installua                                                                |
+| ------------ | ------------------------------------------------------------------------ |
+| `GetDlgItem` | `getDlgItem(dialog, itemId)` → `handle`                                  |
 | `FindWindow` | `findWindow(class[, title[, parent[, childAfter[, { … }]]]])` → `handle` |
-| `IsWindow` | `isWindow(hwnd)` → `boolean` |
+| `IsWindow`   | `isWindow(hwnd)` → `boolean`                                             |
 
 ```lua
 local cancel = getDlgItem(HWNDPARENT, 2)
@@ -554,13 +554,13 @@ cancel.enabled = false
 
 ### HideWindow / BringToFront / LockWindow / SetBrandingImage / SetDetailsView
 
-| NSIS | Installua |
-| --- | --- |
-| `HideWindow` | `hideWindow()` |
-| `BringToFront` | `bringToFront()` |
-| `LockWindow` | `lockWindow("on" \| "off")` |
-| `SetBrandingImage` | `setBrandingImage(path[, { … }])` |
-| `SetDetailsView` | `setDetailsView("hide" \| "show")` |
+| NSIS               | Installua                          |
+| ------------------ | ---------------------------------- |
+| `HideWindow`       | `hideWindow()`                     |
+| `BringToFront`     | `bringToFront()`                   |
+| `LockWindow`       | `lockWindow("on" \| "off")`        |
+| `SetBrandingImage` | `setBrandingImage(path[, { … }])`  |
+| `SetDetailsView`   | `setDetailsView("hide" \| "show")` |
 
 ---
 
@@ -602,13 +602,13 @@ writes the dialog into `.onInit`, the `ReserveFile` above it, and
 `MUI_UNGETLANGUAGE` into `un.onInit` — none of which is spellable, and none of
 which you can put in the wrong place.
 
-| MUI2 | Installua |
-| --- | --- |
-| `MUI_LANGDLL_WINDOWTITLE` | `ask = { title = … }` |
-| `MUI_LANGDLL_INFO` | `ask = { info = … }` |
-| `MUI_LANGDLL_ALLLANGUAGES` | `ask = { allLanguages = true }` |
-| `MUI_LANGDLL_ALWAYSSHOW` | `ask = { alwaysShow = true }` |
-| `MUI_LANGDLL_REGISTRY_*` | `ask = { remember = { root = …, key = …, value = … } }` |
+| MUI2                       | Installua                                               |
+| -------------------------- | ------------------------------------------------------- |
+| `MUI_LANGDLL_WINDOWTITLE`  | `ask = { title = … }`                                   |
+| `MUI_LANGDLL_INFO`         | `ask = { info = … }`                                    |
+| `MUI_LANGDLL_ALLLANGUAGES` | `ask = { allLanguages = true }`                         |
+| `MUI_LANGDLL_ALWAYSSHOW`   | `ask = { alwaysShow = true }`                           |
+| `MUI_LANGDLL_REGISTRY_*`   | `ask = { remember = { root = …, key = …, value = … } }` |
 
 ### IfRtlLanguage
 
@@ -739,12 +739,12 @@ setFileAttributes(INSTDIR .. "/config.ini", "READONLY")
 
 ### GetFullPathName / GetTempFileName / SearchPath / GetFileTime / GetFileTimeLocal
 
-| NSIS | Installua |
-| --- | --- |
-| `GetFullPathName` | `getFullPathName(pathOrFile[, { … }])` → `string` |
-| `GetTempFileName` | `getTempFileName([baseDir])` → `string` |
-| `SearchPath` | `searchPath(filename)` → `string` |
-| `GetFileTime` | `getFileTime(file)` → `int, int` (high, low) |
+| NSIS               | Installua                                                          |
+| ------------------ | ------------------------------------------------------------------ |
+| `GetFullPathName`  | `getFullPathName(pathOrFile[, { … }])` → `string`                  |
+| `GetTempFileName`  | `getTempFileName([baseDir])` → `string`                            |
+| `SearchPath`       | `searchPath(filename)` → `string`                                  |
+| `GetFileTime`      | `getFileTime(file)` → `int, int` (high, low)                       |
 | `GetFileTimeLocal` | `getFileTimeLocal(localFile)` → `int, int` — the **build** machine |
 
 ```lua
@@ -761,18 +761,18 @@ instructions are all reached that way.
 
 **Usage** `fileOpen(path, mode)` → `handle`, where mode is `"r"`, `"w"` or `"a"`
 
-| NSIS | Installua |
-| --- | --- |
-| `FileRead` | `f:read([maxlen])` → `string` |
-| `FileWrite` | `f:write(text)` |
-| `FileReadByte` | `f:readByte()` → `int` |
-| `FileWriteByte` | `f:writeByte(value)` |
-| `FileReadWord` | `f:readWord()` → `int` |
-| `FileWriteWord` | `f:writeWord(value)` |
-| `FileReadUTF16LE` | `f:readUtf16Le([maxlen])` → `string` |
-| `FileWriteUTF16LE` | `f:writeUtf16Le(text[, { … }])` |
-| `FileSeek` | `f:seek(offset[, mode])` → `int` |
-| `FileClose` | `f:close()` |
+| NSIS               | Installua                                 |
+| ------------------ | ----------------------------------------- |
+| `FileRead`         | `handle:read([maxlen])` → `string`        |
+| `FileWrite`        | `handle:write(text)`                      |
+| `FileReadByte`     | `handle:readByte()` → `int`               |
+| `FileWriteByte`    | `handle:writeByte(value)`                 |
+| `FileReadWord`     | `handle:readWord()` → `int`               |
+| `FileWriteWord`    | `handle:writeWord(value)`                 |
+| `FileReadUTF16LE`  | `handle:readUtf16Le([maxlen])` → `string` |
+| `FileWriteUTF16LE` | `handle:writeUtf16Le(text[, { … }])`      |
+| `FileSeek`         | `handle:seek(offset[, mode])` → `int`     |
+| `FileClose`        | `handle:close()`                          |
 
 ```lua
 local f = fileOpen(INSTDIR .. "/install.log", "w")
@@ -801,12 +801,12 @@ writeReg(HKLM, "Software/Example", "Build", 42)
 
 ### The other write forms
 
-| NSIS | Installua |
-| --- | --- |
-| `WriteRegExpandStr` | `writeRegExpandStr(root, subKey, name, value)` |
-| `WriteRegBin` | `writeRegBin(root, subKey, name, hexString)` |
-| `WriteRegMultiStr` | `writeRegMultiStr(root, subKey, name, hexString)` |
-| `WriteRegNone` | `writeRegNone(root, subKey, name[, hexData])` |
+| NSIS                | Installua                                         |
+| ------------------- | ------------------------------------------------- |
+| `WriteRegExpandStr` | `writeRegExpandStr(root, subKey, name, value)`    |
+| `WriteRegBin`       | `writeRegBin(root, subKey, name, hexString)`      |
+| `WriteRegMultiStr`  | `writeRegMultiStr(root, subKey, name, hexString)` |
+| `WriteRegNone`      | `writeRegNone(root, subKey, name[, hexData])`     |
 
 ### ReadRegStr / ReadRegDWORD
 
@@ -834,7 +834,7 @@ deleteRegKey(HKLM, "Software/Example")
 
 ### EnumRegKey / EnumRegValue
 
-The name of the *n*-th subkey or value, counting from zero, or `""` past the
+The name of the _n_-th subkey or value, counting from zero, or `""` past the
 end.
 
 **Usage** `enumRegKey(root, subKey, index)` → `string` ·
@@ -846,13 +846,13 @@ local key = enumRegKey(HKLM, "Software/Example", 0)
 
 ### ReadINIStr / WriteINIStr / DeleteINIStr / DeleteINISec / FlushINI
 
-| NSIS | Installua |
-| --- | --- |
-| `ReadINIStr` | `readIniStr(iniFile, section, entryName)` → `string` |
-| `WriteINIStr` | `writeIniStr(iniFile, section, entryName, value)` |
-| `DeleteINIStr` | `deleteIniStr(iniFile, section, entryName)` |
-| `DeleteINISec` | `deleteIniSection(iniFile, section)` |
-| `FlushINI` | `flushIni(iniFile)` |
+| NSIS           | Installua                                            |
+| -------------- | ---------------------------------------------------- |
+| `ReadINIStr`   | `readIniStr(iniFile, section, entryName)` → `string` |
+| `WriteINIStr`  | `writeIniStr(iniFile, section, entryName, value)`    |
+| `DeleteINIStr` | `deleteIniStr(iniFile, section, entryName)`          |
+| `DeleteINISec` | `deleteIniSection(iniFile, section)`                 |
+| `FlushINI`     | `flushIni(iniFile)`                                  |
 
 ```lua
 writeIniStr(INSTDIR .. "/app.ini", "General", "Path", INSTDIR)
@@ -865,11 +865,11 @@ flushIni(INSTDIR .. "/app.ini")
 
 ### Exec / ExecWait / ExecShell / ExecShellWait
 
-| NSIS | Installua |
-| --- | --- |
-| `Exec` | `exec(commandLine)` |
-| `ExecWait` | `execWait(commandLine)` → `int` (the exit code) |
-| `ExecShell` | `execShell(flags, verb, file[, parameters[, showmode[, { … }]]])` |
+| NSIS            | Installua                                                             |
+| --------------- | --------------------------------------------------------------------- |
+| `Exec`          | `exec(commandLine)`                                                   |
+| `ExecWait`      | `execWait(commandLine)` → `int` (the exit code)                       |
+| `ExecShell`     | `execShell(flags, verb, file[, parameters[, showmode[, { … }]]])`     |
 | `ExecShellWait` | `execShellWait(flags, verb, file[, parameters[, showmode[, { … }]]])` |
 
 ```lua
@@ -918,28 +918,28 @@ Arithmetic and comparison are Lua operators, lowered onto `IntOp` and the
 `*Cmp` family; width and sign are attributes of the type, so there is no
 `Int64Cmp` to write. There are no floats.
 
-| NSIS | Installua |
-| --- | --- |
-| `StrCpy` | assignment: `x = y` |
-| `StrCmpS` | `==`, which is **case-sensitive** — the reversal that bites hardest |
-| `StrCmp` | `string.lower(a) == b`, which folds to one case-insensitive compare |
-| `StrLen` | `string.len(s)` → `int` |
-| `IntOp` | `+ - * / % // & \| ~ << >>` |
-| `IntCmp` / `Int64Cmp` / `IntPtrCmp` and the unsigned forms | `< <= > >= == ~=` |
-| `IntFmt` / `Int64Fmt` | `string.format` |
+| NSIS                                                       | Installua                                                           |
+| ---------------------------------------------------------- | ------------------------------------------------------------------- |
+| `StrCpy`                                                   | assignment: `x = y`                                                 |
+| `StrCmpS`                                                  | `==`, which is **case-sensitive** — the reversal that bites hardest |
+| `StrCmp`                                                   | `string.lower(a) == b`, which folds to one case-insensitive compare |
+| `StrLen`                                                   | `string.len(s)` → `int`                                             |
+| `IntOp`                                                    | `+ - * / % // & \| ~ << >>`                                         |
+| `IntCmp` / `Int64Cmp` / `IntPtrCmp` and the unsigned forms | `< <= > >= == ~=`                                                   |
+| `IntFmt` / `Int64Fmt`                                      | `string.format`                                                     |
 
 ### The string adapters
 
 Hand-written lowerings onto NSIS instructions and `StrFunc` macros — the
 `${Using:StrFunc}` lines are collected and emitted for you.
 
-| Installua | Notes |
-| --- | --- |
-| `string.len(s)` → `int` | counts UTF-16 code units |
-| `string.sub(s, i[, j])` → `string` | negative indices follow Lua, not NSIS |
-| `string.find(s, needle)` → `int` | |
-| `string.lower(s)` / `string.upper(s)` → `string` | |
-| `string.format(fmt, value)` → `string` | `IntFmt`, so one integer |
+| Installua                                        | Notes                                 |
+| ------------------------------------------------ | ------------------------------------- |
+| `string.len(s)` → `int`                          | counts UTF-16 code units              |
+| `string.sub(s, i[, j])` → `string`               | negative indices follow Lua, not NSIS |
+| `string.find(s, needle)` → `int`                 |                                       |
+| `string.lower(s)` / `string.upper(s)` → `string` |                                       |
+| `string.format(fmt, value)` → `string`           | `IntFmt`, so one integer              |
 
 ```lua
 func("majorOf", function(version)
@@ -950,9 +950,9 @@ end)
 
 ### ExpandEnvStrings / ReadEnvStr
 
-| NSIS | Installua |
-| --- | --- |
-| `ReadEnvStr` | `readEnvStr(name)` → `string` |
+| NSIS               | Installua                             |
+| ------------------ | ------------------------------------- |
+| `ReadEnvStr`       | `readEnvStr(name)` → `string`         |
 | `ExpandEnvStrings` | `expandEnvStrings(string)` → `string` |
 
 ### ReadMemory
@@ -964,16 +964,16 @@ end)
 ## Flow, errors and messages
 
 NSIS's `Goto`-and-label instructions have no spelling. `IfErrors`,
-`IfFileExists` and the rest are *predicates* — they read as questions inside an
+`IfFileExists` and the rest are _predicates_ — they read as questions inside an
 ordinary `if`, and the compiler writes the labels.
 
 ### Goto / Return / Quit
 
-| NSIS | Installua |
-| --- | --- |
-| `Goto` | `if`, `while`, `break` and `return` |
-| `Return` | `return` |
-| `Quit` | `os.exit()` |
+| NSIS     | Installua                           |
+| -------- | ----------------------------------- |
+| `Goto`   | `if`, `while`, `break` and `return` |
+| `Return` | `return`                            |
+| `Quit`   | `os.exit()`                         |
 
 ### Abort
 
@@ -1036,9 +1036,9 @@ dialog, which is what this is for.
 
 ### IfAbort / GetInstDirError
 
-| NSIS | Installua |
-| --- | --- |
-| `IfAbort` | `aborted()` → `boolean` |
+| NSIS              | Installua                   |
+| ----------------- | --------------------------- |
+| `IfAbort`         | `aborted()` → `boolean`     |
 | `GetInstDirError` | `getInstDirError()` → `int` |
 
 ### MessageBox
@@ -1156,7 +1156,7 @@ end
 ### raw
 
 Text handed to `makensis` unread. It produces no value, no `local` survives it,
-and a failure inside one is reported as *yours* rather than the compiler's
+and a failure inside one is reported as _yours_ rather than the compiler's
 .
 
 **Usage** `raw [[ … ]]` → nothing
@@ -1199,7 +1199,7 @@ is pending: these are decisions.
 
 ### The preprocessor
 
-Installua has no preprocessor — the script *is* a program. All 37 `!`
+Installua has no preprocessor — the script _is_ a program. All 37 `!`
 directives are out:
 
 `!addincludedir` · `!addplugindir` · `!appendfile` · `!appendmemfile` ·
@@ -1222,47 +1222,47 @@ local VERSION <const> = "1.4.2"
 These are real NSIS lines in the output — you just do not spell them. Listed
 here so a search for the NSIS name lands somewhere.
 
-| NSIS | What writes it |
-| --- | --- |
-| `Goto` | `if`, `while`, `break` |
-| `Call` | a call: `f(x)` |
-| `Push` / `Pop` / `Exch` | the calling convention |
-| `StrCpy` | assignment |
-| `StrCmp` / `StrCmpS` | `==` |
-| `IntOp` / `IntPtrOp` | the arithmetic operators |
-| `IntCmp` / `IntCmpU` / `Int64Cmp` / `Int64CmpU` / `IntPtrCmp` / `IntPtrCmpU` | comparison |
-| `IntFmt` / `Int64Fmt` | `string.format` |
-| `LangString` | `languages { locales = { … } }` |
-| `LicenseLangString` | `page.license { file = { … } }` |
-| `InitPluginsDir` | a body that names `PLUGINSDIR` |
-| `ReserveFile /plugin` | a plugin `.onInit` can reach |
-| `SendMessage` | a control's `value` / `checked` |
-| `EnableWindow` / `ShowWindow` | a control's `enabled` / `visible` |
-| `SetCtlColors` / `CreateFont` | a control's `colors` / `font` |
-| `LoadAndSetImage` | a `bitmap`'s `image` |
-| `GetFunctionAddress` | `onClick` / `onChange` |
+| NSIS                                                                         | What writes it                    |
+| ---------------------------------------------------------------------------- | --------------------------------- |
+| `Goto`                                                                       | `if`, `while`, `break`            |
+| `Call`                                                                       | a call: `f(x)`                    |
+| `Push` / `Pop` / `Exch`                                                      | the calling convention            |
+| `StrCpy`                                                                     | assignment                        |
+| `StrCmp` / `StrCmpS`                                                         | `==`                              |
+| `IntOp` / `IntPtrOp`                                                         | the arithmetic operators          |
+| `IntCmp` / `IntCmpU` / `Int64Cmp` / `Int64CmpU` / `IntPtrCmp` / `IntPtrCmpU` | comparison                        |
+| `IntFmt` / `Int64Fmt`                                                        | `string.format`                   |
+| `LangString`                                                                 | `languages { locales = { … } }`   |
+| `LicenseLangString`                                                          | `page.license { file = { … } }`   |
+| `InitPluginsDir`                                                             | a body that names `PLUGINSDIR`    |
+| `ReserveFile /plugin`                                                        | a plugin `.onInit` can reach      |
+| `SendMessage`                                                                | a control's `value` / `checked`   |
+| `EnableWindow` / `ShowWindow`                                                | a control's `enabled` / `visible` |
+| `SetCtlColors` / `CreateFont`                                                | a control's `colors` / `font`     |
+| `LoadAndSetImage`                                                            | a `bitmap`'s `image`              |
+| `GetFunctionAddress`                                                         | `onClick` / `onChange`            |
 
 ### Rejected NSIS commands
 
-| NSIS | Write instead |
-| --- | --- |
-| `CallInstDLL` | `plugin.method(…)` |
-| `ChangeUI` | — MUI2 owns the dialog resources |
-| `DirShow` | — NSIS reports this one as not working |
-| `FindFirst` / `FindNext` / `FindClose` | `for path in glob("…") do` |
-| `GetCurrentAddress` / `GetLabelAddress` | — there are no labels to address |
-| `LangStringUP` | `languages { locales = { … } }` |
-| `LoadLanguageFile` | `languages { locales = { … } }` |
-| `LogSet` / `LogText` | `detailPrint` — logging needs a custom `makensis` build |
-| `Nop` | write nothing |
-| `PageEx` / `PageExEnd` / `PageCallbacks` | `page.*` |
-| `SectionInstType` | a section's `installTypes` |
-| `SetPluginUnload` | — NSIS retired it |
-| `SubSection` / `SubSectionEnd` | `group(…)` |
-| `Target` | `cpu` and `unicode` |
-| `UninstallExeName` | `writeUninstaller(…)` |
-| `UnsafeStrCpy` | `=` |
-| `XPStyle` | — MUI2 emits it itself |
+| NSIS                                     | Write instead                                           |
+| ---------------------------------------- | ------------------------------------------------------- |
+| `CallInstDLL`                            | `plugin.method(…)`                                      |
+| `ChangeUI`                               | — MUI2 owns the dialog resources                        |
+| `DirShow`                                | — NSIS reports this one as not working                  |
+| `FindFirst` / `FindNext` / `FindClose`   | `for path in glob("…") do`                              |
+| `GetCurrentAddress` / `GetLabelAddress`  | — there are no labels to address                        |
+| `LangStringUP`                           | `languages { locales = { … } }`                         |
+| `LoadLanguageFile`                       | `languages { locales = { … } }`                         |
+| `LogSet` / `LogText`                     | `detailPrint` — logging needs a custom `makensis` build |
+| `Nop`                                    | write nothing                                           |
+| `PageEx` / `PageExEnd` / `PageCallbacks` | `page.*`                                                |
+| `SectionInstType`                        | a section's `installTypes`                              |
+| `SetPluginUnload`                        | — NSIS retired it                                       |
+| `SubSection` / `SubSectionEnd`           | `group(…)`                                              |
+| `Target`                                 | `cpu` and `unicode`                                     |
+| `UninstallExeName`                       | `writeUninstaller(…)`                                   |
+| `UnsafeStrCpy`                           | `=`                                                     |
+| `XPStyle`                                | — MUI2 emits it itself                                  |
 
 ### Lua that is not here
 
@@ -1277,19 +1277,19 @@ runtime load, `#` rejected on strings, and truthiness only for booleans.
 This document is hand-written, which is exactly what a correspondence document
 must not stay. Most of it is already in the tables:
 
-| Part of an entry | Where it comes from today |
-| --- | --- |
-| Heading (NSIS name) | `Row::nsis` |
-| Signature | a call renderer over `Instruction`, the shape `src/table/doc.rs` used to print before it was retired with `LANGUAGE.md` |
-| Return type | `Instruction::outputs()` and the `Ty` of each |
-| Options list | `Row::options`, the `Offer` names |
-| Example | `Row::example` — already written, already compiled |
-| Attribute usage line | `Class::Attribute(Setting)` |
-| "Written by the compiler" | `Class::Lowering(spelling)` |
-| "Rejected" reason | `Class::Rejected(why)` |
-| MUI spelling | `mui::rows::Row`'s second field |
-| **Group** | **new: `Row::group`** |
-| **Description** | **new: `Row::blurb`, one or two sentences** |
+| Part of an entry          | Where it comes from today                                                                                               |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Heading (NSIS name)       | `Row::nsis`                                                                                                             |
+| Signature                 | a call renderer over `Instruction`, the shape `src/table/doc.rs` used to print before it was retired with `LANGUAGE.md` |
+| Return type               | `Instruction::outputs()` and the `Ty` of each                                                                           |
+| Options list              | `Row::options`, the `Offer` names                                                                                       |
+| Example                   | `Row::example` — already written, already compiled                                                                      |
+| Attribute usage line      | `Class::Attribute(Setting)`                                                                                             |
+| "Written by the compiler" | `Class::Lowering(spelling)`                                                                                             |
+| "Rejected" reason         | `Class::Rejected(why)`                                                                                                  |
+| MUI spelling              | `mui::rows::Row`'s second field                                                                                         |
+| **Group**                 | **new: `Row::group`**                                                                                                   |
+| **Description**           | **new: `Row::blurb`, one or two sentences**                                                                             |
 
 So the generator is `src/table/reference.rs`, a
 `cargo run -q -- generate reference > docs/reference-map.md` arm beside `generate table`, and two
