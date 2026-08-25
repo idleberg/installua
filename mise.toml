@@ -3,16 +3,40 @@ hk = "latest"
 pkl = "latest"
 python = "latest"
 
-# `rust` is deliberately absent: rust-toolchain.toml pins 1.97 with clippy and
+# `rust` is deliberately absent: rust-toolchain.toml pins 1.98 with clippy and
 # rustfmt, and rustup honours it. A `rust` entry here would shadow that pin and
-# the two would drift.
+# the two would drift. `install:toolchain` below is how mise stays the only tool
+# a contributor has to know about — it hands the pin to rustup rather than
+# restating it.
 
 [env]
 HK_MISE = 1
 NSISDIR = '''{{ exec(command="makensis -HDRINFO 2>/dev/null | tr ',' '\n' | grep '^NSISDIR=' | cut -d= -f2 || true") }}'''
 
 [hooks]
-postinstall = "hk install --mise"
+postinstall = "hk install --mise && mise run install:toolchain"
+
+# Setup, in dependency order: rustup first — `cargo` is a component of the
+# toolchain it installs, so `cargo install` before it is a chicken-and-egg.
+
+[tasks.install]
+description = "Installs the pinned toolchain, then `installua` from this checkout"
+depends = ["install:toolchain"]
+run = "cargo install --path ."
+
+[tasks."install:toolchain"]
+description = "rustup toolchain install — reads the pin from rust-toolchain.toml"
+# No channel argument on purpose: bare `rustup toolchain install` installs
+# whatever rust-toolchain.toml names, components included, so the version lives
+# in exactly one file.
+run = "rustup toolchain install"
+
+[tasks."install:selene"]
+description = "selene, built for Lua 5.4 — the linter `installua init` configures"
+# Not a dependency of `install`: nothing in `check` runs selene, it is only
+# needed to lint a generated project. The published binary is Lua 5.1, which
+# cannot parse the `<const>` a build-time constant is declared with.
+run = "cargo install selene --features selene-lib/lua54"
 
 [tasks.build]
 description = "Builds the project in release mode"

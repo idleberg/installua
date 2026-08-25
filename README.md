@@ -34,7 +34,9 @@ installer {
 ## Requirements
 
 - **NSIS 3.x** on your `PATH` (`makensis -VERSION`). Installua targets 3.12.
-- **Rust 1.97** to build the compiler.
+- **[mise](https://mise.jdx.dev)** and **[rustup](https://rustup.rs)**. The Rust
+  version is pinned in `rust-toolchain.toml` (1.98) and `mise run install`
+  installs it; you never name it yourself.
 
 ## Install
 
@@ -42,7 +44,7 @@ Not published yet — build it from this repository:
 
 ```sh
 git clone <this repo> && cd installua
-cargo install --path .
+mise run install        # pinned toolchain, then `cargo install --path .`
 ```
 
 ## Getting started
@@ -137,7 +139,7 @@ selene has to be built for Lua 5.4, or it cannot parse the `<const>` a
 build-time constant is declared with — the published binary is not:
 
 ```sh
-cargo install selene --features selene-lib/lua54
+mise run install:selene
 ```
 
 ## Third-party plugins and headers
