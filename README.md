@@ -2,12 +2,6 @@
 
 A Lua-shaped language that compiles to NSIS.
 
-You write an installer as an ordinary Lua program — real syntax, real scoping,
-real editor support — and Installua compiles it to a `.nsi` script and hands
-that to `makensis`. The parts of NSIS that are famously easy to get wrong are
-not yours to get wrong: MUI2's include order, `un.` prefixes, label
-arithmetic, the register stack, `$PLUGINSDIR`. The compiler writes those.
-
 ```lua
 attributes {
 	name = "Example",
@@ -30,6 +24,12 @@ installer {
 	end),
 }
 ```
+
+Write an installer as an ordinary Lua program — real syntax, real scoping,
+real editor support — and Installua compiles it to a `.nsi` script and hands
+that to `makensis`. The parts of NSIS that are famously easy to get wrong are
+not yours to get wrong: MUI2's include order, `un.` prefixes, label
+arithmetic, the register stack, `$PLUGINSDIR`. The compiler has you covered!
 
 ## Requirements
 
@@ -141,6 +141,24 @@ build-time constant is declared with — the published binary is not:
 ```sh
 mise run install:selene
 ```
+
+In VS Code, `installua init --vscode` writes the workspace half of that:
+
+```sh
+installua init . --vscode   # + .vscode/extensions.json, .vscode/tasks.json
+```
+
+`extensions.json` recommends [sumneko.lua][sumneko] — the extension that reads
+`.luarc.json` and the generated stubs — and is the one file `init` will add to
+rather than skip when it already exists, since a recommendation takes nothing
+away. `tasks.json` binds ⇧⌘B / Ctrl+Shift+B to `installua build` on the current
+file and carries a problem matcher for the compiler's diagnostics, so an error
+lands on the Lua line in the editor instead of in the terminal only.
+
+There is no `launch.json`: launching needs a debug adapter, and neither
+Installua nor NSIS has one.
+
+[sumneko]: https://marketplace.visualstudio.com/items?itemName=sumneko.lua
 
 ## Third-party plugins and headers
 
