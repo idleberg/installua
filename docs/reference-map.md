@@ -1117,7 +1117,8 @@ reserves it when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
-Ships declared: `nsExec.execToStack`, `UserInfo.getAccountType`, `System.call`.
+Ships declared: `nsExec.execToStack`, `UserInfo.getAccountType`, `System.call`,
+and third-party `nsProcess.findProcess` / `.killProcess` / `.closeProcess`.
 Anything else — every third-party DLL — is declared by the project in
 [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header), which
 is what supplies the output count nothing can ask the DLL for.
@@ -1218,6 +1219,10 @@ own files is a mistake, and says so.
 
 Run `installua stubs` after adding a declaration: the compiler reads the `.toml`
 on every build, but the editor reads the generated stub.
+
+What ships declared lives in `src/headers/*.toml` in this repository, in this
+same format and read by this same parser — copy one into `.installua/headers/`
+to correct it, or send it back as a pull request so nobody else has to.
 
 ---
 

@@ -1,10 +1,11 @@
 //! `.installua/headers/*.toml`: what a project declares for itself.
 //!
-//! The builtins cover three plugin methods and three macros, which is what this
-//! repository's own examples reach and nothing like what an installer reaches.
-//! A third-party plugin becomes ordinary by being *declared* — so what these
-//! check is that one declaration reaches all three readers: the compiler's
-//! arity check, the emitted line, and the editor stub.
+//! What ships declared is a handful, and an installer reaches past it almost
+//! immediately. A plugin becomes ordinary by being *declared* — whether that
+//! happens in `src/headers/*.toml` here or in a project's own directory, since
+//! both go through one parser — so what these check is that one declaration
+//! reaches all three readers: the compiler's arity check, the emitted line, and
+//! the editor stub.
 //!
 //! Everything here parses text rather than reading a directory. The loader is
 //! a `read_dir` around [`Declarations::parse`], and a test that wrote files
@@ -150,8 +151,9 @@ fn a_method_nobody_declared_names_the_directory_that_would_declare_it() {
     assert!(rendered.contains(".installua/headers/"), "{rendered}");
 }
 
-/// A project file may correct a builtin. The builtins are three entries someone
-/// wrote down, and a wrong count in them must not be a wall.
+/// A project file may correct a builtin. What ships is a file someone wrote
+/// down, in the same format and as fallible, so a wrong count must not be a
+/// wall.
 #[test]
 fn a_project_declaration_replaces_a_builtin_without_complaint() {
     let mut declarations = Declarations::builtin();
@@ -279,8 +281,66 @@ fn a_declared_plugin_is_typed_in_the_stub() {
     assert_eq!(method.matches("---@param ").count(), 2, "{method}");
 }
 
+/// The shipped files are compiled into the binary, so nothing at run time can
+/// report a mistake in one. This is where that mistake is a build failure
+/// instead — and it catches the duplicate case too, since two shipped files
+/// declaring one method is exactly what `parse` complains about.
+#[test]
+fn every_declaration_that_ships_parses() {
+    let (declarations, problems) = Declarations::shipped();
+    assert!(problems.is_empty(), "{problems:?}");
+    // Not an empty table dressed up as a clean one: a `SHIPPED` list that had
+    // lost its entries would pass every assertion above this line.
+    assert!(declarations.plugin("nsExec", "execToStack").is_some());
+    assert!(declarations.lookup("FileFunc", "getSize").is_some());
+}
+
+/// The third-party plugin that ships declared, end to end. `uint` and not
+/// `string` on the code: `pushint` is what the plugin calls, and `if code == 0`
+/// is what every caller writes — a string would compile that as a text compare.
+#[test]
+fn ns_process_ships_declared() {
+    let source = "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+                  local nsProcess = plugin \"nsProcess\"\n\
+                  installer {\n\
+                    section(\"Core\", function()\n\
+                      local code = nsProcess.findProcess(\"app.exe\")\n\
+                      if code == 0 then\n\
+                        nsProcess.closeProcess(\"app.exe\")\n\
+                      end\n\
+                    end),\n\
+                  }\n";
+    let mut diags = Diagnostics::new();
+    let output = installua::build(source, &mut diags).expect("compiles");
+    assert!(diags.is_empty(), "{}", diags.render("<test>"));
+
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    assert!(
+        lines.contains(&"nsProcess::_FindProcess \"app.exe\""),
+        "{output}"
+    );
+    assert!(
+        lines.contains(&"nsProcess::_CloseProcess \"app.exe\""),
+        "{output}"
+    );
+    // `IntCmpU` and not `IntCmp` or `StrCmp`: the declaration said `uint`, so
+    // the comparison is numeric *and* unsigned, which is the whole of what
+    // choosing the type over `string` buys at the call site.
+    assert!(
+        lines.iter().any(|line| line.starts_with("IntCmpU $")),
+        "{output}"
+    );
+    // The dropped result still comes off the stack — `closeProcess` pushed one
+    // whether or not anybody wanted it.
+    assert_eq!(
+        lines.iter().filter(|line| *line == &"Pop $0").count(),
+        2,
+        "{output}"
+    );
+}
+
 /// The builtins are declarations too, and the stub says so — which is what
-/// stops the three that ship here from being a different kind of thing from the
+/// stops the ones that ship here from being a different kind of thing from the
 /// ones a project writes.
 #[test]
 fn the_builtins_reach_the_stub_by_the_same_road() {

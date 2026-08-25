@@ -103,9 +103,9 @@ cargo install selene --features selene-lib/lua54
 
 Installua ships declarations for a handful of plugin methods and header macros —
 `nsExec::ExecToStack`, `UserInfo::GetAccountType`, `System::Call`, `${GetSize}`,
-`${DriveSpace}`, `${VersionCompare}` — and your installer will reach past them
-almost immediately. Anything else is **declared by your project**, in one small
-file per plugin or header:
+`${DriveSpace}`, `${VersionCompare}`, and third-party `nsProcess` — and your
+installer will reach past them almost immediately. Anything else is **declared
+by your project**, in one small file per plugin or header:
 
 ```toml
 # .installua/headers/nsis7z.toml
@@ -147,6 +147,9 @@ all — you only need one to call its macros as `header.macro(…)`.
 
 The full format, the type vocabulary and the rules for redeclaring a builtin are
 in [docs/reference-map.md](docs/reference-map.md#declaring-a-third-party-plugin-or-header).
+What ships declared is written in that same format, in
+[src/headers/](src/headers/) — a plugin worth having here is a pull request
+holding one `.toml` file and no Rust.
 
 Two things are still yours where a plugin is concerned: `!addplugindir` for a
 DLL outside NSIS's own `Plugins/` tree, written through `raw`, and `raw` itself

@@ -1,0 +1,10 @@
+# nsExec, which ships with NSIS.
+
+[[plugin]]
+name = "nsExec"
+method = "execToStack"
+nsis = "nsExec::ExecToStack"
+params = ["string"]
+# The exit code first, then the captured output — `Pop` order, which is the
+# order the declaration has to state and the source cannot see.
+outputs = ["string", "string"]

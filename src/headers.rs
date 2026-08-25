@@ -7,13 +7,17 @@
 //! parameter list carries no directions; and nothing can ask a DLL how many
 //! values it pushes, because NSIS offers no way to ask. Both are written down.
 //!
-//! Two sources, one table. [`Declarations::builtin`] seeds the handful this
-//! repository's own examples reach, and [`Declarations::load`] adds whatever
-//! `.installua/headers/*.toml` declares — which is how a *third-party* plugin
-//! or header becomes ordinary rather than a special case: the compiler checks
-//! its arity, the editor stubs type its calls, and neither half is
-//! hand-maintained. A project file may redeclare a builtin and wins when it
-//! does, because a wrong count shipped here must not be a wall.
+//! Two sources, one table and **one format**. [`Declarations::builtin`] parses
+//! the files in [`SHIPPED`] and [`Declarations::load`] parses whatever
+//! `.installua/headers/*.toml` holds, through the same parser — so what ships
+//! here is not a privileged kind of declaration, it is the same five lines a
+//! project writes, and adding a plugin is a `.toml` file rather than a code
+//! change. A project may redeclare one of ours and wins when it does, because a
+//! wrong count shipped here must not be a wall.
+//!
+//! That is what makes a *third-party* plugin ordinary rather than a special
+//! case: the compiler checks its arity, the editor stubs type its calls, and
+//! neither half is hand-maintained.
 //!
 //! Every macro shares one calling convention, and it is not a choice this
 //! compiler made: a header macro takes its inputs first and its **outputs as
@@ -25,7 +29,7 @@
 
 use std::path::Path;
 
-use crate::types::{Int, Sign, Ty, Width};
+use crate::types::Ty;
 
 /// One macro or method argument. Deliberately *not* [`crate::table::Param`]: an
 /// instruction's parameter is a row of `-CMDHELP` with a direction, optionality
@@ -116,90 +120,26 @@ impl std::fmt::Display for Problem {
     }
 }
 
-const fn data(ty: Ty) -> Param {
-    Param { ty, path: false }
-}
-
-const fn path() -> Param {
-    Param {
-        ty: Ty::Str,
-        path: true,
-    }
-}
-
-/// One row of a builtin table: the namespace, the method, the NSIS spelling,
-/// the parameters and the outputs.
+/// The declarations that ship with the compiler, as the files they are.
 ///
-/// A tuple rather than [`Macro`] or [`PluginMethod`] themselves, because a
-/// `const` cannot hold a `String` and those own theirs — the conversion happens
-/// once per compilation, in [`Declarations::builtin`].
-type Builtin = (
-    &'static str,
-    &'static str,
-    &'static str,
-    &'static [Param],
-    &'static [Ty],
-);
-
-/// `(header, method, macro, params, outputs)`.
-const BUILTIN_MACROS: &[Builtin] = &[
-    (
-        "FileFunc",
-        "getSize",
-        "GetSize",
-        &[path(), data(Ty::Str)],
-        // Size, files, directories. A byte count cannot be negative, and that
-        // is what makes `size // 1024` a bare `IntOp` with no sign fixup — the
-        // one place program 4's README says the lattice pays.
-        &[Ty::nonneg(), Ty::nonneg(), Ty::nonneg()],
-    ),
-    (
-        "FileFunc",
-        "driveSpace",
-        "DriveSpace",
-        &[path(), data(Ty::Str)],
-        &[Ty::nonneg()],
-    ),
-    (
-        "WordFunc",
-        "versionCompare",
-        "VersionCompare",
-        &[data(Ty::Str), data(Ty::Str)],
-        // `"0"`, `"1"` or `"2"` — a string, because that is what the macro
-        // leaves in the register and comparing it as an int would be a guess
-        // the lattice has no evidence for.
-        &[Ty::Str],
-    ),
-];
-
-/// `(plugin, method, `Plugin::Method`, params, outputs)`.
-const BUILTIN_PLUGINS: &[Builtin] = &[
-    (
-        "nsExec",
-        "execToStack",
-        "nsExec::ExecToStack",
-        &[data(Ty::Str)],
-        // The exit code first, then the captured output — `Pop` order, which is
-        // the order the declaration has to state and the source cannot see.
-        &[Ty::Str, Ty::Str],
-    ),
-    (
-        "UserInfo",
-        "getAccountType",
-        "UserInfo::GetAccountType",
-        &[],
-        &[Ty::Str],
-    ),
-    (
-        "System",
-        "call",
-        "System::Call",
-        &[data(Ty::Str)],
-        // Counted from the signature instead: every `.s` in it pushes one
-        // value. Parsing the rest of a `System::Call` signature — which would
-        // narrow the clobber set from "everything" — is deferred.
-        &[],
-    ),
+/// The *same* format a project writes, parsed by the same parser: one shape for
+/// one idea, rather than a `const` table here and a file format there that drift
+/// the first time either grows a field. Three things follow from it — a plugin
+/// added here is five lines of TOML and no Rust, the parser is exercised by this
+/// crate's own data on every run, and the files can be copied into a project's
+/// `.installua/headers/` verbatim by anyone who needs to correct one.
+///
+/// The cost is parsing a few kilobytes per [`Declarations::builtin`], and that a
+/// malformed file here would be a run-time surprise rather than a compile error
+/// — which `tests/headers.rs` turns back into a build failure by asserting that
+/// this parses clean.
+const SHIPPED: &[(&str, &str)] = &[
+    ("FileFunc.toml", include_str!("headers/FileFunc.toml")),
+    ("System.toml", include_str!("headers/System.toml")),
+    ("UserInfo.toml", include_str!("headers/UserInfo.toml")),
+    ("WordFunc.toml", include_str!("headers/WordFunc.toml")),
+    ("nsExec.toml", include_str!("headers/nsExec.toml")),
+    ("nsProcess.toml", include_str!("headers/nsProcess.toml")),
 ];
 
 /// Where a project's own declarations live, relative to its root.
@@ -212,32 +152,41 @@ impl Default for Declarations {
 }
 
 impl Declarations {
-    /// The declarations that ship with the compiler.
+    /// The declarations that ship with the compiler, from [`SHIPPED`].
+    ///
+    /// Problems are dropped rather than returned, because there is nothing a
+    /// caller could do about a file compiled into the binary: the check that
+    /// matters happens in `tests/headers.rs`, where a malformed shipped file
+    /// fails the build instead of the installer.
     pub fn builtin() -> Declarations {
-        Declarations {
-            macros: BUILTIN_MACROS
-                .iter()
-                .map(|(header, installua, nsis, params, outputs)| Macro {
-                    project: false,
-                    header: (*header).to_string(),
-                    installua: (*installua).to_string(),
-                    nsis: (*nsis).to_string(),
-                    params: params.to_vec(),
-                    outputs: outputs.to_vec(),
-                })
-                .collect(),
-            plugins: BUILTIN_PLUGINS
-                .iter()
-                .map(|(plugin, installua, nsis, params, outputs)| PluginMethod {
-                    project: false,
-                    plugin: (*plugin).to_string(),
-                    installua: (*installua).to_string(),
-                    nsis: (*nsis).to_string(),
-                    params: params.to_vec(),
-                    outputs: outputs.to_vec(),
-                })
-                .collect(),
+        Declarations::shipped().0
+    }
+
+    /// The same, with whatever the shipped files got wrong — the half the test
+    /// reads, and the reason [`builtin`](Declarations::builtin) can throw the
+    /// problems away.
+    pub fn shipped() -> (Declarations, Vec<Problem>) {
+        let mut declarations = Declarations {
+            macros: Vec::new(),
+            plugins: Vec::new(),
+        };
+        let mut problems = Vec::new();
+        for (name, text) in SHIPPED {
+            declarations.parse(name, text, &mut problems);
         }
+
+        // Parsed as a project's files are — which is what catches two shipped
+        // files declaring one method, since the second reports — and then
+        // marked as ours. Provenance is what decides whether a *project*
+        // redeclaring this is a correction or a mistake, and everything up to
+        // here was read out of a file that could equally have been a project's.
+        for entry in &mut declarations.macros {
+            entry.project = false;
+        }
+        for entry in &mut declarations.plugins {
+            entry.project = false;
+        }
+        (declarations, problems)
     }
 
     /// The builtins plus every `*.toml` in `dir`, in file-name order.
@@ -716,30 +665,5 @@ mod parse {
             _ => return None,
         };
         Some(Param { ty, path })
-    }
-}
-
-/// The type vocabulary, spelled back — the same words a declaration file
-/// writes. Used by the docs test that checks the format's vocabulary and the
-/// parser's have not drifted apart.
-pub fn spelling(ty: Ty) -> &'static str {
-    match ty {
-        Ty::Str => "string",
-        Ty::Bool => "bool",
-        Ty::Handle => "handle",
-        Ty::Unknown => "any",
-        Ty::Int(Int {
-            width: Width::W32,
-            sign: Sign::NonNeg,
-        }) => "uint",
-        Ty::Int(Int {
-            width: Width::W32, ..
-        }) => "int",
-        Ty::Int(Int {
-            width: Width::W64, ..
-        }) => "int64",
-        Ty::Int(Int {
-            width: Width::Ptr, ..
-        }) => "intptr",
     }
 }

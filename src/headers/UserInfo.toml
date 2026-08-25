@@ -1,0 +1,8 @@
+# UserInfo, which ships with NSIS.
+
+[[plugin]]
+name = "UserInfo"
+method = "getAccountType"
+nsis = "UserInfo::GetAccountType"
+params = []
+outputs = ["string"]

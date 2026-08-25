@@ -1,0 +1,11 @@
+# WordFunc.nsh, which ships with NSIS.
+
+[[header]]
+name = "WordFunc"
+method = "versionCompare"
+nsis = "VersionCompare"
+params = ["string", "string"]
+# `"0"`, `"1"` or `"2"` — a string, because that is what the macro leaves in the
+# register and comparing it as an int would be a guess the lattice has no
+# evidence for.
+outputs = ["string"]

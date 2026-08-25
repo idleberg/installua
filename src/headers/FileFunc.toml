@@ -1,0 +1,24 @@
+# FileFunc.nsh, which ships with NSIS.
+#
+# Both of these put their outputs *last*: a header macro cannot return
+# anything, so `!insertmacro` is handed the registers to write into. That is the
+# convention, not a choice — and it is the reason a declaration exists at all,
+# since `${GetSize} "$dir" "" $0 $1 $2` and `${StrCase} $0 "text" "L"` disagree
+# about which end the destination is.
+
+[[header]]
+name = "FileFunc"
+method = "getSize"
+nsis = "GetSize"
+params = ["path", "string"]
+# Size, files, directories. A byte count cannot be negative, and that is what
+# makes `size // 1024` a bare `IntOp` with no sign fixup — the one place
+# program 4's README says the lattice pays.
+outputs = ["uint", "uint", "uint"]
+
+[[header]]
+name = "FileFunc"
+method = "driveSpace"
+nsis = "DriveSpace"
+params = ["path", "string"]
+outputs = ["uint"]
