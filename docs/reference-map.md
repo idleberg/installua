@@ -210,6 +210,52 @@ local FULL    <const> = VERSION .. "-win64"   -- an ordinary <const>
 `installua check` takes the same `-D`s, because a program whose parameters are
 overridden is a different program to check.
 
+### Build-time if
+
+An `if` at the top level is decided by the compiler, not by the installer. This
+is what replaces `!if` / `!ifdef` / `!ifndef` / `!else` / `!endif`.
+
+**Usage** `if <build-time condition> then … end`, at the top level
+
+```lua
+local ARCH <const> = param("ARCH", "x86")
+
+if ARCH == "x64" then
+	attributes { name = "Example (64-bit)", outFile = "example-x64.exe" }
+	installer { section("Core", function() file("bin/x64/app.exe") end) }
+else
+	attributes { name = "Example", outFile = "example.exe" }
+	installer { section("Core", function() file("bin/x86/app.exe") end) }
+end
+```
+
+**The condition has to fold** — a literal, a `<const>`, a `param`, or an
+expression over them. A condition read at install time is an error, because out
+here there is nothing to read it from: no register has been written, and the
+branch would have to be taken by `makensis` rather than by the installer. That
+`if` belongs inside a `section` or a `func`, where it is an ordinary runtime one.
+It also has to be a `bool`, for the same reason a runtime condition does.
+
+**Whatever the branch holds is an ordinary top-level declaration.** Sections,
+`func`s, `attributes`, `<const>`s, `param`s, globals, `raw.head` / `raw.tail` —
+there is no second set of rules, because the selected statements *are* the top
+level once the branch is taken. Resolution stays order-free across it: a section
+declared inside a branch can be listed by an `installer {}` written outside it,
+and a `<const>` declared below the `if` can be what decides it.
+
+The one thing to know is what "not taken" means: a declaration in the branch that
+was not taken is not part of the program at all. A `param` declared only there is
+not declared, so a `-D` for it is the same `unknown-param` error a misspelling
+gets — which is the honest answer, since in that configuration the program really
+does not have it.
+
+**Nothing of the conditional reaches the output.** It is not a directive the
+compiler emits and then orders against everything else — it is a branch the
+compiler takes, before a single line is bucketed. The emitted script is
+byte-for-byte the script you would get by writing only the branch that won.
+`include` is the one thing that cannot go in a branch: files are merged before
+any of this runs.
+
 ---
 
 ## Script attributes
@@ -1367,12 +1413,14 @@ directives are out:
 
 Write `local X <const> = …`, `if`, `include(…)` and a function instead.
 
-Four of those are worth naming, because "out" reads harsher than it is:
-`!define`, `!undef`, `!ifdef` and `!ifndef` are not withheld, they are
-*unnecessary*. A top-level `local X <const> = …` **is** a `!define` — that is
-what it emits — and the `!ifndef`/`!define`/`!endif` sandwich that gives one a
-settable default is [`param`](#param), which does the same job and additionally
-rejects a `-D` nobody declared.
+Seven of those are worth naming, because "out" reads harsher than it is:
+`!define`, `!undef`, `!if`, `!ifdef`, `!ifndef`, `!else` and `!endif` are not
+withheld, they are *unnecessary*. A top-level `local X <const> = …` **is** a
+`!define` — that is what it emits — the `!ifndef`/`!define`/`!endif` sandwich
+that gives one a settable default is [`param`](#param), which does the same job
+and additionally rejects a `-D` nobody declared, and conditional compilation is
+the [top-level `if`](#build-time-if), which is decided in the compiler rather
+than emitted into the script.
 
 "Out" means there is no Lua spelling, not that the line is unreachable. Six of
 them are ones a real script does want and no construct replaces — `!system`,

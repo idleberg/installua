@@ -49,7 +49,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::{Expr, Program, Stmt, TableField};
+use crate::ast::{Expr, Stmt, TableField};
 use crate::diag::{Code, Diagnostic, Span};
 use crate::ir;
 use crate::locale;
@@ -68,8 +68,8 @@ struct Locale {
 
 impl Lowerer<'_, '_> {
     /// The pass. Finds the block, rejects a second one, lowers the first.
-    pub(super) fn languages_pass(&mut self, program: &Program) {
-        let mut blocks = program.block.iter().filter_map(|stmt| {
+    pub(super) fn languages_pass(&mut self) {
+        let mut blocks = self.resolved.block.iter().filter_map(|stmt| {
             let Stmt::Call(call) = stmt else { return None };
             let name = call.callee_name()?;
             (name == "languages").then(|| (call, call.span()))

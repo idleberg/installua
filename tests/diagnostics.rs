@@ -171,6 +171,10 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\nraw.middle [[ !system 'echo x' ]]",
     ),
     (
+        Code::ConstIf,
+        "attributes { outFile = \"a.exe\" }\ncount = 1\nif count == 1 then\nend",
+    ),
+    (
         Code::NsisRetired,
         "attributes { outFile = \"a.exe\" }\n\
          installer { section(\"Core\", function()\n\

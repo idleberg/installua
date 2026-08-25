@@ -289,6 +289,14 @@ pub enum Code {
     /// clean and ships something else, which is the `!ifndef` silent miss again.
     RawAnchor,
 
+    // -- build-time `if`
+    /// A top-level `if` whose condition does not fold. Out there the branch is
+    /// the compiler's to take — it happens before anything is bucketed, which is
+    /// what keeps the emitter's fixed spine out of it — so a condition that is
+    /// only known at install time has nothing to be decided by. The same rule a
+    /// `<const>` lives under, one level up.
+    ConstIf,
+
     /// An NSIS instruction that has a Lua spelling instead: `StrCmp` is `==`,
     /// `IntOp` is `+`, `StrCpy` is assignment. Not an unknown name — the
     /// compiler knows exactly what it is, and says what to write.
@@ -347,6 +355,7 @@ impl Code {
         Code::ParamForm,
         Code::UnknownParam,
         Code::RawAnchor,
+        Code::ConstIf,
         Code::NsisRetired,
         Code::WrongPlace,
     ];
@@ -396,6 +405,7 @@ impl Code {
             Code::ParamForm => "param-form",
             Code::UnknownParam => "unknown-param",
             Code::RawAnchor => "raw-anchor",
+            Code::ConstIf => "const-if",
             Code::NsisRetired => "nsis-retired",
             Code::WrongPlace => "wrong-place",
         }

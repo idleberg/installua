@@ -174,7 +174,7 @@ pub fn compile_with(
         return None;
     }
 
-    let module = lower::lower(&program, &resolved, options, diags);
+    let module = lower::lower(&resolved, options, diags);
     lower::check_required(&module, diags);
     if diags.has_errors() {
         return None;

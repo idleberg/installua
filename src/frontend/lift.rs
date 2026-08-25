@@ -120,7 +120,10 @@ impl Lifter<'_> {
                 // which is something the whole program either does or does not.
                 // Inside a body there is no stage that could decide, because
                 // the deciding would be install-time and the merging is
-                // compile-time.
+                // compile-time. Inside a top-level `if` both halves are
+                // compile-time and it is still no: merging happens here, in the
+                // frontend, and the branch is taken two passes later — there is
+                // no order in which one could inform the other.
                 if self.depth > 1
                     && matches!(&call, Stmt::Call(expr) if expr.callee_name() == Some("include"))
                 {
@@ -131,6 +134,7 @@ impl Lifter<'_> {
                             "`include` is a top-level statement",
                         )
                         .note("it merges another file's declarations into this one, so it cannot depend on anything decided at install time")
+                        .note("a top-level `if` is no exception: files are merged in the frontend, and the branch is taken later, in resolution")
                        .note("move it to the top of the file; declarations are order-free"),
                     );
                     return None;

@@ -1592,7 +1592,6 @@ const V1_BLOCKS: &[&str] = &[
 const MAX_ROUNDS: usize = 8;
 
 pub fn lower(
-    program: &Program,
     resolved: &Resolved<'_>,
     options: &crate::Options,
     diags: &mut Diagnostics,
@@ -1604,14 +1603,14 @@ pub fn lower(
     let mut inferred = Inferred::seed(resolved);
     for _ in 0..MAX_ROUNDS {
         let mut scratch = Diagnostics::new();
-        let round = lower_once(program, resolved, options, &mut scratch, &inferred).1;
+        let round = lower_once(resolved, options, &mut scratch, &inferred).1;
         if round == inferred {
             break;
         }
         inferred = round;
     }
 
-    let (mut module, _) = lower_once(program, resolved, options, diags, &inferred);
+    let (mut module, _) = lower_once(resolved, options, diags, &inferred);
 
     // 2. Registers. Every body is allocated before any call site is filled in,
     //    because a clobber set is a fact about *physical* registers and there
@@ -1897,7 +1896,6 @@ fn arg_mentions(arg: &ir::Arg) -> bool {
 }
 
 fn lower_once(
-    program: &Program,
     resolved: &Resolved<'_>,
     options: &crate::Options,
     diags: &mut Diagnostics,
@@ -1932,7 +1930,7 @@ fn lower_once(
         un_hooks: Vec::new(),
         requires: Requirements::default(),
     };
-    lowerer.program(program);
+    lowerer.program();
     lowerer.finish()
 }
 
@@ -2027,7 +2025,7 @@ impl Requirements {
 }
 
 impl<'p> Lowerer<'_, 'p> {
-    fn program(&mut self, program: &Program) {
+    fn program(&mut self) {
         // A top-level `<const>` is a `!define`: build-time, folded in every
         // expression, and `${NAME}` in the output. Emitted in source order
         // because the preprocessor is textual and strictly sequential — the one
@@ -2060,11 +2058,12 @@ impl<'p> Lowerer<'_, 'p> {
         // before anything else. Collected here and lowered when the callback
         // is, since the block they belong to may be written above them and
         // resolution being order-free makes that legal.
-        self.global_inits = program
+        self.global_inits = self
+            .resolved
             .block
             .iter()
             .filter(|stmt| matches!(stmt, Stmt::Assign { .. }))
-            .cloned()
+            .map(|stmt| (*stmt).clone())
             .collect();
 
         // Which block listed which declaration, decided before anything is
@@ -2074,10 +2073,10 @@ impl<'p> Lowerer<'_, 'p> {
         // the first body is walked. `languages {}` too, before anything that
         // could read `lang.greeting` or ask for an `.onInit` — same
         // order-freeness argument as the claims.
-        self.languages_pass(program);
-        self.claim_pass(program);
+        self.languages_pass();
+        self.claim_pass();
 
-        for stmt in &program.block {
+        for stmt in self.resolved.block.clone() {
             self.top_level(stmt);
         }
 
@@ -5774,8 +5773,8 @@ impl<'p> Lowerer<'_, 'p> {
     /// `group { … }` without lowering either, because the shape errors belong to
     /// [`Self::installer`] and [`Self::group`] and reporting them from two
     /// places would report them twice.
-    fn claim_pass(&mut self, program: &Program) {
-        for stmt in &program.block {
+    fn claim_pass(&mut self) {
+        for stmt in self.resolved.block.clone() {
             let Stmt::Call(call) = stmt else {
                 continue;
             };

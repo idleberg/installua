@@ -102,6 +102,25 @@ build that quietly ships the default. The default is also the type — `-D
 PORT=abc` against `param("PORT", 8080)` is rejected rather than handed to an
 `IntOp` as a string.
 
+A top-level `if` over those values is the other half, and it replaces `!if` /
+`!ifdef` / `!else` / `!endif`:
+
+```lua
+local ARCH <const> = param("ARCH", "x86")
+
+if ARCH == "x64" then
+	installer { section("Core", function() file("bin/x64/app.exe") end) }
+else
+	installer { section("Core", function() file("bin/x86/app.exe") end) }
+end
+```
+
+The condition has to fold at build time — that is the same rule `<const>` lives
+under — and what it selects is ordinary top-level declarations, resolved
+order-free with everything around them. Nothing of the conditional reaches the
+output: it is a branch the compiler takes rather than a directive it emits, so
+the script is the one you would get by writing only the branch that won.
+
 ### Editor support
 
 `installua init` writes `.luarc.json` and `selene.toml`, and `installua stubs`

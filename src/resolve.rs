@@ -183,15 +183,25 @@ pub struct Param {
 
 #[derive(Debug, Default)]
 pub struct Resolved<'a> {
+    /// The top level the rest of the compiler sees: the source's own statements
+    /// with every build-time `if` replaced by the branch it took.
+    ///
+    /// Every later pass reads this rather than `program.block`, which is what
+    /// makes a top-level `if` cost the emitter nothing — by the time anything is
+    /// bucketed the conditional no longer exists, so there is nothing left to
+    /// order. See [`select`].
+    pub block: Vec<&'a Stmt>,
     pub consts: BTreeMap<String, Const>,
     /// Build parameters by the name `-D` sets them under — which is the string
     /// in the `param(…)` call, not the `<const>` it was bound to. The two are
     /// usually spelled the same and are not required to be: the string is an
     /// interface to the outside and the local is the program's own.
     pub params: BTreeMap<String, Param>,
-    /// Top-level `<const>` names in **source order**, because each becomes a
-    /// `!define` and the preprocessor is strictly sequential. The map is
-    /// alphabetical and the output is not.
+    /// Top-level `<const>` names in **selected-source order**, because each
+    /// becomes a `!define` and the preprocessor is strictly sequential. The map
+    /// is alphabetical and the output is not. Rebuilt from [`Resolved::block`]
+    /// once the last branch has been taken, so a `<const>` inside a build-time
+    /// `if` lands where the `if` was written rather than where it was folded.
     pub const_order: Vec<String>,
     /// Header and plugin namespaces, by the local name they were bound to.
     pub namespaces: BTreeMap<String, Namespace>,
@@ -219,10 +229,13 @@ pub fn resolve<'a>(
     diags: &mut Diagnostics,
 ) -> Resolved<'a> {
     let mut resolved = Resolved::default();
-    top_level(program, &mut resolved, diags);
+    // Consts first, and not for tidiness: folding them is what decides which
+    // branch of each top-level `if` is part of the program, and until that is
+    // settled there is no top level for the other two passes to walk.
     consts(program, &mut resolved, options, diags);
     unknown_params(&resolved, options, diags);
-    globals(program, &mut resolved);
+    top_level(&mut resolved, diags);
+    globals(&mut resolved);
     resolved
 }
 
@@ -395,9 +408,16 @@ fn coerce(text: &str, default: &ConstValue) -> Option<ConstValue> {
     }
 }
 
-/// Pass 1a: the declarations, collected without looking inside a body.
-fn top_level<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Diagnostics) {
-    for stmt in &program.block {
+/// Pass 1b: the declarations, collected without looking inside a body.
+///
+/// Over [`Resolved::block`] rather than the source's own: a `func` inside a
+/// branch that was not taken is not part of the program, and one inside a branch
+/// that was is indistinguishable from one written at the top level.
+fn top_level<'a>(resolved: &mut Resolved<'a>, diags: &mut Diagnostics) {
+    // Cloned so the walk can insert: a `Vec` of references, so this is the
+    // pointers and not the tree.
+    let block = resolved.block.clone();
+    for stmt in block {
         let Stmt::Call(Expr::Call { callee, args, .. }) = stmt else {
             continue;
         };
@@ -448,8 +468,15 @@ fn top_level<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut 
     }
 }
 
-/// Pass 1b: top-level `<const>`s, folded to a fixpoint so that one may refer to
-/// another regardless of the order they were written in.
+/// Pass 1a: top-level `<const>`s, folded to a fixpoint so that one may refer to
+/// another regardless of the order they were written in — and, in the same
+/// fixpoint, the top-level `if`s those constants decide.
+///
+/// The two are one pass because neither finishes without the other: an `if`'s
+/// condition is folded from constants, and a constant may be declared inside the
+/// branch an `if` takes. So each round declares whatever the selected top level
+/// now holds, folds as far as it can, and takes every branch that has become
+/// decidable; a round that takes none is the fixpoint. See [`select`].
 fn consts<'a>(
     program: &'a Program,
     resolved: &mut Resolved<'a>,
@@ -457,156 +484,386 @@ fn consts<'a>(
     diags: &mut Diagnostics,
 ) {
     let mut pending: Vec<Pending> = Vec::new();
+    let mut items: Vec<Item> = program.block.iter().map(Item::unseen).collect();
 
-    for stmt in &program.block {
-        let Stmt::Local {
-            names,
-            is_const,
-            values,
-            span,
-        } = stmt
-        else {
-            continue;
-        };
-
-        // `local fileFunc = import "FileFunc"` is not a value binding at all —
-        // it names a namespace, which is why it is the one non-`<const>`
-        // `local` the top level accepts.
-        if !is_const
-            && let ([name], [value]) = (names.as_slice(), values.as_slice())
-            && let Some(namespace) = namespace(value, diags)
-        {
-            resolved.namespaces.insert(name.text.clone(), namespace);
-            continue;
-        }
-
-        // `local core = section { … }` names a section so that install-time
-        // code can address it. Held here and lowered by the block that lists
-        // it, which is the only place its half is known.
-        if !is_const
-            && let ([name], [value]) = (names.as_slice(), values.as_slice())
-            && let Some(kind) = deferred_kind(value)
-        {
-            if let Some(previous) = resolved.deferred.get(&name.text) {
-                diags.push(
-                    Diagnostic::error(
-                        Code::DuplicateBlock,
-                        *span,
-                        format!("`{}` is declared more than once", name.text),
-                    )
-                    .note(format!(
-                        "the first one is at line {}",
-                        previous.span.start_line
-                    ))
-                    .note("resolution is order-free, so there is no later one that wins"),
-                );
+    loop {
+        for item in &mut items {
+            let Item::Stmt { stmt, declared } = item else {
+                continue;
+            };
+            if *declared {
                 continue;
             }
-            resolved.deferred_order.push(name.text.clone());
-            resolved.deferred.insert(
-                name.text.clone(),
-                Deferred {
-                    kind,
-                    value,
-                    span: name.span,
-                },
-            );
-            continue;
+            *declared = true;
+            declare(stmt, resolved, &mut pending, diags);
         }
 
-        if !is_const {
-            diags.push(
-                Diagnostic::error(
-                    Code::NotYetImplemented,
-                    *span,
-                    "a `local` at the top level has nowhere to live",
-                )
-                .note(
-                    "there is no install-time code outside a section or a `func`, so a register \
-                     here would never be written",
-                )
-                .note(
-                    "write `local X <const> = …` for a build-time value, or assign to a bare \
-                     name for a global",
-                )
-                .note(
-                    "`local x = section { … }` is the other one: it names a section for a block \
-                     to list and for install-time code to address",
-                ),
-            );
-            continue;
-        }
+        fold_pending(&mut pending, resolved, options, diags);
 
-        for (index, name) in names.iter().enumerate() {
-            match values.get(index) {
-                Some(value) => match initialiser(value, diags) {
-                    Initialiser::Value(value) => {
-                        resolved.const_order.push(name.text.clone());
-                        pending.push(Pending {
-                            name,
-                            value,
-                            param: None,
-                        });
-                    }
-                    Initialiser::Param {
-                        name: param,
-                        span,
-                        default,
-                    } => {
-                        // Declared twice is a genuine ambiguity rather than a
-                        // tidiness rule: two defaults for one `-D` name have no
-                        // answer, and resolution being order-free means there
-                        // is no later one to let win.
-                        if let Some(previous) = resolved.params.get(&param) {
-                            diags.push(
-                                Diagnostic::error(
-                                    Code::DuplicateBlock,
-                                    span,
-                                    format!("`{param}` is declared as a parameter more than once"),
-                                )
-                                .note(format!(
-                                    "the first one is at line {}, bound to `{}`",
-                                    previous.span.start_line, previous.bound
-                                ))
-                                .note("a parameter has one default, since `-D` sets it once"),
-                            );
-                            continue;
-                        }
-                        resolved.params.insert(
-                            param.clone(),
-                            Param {
-                                bound: name.text.clone(),
-                                span,
-                                // Replaced the moment the default folds. A
-                                // parameter whose default is not constant never
-                                // gets that far and is reported as the `<const>`
-                                // it failed to be.
-                                value: ConstValue::Bool(false),
-                            },
-                        );
-                        resolved.const_order.push(name.text.clone());
-                        pending.push(Pending {
-                            name,
-                            value: default,
-                            param: Some(param),
-                        });
-                    }
-                    Initialiser::Broken => {}
-                },
-                None => diags.push(
-                    Diagnostic::error(
-                        Code::BadFieldValue,
-                        name.span,
-                        format!("`{}` is `<const>` with no value", name.text),
-                    )
-                    .note("a build-time constant is its value; there is nothing to assign later"),
-                ),
-            }
+        if !select(&mut items, resolved, diags) {
+            break;
         }
     }
 
-    // A worklist rather than one pass: `local A <const> = B` is legal above `B`,
-    // and saying so costs a loop that almost always runs twice.
+    // Every `if` still standing: nothing folded its condition, and no later
+    // round can, since the fixpoint has run out of new constants to learn.
+    for item in &items {
+        if let Item::Cond { cond, .. } = item {
+            undecidable(cond, diags);
+        }
+    }
+
+    resolved.block = items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Stmt { stmt, .. } => Some(*stmt),
+            Item::Cond { .. } => None,
+        })
+        .collect();
+
+    // Source order, read off the selected top level rather than accumulated as
+    // the rounds learned things: a `<const>` inside a build-time `if` is
+    // declared in a later round than the statements around it, and the `!define`
+    // it becomes belongs where the `if` was written.
+    resolved.const_order = resolved
+        .block
+        .iter()
+        .filter_map(|stmt| match stmt {
+            Stmt::Local {
+                names,
+                is_const: true,
+                ..
+            } => Some(names),
+            _ => None,
+        })
+        .flatten()
+        .filter(|name| resolved.consts.contains_key(&name.text))
+        .map(|name| name.text.clone())
+        .collect();
+
+    for Pending { name, value, param } in pending {
+        // A parameter whose default did not fold is reported as a parameter:
+        // the `<const>` wording would send the reader looking at the binding,
+        // and the mistake is in the default beside the name.
+        let (what, note) = match &param {
+            Some(param) => (
+                format!("the default for `{param}` is not a build-time constant"),
+                "a parameter's default is the value a build without a `-D` gets, so it has to be \
+                 known here",
+            ),
+            None => (
+                format!("`{}` is not a build-time constant", name.text),
+                "a `<const>` folds at compile time, so its value has to be a literal or built \
+                 from other `<const>`s",
+            ),
+        };
+        diags.push(Diagnostic::error(Code::BadFieldValue, value.span(), what).note(note));
+    }
+}
+
+/// One entry in the top level being selected.
+///
+/// A `Cond` is a hole: it stands where the `if` was written and is replaced, in
+/// place, by the statements of whichever branch its condition picks. Holding the
+/// position is the whole job — `!define` order and install order are both source
+/// order, and a branch that appended its statements at the end would quietly be
+/// a different program.
+enum Item<'a> {
+    Stmt {
+        stmt: &'a Stmt,
+        /// Whether this statement's declarations have been read. Reading them
+        /// twice would report every parameter as declared more than once.
+        declared: bool,
+    },
+    Cond {
+        cond: &'a Expr,
+        then_block: &'a Block,
+        else_block: Option<&'a Block>,
+    },
+}
+
+impl<'a> Item<'a> {
+    fn unseen(stmt: &'a Stmt) -> Item<'a> {
+        match stmt {
+            Stmt::If {
+                cond,
+                then_block,
+                else_block,
+                ..
+            } => Item::Cond {
+                cond,
+                then_block,
+                else_block: else_block.as_ref(),
+            },
+            stmt => Item::Stmt {
+                stmt,
+                declared: false,
+            },
+        }
+    }
+}
+
+/// Takes every branch whose condition has become foldable, in place. `true` when
+/// one was taken, which is what the fixpoint iterates on.
+///
+/// **This is the design point that protects the emitter's spine.** A top-level
+/// `if` is not a directive that survives into the output and gets ordered
+/// against everything else — it is a branch the compiler takes, and it is gone
+/// before a single statement is bucketed. That is why the feature costs
+/// `src/emit.rs` nothing.
+///
+/// An `elseif` needs no case of its own: the frontend has already desugared it
+/// into a nested `If` in the else branch, so it arrives here as a `Cond` inside
+/// the block this one splices in, and the next round decides it.
+fn select(items: &mut Vec<Item>, resolved: &Resolved, diags: &mut Diagnostics) -> bool {
+    let mut taken = false;
+    let mut out: Vec<Item> = Vec::with_capacity(items.len());
+    for item in std::mem::take(items) {
+        let Item::Cond {
+            cond,
+            then_block,
+            else_block,
+        } = item
+        else {
+            out.push(item);
+            continue;
+        };
+        let Some(value) = fold(cond, &|name| {
+            resolved.consts.get(name).map(|c| c.value.clone())
+        }) else {
+            out.push(Item::Cond {
+                cond,
+                then_block,
+                else_block,
+            });
+            continue;
+        };
+        taken = true;
+        let ConstValue::Bool(value) = value else {
+            not_bool(cond, &value, diags);
+            continue;
+        };
+        let block = match value {
+            true => Some(then_block),
+            false => else_block,
+        };
+        out.extend(block.into_iter().flatten().map(Item::unseen));
+    }
+    *items = out;
+    taken
+}
+
+/// A build-time `if` on something that is not a `bool`. The wording is the
+/// runtime rule's, because it is the same rule: Lua's truthiness would run
+/// `if count then` on `0`, and disagreeing with Lua on the value most likely to
+/// be tested is not a trade a compile-time branch gets to make either.
+fn not_bool(cond: &Expr, value: &ConstValue, diags: &mut Diagnostics) {
+    let replacement = match value {
+        ConstValue::Str(_) => "compare it: `x ~= \"\"`",
+        _ => "compare it: `x ~= 0`",
+    };
+    diags.push(
+        Diagnostic::error(
+            Code::NotBool,
+            cond.span(),
+            format!("a condition needs a `bool`, and this is a {}", value.ty()),
+        )
+        .note(replacement)
+        .note(
+            "in Lua every value but `nil` and `false` is truthy, so `if count then` would run on \
+             `0` — a by-type rule would disagree with Lua on exactly the value most likely to be \
+             tested",
+        ),
+    );
+}
+
+/// A top-level `if` whose condition never folded.
+///
+/// The same rule a `<const>` lives under, and the note points at where the
+/// runtime `if` does work: outside every body there is nothing to test, since
+/// no register has been written yet and the branch would have to be taken by
+/// `makensis` rather than by the installer.
+fn undecidable(cond: &Expr, diags: &mut Diagnostics) {
+    diags.push(
+        Diagnostic::error(
+            Code::ConstIf,
+            cond.span(),
+            "a top-level `if` is decided at build time, and this condition is not a build-time \
+             constant",
+        )
+        .note(
+            "build it from `<const>`s and `param(…)`s, which fold before anything is emitted — \
+             `if param(\"ARCH\", \"x86\") == \"x64\" then`",
+        )
+        .note(
+            "an `if` on a value read at install time belongs inside a `section` or a `func`; out \
+             here there is no register to have been written yet",
+        ),
+    );
+}
+
+/// Reads one top-level statement's declarations: a namespace, a deferred
+/// section, or a `<const>` for the worklist.
+fn declare<'a>(
+    stmt: &'a Stmt,
+    resolved: &mut Resolved<'a>,
+    pending: &mut Vec<Pending<'a>>,
+    diags: &mut Diagnostics,
+) {
+    let Stmt::Local {
+        names,
+        is_const,
+        values,
+        span,
+    } = stmt
+    else {
+        return;
+    };
+
+    // `local fileFunc = import "FileFunc"` is not a value binding at all —
+    // it names a namespace, which is why it is the one non-`<const>`
+    // `local` the top level accepts.
+    if !is_const
+        && let ([name], [value]) = (names.as_slice(), values.as_slice())
+        && let Some(namespace) = namespace(value, diags)
+    {
+        resolved.namespaces.insert(name.text.clone(), namespace);
+        return;
+    }
+
+    // `local core = section { … }` names a section so that install-time
+    // code can address it. Held here and lowered by the block that lists
+    // it, which is the only place its half is known.
+    if !is_const
+        && let ([name], [value]) = (names.as_slice(), values.as_slice())
+        && let Some(kind) = deferred_kind(value)
+    {
+        if let Some(previous) = resolved.deferred.get(&name.text) {
+            diags.push(
+                Diagnostic::error(
+                    Code::DuplicateBlock,
+                    *span,
+                    format!("`{}` is declared more than once", name.text),
+                )
+                .note(format!(
+                    "the first one is at line {}",
+                    previous.span.start_line
+                ))
+                .note("resolution is order-free, so there is no later one that wins"),
+            );
+            return;
+        }
+        resolved.deferred_order.push(name.text.clone());
+        resolved.deferred.insert(
+            name.text.clone(),
+            Deferred {
+                kind,
+                value,
+                span: name.span,
+            },
+        );
+        return;
+    }
+
+    if !is_const {
+        diags.push(
+            Diagnostic::error(
+                Code::NotYetImplemented,
+                *span,
+                "a `local` at the top level has nowhere to live",
+            )
+            .note(
+                "there is no install-time code outside a section or a `func`, so a register \
+                 here would never be written",
+            )
+            .note(
+                "write `local X <const> = …` for a build-time value, or assign to a bare \
+                 name for a global",
+            )
+            .note(
+                "`local x = section { … }` is the other one: it names a section for a block \
+                 to list and for install-time code to address",
+            ),
+        );
+        return;
+    }
+
+    for (index, name) in names.iter().enumerate() {
+        match values.get(index) {
+            Some(value) => match initialiser(value, diags) {
+                Initialiser::Value(value) => pending.push(Pending {
+                    name,
+                    value,
+                    param: None,
+                }),
+                Initialiser::Param {
+                    name: param,
+                    span,
+                    default,
+                } => {
+                    // Declared twice is a genuine ambiguity rather than a
+                    // tidiness rule: two defaults for one `-D` name have no
+                    // answer, and resolution being order-free means there
+                    // is no later one to let win.
+                    if let Some(previous) = resolved.params.get(&param) {
+                        diags.push(
+                            Diagnostic::error(
+                                Code::DuplicateBlock,
+                                span,
+                                format!("`{param}` is declared as a parameter more than once"),
+                            )
+                            .note(format!(
+                                "the first one is at line {}, bound to `{}`",
+                                previous.span.start_line, previous.bound
+                            ))
+                            .note("a parameter has one default, since `-D` sets it once"),
+                        );
+                        continue;
+                    }
+                    resolved.params.insert(
+                        param.clone(),
+                        Param {
+                            bound: name.text.clone(),
+                            span,
+                            // Replaced the moment the default folds. A
+                            // parameter whose default is not constant never
+                            // gets that far and is reported as the `<const>`
+                            // it failed to be.
+                            value: ConstValue::Bool(false),
+                        },
+                    );
+                    pending.push(Pending {
+                        name,
+                        value: default,
+                        param: Some(param),
+                    });
+                }
+                Initialiser::Broken => {}
+            },
+            None => diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    name.span,
+                    format!("`{}` is `<const>` with no value", name.text),
+                )
+                .note("a build-time constant is its value; there is nothing to assign later"),
+            ),
+        }
+    }
+}
+
+/// Folds every `<const>` that can fold, to a fixpoint, applying `-D` as it goes.
+///
+/// A worklist rather than one pass: `local A <const> = B` is legal above `B`,
+/// and saying so costs a loop that almost always runs twice. Whatever is left in
+/// `pending` when this returns did not fold *this round* — which is not yet an
+/// error, since a later round may declare the constant it was waiting for.
+fn fold_pending(
+    pending: &mut Vec<Pending>,
+    resolved: &mut Resolved,
+    options: &crate::Options,
+    diags: &mut Diagnostics,
+) {
     loop {
         let folded: Vec<(String, Const, Option<String>)> = pending
             .iter()
@@ -656,25 +913,6 @@ fn consts<'a>(
             resolved.consts.insert(name, folded);
         }
         pending.retain(|entry| !resolved.consts.contains_key(&entry.name.text));
-    }
-
-    for Pending { name, value, param } in pending {
-        // A parameter whose default did not fold is reported as a parameter:
-        // the `<const>` wording would send the reader looking at the binding,
-        // and the mistake is in the default beside the name.
-        let (what, note) = match &param {
-            Some(param) => (
-                format!("the default for `{param}` is not a build-time constant"),
-                "a parameter's default is the value a build without a `-D` gets, so it has to be \
-                 known here",
-            ),
-            None => (
-                format!("`{}` is not a build-time constant", name.text),
-                "a `<const>` folds at compile time, so its value has to be a literal or built \
-                 from other `<const>`s",
-            ),
-        };
-        diags.push(Diagnostic::error(Code::BadFieldValue, value.span(), what).note(note));
     }
 }
 
@@ -748,10 +986,16 @@ fn namespace(value: &Expr, diags: &mut Diagnostics) -> Option<Namespace> {
 
 /// Pass 1c: globals. A bare assignment declares one, and it can happen anywhere
 /// — inside a section, inside a `func` — so this walks every body.
-fn globals(program: &Program, resolved: &mut Resolved<'_>) {
+fn globals(resolved: &mut Resolved<'_>) {
     let mut scopes: Vec<HashSet<String>> = vec![HashSet::new()];
     let mut found: Vec<Global> = Vec::new();
-    scan_block(&program.block, &mut scopes, &mut found, resolved);
+    // The selected top level, so a global assigned only inside a branch that
+    // was not taken never gets a `Var`.
+    let block = resolved.block.clone();
+    scopes.push(HashSet::new());
+    for stmt in block {
+        scan_stmt(stmt, &mut scopes, &mut found, resolved);
+    }
     resolved.globals = found;
 }
 

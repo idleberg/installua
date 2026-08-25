@@ -361,7 +361,7 @@ no reason string — the staging rule is the reason — and reachability through
 written at, which the reference says; no bucket changed and
 `tests/golden/coverage.txt` is untouched.
 
-### Phase 3 — `if` over constants at top level
+### Phase 3 — `if` over constants at top level (done)
 
 **Why last:** the only genuinely new language surface, and Phases 1–2 shrink its
 job from 180 files to roughly 80.
@@ -388,6 +388,48 @@ mentioning a runtime register is an error, with a note pointing at the runtime
 **Scope from the corpus:** feature flags (30 files), arch/bitness (~50),
 debug/release (20). **Not** `$%ENV%` inside `!if` — 11 files, all VirtualBox, and
 `-D` from the build script covers it.
+
+**Four things the plan did not say, decided in the writing.**
+
+*Selection and constant folding are one fixpoint, not two passes.* The plan reads
+as though folding finishes and then branches are taken. It cannot: a condition
+folds from constants, and a constant may be *declared inside the branch a
+condition selects*. So `resolve::consts` now rounds — declare whatever the
+selected top level holds, fold as far as it goes, take every branch that became
+decidable — and a round that takes none is the answer. Order-freeness therefore
+survives the conditional in both directions: a `<const>` written below an `if`
+decides it, and a branch may declare what the next one reads. The cost is one
+extra concept, [`resolve::Item`], and the reason it exists is positional: a taken
+branch's statements are spliced **in place**, because `!define` order and install
+order are both source order and appending would silently be a different program.
+
+*The whole compiler moved onto `Resolved::block`.* The plan says the conditional
+is gone before bucketing; what makes that true is that `program.block` now has
+exactly one reader. `resolve`'s own `func` and globals passes, `lower`'s
+`languages_pass`, `claim_pass` and top-level loop all walk the selected block, so
+`lower::lower` no longer takes a `&Program` at all. That is what buys the
+property the tests assert — no pass downstream of `resolve` can tell a branch was
+taken, and `src/emit.rs` gained not one line.
+
+*"Fold to a literal" needed a second half: the literal has to be a `bool`.* The
+runtime `if` already refuses by-type truthiness, because Lua would run
+`if count then` on `0` and disagreeing with Lua on the value most likely to be
+tested is not a trade worth making. A build-time `if` is the same rule one level
+up, with the same wording, and it reuses `not-a-bool` rather than minting a code
+for a distinction the reader does not have.
+
+*A declaration in the branch not taken is not a declaration.* Mostly this is
+invisible and correct — a section nothing selected emits nothing. The one visible
+edge is a `param` declared only inside such a branch: a `-D` for it raises
+`unknown-param`, listing the parameters that configuration *does* have. That is
+the honest reading rather than a special case, and the alternative — collecting
+parameters from every branch — would mean declaring a name the program cannot
+use.
+
+*The census did not move,* for the third time and for the same reason:
+`directive(…)` rows carry no reason string. `!if`, `!ifdef`, `!ifndef`, `!else`
+and `!endif` moved in the reference from "out" to *unnecessary*, joining
+`!define` and `!undef`, which is prose rather than a bucket.
 
 ---
 
