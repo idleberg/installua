@@ -3,9 +3,7 @@ name = "installua"
 version = "0.1.0"
 edition = "2024"
 description = "A Lua-shaped language that compiles to NSIS."
-# The proof of concept is its own package, kept for reference. It is
-# not a workspace member and must not be packaged with this crate.
-exclude = ["proof-of-concept", "examples", "verification", "docs"]
+exclude = ["examples", "verification", "docs"]
 
 [lib]
 name = "installua"
