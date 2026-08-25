@@ -1439,6 +1439,27 @@ local APP <const> = "Example"
 local VERSION <const> = "1.4.2"
 ```
 
+**`!macro` and `!insertmacro` are the ones that stay out**, and they are the
+largest bucket by a distance — a scan of 984 real-world scripts finds 15094
+`!insertmacro` sites. Most of that number is already answered: 77% are `MUI_*`
+and `LANGFILE` names, which are [pages](mui-reference.md) and page settings here,
+and another slice is stdlib macros that are ordinary calls. What is left expands
+to *declarations* rather than instructions — a `!define` that a later
+`!insertmacro` reads, a `Var` that has to precede its use — and admitting that is
+admitting a preprocessor with real ordering consequences. The fixed emission
+order is what makes define-before-insert, `Var`-before-use and
+section-index-before-`.onInit` stop being your problem, and text substitution is
+the one feature that cannot coexist with it. Functions plus
+[`import`](#import) cover the rest.
+
+If a particular stock header keeps coming up, the answer is to
+[declare it](#declaring-a-third-party-plugin-or-header) so its macros are calls
+— the way `FileFunc` and `WordFunc` already are. One header at a time, on
+evidence: the same scan puts `nsProcess.nsh` in 25 files, `FileAssociation.nsh`
+in 22 and `EnvVarUpdate.nsh` in 20, and `nsProcess` is declared here because of
+it. A `.toml` in your own project does the same thing without waiting for anyone,
+and a header you only reach through `raw` needs no declaration at all.
+
 ### Written by the compiler, never by you
 
 These are real NSIS lines in the output — you just do not spell them. Listed
