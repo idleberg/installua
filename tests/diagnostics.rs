@@ -167,6 +167,10 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\ninstaller { section(\"Core\", function() end), }",
     ),
     (
+        Code::RawAnchor,
+        "attributes { outFile = \"a.exe\" }\nraw.middle [[ !system 'echo x' ]]",
+    ),
+    (
         Code::NsisRetired,
         "attributes { outFile = \"a.exe\" }\n\
          installer { section(\"Core\", function()\n\

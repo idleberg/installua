@@ -59,6 +59,17 @@ pub fn emit(module: &ir::Module) -> String {
 pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     let mut out = Out::default();
 
+    // 0. `raw.head`, above even `Unicode` — the only text in the file the
+    //    compiler has not read, and the only slot that precedes its own output.
+    //    `!system` and `!tempfile` belong here because the value they produce is
+    //    read by lines below; `!include MUI2.nsh` does not, and is a hard error
+    //    if written here ("Can't change target architecture after data already
+    //    got compressed"), which is the same fact slot 1 rests on.
+    anchored(&mut out, &module.head);
+    // A no-op when nothing is anchored: `blank` skips an empty file, so the
+    // `Unicode` line still leads the output of every program that has no `head`.
+    out.blank();
+
     // 1. `Unicode` leads. A later `raw` then overrides it, rather than being
     //    silently overridden by a `Unicode` the compiler emitted afterwards —
     //    last one wins in NSIS, with no diagnostic either way.
@@ -217,6 +228,9 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
         out.line("FunctionEnd", Origin::Emitted("FunctionEnd"));
     }
 
+    // 11. `raw.tail`, below everything.
+    anchored(&mut out, &module.tail);
+
     (out.text, out.map)
 }
 
@@ -300,6 +314,26 @@ fn define_line(define: &ir::Define) -> String {
     match &define.value {
         Some(value) => format!("!define {} {}", define.name, argument(value)),
         None => format!("!define {}", define.name),
+    }
+}
+
+/// A `raw.head` or `raw.tail` block, at its anchor.
+///
+/// Not [`Out::section`], for the reason the two anchors exist at all: these
+/// lines are the *user's*, so each carries its own [`Origin::Raw`] and a
+/// `makensis` complaint about one is reported against the Lua that wrote it —
+/// where an `Origin::Emitted` would be claiming the compiler vouched for text it
+/// never read.
+fn anchored(out: &mut Out, lines: &[ir::Instruction]) {
+    for (index, instruction) in lines.iter().enumerate() {
+        if index == 0 {
+            out.blank();
+        }
+        let origin = match instruction.span {
+            Some(span) => Origin::Raw(span),
+            None => Origin::Emitted("raw"),
+        };
+        out.line(line(instruction), origin);
     }
 }
 

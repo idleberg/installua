@@ -1220,6 +1220,41 @@ raw [[
 ]]
 ```
 
+#### raw.head and raw.tail
+
+Inside a body, `raw [[ … ]]` means _here_, and where it lands needs no saying.
+At the top level there is no _here_: the emitter's slots are fixed and the order
+you write declarations in is not the order they come out in. So a top-level
+block names its anchor, and the anchor is part of the name — there is no form
+that leaves it off.
+
+**Usage** `raw.head [[ … ]]` · `raw.tail [[ … ]]` → nothing
+
+```lua
+raw.head [[ !system 'git rev-parse --short HEAD > rev.txt' ]]
+raw.tail [[ !packhdr "tmp.dat" '"upx.exe" "tmp.dat"' ]]
+```
+
+| Anchor | Where | For |
+| ------ | ----- | --- |
+| `head` | above every line the compiler writes, including `Unicode` | text producing a value the script then reads: `!system`, `!tempfile`, `!getdllversion` |
+| `tail` | below everything | registrations `makensis` acts on when the build ends: `!packhdr`, `!finalize`, `!uninstfinalize` |
+
+Two, and a third arrives when a real script needs one. Each names a **boundary
+between numbered slots**, never a region — "before everything" and "after
+everything" are boundaries no future slot can move, which is what makes them
+safe to promise while the rest of the spine is still settling.
+
+**What may go at an anchor** is text whose meaning is position-independent. Text
+whose meaning depends on what the compiler generated is a _declaration the
+compiler places_, not an anchor's business: `!addplugindir` written at `head`
+would land above `Unicode`, bind to the default target, and silently break every
+`unicode = false` build — so it is a slot the compiler owns, reached through
+`dir` on a [`[[plugin]]` declaration](#declaring-a-third-party-plugin-or-header).
+`$PLUGINSDIR` is the same rule from the other side, and it is diagnosed: the
+directory is made by an `InitPluginsDir` the compiler puts above the statement
+naming it, and an anchor is outside every body.
+
 ### Declaring a third-party plugin or header
 
 One file per plugin or header in `.installua/headers/`, read by the compiler,
@@ -1332,6 +1367,12 @@ Four of those are worth naming, because "out" reads harsher than it is:
 what it emits — and the `!ifndef`/`!define`/`!endif` sandwich that gives one a
 settable default is [`param`](#param), which does the same job and additionally
 rejects a `-D` nobody declared.
+
+"Out" means there is no Lua spelling, not that the line is unreachable. Six of
+them are ones a real script does want and no construct replaces — `!system`,
+`!tempfile`, `!getdllversion` and `!packhdr`, `!finalize`, `!uninstfinalize` —
+and those go in a [`raw.head` or `raw.tail`](#rawhead-and-rawtail) block, which
+is the escape hatch with a position attached.
 
 The one that is not out is `!addplugindir`, and it is not out because the
 compiler writes it rather than because you may: it has exactly one legal

@@ -1761,6 +1761,70 @@ pub fn addplugindir(module: &mut ir::Module, options: &crate::Options) {
 /// The NSIS spelling of `$PLUGINSDIR`.
 const PLUGINS_DIR: &str = "$PLUGINSDIR";
 
+/// The escape hatch's name, in a body and at an anchor alike.
+const RAW: &str = "raw";
+
+/// Where a top-level [`RAW`] block goes.
+///
+/// Two, and growing only on evidence. Each has to name a **documented boundary
+/// between numbered slots** rather than a region: "before everything" and "after
+/// everything" are boundaries no future slot can move, which is why these two
+/// are safe to promise before the rest of the spine is settled. A region like
+/// "in the MUI part" would be a promise about an interior the compiler owns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Anchor {
+    Head,
+    Tail,
+}
+
+impl Anchor {
+    fn parse(text: &str) -> Option<Anchor> {
+        match text {
+            "head" => Some(Anchor::Head),
+            "tail" => Some(Anchor::Tail),
+            _ => None,
+        }
+    }
+
+    fn text(self) -> &'static str {
+        match self {
+            Anchor::Head => "head",
+            Anchor::Tail => "tail",
+        }
+    }
+
+    /// What the anchor is for, as a diagnostic note reads it. Written once
+    /// because three messages quote it and a fourth would drift.
+    fn purpose(self) -> &'static str {
+        match self {
+            Anchor::Head => {
+                "`head` is above every line the compiler writes, for text producing a value the \
+                 script then reads — `!system`, `!tempfile`, `!getdllversion`"
+            }
+            Anchor::Tail => {
+                "`tail` is below everything, for registrations `makensis` acts on when the build \
+                 ends — `!packhdr`, `!finalize`, `!uninstfinalize`"
+            }
+        }
+    }
+}
+
+/// A `raw` block's text, one [`ir::Instruction`] per non-blank line.
+///
+/// Leading whitespace goes, so the block sits where the emitter's indentation
+/// puts everything else. Nothing else is touched: the text is not read, which is
+/// the whole of what `raw` promises.
+fn raw_lines(text: &str, span: Option<Span>) -> Vec<ir::Instruction> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| ir::Instruction {
+            span,
+            ..ir::Instruction::new(line, Vec::new())
+        })
+        .collect()
+}
+
 /// `InitPluginsDir`, at the top of every body that names `$PLUGINSDIR`.
 ///
 /// **The line whose absence NSIS never mentions.** `$PLUGINSDIR` is not a
@@ -2227,6 +2291,16 @@ impl<'p> Lowerer<'_, 'p> {
             self.todo(stmt.span(), "this declaration");
             return;
         };
+        // `raw.head [[ … ]]` — the one declaration written with a dotted
+        // callee, and the dot is the feature: it is what makes the anchor
+        // impossible to leave off. See [`Self::anchored`].
+        if let Some((base, anchor)) = call.callee_field()
+            && base == RAW
+        {
+            self.anchored(anchor, call);
+            return;
+        }
+
         let Some((name, span)) = call.callee_name().map(|name| (name, call.span())) else {
             self.todo(call.span(), "this call");
             return;
@@ -2261,6 +2335,28 @@ impl<'p> Lowerer<'_, 'p> {
                 self.installer(fields, Half::Uninstaller);
             }
             "func" => self.function(name, call),
+            // Bare `raw` at the top level: the name is right and the position
+            // is missing. Reported here rather than as "not a declaration",
+            // because the fix is two characters and the generic message names
+            // every declaration except the one that was written.
+            RAW => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::RawAnchor,
+                        span,
+                        format!("a top-level `{RAW}` needs an anchor"),
+                    )
+                    .note(format!(
+                        "write `{RAW}.{}` or `{RAW}.{}`; there is no \"here\" at the top level, \
+                         since the emitter's slots are fixed and statement order is not emission \
+                         order",
+                        Anchor::Head.text(),
+                        Anchor::Tail.text()
+                    ))
+                    .note(Anchor::Head.purpose())
+                    .note(Anchor::Tail.purpose()),
+                );
+            }
             // Lowered by [`Self::languages_pass`] before this loop began, so
             // that a body written above it can still read `lang.greeting`.
             "languages" => {}
@@ -2281,6 +2377,103 @@ impl<'p> Lowerer<'_, 'p> {
                     .note(format!("the declarations are {}", list(V1_BLOCKS))),
                 );
             }
+        }
+    }
+
+    /// `raw.head [[ … ]]` and `raw.tail [[ … ]]` — the escape hatch at the top
+    /// level, where the hatch needs a position and there is none to infer.
+    ///
+    /// The anchor is part of the callee rather than a field in a table, which is
+    /// what makes it un-omittable: there is no form of this declaration that
+    /// carries no anchor, so "the anchor is required" is a fact about the
+    /// grammar instead of a rule with a check behind it. It also keeps the two
+    /// `raw`s visibly different — `raw [[ … ]]` in a body means *here*, and
+    /// "here" is exactly what the top level does not have.
+    ///
+    /// **What may go at an anchor** is a rule about content, and it is the rule
+    /// that keeps this from selling the spine's guarantee back to the user:
+    /// *text whose meaning is position-independent*. Text whose meaning depends
+    /// on compiler-generated state is a declaration the compiler places —
+    /// `!addplugindir` written at `head` would land above `Unicode`, bind to the
+    /// default target and silently break every `unicode = false` build, so it is
+    /// slot 1b and not an anchor. When a directive turns out to be
+    /// position-sensitive, the answer is a slot.
+    fn anchored(&mut self, anchor: &Name, call: &Expr) {
+        let span = call.span();
+        let Some(anchor) = Anchor::parse(&anchor.text) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::RawAnchor,
+                    anchor.span,
+                    format!("`{}` is not an anchor", anchor.text),
+                )
+                .note(format!(
+                    "the anchors are `{}` and `{}`",
+                    Anchor::Head.text(),
+                    Anchor::Tail.text()
+                ))
+                .note(Anchor::Head.purpose())
+                .note(Anchor::Tail.purpose())
+                .note(
+                    "there are two on purpose: an anchor names a documented boundary between \
+                     numbered slots, never a region, and a third one arrives when a real script \
+                     needs it",
+                ),
+            );
+            return;
+        };
+
+        let Expr::Call { args, .. } = call else {
+            return;
+        };
+        let [Expr::Str(text)] = args.as_slice() else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!("`{RAW}.{}` takes one literal block", anchor.text()),
+                )
+                .note(format!(
+                    "write `{RAW}.{} [[ … ]]`; a computed string would be text this compiler \
+                     assembled and did not read",
+                    anchor.text()
+                )),
+            );
+            return;
+        };
+
+        // The invariant [`plugins_dir`] exists to hold, at the one position
+        // that pass cannot reach. `$PLUGINSDIR` is a run-time directory a body
+        // gets by having `InitPluginsDir` inserted above the statement that
+        // names it; an anchor is outside every body, so there is no statement,
+        // nothing runs, and the name is text. Diagnosed rather than scanned,
+        // because there is nowhere here for the fix to be inserted.
+        if text.value.contains(PLUGINS_DIR) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::RawAnchor,
+                    span,
+                    format!(
+                        "`{PLUGINS_DIR}` cannot mean anything at `{RAW}.{}`",
+                        anchor.text()
+                    ),
+                )
+                .note(
+                    "the directory is created by an `InitPluginsDir` the compiler puts above the \
+                     statement that names it, and an anchor is outside every body — so nothing \
+                     creates it and nothing runs",
+                )
+                .note(format!(
+                    "a `{RAW} [[ … ]]` in a section or a `func` gets the `InitPluginsDir`"
+                )),
+            );
+            return;
+        }
+
+        let lines = raw_lines(&text.value, Some(span));
+        match anchor {
+            Anchor::Head => self.module.head.extend(lines),
+            Anchor::Tail => self.module.tail.extend(lines),
         }
     }
 

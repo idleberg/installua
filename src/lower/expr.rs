@@ -572,6 +572,25 @@ impl BodyLowerer<'_, '_> {
             "writeReg" => return self.write_reg(args, dest, span),
             "messageBox" => return self.message_box(args, dest, span),
             "raw" => return self.raw(args, dest, span),
+            // The anchored form, in the one place it means nothing: a body
+            // already has a "here", and an anchor is a position *outside* every
+            // body. Caught by name rather than left to the unknown-name path,
+            // which would report `raw.head` as a missing function.
+            "raw.head" | "raw.tail" => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::RawAnchor,
+                        span,
+                        format!("`{name}` is a top-level declaration, not a statement"),
+                    )
+                    .note(
+                        "in a body, `raw [[ … ]]` already lands where it is written — an anchor \
+                         only answers a question the top level asks, where statement order is not \
+                         emission order",
+                    ),
+                );
+                return None;
+            }
             "string.sub" | "string.find" | "string.lower" | "string.upper" | "string.format" => {
                 return self.string_adapter(&name, args, dest, span);
             }
@@ -1371,13 +1390,11 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
 
-        let lines: Vec<ir::Instruction> = text
-            .value
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(|line| ir::Instruction::new(line, Vec::new()))
-            .collect();
+        // No span on the lines: a body's `raw` is a *call site*, and
+        // [`crate::layout`] gives the whole site one `Origin::Raw` from the
+        // site's own span. The anchored form has no site, which is why it
+        // carries spans per line instead.
+        let lines = super::raw_lines(&text.value, None);
         if lines.is_empty() {
             return None;
         }

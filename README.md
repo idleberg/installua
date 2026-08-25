@@ -178,9 +178,15 @@ What ships declared is written in that same format, in
 [src/headers/](src/headers/) — a plugin worth having here is a pull request
 holding one `.toml` file and no Rust.
 
-Two things are still yours where a plugin is concerned: `!addplugindir` for a
-DLL outside NSIS's own `Plugins/` tree, written through `raw`, and `raw` itself
-for anything with no declaration yet.
+What is still yours is `raw` — for a plugin with no declaration yet, and for the
+handful of NSIS lines no construct replaces. Inside a body `raw [[ … ]]` lands
+where it is written; at the top level it takes an anchor, because the emitter's
+slots are fixed and declaration order is not emission order:
+
+```lua
+raw.head [[ !system 'git rev-parse --short HEAD > rev.txt' ]]
+raw.tail [[ !packhdr "tmp.dat" '"upx.exe" "tmp.dat"' ]]
+```
 
 ## Documentation
 

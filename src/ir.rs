@@ -5,8 +5,14 @@
 //! forced it, so the one thing a reader has to keep straight is written down
 //! once, in the type, rather than in the emitter's control flow:
 //!
-//!   1. `Unicode` — first, so a later `raw` overrides it rather than being
-//!      silently overridden
+//!   0. `raw.head` text, above everything the compiler writes — the one slot
+//!      whose contents the compiler has not read. It is above `Unicode` because
+//!      that is the only place `!system` and `!tempfile` can run *before* the
+//!      value they produce is needed, and it is safe there because nothing at
+//!      this anchor may depend on compiler-generated state — see `Lowerer::anchored`
+//!      in [`crate::lower`]
+//!   1. `Unicode` — first of the compiler's own, so a later `raw` overrides it
+//!      rather than being silently overridden
 //!   2. `!define`s, in source order — the preprocessor is textual and strictly
 //!      sequential, unlike everything below it
 //!   3. `!include`s
@@ -28,6 +34,9 @@
 //!      `${SEC_core}`, and the preprocessor is textual, so an `.onInit` that
 //!      names a section has to come after the section. NSIS hoists calls, so
 //!      nothing else about where the functions sit matters
+//!  11. `raw.tail` text, below everything — the registrations
+//!      (`!packhdr`, `!finalize`, `!uninstfinalize`) whose position does not
+//!      matter, given a slot where it visibly does not
 //!
 //! Phase 1 filled 1, 5 and 9; Phase 2 adds 6 and 10. The rest exist empty,
 //! because a widening is a smaller change than a reordering.
@@ -39,7 +48,19 @@ use crate::regs::Slot;
 /// A whole `.nsi` file.
 #[derive(Clone, Debug, Default)]
 pub struct Module {
-    /// Always emitted, always first, defaults true.
+    /// `raw.head` text, above every line the compiler writes — including
+    /// [`Module::unicode`], which is the whole point of having it: `!system` and
+    /// `!tempfile` produce a value the rest of the script reads, so they have to
+    /// run before the rest of the script exists.
+    ///
+    /// Unread by design, like every `raw`. What keeps that from selling the
+    /// spine's guarantee back to the user is a rule about *content* rather than
+    /// position: an anchor carries text whose meaning is position-independent,
+    /// and text whose meaning depends on compiler-generated state is a
+    /// declaration the compiler places — [`Module::plugin_dirs`] being the first
+    /// concrete member of the second class.
+    pub head: Vec<Instruction>,
+    /// Always emitted, first of the compiler's own lines, defaults true.
     pub unicode: bool,
     /// `!addplugindir` lines, one per directory a called plugin was declared
     /// in. Directly under [`Module::unicode`] and above everything else,
@@ -107,6 +128,12 @@ pub struct Module {
     /// functions last.
     pub descriptions: Vec<Descriptions>,
     pub functions: Vec<Function>,
+    /// `raw.tail` text, below everything. The corpus's `tail` traffic —
+    /// `!packhdr`, `!finalize`, `!uninstfinalize` — is registrations, which
+    /// `makensis` acts on when the build ends rather than where the line sits.
+    /// They get the slot where that is most obviously true, which also keeps
+    /// them out of the one place position matters.
+    pub tail: Vec<Instruction>,
 }
 
 impl Module {

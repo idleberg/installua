@@ -605,7 +605,17 @@ impl Lifter<'_> {
                     return None;
                 }
                 lua::Suffix::Call(lua::Call::AnonymousCall(args)) => {
-                    let verbatim = matches!(&acc, Expr::Name(name) if name.text == "raw");
+                    // `raw [[ … ]]` and `raw.head [[ … ]]` alike: the anchored
+                    // form is a different position, not a different kind of
+                    // text, so the head of the callee is what decides whether
+                    // the block is read. Missing this is not a cosmetic bug —
+                    // it is the line that keeps `$` from being escaped inside a
+                    // block nobody is supposed to have touched.
+                    let verbatim = match &acc {
+                        Expr::Name(name) => name.text == "raw",
+                        Expr::Field { base, .. } => base.name() == Some("raw"),
+                        _ => false,
+                    };
                     Expr::Call {
                         args: self.args(args, verbatim),
                         callee: Box::new(acc),

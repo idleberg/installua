@@ -291,15 +291,15 @@ paragraph was reworded, and the "written by the compiler" table gained a
 `!define` row — a top-level `<const>` already emitted one, and a search for the
 NSIS name had nowhere to land.
 
-### Phase 2 — Top-level `raw` with anchors
+### Phase 2 — Top-level `raw` with anchors (done)
 
 **Why second:** unblocks most of category D's 93 files with no new language
 semantics, and de-risks Phase 3 by giving users an exit while the real feature is
 designed.
 
 ```lua
-raw{ at = "head", [[ !system 'git rev-parse --short HEAD > rev.txt' ]] }
-raw{ at = "tail", [[ !packhdr "tmp.dat" '"upx.exe" "tmp.dat"' ]] }
+raw.head [[ !system 'git rev-parse --short HEAD > rev.txt' ]]
+raw.tail [[ !packhdr "tmp.dat" '"upx.exe" "tmp.dat"' ]]
 ```
 
 **Start with exactly two anchors**, `head` (before slot 1) and `tail` (after
@@ -334,6 +334,32 @@ scan, or it becomes an escape hatch into the exact failure that pass prevents.
 
 **Testing:** Tier 3 matters more than usual. `raw` at `head` can break `makensis`
 in ways no unit test sees.
+
+**Three things the plan did not say, decided in the writing.**
+
+*The anchor is part of the name, not a field in a table.* The plan wrote
+`raw{ at = "head", [[ … ]] }`; what shipped is `raw.head [[ … ]]`, on the
+`page.welcome {}` precedent. It makes the anchor **un-omittable by
+construction** — there is no form of the declaration that carries no anchor, so
+"required" is a fact about the grammar rather than a rule with a check behind
+it. `at` was also the wrong word: it reads as a coordinate, and coordinates are
+what an anchor must never be, since the numbered slots are the compiler's. The
+cost, stated plainly: `raw` becomes the first name that is both callable and
+namespaced, and the two forms mean different things — which is the point, since
+`raw [[ … ]]` in a body means *here* and the top level has no *here*.
+
+*`$PLUGINSDIR` at an anchor is a diagnostic, not a scan.* The plan said
+top-level `raw` "must get the same scan". It cannot: that pass works by
+inserting an `InitPluginsDir` above the statement that names the directory, and
+an anchor is outside every body — there is no statement and nowhere to insert.
+So the invariant is held by refusing the text instead, which is the same
+guarantee reached the only way this position allows.
+
+*The census did not move.* `directive(…)` rows in `src/table/overlay.rs` carry
+no reason string — the staging rule is the reason — and reachability through
+`raw` was never what the class meant. Six directives now have a *position* to be
+written at, which the reference says; no bucket changed and
+`tests/golden/coverage.txt` is untouched.
 
 ### Phase 3 — `if` over constants at top level
 
@@ -388,7 +414,7 @@ the way `FileFunc` and `WordFunc` already are. One at a time, on evidence.
 | ---: | --- | --- | --- |
 | 1 | ~~Params declared in-source or in `installua.toml`?~~ | **closed: in-source.** `param(name, default)`, as the whole initialiser of a top-level `<const>` — which is what gives `-D` a set of names to be checked against | — |
 | 2 | ~~Undeclared `-D`: error or ignored?~~ | **closed: error.** `unknown-param`, naming the parameters that do exist | — |
-| 3 | Anchor vocabulary — two, or more from the start? | two (`head`, `tail`), grow on evidence | Phase 2 |
+| 3 | ~~Anchor vocabulary — two, or more from the start?~~ | **closed: two.** `raw.head` and `raw.tail`, spelled into the callee so the anchor cannot be left off; a third arrives when a real script needs one | — |
 | 4 | ~~Is a non-`NSISDIR` plugin directory reachable today?~~ | **closed: no.** A `dir` key on the `[[plugin]]` declaration, emitted by `lower::reserved` as `!addplugindir` at slot 1b | — |
 | 5 | ~~Is the `dir` key per-`[[plugin]]` block, or one project-wide list?~~ | **closed: per-block.** It sits with the declaration it belongs to, and only a plugin the program *calls* emits a line | — |
 

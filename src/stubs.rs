@@ -647,8 +647,22 @@ fn declarations() -> String {
          ---@param handle installua.File\n\
          ---@return fun(): string\n\
          function lines(handle) end\n\n\
-         ---@param text string\n\
-         function raw(text) end\n\n\
+         -- The escape hatch, in a body and at the two top-level anchors. The\n\
+         -- anchor is part of the name rather than a field in a table, so there\n\
+         -- is no form of the declaration that leaves it off: at the top level\n\
+         -- there is no \"here\" for an unanchored block to land in.\n\
+         --\n\
+         -- A class with an `@overload` rather than `function raw(text) end`\n\
+         -- plus two more: `raw` is called *and* has fields, and injecting a\n\
+         -- field into a function is `inject-field`, which LuaLS reports against\n\
+         -- this file. The overload is what keeps the body form callable.\n\
+         ---@class installua.Raw\n\
+         ---@overload fun(text: string)\n\
+         raw = {}\n\n\
+         ---@param text string Above every line the compiler writes: `!system`, `!tempfile`.\n\
+         function raw.head(text) end\n\n\
+         ---@param text string Below everything: `!packhdr`, `!finalize`, `!uninstfinalize`.\n\
+         function raw.tail(text) end\n\n\
          ---@param options string|table\n\
          ---@return string\n\
          function messageBox(options) end\n\n\
@@ -1259,6 +1273,12 @@ const LANGUAGE: &[(&str, &str)] = &[
     ("import", "      - type: string\n"),
     ("plugin", "      - type: string\n"),
     ("raw", "      - type: string\n"),
+    // The anchored form, keyed by its whole dotted name — which is how selene
+    // spells `string.sub` too, and the reason the anchor could be part of the
+    // name in the first place: a linter that only knew `raw` would have nothing
+    // to say about `raw.middle`.
+    ("raw.head", "      - type: string\n"),
+    ("raw.tail", "      - type: string\n"),
 ];
 
 /// The names `lua-language-server` keeps and Installua rejects. Each names its

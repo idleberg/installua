@@ -276,6 +276,19 @@ pub enum Code {
     /// is the default, and nothing says so.
     UnknownParam,
 
+    // -- anchored `raw`
+    /// A top-level `raw` whose anchor is missing, is not one of the anchors, or
+    /// is written where an anchor cannot mean anything — and text at an anchor
+    /// that could only be true inside a body.
+    ///
+    /// All four are one question, because an anchor is a *position outside every
+    /// body*. Inside a body `raw` means "here" and needs no anchor; at the top
+    /// level there is no "here", since the emitter's slots are fixed and
+    /// statement order is not emission order. Defaulting the anchor is the one
+    /// answer that is not available: text that lands in the wrong slot assembles
+    /// clean and ships something else, which is the `!ifndef` silent miss again.
+    RawAnchor,
+
     /// An NSIS instruction that has a Lua spelling instead: `StrCmp` is `==`,
     /// `IntOp` is `+`, `StrCpy` is assignment. Not an unknown name — the
     /// compiler knows exactly what it is, and says what to write.
@@ -333,6 +346,7 @@ impl Code {
         Code::IncludeForm,
         Code::ParamForm,
         Code::UnknownParam,
+        Code::RawAnchor,
         Code::NsisRetired,
         Code::WrongPlace,
     ];
@@ -381,6 +395,7 @@ impl Code {
             Code::IncludeForm => "include-form",
             Code::ParamForm => "param-form",
             Code::UnknownParam => "unknown-param",
+            Code::RawAnchor => "raw-anchor",
             Code::NsisRetired => "nsis-retired",
             Code::WrongPlace => "wrong-place",
         }
