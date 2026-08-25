@@ -67,6 +67,17 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
         Origin::Emitted("Unicode"),
     );
 
+    // 1b. `!addplugindir`, between the `Unicode` line and everything else. An
+    //     untagged one binds to whichever target is current when the directive
+    //     is processed — not to the DLL's charset, which `makensis` never reads,
+    //     and not lazily at the call site — so above slot 1 it would bind to the
+    //     default target and break every `unicode = false` build, and below any
+    //     call site it would be too late for the lookup that call site does.
+    //     That leaves exactly this window. It also gives slot 1's "a later `raw`
+    //     overrides it" contract a second line depending on it: a `raw` that
+    //     flips `Unicode` after this point desynchronises the target.
+    out.section("!addplugindir", module.plugin_dirs.iter().map(line));
+
     // 2. `!define`s, in source order.
     out.section("!define", module.defines.iter().map(define_line));
 

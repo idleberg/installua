@@ -158,11 +158,16 @@ fn prose_and_directive_lines_are_classified_as_what_they_are() {
                 entry.nsis,
                 entry.class.bucket()
             ),
-            Note::Directive => assert_eq!(
-                entry.class,
-                Class::Directive,
-                "{} is a preprocessor command",
-                entry.nsis
+            // A directive is `Directive` or — `!addplugindir`, so far alone —
+            // `LoweringTarget`: a line the *compiler* writes, which is not the
+            // same claim as a line the surface exposes. What the assertion
+            // rules out is a directive that ended up callable, since none of
+            // them carries a parameter model to be called against.
+            Note::Directive => assert!(
+                matches!(entry.class, Class::Directive | Class::LoweringTarget(_)),
+                "{} is a preprocessor command, so it cannot be {}",
+                entry.nsis,
+                entry.class.bucket()
             ),
             _ => {}
         }

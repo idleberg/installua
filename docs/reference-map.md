@@ -1112,8 +1112,9 @@ setRegView("64")
 ### plugin
 
 Names a plugin DLL and returns a table whose methods are its calls. The DLL name
-**is** the namespace, so nothing has to say where the file is; the compiler
-reserves it when `.onInit` can reach the call.
+**is** the namespace, so nothing has to say where the file is as long as it is
+in `NSISDIR/Plugins`; a vendored one adds a `dir` to its declaration. The
+compiler reserves the DLL when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
@@ -1188,6 +1189,7 @@ method = "extractWithDetails"         # what you call it
 nsis = "Nsis7z::ExtractWithDetails"   # what NSIS is given
 params = ["path", "string"]           # positions, in order
 outputs = ["string"]                  # values pushed, in `Pop` order
+dir = "vendor/plugins"                # only if the DLL is not in NSISDIR
 
 [[header]]
 name = "TextFunc"                     # what `import "…"` is given
@@ -1212,6 +1214,16 @@ knowing a value cannot be negative is what elides the sign fixup on `//`.
 values it pushes, so `local rc, out = …` is checked against this list and
 nothing else. A count that is too small unbalances the stack, with no diagnostic
 from NSIS or from anybody.
+
+**`dir` is for a DLL that does not live in `NSISDIR/Plugins`** — a plugin
+vendored into your own repository. It is relative to the project root, and the
+compiler emits one `!addplugindir` for it, in the one position the directive is
+correct in: under the `Unicode` line and above every call site. You never write
+that line yourself, and there is no anchor that would let you — an untagged
+`!addplugindir` binds to whichever target is current when it is processed, so
+one written at the top of a source would bind to the default target and silently
+break every `unicode = false` build. Only a plugin the program actually calls
+emits a line.
 
 Redeclaring one of the builtins is allowed and replaces it, so a count that
 ships wrong here is not a wall. Declaring the same method twice from two of your
@@ -1256,10 +1268,10 @@ is pending: these are decisions.
 
 ### The preprocessor
 
-Installua has no preprocessor — the script _is_ a program. All 37 `!`
+Installua has no preprocessor — the script _is_ a program. 36 of the 37 `!`
 directives are out:
 
-`!addincludedir` · `!addplugindir` · `!appendfile` · `!appendmemfile` ·
+`!addincludedir` · `!appendfile` · `!appendmemfile` ·
 `!assert` · `!cd` · `!define` · `!delfile` · `!echo` · `!else` · `!endif` ·
 `!error` · `!execute` · `!finalize` · `!getdllversion` · `!gettlbversion` ·
 `!if` · `!ifdef` · `!ifmacrodef` · `!ifmacrondef` · `!ifndef` · `!include` ·
@@ -1268,6 +1280,12 @@ directives are out:
 `!tempfile` · `!undef` · `!uninstfinalize` · `!verbose` · `!warning`
 
 Write `local X <const> = …`, `if`, `include(…)` and a function instead.
+
+The one that is not out is `!addplugindir`, and it is not out because the
+compiler writes it rather than because you may: it has exactly one legal
+position, and a `dir` on a
+[`[[plugin]]` declaration](#declaring-a-third-party-plugin-or-header) is how you
+ask for it.
 
 ```lua
 local APP <const> = "Example"
@@ -1293,6 +1311,7 @@ here so a search for the NSIS name lands somewhere.
 | `LicenseLangString`                                                          | `page.license { file = { … } }`   |
 | `InitPluginsDir`                                                             | a body that names `PLUGINSDIR`    |
 | `ReserveFile /plugin`                                                        | a plugin `.onInit` can reach      |
+| `!addplugindir`                                                              | a plugin declared with a `dir`    |
 | `SendMessage`                                                                | a control's `value` / `checked`   |
 | `EnableWindow` / `ShowWindow`                                                | a control's `enabled` / `visible` |
 | `SetCtlColors` / `CreateFont`                                                | a control's `colors` / `font`     |

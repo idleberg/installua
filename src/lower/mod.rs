@@ -1634,6 +1634,7 @@ pub fn lower(
     let clobbers = graph.clobbers(&direct);
     graph.lint_recursion(diags);
     reserved(&mut module, &graph);
+    addplugindir(&mut module, options);
 
     // 4. `live ∩ clobbered`, at last.
     for (index, (_, body)) in module.bodies_mut().into_iter().enumerate() {
@@ -1705,6 +1706,55 @@ pub fn reserved(module: &mut ir::Module, graph: &callgraph::CallGraph) {
                 ],
             )
         })
+        .collect();
+}
+
+/// `!addplugindir` for every directory a called plugin was declared in.
+///
+/// **Called, not reachable — a wider set than [`reserved`]'s on purpose.** The
+/// two passes answer different questions about the same DLL. A reservation is
+/// about the *data block*, so only what an init callback can reach earns one;
+/// a search path is about *`makensis` finding the file at all*, and every call
+/// site needs that. A plugin only a section calls fails with `Plugin not found,
+/// cannot call Foo::Bar` at compile time if this pass copied `reserved`'s
+/// reachability walk.
+///
+/// **Absolutised, because `makensis` resolves a relative plugin directory
+/// against its own working directory** — which [`crate::assemble`] sets to the
+/// emitted script's parent, not the project root the declaration was written
+/// against. With no base to resolve against (an in-memory compile, which has no
+/// project root by definition) the path goes out as written: a caller that
+/// handed the compiler a string and no directory has already said the file
+/// system is not involved.
+///
+/// **Not an anchored `raw`, and that is the rule rather than the exception.**
+/// A user writing this line at the top of their source would land it above
+/// `Unicode`, bind it to the default target, and silently break every
+/// `unicode = false` build. Text whose meaning depends on compiler-generated
+/// state is a declaration the compiler places; only position-independent text
+/// gets an anchor.
+pub fn addplugindir(module: &mut ir::Module, options: &crate::Options) {
+    let mut called: BTreeSet<&str> = BTreeSet::new();
+    for (_, body) in module.bodies() {
+        called.extend(body.plugins.iter().map(String::as_str));
+    }
+
+    // Sorted and deduplicated: two plugins vendored into one directory are one
+    // line, and the output is read in diffs.
+    let mut dirs: BTreeSet<String> = BTreeSet::new();
+    for plugin in called {
+        for dir in options.declarations.plugin_dirs(plugin) {
+            let path = match &options.base {
+                Some(base) => base.join(dir),
+                None => std::path::PathBuf::from(dir),
+            };
+            dirs.insert(path.display().to_string());
+        }
+    }
+
+    module.plugin_dirs = dirs
+        .into_iter()
+        .map(|dir| ir::Instruction::new("!addplugindir", vec![ir::Arg::str(dir)]))
         .collect();
 }
 

@@ -80,6 +80,17 @@ pub struct PluginMethod {
     pub params: Vec<Param>,
     /// One per value the plugin leaves on the stack, in `Pop` order.
     pub outputs: Vec<Ty>,
+    /// Where the DLL lives, when it is not in `NSISDIR/Plugins`. Relative to
+    /// the project root; [`crate::lower::addplugindir`] absolutises it.
+    ///
+    /// **The one field that is about a file rather than a signature**, and it
+    /// has to be: a plugin outside `NSISDIR` is unreachable otherwise, and both
+    /// halves of what the compiler emits fail on it — `Plugin not found` at the
+    /// call site, `no files found` at the `ReserveFile /plugin`. It sits on the
+    /// declaration rather than in `installua.toml` so that adding a vendored
+    /// plugin stays one file, and per block rather than project-wide so that
+    /// only a plugin the program actually calls costs an `!addplugindir` line.
+    pub dir: Option<String>,
 }
 
 /// Everything declared for one compilation: the builtins, plus whatever the
@@ -255,6 +266,7 @@ impl Declarations {
             nsis,
             params,
             outputs,
+            dir,
             file,
             line,
         } = record;
@@ -283,6 +295,7 @@ impl Declarations {
                 nsis,
                 params,
                 outputs,
+                dir,
             });
         } else {
             if self
@@ -370,6 +383,25 @@ impl Declarations {
         names
     }
 
+    /// Every directory declared for `plugin`, in sorted order.
+    ///
+    /// A list rather than an `Option`, because [`PluginMethod::dir`] is per
+    /// block and a plugin is as many blocks as it has methods. Two blocks
+    /// naming two directories is not an error to report here — `!addplugindir`
+    /// is a search path and NSIS is happy with several — so both are emitted
+    /// and the DLL is found in whichever one holds it.
+    pub fn plugin_dirs(&self, plugin: &str) -> Vec<&str> {
+        let mut dirs: Vec<&str> = self
+            .plugins
+            .iter()
+            .filter(|entry| entry.plugin == plugin)
+            .filter_map(|entry| entry.dir.as_deref())
+            .collect();
+        dirs.sort_unstable();
+        dirs.dedup();
+        dirs
+    }
+
     /// The plugin names anything is declared for, in sorted order.
     pub fn plugin_names(&self) -> Vec<&str> {
         let mut names: Vec<&str> = self.plugins.iter().map(|e| e.plugin.as_str()).collect();
@@ -399,6 +431,7 @@ mod parse {
         pub nsis: String,
         pub params: Vec<Param>,
         pub outputs: Vec<Ty>,
+        pub dir: Option<String>,
         pub file: String,
         /// The line the block opened on, so "already declared" points at the
         /// block rather than at whichever field happened to be last.
@@ -415,6 +448,7 @@ mod parse {
         nsis: Option<String>,
         params: Option<Vec<Param>>,
         outputs: Option<Vec<Ty>>,
+        dir: Option<String>,
     }
 
     pub fn records(file: &str, text: &str, problems: &mut Vec<Problem>) -> Vec<Record> {
@@ -510,11 +544,25 @@ mod parse {
                         "`outputs` wants an array of quoted type names on one line".to_string(),
                     ),
                 },
+                // `dir` is a plugin's alone. A header is `!include`d and NSIS
+                // searches for one along `!addincludedir`, which is a different
+                // directive with a different position — accepting the key here
+                // would promise a lookup nothing performs.
+                "dir" if !block.plugin => complain(
+                    line,
+                    "`dir` is a plugin field: a header is found along the include path, not \
+                     the plugin path"
+                        .to_string(),
+                ),
+                "dir" => match string(value) {
+                    Some(text) => block.dir = Some(text),
+                    None => complain(line, "`dir` wants a quoted string".to_string()),
+                },
                 other => complain(
                     line,
                     format!(
                         "`{other}` is not a declaration field; the fields are `name`, `method`, \
-                         `nsis`, `params` and `outputs`"
+                         `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `dir`"
                     ),
                 ),
             }
@@ -588,6 +636,7 @@ mod parse {
             nsis,
             params: block.params.unwrap_or_default(),
             outputs: block.outputs.unwrap_or_default(),
+            dir: block.dir,
             file: file.to_string(),
             line: block.line,
         });

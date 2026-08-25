@@ -115,6 +115,7 @@ method = "extractWithDetails"         # what you call it
 nsis = "Nsis7z::ExtractWithDetails"   # what NSIS is given
 params = ["path", "string"]
 outputs = ["string"]                  # values pushed, in `Pop` order
+dir = "vendor/plugins"                # only if the DLL is not in NSISDIR
 ```
 
 ```lua
@@ -139,7 +140,11 @@ values it pushes, and an `!insertmacro` parameter list carries no directions —
 `${GetSize} "$dir" "" $0 $1 $2` puts it last. There is nothing to discover and
 nothing to infer, so the one thing that cannot be guessed is the one thing you
 write down. `outputs` is the load-bearing line: `local rc, out = …` is checked
-against it and against nothing else.
+against it and against nothing else. `dir` is the one field that is about a file
+rather than a signature — a DLL vendored into your repository instead of
+installed into `NSISDIR` — and the compiler turns it into an `!addplugindir` in
+the one position that directive is correct in, which is not a position you could
+write it in yourself.
 
 A header is the easier half. `import "AnyHeader"` emits the `!include` whatever
 the name is, so a header you only reach through `raw` needs no declaration at

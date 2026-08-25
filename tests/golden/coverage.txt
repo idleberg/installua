@@ -2,9 +2,9 @@ installua coverage -- makensis v3.12, 276 commands
 
   exposed          105
   attribute         68
-  lowering-target   28
+  lowering-target   29
   language          14
-  directive         37
+  directive         36
   rejected          24
   todo               0
 

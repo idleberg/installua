@@ -109,6 +109,7 @@ emitted in this sequence regardless of source position:
 | # | Slot | Ordering rule |
 | ---: | --- | --- |
 | 1 | `Unicode` | first, so a later `raw` overrides rather than being overridden |
+| 1b | `!addplugindir`s | after slot 1: an untagged one binds to the target current at that point |
 | 2 | `!define`s | source order |
 | 3 | `!include`s | — |
 | 4 | header init lines (`${Using:…}`) | — |
@@ -172,14 +173,68 @@ rather than a vague region. See Phase 2.
 Ordering principle: do the things that *remove* directives from the language
 question before the thing that adds language surface.
 
-### Phase 0 — Confirm `!addplugindir` needs nothing
+### Phase 0 — `!addplugindir` needs nothing from the language (done)
 
 `lower::plugins_dir` already turns `plugin` declarations into
 `ReserveFile /plugin`, and the DLL name is the namespace — "the same lookup
 `!addplugindir` does". The 66 corpus files need nothing from the language.
 
-**Only open question:** whether a plugin living outside `NSISDIR` is reachable
-today. If not, that is a config key, not a feature. Verify and close.
+**A plugin outside `NSISDIR` is not reachable today.** Verified: the `.toml`
+declaration fields are `name`/`method`/`nsis`/`params`/`outputs` and none names
+a file, `installua.toml` is `name`/`entry`, and `assemble` runs `makensis -WX`
+with no further flags. Both halves of what the compiler generates fail, and
+differently — `Plugin not found, cannot call nsFoo::ExecToStack` at the call
+site, `no files found` at the `ReserveFile /plugin`. So the two passes are
+correct as written; the DLL merely has to be findable.
+
+**It is a config key plus one compiler-owned line.** The path goes on the
+`[[plugin]]` block in `.installua/headers/*.toml` as `dir`, resolved against the
+project root and absolutised — `makensis` resolves a relative plugin directory
+against its working directory, and `assemble` sets that to the emitted script's
+parent, not the project root. `lower::addplugindir` emits one line per
+directory, deduplicated.
+
+**One correction to this plan, found in the writing.** It said `lower::reserved`
+should emit the line "in the same pass that writes their `ReserveFile /plugin`",
+reusing that pass's reachability walk. That is wrong, and the plan's own §1
+evidence says so: the two failures it lists happen at *different* times.
+`no files found` at the `ReserveFile` is about the data block, so reachability
+from an init callback is the right question there. `Plugin not found, cannot
+call Foo::Bar` is about `makensis` locating the DLL at all, and **every call
+site** raises it — a plugin only a section calls would have compiled to a hard
+error under the pass as planned. So it is a second pass over `body.plugins` for
+every body, and the two sets are different on purpose.
+
+`!addplugindir` also moved from `directive(…)` to
+`lowering("!addplugindir", …)` in `src/table/overlay.rs` — it is now a real NSIS
+line in the output that nobody spells, which is what that class means. The
+census reads 36 directives and 29 lowering targets, and `docs/reference-map.md`
+now says "36 of the 37".
+
+**The position is forced, and it is slot 1b.** An untagged `!addplugindir` binds
+to whichever target is current *when the directive is processed* — not to the
+DLL's charset, which `makensis` never inspects, and not lazily at the call site.
+The same directory with the same DLL resolves or does not resolve purely on
+where the line sits:
+
+| | |
+| --- | --- |
+| `!addplugindir` then `Unicode false` | plugin not found |
+| `Unicode false` then `!addplugindir` | builds |
+| `Unicode true` then `!addplugindir` | builds |
+| call site, then `!addplugindir` | plugin not found |
+
+So the window is after slot 1 and before any call site, which makes it a new
+slot 1b between `Unicode` and the `!define`s — the same reason slot 1 leads at
+all. `/target` is only a way to name a target other than the current one, which
+a compiler that owns `Unicode` never needs.
+
+Two consequences worth stating. A `makensis -X"!addplugindir …"` flag is *not*
+an equivalent: `-X` is processed before the script, therefore before `Unicode`,
+therefore binds to the default target and silently breaks every
+`unicode = false` build. And the "a later `raw` overrides it" contract on slot 1
+now has a second line depending on it — a `raw` that flips `Unicode` to false
+after slot 1b desynchronises the target.
 
 ### Phase 1 — Build parameters
 
@@ -229,6 +284,24 @@ slot 10). That covers the corpus honestly: `!system` / `!tempfile` /
 position-independent registrations and `tail` serves them. Add interior anchors
 only when a real script demands one, and name each after a **documented boundary
 between two numbered slots** — never after a region like "mui".
+
+`head` genuinely precedes slot 1, and that is verified rather than assumed:
+`!system` and `!tempfile` above a `Unicode` line assemble clean, while
+`!include MUI2.nsh` above one is a hard error — *"Can't change target
+architecture after data already got compressed"*. Slot 1 leads because it is the
+last point at which the target can still be set, and everything MUI touches is
+already past it.
+
+**The rule that governs which anchor an escape hatch may have**, and the reason
+Phase 0 does not use one: *anchors are for text whose meaning is
+position-independent; text whose meaning depends on compiler-generated state is
+a declaration the compiler places.* `!addplugindir` is the first concrete member
+of the second class — written by a user at `head` it would land above `Unicode`,
+bind to the default target, and silently break every `unicode = false` build.
+That is the `!ifndef` silent-miss failure mode wearing a new costume, and an
+anchor that permitted it would be selling the spine's guarantee back to the
+user. When a directive turns out to be position-sensitive, the answer is a slot,
+not an anchor.
 
 **The invariant to preserve:** `lower::plugins_dir` already scans `raw` text for
 `$PLUGINSDIR`, because that is "the one place a `$PLUGINSDIR` can arrive without
@@ -292,7 +365,8 @@ the way `FileFunc` and `WordFunc` already are. One at a time, on evidence.
 | 1 | Params declared in-source or in `installua.toml`? | in-source `param(name, default)` | Phase 1 |
 | 2 | Undeclared `-D`: error or ignored? | error | Phase 1 |
 | 3 | Anchor vocabulary — two, or more from the start? | two (`head`, `tail`), grow on evidence | Phase 2 |
-| 4 | Is a non-`NSISDIR` plugin directory reachable today? | verify | Phase 0 |
+| 4 | ~~Is a non-`NSISDIR` plugin directory reachable today?~~ | **closed: no.** A `dir` key on the `[[plugin]]` declaration, emitted by `lower::reserved` as `!addplugindir` at slot 1b | — |
+| 5 | ~~Is the `dir` key per-`[[plugin]]` block, or one project-wide list?~~ | **closed: per-block.** It sits with the declaration it belongs to, and only a plugin the program *calls* emits a line | — |
 
 ---
 

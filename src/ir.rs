@@ -41,6 +41,14 @@ use crate::regs::Slot;
 pub struct Module {
     /// Always emitted, always first, defaults true.
     pub unicode: bool,
+    /// `!addplugindir` lines, one per directory a called plugin was declared
+    /// in. Directly under [`Module::unicode`] and above everything else,
+    /// because an untagged `!addplugindir` binds to whichever target is current
+    /// *when the directive is processed* — a line above `Unicode` binds to the
+    /// default target and silently breaks every `unicode = false` build, and a
+    /// line below a call site is too late for the lookup that call site does.
+    /// See [`crate::lower::addplugindir`].
+    pub plugin_dirs: Vec<Instruction>,
     pub defines: Vec<Define>,
     pub includes: Vec<String>,
     pub inits: Vec<Instruction>,

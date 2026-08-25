@@ -2152,7 +2152,13 @@ pub const ROWS: &[Row] = &[
         "GetCurrentAddress",
         "the address of the current instruction, which no Installua program has a name for",
     ),
-    directive("!addplugindir"),
+    // The one directive the compiler writes, and the only one it can: an
+    // untagged `!addplugindir` binds to whichever target is current when it is
+    // processed, so the line is correct in exactly one window — under `Unicode`
+    // and above every call site — and nothing a user could write would land
+    // there. A `dir` on a `[[plugin]]` declaration is how you ask for it. See
+    // [`crate::lower::addplugindir`].
+    lowering("!addplugindir", "a plugin declared with a `dir`"),
     // `ReserveFile /plugin`'s twin, and compiler-written for the same reason:
     // `$PLUGINSDIR` expands to nothing until something creates it, and NSIS
     // assembles the program that forgot without a word. Every body that names

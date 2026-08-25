@@ -73,6 +73,14 @@ pub fn all() -> Vec<Retired> {
                 Class::LoweringTarget(instead) | Class::Rejected(instead) => instead,
                 _ => return None,
             };
+            // A preprocessor command is not a name anybody can type: `!` is a
+            // parse error before resolution ever runs, so a row for
+            // `!addplugindir` would be a diagnostic with no way to reach it.
+            // The same argument as `KEYWORDS`, one step earlier in the
+            // frontend.
+            if entry.nsis.starts_with('!') {
+                return None;
+            }
             let installua = camel(entry.nsis);
             if KEYWORDS.contains(&installua.as_str()) {
                 return None;
