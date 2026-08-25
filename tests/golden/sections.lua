@@ -14,7 +14,7 @@ attributes {
 }
 
 -- A handle is an ordinary Lua local, and the block below decides the install
--- order. Declaring one here and listing it there is the whole of §13's binding:
+-- order. Declaring one here and listing it there is the whole of the binding:
 -- there is no name the compiler invents and no define a user has to know.
 local core = section { "Core",
 	required = true,

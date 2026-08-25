@@ -1,6 +1,5 @@
-//! Phase 2 at the pass boundary (§14 tier 0): resolution, the type lattice, and
-//! the CFG — asserted as properties of the IR rather than read out of emitted
-//! text.
+//! Phase 2 at the pass boundary (tier 0): resolution, the type lattice, and the
+//! CFG — asserted as properties of the IR rather than read out of emitted text.
 //!
 //! The distinction is the point. "There is no `StrCpy` in the output" is an
 //! argument from absence, and it passes just as happily when the compiler
@@ -20,7 +19,7 @@ fn module(source: &str) -> ir::Module {
 }
 
 /// The first section's body. Every test here is about one body, because a CFG
-/// is per-body and NSIS `Goto` cannot cross the boundary anyway (§8).
+/// is per-body and NSIS `Goto` cannot cross the boundary anyway.
 fn body(source: &str) -> Body {
     let module = module(source);
     let (_, body) = module.bodies().next().expect("one body");
@@ -36,7 +35,7 @@ fn program(statements: &str) -> String {
 
 /// The laid-out body as a list of instruction names, with labels as `name:`.
 /// Coarse enough to read and exact enough to fail on a spurious line — which
-/// `assert!(out.contains(…))` is not (§14).
+/// `assert!(out.contains(…))` is not.
 fn shape(body: &Body) -> Vec<String> {
     layout::lay_out(body)
         .into_iter()
@@ -53,7 +52,7 @@ fn shape(body: &Body) -> Vec<String> {
 /// nothing else: `and` and `or` recurse, `not` swaps its two destinations, and
 /// no boolean is ever materialised into a register. Evaluating the expression
 /// instead would burn registers there are only twenty of, which is nsL's issue
-/// #5 (§8).
+/// #5.
 #[test]
 fn a_fused_condition_allocates_no_temporaries() {
     let body = body(&program(
@@ -111,9 +110,9 @@ detailPrint(\"length \" .. string.len(path))",
 }
 
 /// `IntCmp a b <eq> <lt> <gt>` covers all six relational operators in one
-/// instruction with no temporaries — the payoff of §8's "no materialised
-/// booleans", and not obvious from the NSIS documentation, so §12 writes it
-/// down as a table. This is that table.
+/// instruction with no temporaries — the payoff of "no materialised booleans",
+/// and not obvious from the NSIS documentation, so it is written down as a
+/// table. This is that table.
 #[test]
 fn int_cmp_fuses_all_six_comparisons() {
     use Arm::{Else, Then};
@@ -126,8 +125,8 @@ fn int_cmp_fuses_all_six_comparisons() {
 }
 
 /// A label is emitted only for a block something jumps to, and a `Goto` to the
-/// next line is never emitted (§8). An `if` with no `else` therefore costs one
-/// label and no jump at all.
+/// next line is never emitted. An `if` with no `else` therefore costs one label
+/// and no jump at all.
 #[test]
 fn an_if_with_no_else_costs_one_label_and_no_goto() {
     let body = body(&program(
@@ -156,9 +155,9 @@ detailPrint(\"after\")",
     );
 }
 
-/// The label counter resets per body (§15.25), so inserting an `if` in one
-/// section renumbers labels in that section only — which is what keeps §14's
-/// whole-file goldens diffable. Both bodies here start at zero.
+/// The label counter resets per body, so inserting an `if` in one section
+/// renumbers labels in that section only — which is what keeps the whole-file
+/// goldens diffable. Both bodies here start at zero.
 #[test]
 fn the_label_counter_resets_per_body() {
     let module = module(
@@ -192,8 +191,8 @@ installer {
 }
 
 /// Dead blocks disappear, and a `<const>` condition never becomes a branch at
-/// all — which is also why `!if`/`!ifdef` need no surface spelling (§7-2,
-/// §15.6). Nothing from the untaken arm reaches the `.nsi`.
+/// all — which is also why `!if`/`!ifdef` need no surface spelling. Nothing
+/// from the untaken arm reaches the `.nsi`.
 #[test]
 fn a_const_condition_folds_away_entirely() {
     let body = body(&program(
@@ -208,8 +207,8 @@ detailPrint(\"always\")",
     assert_eq!(shape(&body), vec!["DetailPrint"]);
 }
 
-/// Resolution is order-free (§15.6): a section can call a `func` declared below
-/// it. Lua does not hoist, and Installua has to, because there is no build-time
+/// Resolution is order-free: a section can call a `func` declared below it. Lua
+/// does not hoist, and Installua has to, because there is no build-time
 /// execution for an ordering rule to be about.
 #[test]
 fn a_section_calls_a_func_declared_below_it() {
@@ -242,7 +241,7 @@ attributes { outFile = \"a.exe\" }
 /// The sign lattice earns its place by *eliding* work. `StrLen` is non-negative
 /// by construction, so `//` on it is one `IntOp` with no fixup — NSIS truncates
 /// toward zero and Lua floors, and they only disagree when exactly one operand
-/// is negative (§15.4, §15.14).
+/// is negative.
 #[test]
 fn a_non_negative_division_needs_no_fixup() {
     let body = body(&program(
@@ -285,7 +284,7 @@ local half = n // 2",
 
 /// `==` on strings is `StrCmpS`. Case-sensitive being the *default* is the
 /// reversal from NSIS habit that will bite hardest, and `string.lower` is the
-/// escape (§15.9).
+/// escape.
 #[test]
 fn string_equality_is_case_sensitive() {
     let body = body(&program(
@@ -301,8 +300,7 @@ if a == \"ONE\" then detailPrint(\"same\") end",
 }
 
 /// A predicate fuses straight into its branching instruction and spends no
-/// register — the case §15.20 dissolved a whole second condition shape to
-/// reach.
+/// register — the case that dissolved a whole second condition shape.
 #[test]
 fn a_predicate_in_a_condition_spends_no_register() {
     let body = body(&program(
@@ -324,9 +322,9 @@ fn errors(source: &str) -> Diagnostics {
     diags
 }
 
-/// Truthiness is `bool` and nothing else (§15.20). The tempting by-type rule —
-/// `int` → `~= 0` — contradicts Lua on `0`, which is the value a reader is most
-/// likely to test, and `lua-language-server` reports nothing either way.
+/// Truthiness is `bool` and nothing else. The tempting by-type rule — `int` →
+/// `~= 0` — contradicts Lua on `0`, which is the value a reader is most likely
+/// to test, and `lua-language-server` reports nothing either way.
 #[test]
 fn only_a_bool_is_truthy() {
     let diags = errors(&program(
@@ -340,7 +338,7 @@ fn only_a_bool_is_truthy() {
     assert!(clean.is_empty(), "{}", clean.render("<test>"));
 }
 
-/// A global has one type for its lifetime, because a `Var` is one slot (§15.24).
+/// A global has one type for its lifetime, because a `Var` is one slot.
 #[test]
 fn a_global_has_one_type() {
     let diags = errors(&program("state = \"fresh\"\nstate = 1"));
@@ -349,7 +347,7 @@ fn a_global_has_one_type() {
 
 /// A comparison whose operands disagree is a hard error naming both, rather
 /// than a `StrCmp` that makes `"10" < "9"` true and `10 < 9` false with NSIS
-/// objecting to neither (§15.14).
+/// objecting to neither.
 #[test]
 fn a_mixed_comparison_names_both_operands() {
     let diags = errors(&program(

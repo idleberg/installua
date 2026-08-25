@@ -1,7 +1,7 @@
 ; Hand-written expected output for install.lua — PLAN Phase 0, program 3 of five.
 ;
 ; Label numbering is one counter per body, incremented per construct in source
-; order, as §15.19's `_generated_while_7_top` implies. Constructs 1, 2 and 5 fuse
+; order, as `_generated_while_7_top` implies. Constructs 1, 2 and 5 fuse
 ; into jumps at labels the enclosing loop already owns and emit none themselves.
 
 Unicode true

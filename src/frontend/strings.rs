@@ -1,5 +1,5 @@
 //! String literals: decoding, escape validation, and the two checks that exist
-//! because `makensis` will not make them (§5, §13, §15.31).
+//! because `makensis` will not make them.
 //!
 //! `full-moon` hands over the raw text between the quotes without looking at
 //! it, so `"C:\Program Files"` parses happily here and is a syntax error in
@@ -19,7 +19,7 @@ pub const MAX_STRING_LENGTH: usize = 1023;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LiteralKind {
     /// `[[…]]` — no escape processing at all, which is what makes it the
-    /// recommended spelling for a Windows path (§5).
+    /// recommended spelling for a Windows path.
     pub long: bool,
     /// A direct argument of `raw`, where `$` is a sigil rather than a dollar
     /// sign and warning about it would be noise.
@@ -192,14 +192,14 @@ fn decode_unicode(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Optio
 /// A byte escape names a byte, and this compiler carries text. Bytes above 127
 /// become the matching Latin-1 code point, which round-trips for the ASCII
 /// range every real installer uses and is honest about the rest: NSIS cannot
-/// spell these at all, so they are folded into the literal either way (§5).
+/// spell these at all, so they are folded into the literal either way.
 fn byte_char(byte: u32) -> char {
     char::from_u32(byte).unwrap_or('\u{fffd}')
 }
 
-/// §5's muscle-memory trap. A literal is data, so every `$` is escaped to `$$`
-/// on output and `detailPrint("costs $5")` is correct — while
-/// `detailPrint("in $INSTDIR")` almost never is.
+/// The muscle-memory trap. A literal is data, so every `$` is escaped to `$$`
+/// on output and `detailPrint("costs $5")` is correct — while `detailPrint("in
+/// $INSTDIR")` almost never is.
 fn check_dollar(value: &str, span: Span, diags: &mut Diagnostics) {
     let bytes: Vec<char> = value.chars().collect();
     for (index, c) in bytes.iter().enumerate() {
@@ -218,7 +218,7 @@ fn check_dollar(value: &str, span: Span, diags: &mut Diagnostics) {
             .take_while(|c| c.is_alphanumeric() || **c == '_')
             .collect();
         let mut note = String::from(
-            "a string literal is data, never a template: every `$` is emitted as `$$` (§15.1)",
+            "a string literal is data, never a template: every `$` is emitted as `$$`",
         );
         if !name.is_empty() {
             note = format!("did you mean `.. {name} ..`? {note}");
@@ -251,8 +251,9 @@ fn first_word(rest: &[char]) -> String {
     }
 }
 
-/// §15.31. There is no `makensis` warning to promote here — over-long strings
-/// truncate silently — so this is the only place the failure is visible.
+/// The 1024-byte check. There is no `makensis` warning to promote here — an
+/// over-long string truncate silently — so this is the only place the failure
+/// is visible.
 fn check_length(value: &str, span: Span, diags: &mut Diagnostics) {
     let length = value.chars().count();
     if length <= MAX_STRING_LENGTH {

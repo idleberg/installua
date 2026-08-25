@@ -1,4 +1,4 @@
-//! `InitPluginsDir`, which the compiler writes and no program spells (§11).
+//! `InitPluginsDir`, which the compiler writes and no program spells.
 //!
 //! `$PLUGINSDIR` is not a fact about the machine the way `$WINDIR` is. It names
 //! a temporary directory that does not exist until something creates it, and
@@ -153,10 +153,10 @@ fn a_raw_block_is_read_too() {
     );
 }
 
-/// A `$` in a string literal is five dollars, not a variable (§15.1) — the
-/// emitter doubles it, so the line reads the directory no more than any other
-/// sentence does. The compiler already warns about the habit; what is asserted
-/// here is that the warning is not also a plugins directory.
+/// A `$` in a string literal is five dollars, not a variable — the emitter
+/// doubles it, so the line reads the directory no more than any other sentence
+/// does. The compiler already warns about the habit; what is asserted here is
+/// that the warning is not also a plugins directory.
 #[test]
 fn a_literal_dollar_is_not_a_read() {
     let output = build(&program(

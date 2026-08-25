@@ -1,9 +1,9 @@
-; PLAN Phase 0, task 1b — the large-string plugin hazard (§15.31).
+; PLAN Phase 0, task 1b — the large-string plugin hazard.
 ;
 ; Built twice from this one file: once with vanilla makensis
 ; (NSIS_MAX_STRLEN=1024) and once with the official strlen_8192 special build.
 ; Both link the *same* stock plugin DLLs from the standard distribution, which
-; are compiled against 1024. That is the hazard §15.31 left unverified.
+; are compiled against 1024. That is the hazard this probe exists to measure.
 ;
 ; Every probe reports a length, so silent truncation is visible as a number
 ; rather than needing a crash.

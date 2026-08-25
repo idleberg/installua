@@ -3,8 +3,8 @@
 use crate::diag::Span;
 use crate::overlay;
 
-/// The whole type lattice of this PoC (§3): enough to keep `IntOp` and `IntCmp`
-/// off strings, nowhere near the real thing.
+/// The whole type lattice of this PoC: enough to keep `IntOp` and `IntCmp` off
+/// strings, nowhere near the real thing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Ty {
     Int,
@@ -23,27 +23,27 @@ impl Ty {
 #[derive(Debug)]
 pub struct Program {
     pub installer: Option<Installer>,
-    /// Headers actually imported, in overlay order (§7-4).
+    /// Headers actually imported, in overlay order.
     pub includes: Vec<&'static overlay::Header>,
-    /// One-time init lines a used macro asked for, deduplicated (§6).
+    /// One-time init lines a used macro asked for, deduplicated.
     pub inits: Vec<&'static str>,
     /// `local X <const>` → `!define`, in source order: unlike everything else,
-    /// the preprocessor is strictly sequential (§12).
+    /// the preprocessor is strictly sequential.
     pub defines: Vec<Define>,
     pub functions: Vec<Function>,
     /// Sections and section groups. Order is install order, so this is the one
-    /// sequence the emitter may not reorder (§12).
+    /// sequence the emitter may not reorder.
     pub items: Vec<SectionItem>,
 }
 
-/// A build-time constant (§7-1). `value` is already NSIS text, so a `<const>`
-/// that refers to another one holds `${OTHER}` rather than a copy.
+/// A build-time constant. `value` is already NSIS text, so a `<const>` that
+/// refers to another one holds `${OTHER}` rather than a copy.
 #[derive(Debug)]
 pub struct Define {
     pub name: String,
     pub value: String,
     /// The build-machine command that has to run before the `!define`, when the
-    /// value came from `pre.*` (§7-3).
+    /// value came from `pre.*`.
     pub pre: Option<PreCall>,
     pub span: Span,
 }
@@ -102,11 +102,11 @@ pub struct Section {
 
 #[derive(Debug)]
 pub enum Stmt {
-    /// `local x = <expr>` — becomes a register (§3).
+    /// `local x = <expr>` — becomes a register.
     Local(Local),
     Call(Call),
-    /// Install-time control flow, not build-time (§2). `elseif` is desugared
-    /// into a nested `If` in the else branch by the frontend.
+    /// Install-time control flow, not build-time. `elseif` is desugared into a
+    /// nested `If` in the else branch by the frontend.
     If(If),
     /// A call to a user-declared `function` — `Call name`.
     CallFunction {
@@ -117,7 +117,7 @@ pub enum Stmt {
     Macro(MacroCall),
     Plugin(PluginCall),
     /// Its own node because it is its own lowering: a statement, a flag set and
-    /// a jump table at once (§13).
+    /// a jump table at once.
     MessageBox(MessageBox),
 }
 
@@ -133,7 +133,7 @@ pub struct MessageBox {
 }
 
 /// A branch of the jump table. The body is a block, not a value: closures exist
-/// as declaration bodies only (§3).
+/// as declaration bodies only.
 #[derive(Debug)]
 pub struct Handler {
     pub button: &'static overlay::Button,
@@ -182,7 +182,7 @@ pub struct If {
     pub span: Span,
 }
 
-/// A condition is a comparison, never a materialized boolean (§8): it lowers
+/// A condition is a comparison, never a materialized boolean: it lowers
 /// straight into the branch targets of one `IntCmp`.
 #[derive(Debug)]
 pub struct Condition {
@@ -199,7 +199,7 @@ pub enum Expr {
     /// A reference to a `local`.
     Local(String, Span),
     /// A reference to a `<const>`: build-time, so it carries its own NSIS text
-    /// (`${NAME}`) rather than a register (§7-1).
+    /// (`${NAME}`) rather than a register.
     Const {
         text: String,
         ty: Ty,
@@ -212,7 +212,7 @@ pub enum Expr {
         span: Span,
     },
     /// `..` is usually zero instructions: NSIS interpolates variables inside
-    /// literals, so this lowers to a string template (§4).
+    /// literals, so this lowers to a string template.
     Concat(Vec<Expr>, Span),
     /// A macro with an output variable, used for its value.
     Macro(Box<MacroCall>),
@@ -230,8 +230,8 @@ impl Expr {
     }
 }
 
-/// Operators are instructions (§4): each of these is an `IntOp` opcode. Lua's
-/// `/` and `^` are absent on purpose — they mean something else in NSIS.
+/// Operators are instructions: each of these is an `IntOp` opcode. Lua's `/`
+/// and `^` are absent on purpose — they mean something else in NSIS.
 #[derive(Debug, Clone, Copy)]
 pub enum BinOp {
     Add,
@@ -256,7 +256,7 @@ impl BinOp {
     }
 
     /// Build-time evaluation, in NSIS's semantics rather than Lua's, so a
-    /// folded operation and an emitted one cannot disagree (§4).
+    /// folded operation and an emitted one cannot disagree.
     pub fn fold(self, lhs: i64, rhs: i64) -> Option<i64> {
         match self {
             BinOp::Add => lhs.checked_add(rhs),

@@ -1,4 +1,4 @@
-//! The NSIS-facing migration table, as a diagnostic rather than a page (§5).
+//! The NSIS-facing migration table, as a diagnostic rather than a page.
 //!
 //! Some NSIS instructions are deliberately not ported, because Lua already has
 //! the better spelling: `StrCmp` is `==`, `IntOp` is `+`, `StrCpy` is
@@ -8,7 +8,7 @@
 //!
 //! ```text
 //! error[nsis-retired]: `StrCmp` is not a function here
-//!   note: write `==`, which is case-sensitive (§15.9)
+//!   note: write `==`, which is case-sensitive
 //! ```
 //!
 //! **Keyed on the Installua spelling, matched case-insensitively.** The rows
@@ -40,9 +40,8 @@ pub struct Retired {
 
 /// The camelCase of an NSIS name is occasionally a Lua keyword — `Goto` is
 /// `goto` — and those are gone before lowering ever sees a name: the frontend
-/// rejects the *keyword* with its own code and its own note (§8 owns labels).
-/// A row here would be unreachable, and an unreachable row is a diagnostic
-/// nobody can test.
+/// rejects the *keyword* with its own code and its own note. A row here would
+/// be unreachable, and an unreachable row is a diagnostic nobody can test.
 const KEYWORDS: &[&str] = &["goto", "return", "function", "while", "repeat", "not"];
 
 /// Looks up a name a user typed. Case-insensitive, so `StrCmp`, `strcmp` and

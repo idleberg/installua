@@ -1,5 +1,5 @@
-//! Frontend pass boundaries (§14 tier 0) and the Phase 1 exit criterion:
-//! `installua check` clean on all five of Phase 0's programs.
+//! Frontend pass boundaries (tier 0) and the Phase 1 exit criterion: `installua
+//! check` clean on all five of Phase 0's programs.
 
 use std::path::{Path, PathBuf};
 
@@ -11,7 +11,7 @@ fn examples() -> PathBuf {
 }
 
 /// **The Phase 1 exit criterion.** Not "no errors" but *no diagnostics at all*:
-/// §14's rule is that warnings are failures, and the five programs are the
+/// warnings are failures, and the five programs are the
 /// specification, so a warning on one of them means either the program or the
 /// check is wrong.
 #[test]
@@ -57,7 +57,7 @@ fn parse(source: &str) -> Block {
     program.block
 }
 
-/// The `elseif` desugaring (§7): after the frontend, every `If` has exactly one
+/// The `elseif` desugaring: after the frontend, every `If` has exactly one
 /// condition, so the layout pass has one shape to lay out rather than a chain.
 #[test]
 fn elseif_desugars_into_a_nested_if() {
@@ -123,7 +123,7 @@ fn elseif_without_else_leaves_no_empty_block() {
 }
 
 /// Escapes are decoded once, in the frontend, so no later pass re-reads a
-/// literal — and a long string is decoded not at all (§5).
+/// literal — and a long string is decoded not at all.
 #[test]
 fn escapes_are_decoded_once() {
     let block = parse(r#"local a, b = "one\ttwo", [[C:\Tools]]"#);
@@ -145,7 +145,7 @@ fn escapes_are_decoded_once() {
 }
 
 /// `raw` takes NSIS source rather than data, so the `$` check does not run
-/// inside it — the sigils in there are the point (§13).
+/// inside it — the sigils in there are the point.
 #[test]
 fn raw_suppresses_the_dollar_check() {
     let mut diags = Diagnostics::new();
@@ -158,7 +158,7 @@ fn raw_suppresses_the_dollar_check() {
 }
 
 /// Hexadecimal is an integer; a fraction and an exponent are not. The check is
-/// at the literal, since there is no float type for it to be at (§6).
+/// at the literal, since there is no float type for it to be at.
 #[test]
 fn integer_literals_are_integers() {
     let block = parse("local a, b, c = 42, 0x20, -7");

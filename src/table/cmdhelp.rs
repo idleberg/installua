@@ -1,7 +1,7 @@
 //! The `-CMDHELP` generator: syntax lines in, parameter skeletons out.
 //!
-//! §15.23's model is joined from two halves, and this is the mechanical one.
-//! `makensis -CMDHELP` prints one syntax line per command and is the only
+//! The parameter model is joined from two halves, and this is the mechanical
+//! one. `makensis -CMDHELP` prints one syntax line per command and is the only
 //! machine-readable description NSIS ships, so arity, optionality, flags, enum
 //! members and — crucially — which positions are *variables* rather than values
 //! are read from it rather than transcribed by hand.
@@ -13,8 +13,8 @@
 //!
 //! The output of this module is rendered to Rust source and checked in
 //! ([`generate`]), so a new NSIS version is a reviewable diff rather than a
-//! silent change in behaviour (§6). Two tests guard it: one regenerates from
-//! the checked-in snapshot and diffs the generated file, one regenerates the
+//! silent change in behaviour. Two tests guard it: one regenerates from the
+//! checked-in snapshot and diffs the generated file, one regenerates the
 //! snapshot from the local `makensis` and diffs that.
 
 use super::{Dir, Note, Rep};
@@ -35,8 +35,8 @@ pub struct ParsedParam {
     pub name: String,
     pub dir: Dir,
     /// A `$(user_var: …)` position: an NSIS *variable* is demanded, not a
-    /// value. §15.23's `dir: In` on a variable — `fileRead(open())` has no
-    /// lowering, and this is the field that says so.
+    /// value. A `dir: In` on a variable — `fileRead(open())` has no lowering,
+    /// and this is the field that says so.
     pub var: bool,
     pub req: bool,
     pub rep: Rep,
@@ -52,7 +52,7 @@ pub struct ParsedOpt {
     pub nsis: String,
     /// `/TIMEOUT=X` rather than `/BRANDING`.
     pub value: bool,
-    /// Emit position: the number of parameters that precede it (§15.23).
+    /// Emit position: the number of parameters that precede it.
     pub after: usize,
 }
 
@@ -142,8 +142,8 @@ fn parse_tokens(command: &mut Parsed, tokens: Vec<Token>, required: bool) {
             Token::Alternation => {
                 command.note = Note::Alternation;
                 // What follows is the second spelling of the same command, and
-                // §15.23 gives it to the overlay as a `conflicts` set rather
-                // than to the parameter list.
+                // it goes to the overlay as a `conflicts` set rather than to
+                // the parameter list.
                 return;
             }
             Token::Repeat => {
@@ -155,10 +155,10 @@ fn parse_tokens(command: &mut Parsed, tokens: Vec<Token>, required: bool) {
                 // `[/x filespec [...]]` and `[/SD return]`: a bracketed group
                 // whose first token is a flag and whose rest are plain words is
                 // a flag *with an argument*, not a flag followed by a
-                // parameter. §15.23 gives the argument to the `Opt` — one
-                // `exclude = {…}` expands to N `/x` pairs — so the words after
-                // the flag must not become positional parameters, which would
-                // shift every later position by one.
+                // parameter. The argument goes to the `Opt` — one `exclude =
+                // {…}` expands to N `/x` pairs — so the words after the flag
+                // must not become positional parameters, which would shift
+                // every later position by one.
                 if let Some(flag) = flag_with_argument(&text) {
                     command.options.push(ParsedOpt {
                         nsis: flag,
@@ -385,10 +385,10 @@ fn push(command: &mut Parsed, param: ParsedParam) {
 /// Written out rather than inferred, because inference does not work here. The
 /// rule that catches all three — *a lowercase alternative beside one carrying a
 /// capital* — also fires on `PageEx custom|uninstConfirm|…` and on
-/// `ManifestSupportedOS none|all|WinVista|…`, where the lowercase words are real
-/// keywords. It would strip seven of them and silently open two closed sets,
-/// which trades this file's defect for a worse one: a check that no longer runs
-/// and says nothing about it (§13).
+/// `ManifestSupportedOS none|all|WinVista|…`, where the lowercase words are
+/// real keywords. It would strip seven of them and silently open two closed
+/// sets, which trades this file's defect for a worse one: a check that no
+/// longer runs and says nothing about it.
 ///
 /// Kept short on purpose. A word belongs here once `makensis` has been run
 /// against it and rejected it, and not because a reader thought it looked like a
@@ -442,8 +442,8 @@ fn split_members(text: &str) -> Alternation {
 
     // `mode=modeflag[|modeflag[...]]]` describes recursion, not a member list:
     // the real members are on the next line, which NSIS itself truncates. An
-    // unparseable annotation is no annotation (§14) — the overlay says what
-    // `MessageBox`'s flags are, and §15.18 already ruled on them.
+    // unparseable annotation is no annotation — the overlay says what
+    // `MessageBox`'s flags are, and `messageBox` already ruled on them.
     if text.contains("...") {
         return empty();
     }
@@ -650,9 +650,9 @@ fn flush(tokens: &mut Vec<Token>, word: &mut String) {
 /// Renders the parsed snapshot as the Rust source checked in at
 /// `src/table/generated.rs`.
 ///
-/// Generated *code* rather than a parse at startup, because §6 wants the
-/// per-version diff to be reviewable and §9-2 wants the table to be `&'static`
-/// with no initialisation order to get wrong.
+/// Generated *code* rather than a parse at startup, so that the per-version
+/// diff is reviewable and the table is `&'static` with no initialisation order
+/// to get wrong.
 pub fn generate(snapshot: &str) -> String {
     let commands = parse(snapshot);
     let version = snapshot
@@ -664,15 +664,15 @@ pub fn generate(snapshot: &str) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "//! Generated from `makensis -CMDHELP` ({version}). Do not edit.\n\
-         //!\n\
-         //!\n\
+         //! \n\
+         //! \n\
          //! ```text\n\
          //! cargo run -q -- generate table tables/cmdhelp-3.12.txt > /tmp/generated.rs\n\
          //! mv /tmp/generated.rs src/table/generated.rs\n\
          //! ```\n\
-         //!\n\
+         //! \n\
          //! `cargo test` fails if this file and the snapshot ever drift, and\n\
-         //! again if the snapshot and the local `makensis` do (§14). The\n\
+         //! again if the snapshot and the local `makensis` do. The\n\
          //! hand-written half of every row is in `super::overlay`.\n\
          \n\
          use super::{{Dir, Note, Opt, Rep, Shape}};\n\

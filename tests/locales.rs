@@ -1,4 +1,4 @@
-//! The NLF snapshot against a local NSIS (§15.26).
+//! The NLF snapshot against a local NSIS.
 //!
 //! `tests/mui.rs` is the model, and until the scraper moved in here there was
 //! no test at all on this side: `tables/locales-3.12.txt` was written by a
@@ -56,7 +56,7 @@ fn every_snapshot_name_is_a_known_locale() {
     );
     assert!(
         all.contains(&"PortugueseBR"),
-        "`PortugueseBR` is the §15.26 worked example and must survive the split"
+        "`PortugueseBR` is the worked example and must survive the split"
     );
     assert!(
         all.iter().all(|name| !name.starts_with('#')),

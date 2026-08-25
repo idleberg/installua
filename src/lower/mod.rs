@@ -10,7 +10,7 @@
 //! and what a label is stays entirely inside [`crate::layout`].
 //!
 //! Anything outside the exposed set is [`Code::NotYetImplemented`] — the honest
-//! edge of the vertical slice (PLAN §0), and deliberately a different code from
+//! edge of the vertical slice, and deliberately a different code from
 //! [`Code::UnknownField`], which means *no version will ever accept this*. The
 //! first is a five-second wait and the second is a five-second fix, and
 //! collapsing them is how a `todo` count stops predicting anything.
@@ -42,7 +42,7 @@ use fields::Fields;
 
 /// The `attributes {}` surface, read from the census rather than frozen here: a
 /// name is an attribute exactly when a [`table::Class::Attribute`] row claims
-/// it, which is what makes a new setting one overlay line (§15.23).
+/// it, which is what makes a new setting one overlay line.
 ///
 /// A dotted name is not one of these: it is a member of a group, and the
 /// *group* is the name written here — which is why [`attribute_groups`] is
@@ -66,9 +66,9 @@ fn attribute_names() -> Vec<&'static str> {
 ///
 /// A group is **derived** and never listed: a name is one exactly when some
 /// `Attribute` row's field path is `group.field`, which keeps a new nested
-/// setting one overlay line the way a flat one is (§15.23). The alternative was
-/// a `const` beside the rows, and a second place to add the same name is a
-/// second place to forget it.
+/// setting one overlay line the way a flat one is. The alternative was a
+/// `const` beside the rows, and a second place to add the same name is a second
+/// place to forget it.
 ///
 /// One dot, not two. `page.license.file` is a page setting, reached through the
 /// page it names and never through `attributes {}` — the same dotted
@@ -124,9 +124,9 @@ const BLOCK_OWNERS: &[&str] = &["installer", "uninstaller", "page"];
 /// the one failure a user cannot act on.
 ///
 /// `unicode` is absent because it is not a line the lowering places: it sets a
-/// field the emitter reads first (§15.16), so it is already ahead of everything
-/// here. Every field absent from this list ranks [`LATE`] and keeps the order
-/// it was written in, which a stable sort preserves.
+/// field the emitter reads first, so it is already ahead of everything here.
+/// Every field absent from this list ranks [`LATE`] and keeps the order it was
+/// written in, which a stable sort preserves.
 const ORDERED: &[(&str, u8)] = &[("cpu", 0), ("compressor", 1), ("brandingImage", 2)];
 
 /// The rank of an attribute with no ordering constraint.
@@ -259,7 +259,7 @@ const MUI_HOOKS: &[MuiHook] = &[
         needs_unpage: true,
     },
     // Not `needs_unpage`: the block this one is called from is the compiler's
-    // own, so it exists whenever the hook does (§15.23, batch 40).
+    // own, so it exists whenever the hook does.
     MuiHook {
         word: "onMouseOverSection",
         install: "MUI_CUSTOMFUNCTION_ONMOUSEOVERSECTION",
@@ -283,10 +283,10 @@ impl MuiHook {
 
 /// The fields NSIS reads once for the whole script, so only `installer {}` has
 /// them: written in both blocks they would define one name twice, which is a
-/// redefinition warning and so an error under `-WX` (§14 tier 3).
+/// redefinition warning and so an error under `-WX` (tier 3).
 ///
-/// `icon` is not one of these. It is two defines — `MUI_ICON` and
-/// `MUI_UNICON` — and is genuinely the same field for the other half (§15.3).
+/// `icon` is not one of these. It is two defines — `MUI_ICON` and `MUI_UNICON`
+/// — and is genuinely the same field for the other half.
 const ONCE_GLOBAL_FIELDS: &[&str] = &[
     "installDir",
     "checkBitmap",
@@ -302,7 +302,7 @@ const ONCE_GLOBAL_FIELDS: &[&str] = &[
 /// and not a policy of this compiler's.
 const MAX_INST_TYPES: usize = 32;
 
-/// Which of the two halves a declaration belongs to (§15.3).
+/// Which of the two halves a declaration belongs to.
 ///
 /// NSIS spells the difference as a `un.` prefix on function and section names
 /// and a `MUI_UNPAGE_` prefix on page macros; Installua spells it as which
@@ -376,9 +376,9 @@ fn index_name(local: &str, half: Half) -> String {
 /// The `Var` a claimed control's handle lives in.
 ///
 /// A `Var` and not a register, because a plugin call clobbers every one of them
-/// (§15.11) and the handle has to survive from the creator into `leave` — two
-/// NSIS functions, with the whole page in between (ruling 7). The allocator
-/// never sees it, which is exactly what [`Slot::Global`] means.
+/// and the handle has to survive from the creator into `leave` — two NSIS
+/// functions, with the whole page in between (ruling 7). The allocator never
+/// sees it, which is exactly what [`Slot::Global`] means.
 ///
 /// Named from the local for the same reason a section's define is, and prefixed
 /// like a generated label because it is one more name in the `Var` namespace the
@@ -448,10 +448,10 @@ impl Site {
     fn how(self) -> &'static str {
         match self {
             Site::Block => {
-                "a bare name here lists a declaration: bind one with `local x = section { … }` (§13)"
+                "a bare name here lists a declaration: bind one with `local x = section { … }`"
             }
             Site::Controls => {
-                "a bare name here lists a declaration: bind one with `local x = text { … }` (§13)"
+                "a bare name here lists a declaration: bind one with `local x = text { … }`"
             }
         }
     }
@@ -647,13 +647,12 @@ struct Post {
     after: Vec<ir::Arg>,
 }
 
-/// A `group`'s member list, in either of §15.23's two forms and without judging
-/// the call. The shape errors belong to [`Lowerer::group`], which reports them
-/// once where the group is lowered; this is the claim pass looking for the bare
-/// names inside.
-/// A `page.custom`'s `controls = { … }`, without judging the page. The shape
-/// errors belong to [`Lowerer::custom_page`]; this is the claim pass looking for
-/// the bare names inside.
+/// A `group`'s member list, in either of its two forms and without judging the
+/// call. The shape errors belong to [`Lowerer::group`], which reports them once
+/// where the group is lowered; this is the claim pass looking for the bare
+/// names inside. A `page.custom`'s `controls = { … }`, without judging the
+/// page. The shape errors belong to [`Lowerer::custom_page`]; this is the claim
+/// pass looking for the bare names inside.
 fn page_controls(value: &Expr) -> Option<&[TableField]> {
     let Expr::Call { args, .. } = value else {
         return None;
@@ -737,14 +736,14 @@ enum Holds {
     /// `colors = { text = "000000", background = "FFFFFF" }`: the field's own
     /// define takes the background and the payload takes the text.
     ///
-    /// One field holding two for the reason §15.32 gives one level down — MUI2
-    /// spends both of these on a single `SetCtlColors`, so `bgColor` and
-    /// `textColor` as separate fields would let a script write one and get the
-    /// other from whatever MUI2 had defaulted it to. It is also what the pair's
-    /// cross-field constraint becomes: MUI2 reads the text colour only inside an
-    /// `!ifdef` on the background, so a text colour written alone is read by
-    /// nothing, and a shape that asks for both cannot say the case that does
-    /// nothing.
+    /// One field holding two for the reason a control's fields give one level
+    /// down — MUI2 spends both of these on a single `SetCtlColors`, so
+    /// `bgColor` and `textColor` as separate fields would let a script write
+    /// one and get the other from whatever MUI2 had defaulted it to. It is also
+    /// what the pair's cross-field constraint becomes: MUI2 reads the text
+    /// colour only inside an `!ifdef` on the background, so a text colour
+    /// written alone is read by nothing, and a shape that asks for both cannot
+    /// say the case that does nothing.
     Colors(&'static str),
     /// A string and the one define that gives it more room: `title = "Done"`,
     /// or `title = { text = "Done", lines = 3 }`.
@@ -848,9 +847,8 @@ enum Room {
 /// The NSIS line is absent on purpose. `DirText`, `ComponentText` and
 /// `LicenseText` are written by MUI2, from these defines, inside the `PageEx`
 /// it generates; a second one written by us assembles clean under `-WX` and
-/// then loses the race (§15.7). What is private to MUI2 is the **line**, and
-/// what stays public is the **setting** — the split `icon`/`MUI_ICON` already
-/// lives on.
+/// then loses the race. What is private to MUI2 is the **line**, and what stays
+/// public is the **setting** — the split `icon`/`MUI_ICON` already lives on.
 #[derive(Debug)]
 struct PageField {
     installua: &'static str,
@@ -1286,7 +1284,7 @@ const STARTMENU_FIELDS: &[PageField] = &[
     // raises `warning 6000: unknown variable/constant` — and this compiler
     // assembles under `-WX`. The two defines are refused in the inventory with
     // that reason, which is the only place a name can be *unusable* rather than
-    // unimplemented (§15.23).
+    // unimplemented.
     DESTROYED_FIELD,
 ];
 
@@ -1303,9 +1301,9 @@ const CONFIRM_FIELDS: &[PageField] = &[
 
 /// One MUI2 page, and the settings that belong to it rather than to the block.
 ///
-/// A declaration written in §15.23's table form, taken apart: the array part is
-/// the parameters and the hash part the options, so what comes out is one name,
-/// the thing the construct encloses, and the switches beside them.
+/// A declaration written in the table form, taken apart: the array part is the
+/// parameters and the hash part the options, so what comes out is one name, the
+/// thing the construct encloses, and the switches beside them.
 struct Declaration<'e> {
     /// The one positional entry.
     name: &'e Expr,
@@ -1352,8 +1350,8 @@ const fn page(installua: &'static str, nsis: &'static str, own: &'static [PageFi
 
 /// The eight pages, as a **closed set**: this is why a page is reached by
 /// member access (`page.directory`) where a section is reached by string
-/// (`section("Tools", …)`). A user picks a section's name and MUI2 picks
-/// these, so one completes and the other cannot (§15.1).
+/// (`section("Tools", …)`). A user picks a section's name and MUI2 picks these,
+/// so one completes and the other cannot.
 ///
 /// Seven of them are MUI2's and the eighth is not, and it is still in the same
 /// list for the same reason: what a user picks from is a set an editor can
@@ -1402,8 +1400,8 @@ const V1_PAGES: &[Page] = &[
     // The eighth, and the only one that is not MUI2's. It is reached by the
     // same member access as the other seven because it is a *page* — the set
     // stays closed, and what a user picks is still from a list an editor can
-    // complete (§15.1). What it is not is a `!insertmacro`: `Page custom` names
-    // two functions, and both of them are ours to write (§15.32).
+    // complete. What it is not is a `!insertmacro`: `Page custom` names two
+    // functions, and both of them are ours to write.
     Page {
         installua: "custom",
         nsis: "custom",
@@ -1420,8 +1418,7 @@ impl Page {
     }
 
     /// Every field this page accepts, in the order the defines are emitted —
-    /// which is this order and not the user's, because a Lua table has none
-    /// (§12).
+    /// which is this order and not the user's, because a Lua table has none.
     fn fields(&self) -> impl Iterator<Item = &'static PageField> {
         let header: &'static [PageField] = if self.header { HEADER_FIELDS } else { &[] };
         self.own.iter().chain(header).chain(COMMON_FIELDS)
@@ -1479,14 +1476,14 @@ const BLOCK_MUI_DEFINES: &[&str] = &[
     // One name for two spellings, and the only entry here that is: MUI2 builds
     // this one with its uninstaller prefix, so the uninstaller's is
     // `MUI_UNFINISHPAGE_NOAUTOCLOSE` and the snapshot records the pair as the
-    // single row the `un` tag marks (§15.23).
+    // single row the `un` tag marks.
     "MUI_FINISHPAGE_NOAUTOCLOSE",
     "MUI_UNABORTWARNING",
     "MUI_UNABORTWARNING_TEXT",
     "MUI_UNABORTWARNING_CANCEL_DEFAULT",
-    // §15.26's dialog. Seven settings and no macro: the three macros the block
-    // writes are `!insertmacro` lines rather than `!define`s, so they are
-    // exposed without being here — same shape as `MUI_LANGUAGE` itself.
+    // The `languages {}` dialog. Seven settings and no macro: the three macros
+    // the block writes are `!insertmacro` lines rather than `!define`s, so they
+    // are exposed without being here — same shape as `MUI_LANGUAGE` itself.
     "MUI_LANGDLL_WINDOWTITLE",
     "MUI_LANGDLL_INFO",
     "MUI_LANGDLL_ALLLANGUAGES",
@@ -1588,10 +1585,10 @@ const V1_BLOCKS: &[&str] = &[
 /// How many rounds the signature fixpoint gets. Three is enough for the deepest
 /// chain in the five programs — a caller learns a parameter, the callee learns
 /// its return, the caller reads it — and the cap exists because a lattice with
-/// `Unknown` at the top is not strictly monotone: a disagreement can flip a slot
-/// back. A program that has not settled by then compiles against the last round,
-/// which is sound: an unsettled type is `Unknown`, and `Unknown` is refused at
-/// every point where guessing would matter (§15.14).
+/// `Unknown` at the top is not strictly monotone: a disagreement can flip a
+/// slot back. A program that has not settled by then compiles against the last
+/// round, which is sound: an unsettled type is `Unknown`, and `Unknown` is
+/// refused at every point where guessing would matter.
 const MAX_ROUNDS: usize = 8;
 
 pub fn lower(
@@ -1603,7 +1600,7 @@ pub fn lower(
     // 1. Types, to a fixpoint. Rounds before the last are lowered against a
     //    scratch collector: their diagnostics are about a type table that was
     //    still incomplete, so reporting them would be reporting the compiler's
-    //    intermediate state to the user (§9-4).
+    //    intermediate state to the user.
     let mut inferred = Inferred::seed(resolved);
     for _ in 0..MAX_ROUNDS {
         let mut scratch = Diagnostics::new();
@@ -1618,7 +1615,7 @@ pub fn lower(
 
     // 2. Registers. Every body is allocated before any call site is filled in,
     //    because a clobber set is a fact about *physical* registers and there
-    //    are none until colouring has run (§9-3).
+    //    are none until colouring has run.
     let mut across = Vec::new();
     let mut direct: BTreeMap<String, BTreeSet<u8>> = BTreeMap::new();
     let functions = module.functions.len();
@@ -1632,7 +1629,7 @@ pub fn lower(
         }
     }
 
-    // 3. The call graph, built once and read three times here (§15.11).
+    // 3. The call graph, built once and read three times here.
     let graph = callgraph::build(&module);
     let clobbers = graph.clobbers(&direct);
     graph.lint_recursion(diags);
@@ -1696,7 +1693,7 @@ pub fn reserved(module: &mut ir::Module, graph: &callgraph::CallGraph) {
     // The DLL is the namespace and nothing else: `nsExec.execToStack` becomes
     // `nsExec::ExecToStack` out of `nsExec.dll`, which is the same lookup
     // `!addplugindir` does and the reason a plugin's declaration needs no
-    // separate file name (§11).
+    // separate file name.
     module.reserved = plugins
         .into_iter()
         .map(|plugin| {
@@ -1722,7 +1719,7 @@ const PLUGINS_DIR: &str = "$PLUGINSDIR";
 /// nothing at all. So `SetOutPath "$PLUGINSDIR"` without the init is
 /// `SetOutPath ""`, which `makensis -WX` assembles without a word and which
 /// puts the files somewhere else on a user's machine. That is the include-order
-/// hazard again with a different name (PLAN §11): a line that costs nothing to
+/// hazard again with a different name: a line that costs nothing to
 /// omit until the day it costs everything.
 ///
 /// **Per body, at the top, and not hoisted.** A body is the smallest unit that
@@ -1774,9 +1771,9 @@ fn mentions(line: &ir::Instruction) -> bool {
 fn arg_mentions(arg: &ir::Arg) -> bool {
     match arg {
         // [`ir::Piece::Text`] is deliberately not here. A `$` in text is five
-        // dollars and the emitter doubles it (§15.1), so a literal
-        // `"$PLUGINSDIR"` in a Lua string ships as `$$PLUGINSDIR` and reads the
-        // directory no more than any other sentence does.
+        // dollars and the emitter doubles it, so a literal `"$PLUGINSDIR"` in a
+        // Lua string ships as `$$PLUGINSDIR` and reads the directory no more
+        // than any other sentence does.
         ir::Arg::Data { pieces, .. } => pieces
             .iter()
             .any(|piece| matches!(piece, ir::Piece::Var(var) if var == PLUGINS_DIR)),
@@ -1825,10 +1822,10 @@ fn lower_once(
     lowerer.finish()
 }
 
-/// A global's agreed type, and every site that agreed on it. §15.24 checks
-/// across all assignments rather than pinning to the declaring one, because
-/// §15.6 makes the language order-free and "the declaring assignment" is
-/// therefore arbitrary.
+/// A global's agreed type, and every site that agreed on it. A global is
+/// declared by assigning to it, and the check runs across every assignment
+/// rather than pinning to the declaring one: resolution is order-free, so "the
+/// declaring assignment" is arbitrary.
 type GlobalTypes = BTreeMap<String, (Ty, Vec<Span>)>;
 
 struct Lowerer<'a, 'p> {
@@ -1854,19 +1851,19 @@ struct Lowerer<'a, 'p> {
     /// define it is addressed through is [`index_name`] of the two, and so is
     /// not stored beside them.
     claims: BTreeMap<String, Claim>,
-    /// Whether an `.onInit` was written, so that one is not invented twice.
-    /// The uninstaller's is the second slot (§15.26 needs both).
+    /// Whether an `.onInit` was written, so that one is not invented twice. The
+    /// uninstaller's is the second slot (`languages {}` needs both).
     on_init: [bool; 2],
     /// Lines the compiler owes the *first* of each half's init callback:
     /// `MUI_LANGDLL_DISPLAY` and `MUI_UNGETLANGUAGE`, which have to run before
     /// anything reads `$LANGUAGE` and so cannot wait for a body to ask for them.
     init_prelude: [Vec<ir::Instruction>; 2],
     /// The `LangString` names `languages {}` declared, so `lang.greeting` is a
-    /// resolved read rather than a `$(…)` nobody checked (§15.26).
+    /// resolved read rather than a `$(…)` nobody checked.
     lang_strings: BTreeSet<String>,
     /// The locales `languages {}` declared, in the order it listed them — read
     /// by the license page, which has to check its own per-locale table against
-    /// exactly this set (§15.26). Declaration order rather than a set, because
+    /// exactly this set. Declaration order rather than a set, because
     /// the first one is the default language and a diagnostic that has to name
     /// *some* locale should name that one.
     locales: Vec<String>,
@@ -1884,15 +1881,15 @@ struct Lowerer<'a, 'p> {
     minted: usize,
     /// Uninstaller hooks MUI2 reaches only through `!ifdef MUI_UNINSTALLER`,
     /// with the entry that wrote each — checked once the block's pages are
-    /// known, since §15.6 lets the page be written below the hook.
+    /// known, since resolution is order-free and the page may be written below
+    /// the hook.
     un_hooks: Vec<(Span, &'static str)>,
     /// What the program needs included and initialised. Collected during
-    /// lowering and emitted at the top, which is the only order that works
-    /// (§15.21).
+    /// lowering and emitted at the top, which is the only order that works.
     requires: Requirements,
 }
 
-/// The collect-then-emit pass §15.21 asks for.
+/// The collect-then-emit pass the headers and `StrFunc` adapters ask for.
 ///
 /// Both halves are sets: `import "FileFunc"` twice is one `!include`, and two
 /// calls to `string.upper` are one `${Using:StrFunc} StrCase`. The second is
@@ -1917,10 +1914,10 @@ impl Requirements {
 
 impl<'p> Lowerer<'_, 'p> {
     fn program(&mut self, program: &Program) {
-        // A top-level `<const>` is a `!define` (§7-1): build-time, folded in
-        // every expression, and `${NAME}` in the output. Emitted in source
-        // order because the preprocessor is textual and strictly sequential —
-        // the one part of an NSIS script where order is semantics (§12).
+        // A top-level `<const>` is a `!define`: build-time, folded in every
+        // expression, and `${NAME}` in the output. Emitted in source order
+        // because the preprocessor is textual and strictly sequential — the one
+        // part of an NSIS script where order is semantics.
         self.module.defines = self
             .resolved
             .const_order
@@ -1935,20 +1932,20 @@ impl<'p> Lowerer<'_, 'p> {
             .collect();
 
         // `import "FileFunc"` is an `!include`, deduplicated against every
-        // other import and against the ones an adapter pulls in on its own
-        // (§15.21). A `plugin` needs no line at all: NSIS finds it by name.
+        // other import and against the ones an adapter pulls in on its own. A
+        // `plugin` needs no line at all: NSIS finds it by name.
         for namespace in self.resolved.namespaces.values() {
             if let crate::resolve::Namespace::Header(header) = namespace {
                 self.requires.headers.insert(header.clone());
             }
         }
 
-        // A bare assignment at the top level declares a global *and* gives it
-        // a value (§15.24), and a `Var` has no initialiser — so the assignments
-        // become the first lines of `.onInit`, which is the one body NSIS
-        // guarantees runs before anything else. Collected here and lowered when
-        // the callback is, since the block they belong to may be written above
-        // them and §15.6 makes that legal.
+        // A bare assignment at the top level declares a global *and* gives it a
+        // value, and a `Var` has no initialiser — so the assignments become the
+        // first lines of `.onInit`, which is the one body NSIS guarantees runs
+        // before anything else. Collected here and lowered when the callback
+        // is, since the block they belong to may be written above them and
+        // resolution being order-free makes that legal.
         self.global_inits = program
             .block
             .iter()
@@ -1960,9 +1957,9 @@ impl<'p> Lowerer<'_, 'p> {
         // lowered. A body can address a section the block lists *after* it —
         // `installer { onInit(…), core }` is ordinary — and the claim is what
         // says which half a handle names, so the map has to be complete before
-        // the first body is walked (§15.6).
-        // §15.26's block, before anything that could read `lang.greeting` or
-        // ask for an `.onInit` — same order-freeness argument as the claims.
+        // the first body is walked. `languages {}` too, before anything that
+        // could read `lang.greeting` or ask for an `.onInit` — same
+        // order-freeness argument as the claims.
         self.languages_pass(program);
         self.claim_pass(program);
 
@@ -1987,12 +1984,12 @@ impl<'p> Lowerer<'_, 'p> {
                 DeferredKind::Control(_) => (
                     "page",
                     format!("write `{local},` among the `controls` of a `page.custom {{}}`"),
-                    "the list's order is the tab order; the declaration's is nothing (§15.32)",
+                    "the list's order is the tab order; the declaration's is nothing",
                 ),
                 DeferredKind::StartMenu => (
                     "block",
                     format!("write `{local},` among the entries of `installer {{}}`"),
-                    "the block's order is the page order; the declaration's is nothing (§15.3)",
+                    "the block's order is the page order; the declaration's is nothing",
                 ),
                 _ => (
                     "block",
@@ -2000,7 +1997,7 @@ impl<'p> Lowerer<'_, 'p> {
                         "write `{local},` among the entries of `installer {{}}` or \
                          `uninstaller {{}}`"
                     ),
-                    "the block's order is the install order; the declaration's is nothing (§13)",
+                    "the block's order is the install order; the declaration's is nothing",
                 ),
             };
             self.diags.push(
@@ -2015,9 +2012,9 @@ impl<'p> Lowerer<'_, 'p> {
         }
 
         // Nothing declared an `.onInit`, and there is something for one to do:
-        // globals to initialise (§15.24), or a language to pick before anything
-        // reads `$LANGUAGE` (§15.26). The callback exists to hold them, and
-        // inventing it is the same ruling as inventing the `.` on its name.
+        // globals to initialise, or a language to pick before anything reads
+        // `$LANGUAGE`. The callback exists to hold them, and inventing it is
+        // the same ruling as inventing the `.` on its name.
         for half in [Half::Installer, Half::Uninstaller] {
             let prelude = std::mem::take(&mut self.init_prelude[half.index()]);
             let inits = match half {
@@ -2050,7 +2047,7 @@ impl<'p> Lowerer<'_, 'p> {
             });
         }
         // Globals in first-seen order, emitted before the first body that
-        // touches them (§12) — which the field order in `ir::Module` already
+        // touches them — which the field order in `ir::Module` already
         // guarantees.
         self.module.vars = self
             .resolved
@@ -2087,14 +2084,14 @@ impl<'p> Lowerer<'_, 'p> {
         // `!include`s, deduplicated and ordered: `MUI2.nsh` first because it is
         // the one header whose macros the others must not shadow, then the rest
         // alphabetically. Alphabetical rather than first-imported so that
-        // moving an `import` line does not rewrite a golden (§14) — headers are
+        // moving an `import` line does not rewrite a golden — headers are
         // independent, unlike `!define`s, so there is nothing to preserve.
         if self.mui {
             self.module.includes.push("MUI2.nsh".to_string());
             // A program with no `languages {}` still needs one language line —
             // MUI2 `!warning`s without one — so English stands in. Written out
             // it would be `languages { locales = { English = {} } }`, which is
-            // why this is a default and not a policy (§15.26).
+            // why this is a default and not a policy.
             if self.module.languages.is_empty() {
                 self.module.languages.push(ir::Instruction::new(
                     "!insertmacro",
@@ -2109,7 +2106,7 @@ impl<'p> Lowerer<'_, 'p> {
                 .map(|header| format!("{header}.nsh")),
         );
         // `${Using:StrFunc} StrCase` — one line per function actually reached,
-        // after the `!include` and before anything that calls it (§15.21).
+        // after the `!include` and before anything that calls it.
         self.module.inits.extend(
             self.requires
                 .str_func
@@ -2122,7 +2119,8 @@ impl<'p> Lowerer<'_, 'p> {
         // and `MUI_UNPAGE_INIT` is the only thing that sets it — so without a
         // page the define is written, the function is written, and nothing ever
         // calls either. Checked here rather than where the hook is written,
-        // because §15.6 lets the page be written below it.
+        // because resolution is order-free and the page may be written below
+        // it.
         if self.module.unpages.is_empty() {
             for (span, word) in std::mem::take(&mut self.un_hooks) {
                 self.diags.push(
@@ -2133,7 +2131,7 @@ impl<'p> Lowerer<'_, 'p> {
                     )
                     .note(
                         "MUI2 writes the `un.` half of the callback that calls it only for a \
-                         script that has one, so this function would never run (§15.3)",
+                         script that has one, so this function would never run",
                     ),
                 );
             }
@@ -2141,7 +2139,7 @@ impl<'p> Lowerer<'_, 'p> {
 
         // One description block per half that has anything to say. A half with
         // texts needs it to show them; a half with only the hook needs it
-        // because MUI2 calls the hook from inside it (§15.23).
+        // because MUI2 calls the hook from inside it.
         for half in [Half::Installer, Half::Uninstaller] {
             let texts = std::mem::take(&mut self.descriptions[half.index()]);
             if texts.is_empty() && !self.hover[half.index()] {
@@ -2266,7 +2264,7 @@ impl<'p> Lowerer<'_, 'p> {
                     format!("`{name} {{}}` appears more than once"),
                 )
                 .note(format!("the first one is at line {previous}"))
-                .note("it is script-global, so there is exactly one (§2)"),
+                .note("it is script-global, so there is exactly one"),
             );
             return true;
         }
@@ -2277,8 +2275,8 @@ impl<'p> Lowerer<'_, 'p> {
     // -- attributes -------------------------------------------------------
 
     fn attributes(&mut self, fields: &[TableField], span: Span) {
-        // A Lua table has no order (§12), so the order is the compiler's —
-        // see [`ORDERED`] for which fields need one and how that was measured.
+        // A Lua table has no order, so the order is the compiler's — see
+        // [`ORDERED`] for which fields need one and how that was measured.
         let mut fields: Vec<&TableField> = fields.iter().collect();
         fields.sort_by_key(|field| attribute_rank(field));
 
@@ -2296,9 +2294,9 @@ impl<'p> Lowerer<'_, 'p> {
 
             match name.text.as_str() {
                 // The nested ones. `versionInfo` is hand-shaped — its members
-                // are ordered against each other and `keys` is a free map —
-                // and `unicode` emits nothing: it sets a field the emitter
-                // reads first, so a later `raw` can override it (§15.16).
+                // are ordered against each other and `keys` is a free map — and
+                // `unicode` emits nothing: it sets a field the emitter reads
+                // first, so a later `raw` can override it.
                 "versionInfo" => self.version_info(value),
                 "unicode" => match self.constant(value) {
                     Some(ConstValue::Bool(value)) => self.module.unicode = value,
@@ -2307,7 +2305,7 @@ impl<'p> Lowerer<'_, 'p> {
                         "unicode",
                         "a `bool`",
                         "write `unicode = true`; NSIS's charset otherwise depends on how the \
-                         local `makensis` was built, which is why it is always emitted (§15.16)",
+                         local `makensis` was built, which is why it is always emitted",
                     ),
                 },
                 // Every other group is its rows and nothing else, so one
@@ -2317,8 +2315,8 @@ impl<'p> Lowerer<'_, 'p> {
                     Some(entry) => self.setting(entry, &name.text, value),
                     // A name that belongs to the other block is a five-second
                     // fix rather than a five-second wait, so it says which
-                    // block rather than which version (§9-4). Reached only by
-                    // `pages` and `text`: the other four installer fields are
+                    // block rather than which version. Reached only by `pages`
+                    // and `text`: the other four installer fields are
                     // `Attribute` rows and NSIS lets them be set script-wide.
                     None if V1_INSTALLER_FIELDS.contains(&other) => {
                         self.diags.push(
@@ -2329,7 +2327,7 @@ impl<'p> Lowerer<'_, 'p> {
                             )
                             .note(
                                 "it belongs in `installer {}` — and in `uninstaller {}`, \
-                                 which is the same field for the other half (§15.3)",
+                                 which is the same field for the other half",
                             ),
                         );
                     }
@@ -2342,8 +2340,8 @@ impl<'p> Lowerer<'_, 'p> {
                         // A flattened member reads as a plausible attribute and
                         // is nothing but the group written wrong, so it is
                         // answered with the group rather than with the list of
-                        // everything: `manifestGdiScaling` is
-                        // `manifest = { gdiScaling = … }` (§15.23).
+                        // everything: `manifestGdiScaling` is `manifest = {
+                        // gdiScaling = … }`.
                         self.diags.push(match flattened(other) {
                             Some((group, member)) => diagnostic.note(format!(
                                 "write `{group} = {{ {member} = … }}` — the settings NSIS \
@@ -2362,13 +2360,13 @@ impl<'p> Lowerer<'_, 'p> {
     /// The settings NSIS would read and then ignore, refused before they are
     /// emitted.
     ///
-    /// A [`table::Setting::Only`] is read only when a sibling field holds one of
-    /// a few values. `makensis` says so itself — *warning 8026:
+    /// A [`table::Setting::Only`] is read only when a sibling field holds one
+    /// of a few values. `makensis` says so itself — *warning 8026:
     /// SetCompressorDictSize: compressor is not set to LZMA. Effectively
-    /// ignored.* — which means the failure is already caught by tier 3, but only
-    /// for a program somebody wrote a fixture for, and with the NSIS command's
-    /// name on it rather than the field's. §11's rule is that a user does not
-    /// meet this at all.
+    /// ignored.* — which means the failure is already caught by tier 3, but
+    /// only for a program somebody wrote a fixture for, and with the NSIS
+    /// command's name on it rather than the field's, and the rule the five
+    /// programs set is that a user does not meet this at all.
     ///
     /// Here rather than in [`Self::setting`] because the constraint is about the
     /// **block**: it is the one per-field fact that cannot be decided from the
@@ -2444,7 +2442,7 @@ impl<'p> Lowerer<'_, 'p> {
     ///
     /// The whole of the per-field knowledge is [`table::Setting`], so this is
     /// the function that has to grow when a *shape* is new and not when a
-    /// setting is (§15.23).
+    /// setting is.
     fn setting(&mut self, entry: &'static table::Instruction, field: &str, value: &Expr) {
         let table::Class::Attribute(holds) = entry.class else {
             // A row reached by name from `attributes {}` that is not an
@@ -2535,9 +2533,9 @@ impl<'p> Lowerer<'_, 'p> {
     /// is: they are this function called twice.
     ///
     /// `param` is the position the value stands against and is read only for an
-    /// enum's members, which are the snapshot's and never a list here (§15.23).
-    /// `line` is the NSIS command, which the notes name because that is what
-    /// the field becomes.
+    /// enum's members, which are the snapshot's and never a list here. `line`
+    /// is the NSIS command, which the notes name because that is what the field
+    /// becomes.
     fn value_arg(
         &mut self,
         holds: table::Setting,
@@ -2638,11 +2636,11 @@ impl<'p> Lowerer<'_, 'p> {
     /// The keyword an enum-valued field was written with.
     ///
     /// Almost always a string — `compressor = "lzma"` — but a registry root is
-    /// a **bare** name, because `readRegStr(HKLM, …)` already spells it that way
-    /// and one idea with two spellings is worse than either of them (§15.1).
-    /// The names this accepts are exactly the sigil-less constants, so no other
-    /// field changes: there is no constant called `lzma` for `compressor = lzma`
-    /// to find, and an unknown bare name still fails as a value.
+    /// a **bare** name, because `readRegStr(HKLM, …)` already spells it that
+    /// way and one idea with two spellings is worse than either of them. The
+    /// names this accepts are exactly the sigil-less constants, so no other
+    /// field changes: there is no constant called `lzma` for `compressor =
+    /// lzma` to find, and an unknown bare name still fails as a value.
     fn keyword(&mut self, value: &Expr, field: &str) -> Option<String> {
         if let Expr::Name(name) = value
             && let Some(constant) = crate::builtins::constant_named(&name.text)
@@ -2660,7 +2658,7 @@ impl<'p> Lowerer<'_, 'p> {
     /// [`table::Setting::Table`] are named, and for the same reason in reverse:
     /// three strings on one line can only be told apart by a key, and two
     /// resources can only be told apart by their order. A Lua table keeps that
-    /// order and no other (§12), which is the order NSIS adds them in.
+    /// order and no other, which is the order NSIS adds them in.
     fn each_setting(
         &mut self,
         entry: &'static table::Instruction,
@@ -2800,10 +2798,10 @@ impl<'p> Lowerer<'_, 'p> {
             .push(ir::Instruction::new(entry.nsis, args));
     }
 
-    /// `installDirRegKey = { root = HKLM, key = "Software/App", name = "Path" }`:
-    /// one NSIS line built out of a Lua table, one key per position, emitted in
-    /// the *table's* order rather than the source's — a Lua table has no order
-    /// to preserve and NSIS counts arguments (§12).
+    /// `installDirRegKey = { root = HKLM, key = "Software/App", name = "Path"
+    /// }`: one NSIS line built out of a Lua table, one key per position,
+    /// emitted in the *table's* order rather than the source's — a Lua table
+    /// has no order to preserve and NSIS counts arguments.
     ///
     /// A part may be left out when its position is optional *and* nothing after
     /// it was written — `addResource`'s `reslang` is the one that is. Which
@@ -2835,7 +2833,7 @@ impl<'p> Lowerer<'_, 'p> {
     }
 
     /// `bgGradient = false` or `bgGradient = { top = …, … }`: the two branches
-    /// of an alternation (§13).
+    /// of an alternation.
     ///
     /// `false` and not `"off"`, because the word is NSIS's spelling of a state
     /// Lua already has one of — and not `nil` either, since leaving the field
@@ -2988,8 +2986,7 @@ impl<'p> Lowerer<'_, 'p> {
     /// Whether a keyword is one of the closed set the position accepts.
     ///
     /// NSIS accepts an unknown keyword here and *ignores* it — `SetCompressor
-    /// lmza` is not an error — so the closed set is checked here or not at all
-    /// (§13).
+    /// lmza` is not an error — so the closed set is checked here or not at all.
     fn enumerated(&mut self, field: &str, text: &str, allowed: &[&str], span: Span) -> bool {
         if !allowed.contains(&text) {
             self.diags.push(
@@ -2999,7 +2996,7 @@ impl<'p> Lowerer<'_, 'p> {
                     format!("`{text}` is not a `{field}`"),
                 )
                 .note(format!("the values are {}", list(allowed)))
-                .note("NSIS ignores a keyword it does not know here rather than objecting (§13)"),
+                .note("NSIS ignores a keyword it does not know here rather than objecting"),
             );
             return false;
         }
@@ -3062,9 +3059,9 @@ impl<'p> Lowerer<'_, 'p> {
     /// `versionInfo = { product = "1.4.2.0", keys = { … } }`.
     ///
     /// The keys are emitted in **sorted** order rather than source order. A Lua
-    /// table has no order to preserve — `{ a = 1, b = 2 }` and `{ b = 2, a = 1 }`
-    /// are the same table — so anything else would make the golden depend on
-    /// something the language says is not there (§14).
+    /// table has no order to preserve — `{ a = 1, b = 2 }` and `{ b = 2, a = 1
+    /// }` are the same table — so anything else would make the golden depend on
+    /// something the language says is not there.
     fn version_info(&mut self, value: &Expr) {
         let Expr::Table { fields, .. } = value else {
             self.bad_value(
@@ -3078,7 +3075,7 @@ impl<'p> Lowerer<'_, 'p> {
 
         // `VIAddVersionKey` before `VIProductVersion` is a `makensis` error, so
         // the two are ordered here rather than left to the order the fields
-        // happen to be written in — a table has no order (§12).
+        // happen to be written in — a table has no order.
         let mut fields: Vec<&TableField> = fields.iter().collect();
         fields.sort_by_key(|field| match field {
             TableField::Named { name, .. } if name.text == "product" => 0,
@@ -3173,13 +3170,14 @@ impl<'p> Lowerer<'_, 'p> {
     // -- bodies -----------------------------------------------------------
 
     /// `installer { … }` and `uninstaller { … }`, which are the same block with
-    /// two spellings — the whole of §15.3's duality is [`Half`] threaded
-    /// through this one function. `un.` has no surface spelling at all.
+    /// two spellings — the whole of the uninstaller's duality is [`Half`]
+    /// threaded through this one function. `un.` has no surface spelling at
+    /// all.
     ///
     /// Two passes rather than one: the named fields are settings the whole
     /// block carries, and the positional entries — sections, pages, callbacks —
-    /// read some of them. A Lua table has no order for the user to get right
-    /// (§12), so the order is the compiler's.
+    /// read some of them. A Lua table has no order for the user to get right,
+    /// so the order is the compiler's.
     fn installer(&mut self, fields: &[TableField], half: Half) {
         for field in fields {
             let TableField::Named { name, value } = field else {
@@ -3191,7 +3189,7 @@ impl<'p> Lowerer<'_, 'p> {
                 }
                 // The five block-level MUI settings. Each is a line MUI2 writes
                 // itself, from this define, so writing the line instead would
-                // assemble clean under `-WX` and then lose (§15.7).
+                // assemble clean under `-WX` and then lose.
                 "icon" => {
                     let define = match half {
                         Half::Installer => "MUI_ICON",
@@ -3258,7 +3256,7 @@ impl<'p> Lowerer<'_, 'p> {
                 // not a `page.finish` one: MUI2 reads it from
                 // `MUI_FINISHPAGE_GUIINIT`, behind an `!ifndef` on the half's
                 // `WELCOMEFINISHPAGE_GUINIT`, so the second finish page of a
-                // half could not differ even if it asked (§15.7).
+                // half could not differ even if it asked.
                 "autoClose" => {
                     let define = match half {
                         Half::Installer => "MUI_FINISHPAGE_NOAUTOCLOSE",
@@ -3293,7 +3291,7 @@ impl<'p> Lowerer<'_, 'p> {
                         )
                         .note(
                             "NSIS reads it once, script-wide, so both halves writing it would \
-                             define one name twice — write it in `installer {}` (§15.3)",
+                             define one name twice — write it in `installer {}`",
                         ),
                     );
                 }
@@ -3493,8 +3491,8 @@ impl<'p> Lowerer<'_, 'p> {
     /// one it ships.
     ///
     /// Per half like `icon`, and by the same mechanism: the half picks
-    /// `…_BITMAP` or `…_UNBITMAP`, which are two names MUI2 reads in two places
-    /// (§15.3). The enable itself is neither half's, so it is written once.
+    /// `…_BITMAP` or `…_UNBITMAP`, which are two names MUI2 reads in two
+    /// places. The enable itself is neither half's, so it is written once.
     fn header_image(&mut self, value: &Expr, half: Half) {
         let (bitmap, stretch, rtl, rtl_stretch) = match half {
             Half::Installer => (
@@ -3568,7 +3566,7 @@ impl<'p> Lowerer<'_, 'p> {
                         )
                         .note(
                             "MUI2 reads this one once for the whole script, so it governs both \
-                             halves — write it in `installer { headerImage = { … } }` (§15.3)",
+                             halves — write it in `installer { headerImage = { … } }`",
                         ),
                     );
                 }
@@ -3592,7 +3590,7 @@ impl<'p> Lowerer<'_, 'p> {
 
     /// `MUI_HEADERIMAGE`, once. Both blocks may carry the field and the enable
     /// is neither one's: written twice it is a redefinition, which is a warning
-    /// and so an error under `-WX` (§14 tier 3).
+    /// and so an error under `-WX` (tier 3).
     fn header_image_on(&mut self) {
         self.mui = true;
         if self
@@ -3823,11 +3821,11 @@ impl<'p> Lowerer<'_, 'p> {
     /// `installTypes = { "Full", "Minimal" }` — the presets the components page
     /// offers, in the order it offers them.
     ///
-    /// The order is the whole of §13's binding at this end. A section says which
-    /// types it belongs to *by name*, NSIS reads only a one-based position, and
-    /// this list is what turns one into the other — so the numbering exists in
-    /// exactly one place and a user never writes a number that could go stale
-    /// when a type is inserted in front of it.
+    /// The order is the whole of the install-type binding at this end. A
+    /// section says which types it belongs to *by name*, NSIS reads only a
+    /// one-based position, and this list is what turns one into the other — so
+    /// the numbering exists in exactly one place and a user never writes a
+    /// number that could go stale when a type is inserted in front of it.
     ///
     /// The two halves are two lists because NSIS numbers them separately: an
     /// `InstType un.` belongs to the uninstaller's components page and the
@@ -3945,7 +3943,7 @@ impl<'p> Lowerer<'_, 'p> {
         for entry in written {
             match entry {
                 TableField::Named { name, value } => named.push((name, value)),
-                // §15.23's form: the array part is the parameter. Only the
+                // The table form: the array part is the parameter. Only the
                 // custom page has one — the other seven are named by the macro
                 // they insert and captioned by MUI2's own language file.
                 TableField::Positional { value } if page.custom => positional.push(value),
@@ -3984,7 +3982,7 @@ impl<'p> Lowerer<'_, 'p> {
                     .note("write `local menu = page.startMenu { … }` and list `menu,` in the block")
                     .note(
                         "the local is the page's id: it is what `menu.folder` and `menu.write` \
-                         name, and `MUI_PAGE_STARTMENU` takes one either way (§13)",
+                         name, and `MUI_PAGE_STARTMENU` takes one either way",
                     ),
                 );
                 return;
@@ -4069,7 +4067,7 @@ impl<'p> Lowerer<'_, 'p> {
     }
 
     /// `file = { English = "en.txt", German = "de.txt" }` — one license per
-    /// locale, which is `LicenseLangString` (§15.26).
+    /// locale, which is `LicenseLangString`.
     ///
     /// The name it files them under is the compiler's, so it collides with no
     /// `LangString` a translator wrote, and what the page macro gets back is a
@@ -4222,10 +4220,10 @@ impl<'p> Lowerer<'_, 'p> {
     /// compiler's to write.
     ///
     /// Everything here is the same *setting* as on the other seven and a
-    /// different *mechanism*, which is the split §15.7 already draws. `Page
-    /// custom` is a stock NSIS instruction and MUI2 never sees it, so
-    /// `MUI_PAGE_HEADER_TEXT` — a define MUI2 reads from inside the `PageEx` it
-    /// generates — would sit there doing nothing and then leak onto the next
+    /// different *mechanism*, which is the split MUI2's page world already
+    /// draws. `Page custom` is a stock NSIS instruction and MUI2 never sees it,
+    /// so `MUI_PAGE_HEADER_TEXT` — a define MUI2 reads from inside the `PageEx`
+    /// it generates — would sit there doing nothing and then leak onto the next
     /// page that *does* read it. `MUI_HEADER_TEXT` inside the creator is the
     /// call MUI2's own documentation writes, and it has no ordering to get
     /// wrong: it is an instruction in a function body rather than a define with
@@ -4373,11 +4371,11 @@ impl<'p> Lowerer<'_, 'p> {
                 }
 
                 // The callbacks. `GetFunctionAddress` is a `todo` row and stays
-                // one: §3's reason — *`Call`-by-address has no Lua shape* — is
-                // still true of the **surface**, and the compiler emitting it is
-                // the same move as emitting `SectionGetFlags`. The address of a
-                // generated function exists in exactly one place, which is what
-                // makes writing it here safe and writing it by hand not.
+                // one: the reason — *`Call`-by-address has no Lua shape* — is
+                // still true of the **surface**, and the compiler emitting it
+                // is the same move as emitting `SectionGetFlags`. The address
+                // of a generated function exists in exactly one place, which is
+                // what makes writing it here safe and writing it by hand not.
                 for (nsis, function) in &control.events {
                     let address = lowerer.body.vreg(control.span);
                     lowerer.emit(ir::Instruction::new(
@@ -4520,11 +4518,12 @@ impl<'p> Lowerer<'_, 'p> {
     /// One control declaration, checked and turned into the plugin call that
     /// creates it.
     ///
-    /// §15.23's shape with nothing positional but the text: `nsDialogs` takes
+    /// The table form with nothing positional but the text: `nsDialogs` takes
     /// x, y, width and height as four separate arguments and a table's array
     /// part is a sequence, so writing them unnamed would be four numbers in an
     /// order a reader has to know. The one thing that *is* the control's
-    /// parameter — the text it is drawn with — stays where §15.23 puts it.
+    /// parameter — the text it is drawn with — stays where the table form puts
+    /// it.
     fn control(
         &mut self,
         value: &Expr,
@@ -4931,7 +4930,7 @@ impl<'p> Lowerer<'_, 'p> {
                         field.installua,
                         "a global",
                         "NSIS stores the chosen directory into this one, so it wants the \
-                         variable and not its value (§15.24)",
+                         variable and not its value",
                     );
                     return;
                 };
@@ -4947,7 +4946,7 @@ impl<'p> Lowerer<'_, 'p> {
                             value.span(),
                             format!("`{name}` is not a global"),
                         )
-                        .note("a global is declared by assigning to it at the top level (§15.24)"),
+                        .note("a global is declared by assigning to it at the top level"),
                     );
                     return;
                 }
@@ -5323,7 +5322,7 @@ impl<'p> Lowerer<'_, 'p> {
     /// The name is the compiler's, because nothing in the source is one: the
     /// hook is written where it runs. `un.` leads the uninstaller's, since MUI2
     /// calls it from an uninstaller page and NSIS spells that half in the
-    /// function's name (§15.3).
+    /// function's name.
     fn page_callback(
         &mut self,
         value: &Expr,
@@ -5400,7 +5399,7 @@ impl<'p> Lowerer<'_, 'p> {
     ///
     /// Split from [`Self::page_callback`] because a custom page's `pre` and
     /// `show` become no function at all: `Page custom` has two slots and three
-    /// hooks, so two of them are inlined into the creator (§15.32).
+    /// hooks, so two of them are inlined into the creator.
     fn callback_body<'a>(&mut self, value: &'a Expr, which: &str) -> Option<(&'a Block, Span)> {
         let Expr::Function {
             params,
@@ -5418,7 +5417,7 @@ impl<'p> Lowerer<'_, 'p> {
                     *span,
                     format!("`{which}` takes no arguments"),
                 )
-                .note("NSIS calls it, and `Call` has no argument list (§3)"),
+                .note("NSIS calls it, and `Call` has no argument list"),
             );
             return None;
         }
@@ -5443,7 +5442,7 @@ impl<'p> Lowerer<'_, 'p> {
         let Some(name) = value.callee_name() else {
             // `page.directory { … }`: a member rather than a bare name, which
             // is what a **closed** set of names buys — an editor completes the
-            // eight and a typo is caught where it is written (§15.1).
+            // eight and a typo is caught where it is written.
             if let Some((base, which)) = value.callee_field()
                 && base == "page"
             {
@@ -5476,10 +5475,10 @@ impl<'p> Lowerer<'_, 'p> {
         }
     }
 
-    /// A bare name among a block's entries: the section or group that
-    /// `local core = section { … }` bound, lowered here rather than where it was
+    /// A bare name among a block's entries: the section or group that `local
+    /// core = section { … }` bound, lowered here rather than where it was
     /// written because here is where its half and its block's install types are
-    /// known (`PHASE-6-SECTIONS.md` ruling 2).
+    /// known.
     ///
     /// The position in the block is what decides install order, and the `local`
     /// decides nothing — which is the one thing a reader has to learn that they
@@ -5611,11 +5610,11 @@ impl<'p> Lowerer<'_, 'p> {
                 .note(match site {
                     Site::Block => {
                         "a control is listed by the `controls` of a `page.custom {}`, because a \
-                         window needs the dialog it sits in (§15.32)"
+                         window needs the dialog it sits in"
                     }
                     Site::Controls => {
                         "a section is listed by `installer {}` or `uninstaller {}`: it is what \
-                         gets installed, not what is drawn (§13)"
+                         gets installed, not what is drawn"
                     }
                 }),
             );
@@ -5652,7 +5651,7 @@ impl<'p> Lowerer<'_, 'p> {
         // The name a claim earns is the compiler's, but it lands in a namespace
         // the author writes in too — a section's `!define` beside the
         // `<const>`s, a control's `Var` beside the globals — and NSIS holds one
-        // name once: a second `!define` is a warning it then ships (§12), and a
+        // name once: a second `!define` is a warning it then ships, and a
         // second `Var` is an error.
         let (earned, kind_of_name) = earned_name(&name.text, deferred.0, half);
         let taken = match kind_of_name {
@@ -5726,8 +5725,8 @@ impl<'p> Lowerer<'_, 'p> {
         }
     }
 
-    /// `onInit(function() … end)`. The leading `.` is emitted, never written
-    /// (§15.7), and so is the `un.` on the uninstaller's.
+    /// `onInit(function() … end)`. The leading `.` is emitted, never written,
+    /// and so is the `un.` on the uninstaller's.
     fn callback(&mut self, value: &Expr, half: Half, which: &str) {
         let Expr::Call { args, .. } = value else {
             return;
@@ -5750,7 +5749,7 @@ impl<'p> Lowerer<'_, 'p> {
                     *span,
                     format!("`{which}` takes no arguments"),
                 )
-                .note("NSIS calls it, and `Call` has no argument list (§3)"),
+                .note("NSIS calls it, and `Call` has no argument list"),
             );
             return;
         }
@@ -5760,7 +5759,7 @@ impl<'p> Lowerer<'_, 'p> {
             Half::Uninstaller => format!("un.{which}"),
         };
         // The global initialisers go in front of whatever the user wrote, so a
-        // `.onInit` that reads a global sees its value (§15.24).
+        // `.onInit` that reads a global sees its value.
         let block = if half == Half::Installer && which == "onInit" {
             self.on_init[half.index()] = true;
             let mut all = std::mem::take(&mut self.global_inits);
@@ -5772,9 +5771,9 @@ impl<'p> Lowerer<'_, 'p> {
             }
             block.clone()
         };
-        // §15.26's line goes in front of everything, including the global
-        // initialisers: one of them may read `lang.greeting`, and until the
-        // dialog has run `$LANGUAGE` is whatever the system said.
+        // The `languages {}` line goes in front of everything, including the
+        // global initialisers: one of them may read `lang.greeting`, and until
+        // the dialog has run `$LANGUAGE` is whatever the system said.
         let prelude = match which {
             "onInit" => std::mem::take(&mut self.init_prelude[half.index()]),
             _ => Vec::new(),
@@ -5817,9 +5816,9 @@ impl<'p> Lowerer<'_, 'p> {
             self.todo(value.span(), "this entry");
             return;
         };
-        // §15.23's pair, the same as `section`'s: a short form for a group with
-        // nothing to configure, and a table form whose array part is the name
-        // and whose hash part is `expanded` and the sections it holds.
+        // The short-and-table pair, the same as `section`'s: a short form for a
+        // group with nothing to configure, and a table form whose array part is
+        // the name and whose hash part is `expanded` and the sections it holds.
         let (name, options, members) = match args.as_slice() {
             [name, members @ Expr::Table { .. }] => (name, Vec::new(), members),
             [Expr::Table { fields, span }] => {
@@ -5963,9 +5962,9 @@ impl<'p> Lowerer<'_, 'p> {
             return None;
         }
 
-        // §15.23's pair: `section("Core", fn)` when there is nothing to
-        // configure, and `section { "Core", required = true, body = fn }` when
-        // there is. Two forms and not three — the middle-table
+        // The short-and-table pair: `section("Core", fn)` when there is nothing
+        // to configure, and `section { "Core", required = true, body = fn }`
+        // when there is. Two forms and not three — the middle-table
         // `section(name, options, body)` was the one shape in the surface that
         // put options between two parameters, and it is gone.
         //
@@ -6077,8 +6076,8 @@ impl<'p> Lowerer<'_, 'p> {
 
         Some(ir::Section {
             // `un.` is how NSIS marks a section as the uninstaller's, and it is
-            // emitted rather than written — the whole of §15.3 at the surface
-            // is that this prefix has no spelling.
+            // emitted rather than written — the whole of the uninstaller block
+            // at the surface is that this prefix has no spelling.
             name: format!("{}{name}", half.prefix()),
             optional,
             inst_types,
@@ -6096,9 +6095,9 @@ impl<'p> Lowerer<'_, 'p> {
         })
     }
 
-    /// §15.23's table form, split into the three parts a declaration is made
-    /// of: the one positional parameter that is its name, the named key holding
-    /// what it encloses, and the options beside them.
+    /// The table form, split into the three parts a declaration is made of: the
+    /// one positional parameter that is its name, the named key holding what it
+    /// encloses, and the options beside them.
     ///
     /// The array part is the parameters and the hash part the options — the
     /// division `file { "docs/", recursive = true }` makes against
@@ -6173,11 +6172,11 @@ impl<'p> Lowerer<'_, 'p> {
     /// A section's `installTypes = { "Full" }`, resolved to the one-based
     /// positions `SectionIn` reads.
     ///
-    /// This is the §13 binding, and it is a *compile-time* one: the name a user
-    /// writes is the name they declared on the block, and the number NSIS wants
-    /// never appears in the source. That the numbering exists in one place is
-    /// what makes inserting an install type at the front safe — every section
-    /// renumbers, and none of them says a number.
+    /// This is the install-type binding, and it is a *compile-time* one: the
+    /// name a user writes is the name they declared on the block, and the
+    /// number NSIS wants never appears in the source. That the numbering exists
+    /// in one place is what makes inserting an install type at the front safe —
+    /// every section renumbers, and none of them says a number.
     ///
     /// The declaration list is already lowered by the time any section is,
     /// because `installer {}` reads its named fields before its positional
@@ -6280,8 +6279,8 @@ impl<'p> Lowerer<'_, 'p> {
     }
 
     /// One body, one CFG, one register file. Everything about a body is local
-    /// to it — the label counter resets (§15.25) and NSIS `Goto` cannot cross
-    /// the boundary anyway (§8).
+    /// to it — the label counter resets and NSIS `Goto` cannot cross the
+    /// boundary anyway.
     fn body(
         &mut self,
         block: &Block,
@@ -6347,9 +6346,9 @@ impl<'p> Lowerer<'_, 'p> {
     }
 
     /// Every `return` in one body has to agree on how many values it leaves,
-    /// because `Call` has no arity: the callee pushes and the caller pops, and a
-    /// disagreement is a stack that unbalances at runtime with NSIS reporting
-    /// nothing at all (§3).
+    /// because `Call` has no arity: the callee pushes and the caller pops, and
+    /// a disagreement is a stack that unbalances at runtime with NSIS reporting
+    /// nothing at all.
     fn returns(&mut self, owner: Option<&str>, returns: &[(Vec<Ty>, Span)]) {
         let Some((first, first_span)) = returns.first() else {
             return;
@@ -6372,7 +6371,7 @@ impl<'p> Lowerer<'_, 'p> {
                     ))
                     .note(
                         "`Call` has no arity — the callee pushes and the caller pops — so the \
-                         two would unbalance the stack with no diagnostic from NSIS (§3)",
+                         two would unbalance the stack with no diagnostic from NSIS",
                     )
                     .note(
                         "a path that falls off the end of the body returns nothing, which counts",
@@ -6425,7 +6424,7 @@ impl<'p> Lowerer<'_, 'p> {
                     )
                     .note(
                         "an attribute is written into the script's header, before any \
-                         instruction has run (§12)",
+                         instruction has run",
                     ),
                 );
                 None
@@ -6438,9 +6437,9 @@ impl<'p> Lowerer<'_, 'p> {
     /// Everything an attribute can hold is build-time, but "build-time" is not
     /// the same as "a string this compiler knows": `$PROGRAMFILES64` is
     /// expanded by the installer at run time and `${APP}` by the preprocessor,
-    /// and both are constants a user writes as an ordinary name (§15.1). So
-    /// this walks the same three shapes [`BodyLowerer::simple`] does, and folds
-    /// only what is left.
+    /// and both are constants a user writes as an ordinary name. So this walks
+    /// the same three shapes [`BodyLowerer::simple`] does, and folds only what
+    /// is left.
     fn constant_arg(&mut self, expr: &Expr, what: &str) -> Option<ir::Arg> {
         match expr {
             Expr::Name(name) => {
@@ -6491,7 +6490,7 @@ enum Field {
 // -- the body lowerer ------------------------------------------------------
 
 /// What a name in a body means. `Const` is not a register at all — a `<const>`
-/// is build-time (§7-1), so a use folds rather than reads.
+/// is build-time, so a use folds rather than reads.
 #[derive(Clone, Debug)]
 enum Binding {
     Local { slot: Slot, ty: Ty },
@@ -6499,7 +6498,7 @@ enum Binding {
 }
 
 /// Where `break` and `continue()` go. Both are ordinary terminators, which is
-/// the whole reason no statement lowerer does label bookkeeping (§8).
+/// the whole reason no statement lowerer does label bookkeeping.
 struct LoopTargets {
     break_to: BlockId,
     continue_to: BlockId,
@@ -6513,7 +6512,7 @@ struct BodyLowerer<'a, 'p> {
     learned: &'a mut Inferred,
     globals: &'a mut GlobalTypes,
     /// Headers and `StrFunc` declarations, shared with every other body: the
-    /// collect half of §15.21's collect-then-emit.
+    /// collect half of the collect-then-emit pass.
     requires: &'a mut Requirements,
     /// Which block listed which section, so that `core.selected` knows the
     /// define it reads and whether this half is the one that has a `core` at all
@@ -6521,7 +6520,7 @@ struct BodyLowerer<'a, 'p> {
     claims: &'a BTreeMap<String, Claim>,
     /// The `LangString` names in scope, which is every one `languages {}`
     /// declared: `lang.greeting` is `$(greeting)` and an unknown name is an
-    /// error rather than an empty string (§15.26).
+    /// error rather than an empty string.
     lang_strings: &'a BTreeSet<String>,
     /// The half this body runs in. `None` for a `func`, which either half may
     /// call: there is no wrong half to name a section from, so rule 4 has
@@ -6534,15 +6533,14 @@ struct BodyLowerer<'a, 'p> {
     place: table::Place,
     /// The install types the block declared, in order — the name → position
     /// binding a `handle.installTypes = { … }` write resolves against, and the
-    /// same one `SectionIn` uses at compile time (§13).
+    /// same one `SectionIn` uses at compile time.
     inst_types: Vec<String>,
     body: Body,
     scopes: Vec<Vec<(String, Binding)>>,
     loops: Vec<LoopTargets>,
     /// What each `return` in this body leaves on the stack.
     returns: Vec<(Vec<Ty>, Span)>,
-    /// The statement being lowered, stamped onto every instruction it produces
-    /// (§15.22).
+    /// The statement being lowered, stamped onto every instruction it produces.
     span: Span,
     current: BlockId,
 }
@@ -6605,9 +6603,9 @@ impl BodyLowerer<'_, '_> {
             .map(|(_, binding)| binding)
     }
 
-    /// A slot for a named value. There is nothing to fail here any more:
-    /// twenty registers is a fact about how many values are live at once, and
-    /// [`crate::alloc`] is the only pass that can know that (§9-3).
+    /// A slot for a named value. There is nothing to fail here any more: twenty
+    /// registers is a fact about how many values are live at once, and
+    /// [`crate::alloc`] is the only pass that can know that.
     fn claim_local(&mut self, span: Span) -> Slot {
         self.body.vreg(span)
     }
@@ -6632,7 +6630,7 @@ impl BodyLowerer<'_, '_> {
 
     /// One instruction, attributed to the statement being lowered.
     ///
-    /// The attribution is a field rather than a lookup because §15.22's map has
+    /// The attribution is a field rather than a lookup because the line map has
     /// to survive layout, and by then the statement is long gone: the emitter
     /// sees a flat list and the CFG that produced it does not exist any more.
     fn emit(&mut self, instruction: ir::Instruction) {
@@ -6642,7 +6640,7 @@ impl BodyLowerer<'_, '_> {
     }
 
     /// A plugin call the *compiler* writes: `nsDialogs::Create`, and the
-    /// `CreateControl`s under it (§15.32).
+    /// `CreateControl`s under it.
     ///
     /// An opaque site rather than a bare [`Self::emit`], for the same reason a
     /// user's plugin call is one: a plugin clobbers every register, and the
@@ -6738,7 +6736,7 @@ impl BodyLowerer<'_, '_> {
     ///
     /// Values are pushed in **reverse source order**, so the caller's first
     /// `Pop` is the first return value — the mirror of the parameter rule, and
-    /// the reason neither side needs an `Exch` (§11, program 4).
+    /// the reason neither side needs an `Exch` (program 4).
     fn return_stmt(&mut self, values: &[Expr], span: Span) {
         let mut lowered = Vec::with_capacity(values.len());
         for value in values {
@@ -6761,7 +6759,7 @@ impl BodyLowerer<'_, '_> {
 
     fn local(&mut self, names: &[Name], is_const: bool, values: &[Expr], span: Span) {
         // `local a, b = f()`: one call, several names. Plural outputs are
-        // invisible at the call site (§11), so the *declaration's* arity is what
+        // invisible at the call site, so the *declaration's* arity is what
         // decides, and it comes from the signature table rather than from here.
         if names.len() > 1
             && values.len() == 1
@@ -6801,16 +6799,16 @@ impl BodyLowerer<'_, '_> {
                         )
                         .note(
                             "a `<const>` folds at compile time and never reaches a register \
-                             (§7-1)",
+                            ",
                         ),
                     ),
                 }
                 continue;
             }
 
-            // The slot is claimed *before* the initialiser is walked, so
-            // `local sum = 1 + 1` is one `IntOp` into the local rather than an
-            // `IntOp` into a temporary and a `StrCpy` after it (§12).
+            // The slot is claimed *before* the initialiser is walked, so `local
+            // sum = 1 + 1` is one `IntOp` into the local rather than an `IntOp`
+            // into a temporary and a `StrCpy` after it.
             let slot = self.claim_local(name.span);
             let Some(ty) = self.value_into(value, &slot) else {
                 continue;
@@ -6856,7 +6854,7 @@ impl BodyLowerer<'_, '_> {
             };
 
             // `currentInstType = "Minimal"` — a name the compiler owns, whose
-            // write is an instruction rather than a register (§13).
+            // write is an instruction rather than a register.
             if crate::builtins::owned(&name.text) {
                 self.owned_write(name, value);
                 continue;
@@ -6871,14 +6869,14 @@ impl BodyLowerer<'_, '_> {
                             name.span,
                             format!("`{}` is `<const>`", name.text),
                         )
-                        .note("a build-time constant has no register to assign to (§7-1)"),
+                        .note("a build-time constant has no register to assign to"),
                     );
                     continue;
                 }
                 // `$INSTDIR` is a variable, not a constant: `.onInit` reading a
-                // prior install location and assigning it is the shape §13
-                // calls canonical, and it is the only reason a "constant" here
-                // has a `writable` column at all.
+                // prior install location and assigning it is the canonical
+                // shape, and it is the only reason a "constant" here has a
+                // `writable` column at all.
                 None => match crate::builtins::constant_named(&name.text) {
                     Some(constant) if constant.writable => {
                         (Slot::Global(constant.nsis.to_string()), Some(constant.ty))
@@ -6892,7 +6890,7 @@ impl BodyLowerer<'_, '_> {
                             )
                             .note(
                                 "it describes the machine the installer is running on, and NSIS \
-                                 accepts the assignment silently rather than objecting (§13)",
+                                 accepts the assignment silently rather than objecting",
                             ),
                         );
                         continue;
@@ -6924,9 +6922,7 @@ impl BodyLowerer<'_, '_> {
                         target.span(),
                         format!("`{name}` is assigned a {ty} here and a {previous} elsewhere"),
                     )
-                    .note(
-                        "a `Var` is one slot, so a global has one type for its lifetime (§15.24)",
-                    );
+                    .note("a `Var` is one slot, so a global has one type for its lifetime");
                     for site in sites {
                         diagnostic =
                             diagnostic.note(format!("assigned at line {}", site.start_line));
@@ -6955,8 +6951,8 @@ impl BodyLowerer<'_, '_> {
 
     /// A call used for its effect. `continue()` is one of these syntactically
     /// and a terminator semantically — a slight wart, and better than the
-    /// alternatives, since Lua has no `continue` and `goto` is what 5.4 added to
-    /// spell the idiom (§8).
+    /// alternatives, since Lua has no `continue` and `goto` is what 5.4 added
+    /// to spell the idiom.
     fn call_statement(&mut self, call: &Expr) {
         if call.callee_name() == Some("continue")
             && let Expr::Call { args, span, .. } = call
@@ -6964,7 +6960,7 @@ impl BodyLowerer<'_, '_> {
             if !args.is_empty() {
                 self.diags.push(
                     Diagnostic::error(Code::WrongArity, *span, "`continue()` takes no arguments")
-                        .note("it is a jump wearing a call's syntax (§8)"),
+                        .note("it is a jump wearing a call's syntax"),
                 );
                 return;
             }
@@ -6991,7 +6987,7 @@ impl BodyLowerer<'_, '_> {
 
     fn if_stmt(&mut self, cond: &Expr, then_block: &Block, else_block: Option<&Block>, span: Span) {
         // A `<const>` condition folds away entirely, which is what makes
-        // `!if`/`!ifdef` need no surface spelling at all (§7-2, §15.6).
+        // `!if`/`!ifdef` need no surface spelling at all.
         if let Some(ConstValue::Bool(taken)) = self.constant(cond) {
             match (taken, else_block) {
                 (true, _) => self.block(then_block),
@@ -7178,7 +7174,7 @@ impl BodyLowerer<'_, '_> {
         let _ = span;
     }
 
-    /// `for x in <iterator>`, where the iterator set is closed (§7).
+    /// `for x in <iterator>`, where the iterator set is closed.
     ///
     /// The two members run on **different machines**, and a reader has to be
     /// able to tell which from the source alone: `glob` walks the build machine
@@ -7203,7 +7199,7 @@ impl BodyLowerer<'_, '_> {
                         names.len()
                     ),
                 )
-                .note("there are no pairs to unpack: `for k, v` has nothing to iterate over (§7)"),
+                .note("there are no pairs to unpack: `for k, v` has nothing to iterate over"),
             );
             return;
         };
@@ -7220,13 +7216,12 @@ impl BodyLowerer<'_, '_> {
     /// The glob runs where `makensis` runs, so the loop is **unrolled** and the
     /// body is lowered once per match with the name bound to a `<const>`.
     /// Matches are sorted, because a directory listing has no order and a
-    /// golden file needs one (§14).
+    /// golden file needs one.
     fn glob_for(&mut self, name: &Name, args: &[Expr], block: &Block, span: Span) {
         let [pattern] = args else {
             self.diags.push(
-                Diagnostic::error(Code::WrongArity, span, "`glob` takes one pattern").note(
-                    "it runs on the build machine, so the pattern has to be known there (§7)",
-                ),
+                Diagnostic::error(Code::WrongArity, span, "`glob` takes one pattern")
+                    .note("it runs on the build machine, so the pattern has to be known there"),
             );
             return;
         };
@@ -7239,7 +7234,7 @@ impl BodyLowerer<'_, '_> {
                 )
                 .note(
                     "it is expanded while the installer is being built, so there is no register \
-                       for a runtime value to arrive in (§7)",
+                       for a runtime value to arrive in",
                 ),
             );
             return;
@@ -7254,7 +7249,7 @@ impl BodyLowerer<'_, '_> {
                 )
                 .note(
                     "this source was compiled from a string rather than a file, so there is \
-                     nothing for `assets/*.txt` to mean (§9-2)",
+                     nothing for `assets/*.txt` to mean",
                 ),
             );
             return;
@@ -7292,7 +7287,7 @@ impl BodyLowerer<'_, '_> {
     /// on the line, so the loop is a `ClearErrors`/`FileRead`/`IfErrors` triple
     /// plus a `${TrimNewLines}`. The trim is what makes this *Lua's* `lines`
     /// rather than NSIS's `FileRead`, and it is the one line here that costs a
-    /// header (§15.27).
+    /// header.
     fn lines_for(&mut self, name: &Name, args: &[Expr], block: &Block, span: Span) {
         let [handle] = args else {
             self.diags.push(
@@ -7394,9 +7389,9 @@ impl BodyLowerer<'_, '_> {
         })
     }
 
-    /// The twin of [`Lowerer::bad_value`], for the fields a *body* writes:
-    /// a control's `colors` and `font` are tables checked here rather than at
-    /// the top level, since the write is a statement (§15.32).
+    /// The twin of [`Lowerer::bad_value`], for the fields a *body* writes: a
+    /// control's `colors` and `font` are tables checked here rather than at the
+    /// top level, since the write is a statement.
     pub(super) fn bad_value(&mut self, span: Span, what: &str, wanted: &str, note: &str) {
         self.diags.push(
             Diagnostic::error(
@@ -7411,8 +7406,8 @@ impl BodyLowerer<'_, '_> {
     fn undefined(&mut self, name: &Name) {
         // An NSIS instruction with a Lua spelling is not an unknown name: the
         // compiler knows exactly what it is, and the generic error would tell
-        // an NSIS user that it had never heard of the instruction they use most
-        // (§5). Checked first, because `strCmp` is also within one case-fold of
+        // an NSIS user that it had never heard of the instruction they use
+        // most. Checked first, because `strCmp` is also within one case-fold of
         // nothing else.
         if let Some(retired) = crate::retired::lookup(&name.text) {
             self.diags.push(
@@ -7437,11 +7432,11 @@ impl BodyLowerer<'_, '_> {
         );
         diagnostic = match crate::builtins::nearest(&name.text) {
             // camelCase in, NSIS casing out — so `detailprint` is a spelling
-            // mistake with an obvious fix rather than an unknown name (§6).
+            // mistake with an obvious fix rather than an unknown name.
             Some(suggestion) => diagnostic.note(format!("did you mean `{suggestion}`?")),
             None => diagnostic.note(
                 "resolution is order-free, so this means nowhere in the file — not merely \
-                 not yet (§15.6)",
+                 not yet",
             ),
         };
         self.diags.push(diagnostic);
@@ -7455,9 +7450,9 @@ impl BodyLowerer<'_, '_> {
 /// The build-machine half of `for … in glob(…)`.
 ///
 /// Deliberately not a dependency: the pattern language is one directory and one
-/// filename with `*` and `?` in it, which is what §7 exposes and what the five
-/// programs use. Anything larger is a shell's job, and `BUILD.system` is where
-/// a shell belongs (§15.8).
+/// filename with `*` and `?` in it, which is what the compile-time surface
+/// exposes and what the five programs use. Anything larger is a shell's job,
+/// and `BUILD.system` is where a shell belongs.
 ///
 /// Paths come back **as the source would have written them**, with `/` and
 /// relative to the source's directory, so the emitter's path handling applies
@@ -7519,7 +7514,7 @@ fn todo_at(diags: &mut Diagnostics, span: Span, what: &str) {
             span,
             format!("{what} is not in this version's exposed set"),
         )
-        .note("it is scheduled rather than missing: `installua coverage` counts it (PLAN §0)"),
+        .note("it is scheduled rather than missing: `installua coverage` counts it"),
     );
 }
 

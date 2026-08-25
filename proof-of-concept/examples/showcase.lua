@@ -1,10 +1,10 @@
--- One construct from each language group (§11). `demo.lua` is the minimal
+-- One construct from each language group. `demo.lua` is the minimal
 -- input; this one exercises everything the PoC lowers.
 
 local winver = import "WinVer"
 local nsExec = plugin "nsExec"
 
--- Compile-time (§7). `<const>` is `!define`; `pre.*` ran on the build machine,
+-- Compile-time. `<const>` is `!define`; `pre.*` ran on the build machine,
 -- and the namespace is what makes the stage legible in the source.
 local APP     <const> = "Example"
 local VERSION <const> = "1.4.2"
@@ -17,7 +17,7 @@ installer {
   installDir = [[$PROGRAMFILES\Example]],
 }
 
--- Arithmetic and strings (§4, §5). `//` is NSIS's `/` and `%` follows the
+-- Arithmetic and strings. `//` is NSIS's `/` and `%` follows the
 -- dividend; Lua's `/` and `^` mean something else again and are rejected.
 -- `..` costs no instructions: it becomes one NSIS string template.
 function reportBudget()
@@ -62,8 +62,8 @@ section("Core", function()
 
   reportBudget()
   nsExec.execToLog([[cmd /c ver]])
-  -- No `writeUninstaller` here: uninstaller duality is a group of its own
-  -- (§13), and `makensis` rejects the call without an `un.` section.
+  -- No `writeUninstaller` here: uninstaller duality is a group of its own, and
+  -- `makensis` rejects the call without an `un.` section.
 end)
 
 sectionGroup("Optional components", { expanded = true }, function()

@@ -3,11 +3,11 @@
 //! Two tiers, both live from this phase on:
 //!
 //!   * tier 2 — the golden `.nsi` is compared by **exact equality**.
-//!     `assert!(out.contains(…))` is banned (§14): it passes on output carrying
-//!     one spurious `StrCpy` too many, which is the failure mode of every
-//!     compiler this one is trying not to be.
-//!   * tier 3 — `makensis -WX` with an empty warning allowlist, skipped
-//!     cleanly when `makensis` is not installed.
+//!     `assert!(out.contains(…))` is banned: it passes on output carrying one
+//!     spurious `StrCpy` too many, which is the failure mode of every compiler
+//!     this one is trying not to be.
+//!   * tier 3 — `makensis -WX` with an empty warning allowlist, skipped cleanly
+//!     when `makensis` is not installed.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -34,7 +34,7 @@ fn the_spine_matches_its_golden() {
 
 /// `Unicode` leads, and it leads even when nothing asked for it — a later `raw`
 /// then overrides it rather than being silently overridden, since NSIS takes
-/// the last one with no diagnostic either way (§15.16).
+/// the last one with no diagnostic either way.
 #[test]
 fn unicode_is_always_first() {
     let output = build(r#"attributes { outFile = "a.exe" }"#);
@@ -44,9 +44,9 @@ fn unicode_is_always_first() {
     assert_eq!(output.lines().next(), Some("Unicode false"));
 }
 
-/// A string literal is data, never a template, so every `$` is doubled (§15.1).
-/// `$5` is the case that needs no warning: in raw NSIS it is register 5, and
-/// here it is five dollars, correctly.
+/// A string literal is data, never a template, so every `$` is doubled. `$5` is
+/// the case that needs no warning: in raw NSIS it is register 5, and here it is
+/// five dollars, correctly.
 #[test]
 fn literals_are_data() {
     let output = build(&program(r#"detailPrint("costs $5")"#));
@@ -56,7 +56,7 @@ fn literals_are_data() {
 /// And `${NOPE}` is the case that does. The doubling is what keeps it from
 /// shipping as warning 6000 plus a silently wrong installer — but a `$` in
 /// front of an identifier is muscle memory rather than intent, so it is also
-/// diagnosed (§5).
+/// diagnosed.
 #[test]
 fn a_sigil_in_a_literal_is_diagnosed_and_escaped() {
     let mut diags = Diagnostics::new();
@@ -86,7 +86,7 @@ fn detail_print(output: &str) -> String {
 }
 
 /// A path position takes `/` and emits `\`, because NSIS does not accept a
-/// forward slash everywhere and §5 does not leave that to the user. A
+/// forward slash everywhere and Installua does not leave that to the user. A
 /// non-path position is left alone.
 #[test]
 fn path_positions_are_normalised() {
@@ -109,10 +109,10 @@ installer {
     );
 }
 
-/// Tier 3, live from Phase 1 (§14). The allowlist is empty: a `$`-sigil
-/// mistake, a mis-ordered `!define` and an unknown `${FOO}` are all warning
-/// 6000 plus a silently wrong installer, so a test that checks only the exit
-/// code passes on precisely the bugs this compiler exists to prevent.
+/// Tier 3, live from Phase 1. The allowlist is empty: a `$`-sigil mistake, a
+/// mis-ordered `!define` and an unknown `${FOO}` are all warning 6000 plus a
+/// silently wrong installer, so a test that checks only the exit code passes on
+/// precisely the bugs this compiler exists to prevent.
 #[test]
 fn the_spine_assembles_under_wx() {
     let Some(makensis) = makensis() else {

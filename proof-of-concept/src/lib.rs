@@ -1,6 +1,6 @@
 //! Luis proof of concept: compile a Lua-shaped source file to NSIS.
 //!
-//! Four phases (§9-1): parse -> check -> lower -> emit. The subset covered is
+//! Four phases: parse -> check -> lower -> emit. The subset covered is
 //! deliberately tiny — `installer { name, outFile }` plus `section` bodies made
 //! of constant-argument instruction calls.
 

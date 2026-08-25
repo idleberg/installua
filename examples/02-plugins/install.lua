@@ -1,4 +1,4 @@
--- Program 2 of five (PLAN Phase 0, §11): plugin-heavy.
+-- Program 2 of five: plugin-heavy.
 --
 -- The point of this one is the stack ABI and the opaque-clobber rule. Three
 -- callees clobber everything — `plugin`, `System::Call` and `raw` — and this
@@ -6,7 +6,7 @@
 --
 -- Note what is *not* here: `Push`, `Pop` and `Exch` have no Installua spelling.
 -- A plugin's output count comes from its declaration in `.installua/headers/`,
--- which is what makes `local rc, out = …` legal at all (§11).
+-- which is what makes `local rc, out = …` legal at all.
 
 local APP <const> = "Example2"
 
@@ -21,7 +21,7 @@ attributes {
 	requestExecutionLevel = "admin",
 }
 
--- A global, because §13's `raw` rule says no local survives a `raw` block, so a
+-- A global, because no local survives a `raw` block, so a
 -- value that has to cross one goes through the honest channel.
 gitDescribe = ""
 
@@ -59,8 +59,8 @@ installer {
 		detailPrint(label .. " reported " .. out)
 
 		-- `System::Call` is the second opaque callee, and it is opaque because
-		-- `.r0` inside that string writes a register nothing in the AST records
-		-- (§13). `.s` pushes instead, which the declaration can describe.
+		-- `.r0` inside that string writes a register nothing in the AST records.
+		-- `.s` pushes instead, which the declaration can describe.
 		-- `out` is still live here, so this is the one call site in the five
 		-- programs where a caller-save actually fires.
 		local ticks = system.call("kernel32::GetTickCount() i .s")

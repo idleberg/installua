@@ -44,7 +44,7 @@ description = "cargo clippy — hk's pre-commit check step"
 run = "cargo clippy --all-targets -- --deny warnings"
 
 [tasks.coverage]
-description = "tests/golden/coverage.txt — the §14 census"
+description = "tests/golden/coverage.txt — the command census"
 run = "cargo run -q -- coverage > tests/golden/coverage.txt"
 
 [tasks.goldens]

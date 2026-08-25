@@ -26,11 +26,9 @@ verified: touching one fixture changes the hash, and program 5, which packs noth
 the only one that matches across checkouts.
 
 `SetDateSave off` makes it mtime-independent and the output identical again — also
-verified. That is an NSIS script attribute, so by §13's rule it belongs in `attributes {}`
+verified. That is an NSIS script attribute, so it belongs in `attributes {}`
 as `dateSave`, and it is **not** defaulted to `false`: dropping the packed files'
-timestamps is a real behaviour change and the user's call to make. It is recorded in
-`PHASE-0.md` as an attribute worth exposing with the reproducible-builds argument
-attached.
+timestamps is a real behaviour change and the user's call to make.
 
 So the gate asserts **run-to-run determinism in a fixed tree**, which is what catches an
 `.nsi` that embeds a build timestamp. Cross-machine reproducibility is available, opt-in,
@@ -91,7 +89,7 @@ that is pure where `errors()` is not.
 `name` · `outFile` · `unicode` · `compressor` · `requestExecutionLevel` · `installDir` ·
 `icon` · `caption` · `manifest.*` · `versionInfo.product` · `versionInfo.keys` · `crcCheck`
 
-**Pages — 7**, as positional entries in `installer {}` and `uninstaller {}` (§15.7):
+**Pages — 7**, as positional entries in `installer {}` and `uninstaller {}`:
 `page.welcome` · `page.license` · `page.components` · `page.directory` · `page.instFiles` ·
 `page.finish` · `page.confirm`
 
@@ -100,7 +98,7 @@ that is pure where `errors()` is not.
 `attributes` · `installer` · `uninstaller` · `languages` · `section` · `sectionGroup` ·
 `func` · `onInit`
 
-**Operators — all of §6**, since they are the compiler rather than the overlay.
+**Operators — all of them**, since they are the compiler rather than the overlay.
 
 **Stdlib adapters — 7**
 
@@ -127,7 +125,7 @@ Ten, out of roughly seventy:
 PLAN calls the `MUI_*` volume the most likely thing to make v1 feel incomplete. Ten of
 seventy is the number behind that.
 
-## §15.14's open empirical question, answered weakly
+## The lattice's open empirical question, answered weakly
 
 *How often does the type lattice land on `unknown`?* Across all five programs: **zero
 times**. The reason is more useful than the number — types enter almost entirely through

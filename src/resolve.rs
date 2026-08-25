@@ -1,11 +1,11 @@
-//! Order-free name resolution (§15.6, §12).
+//! Order-free name resolution.
 //!
 //! Every top-level name is resolved before any body is lowered, so a section on
 //! line 3 can call a `func` declared on line 300 and read a `<const>` defined
 //! below it. That is possible only because Installua **compiles** rather than
 //! transliterates: there is no build-time execution for an ordering rule to be
 //! about, so the order things appear in the source is decoupled from the order
-//! they appear in the output (§15.6).
+//! they appear in the output.
 //!
 //! It is worth being deliberate that this diverges from Lua, which does not
 //! hoist — `function greet() end` is sugar for an assignment executed in order,
@@ -16,7 +16,7 @@
 //! NSIS itself is inconsistent about this, which is why hoisting is the
 //! compiler's job rather than the user's: `Function`/`Call` resolves late,
 //! `Var` and `!include` are hard errors when used early, and a mis-ordered
-//! `!define` is a *warning* that silently ships the wrong string (§12).
+//! `!define` is a *warning* that silently ships the wrong string.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -26,8 +26,8 @@ use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 use crate::lower::control::{self, Control};
 use crate::types::Ty;
 
-/// A compile-time value. These never reach a register: `<const>` is build-time
-/// (§7-1), so a use folds rather than reads.
+/// A compile-time value. These never reach a register: `<const>` is build-time,
+/// so a use folds rather than reads.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConstValue {
     Int(i64),
@@ -39,7 +39,7 @@ impl ConstValue {
     pub fn ty(&self) -> Ty {
         match self {
             // A literal's sign is known, and that is the cheapest place the
-            // lattice ever learns it (§15.14).
+            // lattice ever learns it.
             ConstValue::Int(value) if *value >= 0 => Ty::nonneg(),
             ConstValue::Int(_) => Ty::int(),
             ConstValue::Str(_) => Ty::Str,
@@ -70,13 +70,12 @@ pub struct Const {
 /// `fileFunc.getSize(…)` is one macro expansion rather than a field access
 /// followed by a call. Binding it to a name is what makes the namespace
 /// *visible* — three namespaces exist and NSIS enforces the boundary between
-/// them (§13), so the name a user chooses is how they tell which is which.
+/// them, so the name a user chooses is how they tell which is which.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Namespace {
     /// A `!include`d header: its macros are `${Name}`.
     Header(String),
-    /// A plugin: its methods are `Plugin::Method`, and it clobbers everything
-    /// (§15.11).
+    /// A plugin: its methods are `Plugin::Method`, and it clobbers everything.
     Plugin(String),
 }
 
@@ -93,9 +92,9 @@ impl Namespace {
 ///
 /// Not a value either, for the same reason a namespace is not: there is nothing
 /// at run time for `core` to be. NSIS spells a section as an *index*, and the
-/// local is how the author addresses one without ever saying the number — §13's
-/// binding, and the reason the set of sections is never enumerated by the
-/// compiler (`PHASE-6-SECTIONS.md` ruling 1).
+/// local is how the author addresses one without ever saying the number — the
+/// section binding, and the reason the set of sections is never enumerated by
+/// the compiler.
 ///
 /// The call is held rather than lowered, because lowering it needs the construct
 /// that lists it: a section's half and its block's install types, a control's
@@ -150,7 +149,7 @@ pub struct Func<'a> {
     pub span: Span,
 }
 
-/// A global, declared by assigning to it (§15.24).
+/// A global, declared by assigning to it.
 #[derive(Clone, Debug)]
 pub struct Global {
     pub name: String,
@@ -163,7 +162,7 @@ pub struct Global {
 pub struct Resolved<'a> {
     pub consts: BTreeMap<String, Const>,
     /// Top-level `<const>` names in **source order**, because each becomes a
-    /// `!define` and the preprocessor is strictly sequential (§12). The map is
+    /// `!define` and the preprocessor is strictly sequential. The map is
     /// alphabetical and the output is not.
     pub const_order: Vec<String>,
     /// Header and plugin namespaces, by the local name they were bound to.
@@ -171,12 +170,12 @@ pub struct Resolved<'a> {
     /// Sections and groups waiting for the block that lists them, by the local
     /// name they were bound to.
     pub deferred: BTreeMap<String, Deferred<'a>>,
-    /// Those names in source order, so that "never claimed" is reported where it
-    /// was written rather than alphabetically (§14).
+    /// Those names in source order, so that "never claimed" is reported where
+    /// it was written rather than alphabetically.
     pub deferred_order: Vec<String>,
     pub functions: BTreeMap<String, Func<'a>>,
     /// In first-seen order, because `Var` declarations are emitted in it and
-    /// §14 diffs goldens.
+    /// the goldens are diffed.
     pub globals: Vec<Global>,
 }
 
@@ -214,7 +213,7 @@ fn top_level<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut 
                     stmt.span(),
                     "`func` takes a name and a body",
                 )
-                .note("write `func(\"name\", function(…) … end)` (§3)"),
+                .note("write `func(\"name\", function(…) … end)`"),
             );
             continue;
         };
@@ -230,7 +229,7 @@ fn top_level<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut 
                     "the first one is at line {}",
                     previous.span.start_line
                 ))
-                .note("resolution is order-free, so there is no later one that wins (§15.6)"),
+                .note("resolution is order-free, so there is no later one that wins"),
             );
             continue;
         }
@@ -265,7 +264,7 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
 
         // `local fileFunc = import "FileFunc"` is not a value binding at all —
         // it names a namespace, which is why it is the one non-`<const>`
-        // `local` the top level accepts (§15.27).
+        // `local` the top level accepts.
         if !is_const
             && let ([name], [value]) = (names.as_slice(), values.as_slice())
             && let Some(namespace) = namespace(value, diags)
@@ -274,9 +273,9 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
             continue;
         }
 
-        // `local core = section { … }` names a section so that install-time code
-        // can address it. Held here and lowered by the block that lists it,
-        // which is the only place its half is known (§15.6).
+        // `local core = section { … }` names a section so that install-time
+        // code can address it. Held here and lowered by the block that lists
+        // it, which is the only place its half is known.
         if !is_const
             && let ([name], [value]) = (names.as_slice(), values.as_slice())
             && let Some(kind) = deferred_kind(value)
@@ -292,7 +291,7 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
                         "the first one is at line {}",
                         previous.span.start_line
                     ))
-                    .note("resolution is order-free, so there is no later one that wins (§15.6)"),
+                    .note("resolution is order-free, so there is no later one that wins"),
                 );
                 continue;
             }
@@ -321,7 +320,7 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
                 )
                 .note(
                     "write `local X <const> = …` for a build-time value, or assign to a bare \
-                     name for a global (§15.24)",
+                     name for a global",
                 )
                 .note(
                     "`local x = section { … }` is the other one: it names a section for a block \
@@ -383,7 +382,7 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
             )
             .note(
                 "a `<const>` folds at compile time, so its value has to be a literal or built \
-                 from other `<const>`s (§7-1)",
+                 from other `<const>`s",
             ),
         );
     }
@@ -437,7 +436,7 @@ fn namespace(value: &Expr, diags: &mut Diagnostics) -> Option<Namespace> {
             )
             .note(format!(
                 "write `local x = {} \"Name\"`, with a literal — a header is read at build \
-                 time, so there is nothing for a computed name to be (§15.27)",
+                 time, so there is nothing for a computed name to be",
                 callee.text
             )),
         );
@@ -446,8 +445,8 @@ fn namespace(value: &Expr, diags: &mut Diagnostics) -> Option<Namespace> {
     Some(build(name.value.clone()))
 }
 
-/// Pass 1c: globals. A bare assignment declares one (§15.24), and it can happen
-/// anywhere — inside a section, inside a `func` — so this walks every body.
+/// Pass 1c: globals. A bare assignment declares one, and it can happen anywhere
+/// — inside a section, inside a `func` — so this walks every body.
 fn globals(program: &Program, resolved: &mut Resolved<'_>) {
     let mut scopes: Vec<HashSet<String>> = vec![HashSet::new()];
     let mut found: Vec<Global> = Vec::new();
@@ -621,8 +620,8 @@ fn bound(scopes: &[HashSet<String>], name: &str) -> bool {
     scopes.iter().any(|scope| scope.contains(name))
 }
 
-/// Constant folding (§7-2), which is also why `!if`/`!ifdef` never need a
-/// surface spelling: a `<const>` condition folds before a branch is ever built.
+/// Constant folding, which is also why `!if`/`!ifdef` never need a surface
+/// spelling: a `<const>` condition folds before a branch is ever built.
 ///
 /// `lookup` is a closure rather than a map so that the same function serves the
 /// top-level pass, where only top-level constants are visible, and a body,
@@ -669,15 +668,15 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
 }
 
 /// Integer folding at Lua's semantics, not NSIS's — `//` floors and `%` takes
-/// the sign of the divisor (§15.4). Folding is the one place the fixup is free,
-/// because it happens in Rust.
+/// the sign of the divisor. Folding is the one place the fixup is free, because
+/// it happens in Rust.
 fn integer(op: BinOp, a: i64, b: i64) -> Option<i64> {
     match op {
         BinOp::Add => Some(a.wrapping_add(b)),
         BinOp::Sub => Some(a.wrapping_sub(b)),
         BinOp::Mul => Some(a.wrapping_mul(b)),
         // Lua floors and NSIS truncates, so folding does what Lua says and the
-        // runtime lowering carries the fixup (§15.4).
+        // runtime lowering carries the fixup.
         BinOp::FloorDiv if b != 0 => {
             let (quotient, remainder) = (a.wrapping_div(b), a.wrapping_rem(b));
             Some(quotient - i64::from(remainder != 0 && (remainder < 0) != (b < 0)))

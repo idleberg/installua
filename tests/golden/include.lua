@@ -1,4 +1,4 @@
--- Three files, one program (§15.28).
+-- Three files, one program.
 --
 -- The point of the golden is what the `.nsi` does *not* show: no marker, no
 -- ordering artefact, nothing that says which file a line came from. `include`

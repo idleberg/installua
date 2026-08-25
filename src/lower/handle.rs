@@ -1,8 +1,8 @@
 //! Handles and their fields: `core.selected`, `docs.text = ""`, `serial.value`.
 //!
-//! A handle is the §13 binding made runtime-visible. `local core = section { … }`
-//! binds no value — there is nothing at run time for `core` to *be* — and the
-//! block that lists it turns it into a `!define`, so `core.selected` is
+//! A handle is the section binding made runtime-visible. `local core = section
+//! { … }` binds no value — there is nothing at run time for `core` to *be* —
+//! and the block that lists it turns it into a `!define`, so `core.selected` is
 //! `SectionGetFlags ${SEC_core}` and the bit test after it. The number NSIS
 //! actually wants never appears in the source, which is the whole point: a
 //! section can be moved, renamed or given a sibling and nothing renumbers.
@@ -15,12 +15,12 @@
 //! clobbers `$0`, and this compiler has a register allocator, so it emits the
 //! three instructions itself (ruling 6).
 //!
-//! A **control**'s field is the same surface over a different mechanism, and the
-//! difference is worth naming: a section's seven fields are seven bits of one
-//! word, so every write is a read-modify-write, and a control's seven are seven
-//! separate instructions, so none of them is. What the two share is the four
-//! claim rules — a control named from the half that did not draw it is rule 4 in
-//! the same words with a `Var` in place of an index (§15.32).
+//! A **control**'s field is the same surface over a different mechanism, and
+//! the difference is worth naming: a section's seven fields are seven bits of
+//! one word, so every write is a read-modify-write, and a control's seven are
+//! seven separate instructions, so none of them is. What the two share is the
+//! four claim rules — a control named from the half that did not draw it is
+//! rule 4 in the same words with a `Var` in place of an index.
 
 use crate::ast::{Expr, Name, TableField};
 use crate::diag::{Code, Diagnostic, Span};
@@ -148,11 +148,11 @@ impl BodyLowerer<'_, '_> {
                     .note(match kind.is_control() {
                         true => {
                             "the two halves are two executables: the other's dialog is not drawn \
-                             here, so its handle is a `Var` that never gets a window (§15.32)"
+                             here, so its handle is a `Var` that never gets a window"
                         }
                         false => {
                             "the two halves are two executables: an index from one is a number \
-                             the other's sections do not share (§13)"
+                             the other's sections do not share"
                         }
                     }),
                 );
@@ -175,9 +175,9 @@ impl BodyLowerer<'_, '_> {
         // A window this compiler did not draw, in a register: `getDlgItem`
         // reaches MUI2's own buttons, and `findWindow` reaches other programs'.
         // The lattice has one `handle` type covering files, registry roots and
-        // windows alike (§15.14), so this accepts more than it should — a
-        // `fileOpen` handle has an `enabled` here — and narrowing it is a fifth
-        // type rather than a check.
+        // windows alike, so this accepts more than it should — a `fileOpen`
+        // handle has an `enabled` here — and narrowing it is a fifth type
+        // rather than a check.
         match self.lookup(name) {
             Some(Binding::Local { slot, ty }) if *ty == Ty::Handle || *ty == Ty::Unknown => {
                 Some(Addressed::Control(ControlHandle {
@@ -301,7 +301,7 @@ impl BodyLowerer<'_, '_> {
         );
         diagnostic = if self.lang_strings.is_empty() {
             diagnostic.note(
-                "nothing declares one: `languages { locales = { English = { … } } }` is where                  they live (§15.26)",
+                "nothing declares one: `languages { locales = { English = { … } } }` is where                  they live",
             )
         } else {
             let names: Vec<&str> = self.lang_strings.iter().map(String::as_str).collect();
@@ -323,8 +323,7 @@ impl BodyLowerer<'_, '_> {
     /// choice that matters: the closure is written inside a section body and
     /// reads that body's locals, and a generated `Function` would put them out
     /// of scope. Reverse postorder is what makes it safe — the blocks the body
-    /// creates all reach the join, so they are laid out between the two lines
-    /// (§8-2).
+    /// creates all reach the join, so they are laid out between the two lines.
     pub(super) fn start_menu_write(
         &mut self,
         base: &str,
@@ -465,7 +464,7 @@ impl BodyLowerer<'_, '_> {
                     )
                     .note(
                         "the installer reads the variable the page filled in and the uninstaller \
-                         reads the registry, and a `func` is called by both (§15.3)",
+                         reads the registry, and a `func` is called by both",
                     )
                     .note("read `menu.folder` in the section or callback that needs it"),
                 );
@@ -487,8 +486,8 @@ impl BodyLowerer<'_, '_> {
                     vec![index, ir::Arg::dest(flags.clone())],
                 ));
                 // Down to bit 0 and masked. A `bool` in this compiler is `0` or
-                // `1` and nothing else (§15.20), so `SF_RO` being 16 is not a
-                // truth value that happens to work — it is the wrong number.
+                // `1` and nothing else, so `SF_RO` being 16 is not a truth
+                // value that happens to work — it is the wrong number.
                 let source = if shift == 0 {
                     ir::Arg::slot(flags)
                 } else {
@@ -547,7 +546,7 @@ impl BodyLowerer<'_, '_> {
                         "NSIS stores it as a bit field and this language has no list to decode \
                          it into",
                     )
-                    .note("ask about one of them: `if core.installTypes(\"Full\") then` (§13)"),
+                    .note("ask about one of them: `if core.installTypes(\"Full\") then`"),
                 );
                 None
             }
@@ -565,8 +564,8 @@ impl BodyLowerer<'_, '_> {
     /// as a call on the field the write assigns to — the name is the argument
     /// because the answer is one bit and the bit is which name.
     ///
-    /// The position is the compiler's on both sides (§13): inserting a type at
-    /// the front of the block's `installTypes` moves this read along with every
+    /// The position is the compiler's on both sides: inserting a type at the
+    /// front of the block's `installTypes` moves this read along with every
     /// `SectionSetInstTypes` and every `SetCurInstType`.
     pub(super) fn inst_type_member(
         &mut self,
@@ -583,7 +582,7 @@ impl BodyLowerer<'_, '_> {
                     field.span,
                     "`installTypes` is a section's, and this is a control",
                 )
-                .note("a control is drawn on a page; an install type picks sections (§13)"),
+                .note("a control is drawn on a page; an install type picks sections"),
             );
             return None;
         };
@@ -630,8 +629,8 @@ impl BodyLowerer<'_, '_> {
             ],
         ));
         // Down to bit 0 and masked, exactly as a flag read is: a `bool` in this
-        // compiler is `0` or `1` and nothing else (§15.20), so the bit's own
-        // value is the wrong number even where it is truthy.
+        // compiler is `0` or `1` and nothing else, so the bit's own value is
+        // the wrong number even where it is truthy.
         let source = if position == 0 {
             ir::Arg::slot(types)
         } else {
@@ -748,8 +747,8 @@ impl BodyLowerer<'_, '_> {
                     );
                     return;
                 }
-                // A `bool` is already `0` or `1` (§15.20), so the mask below
-                // is skipped: the invariant is the reason the type exists.
+                // A `bool` is already `0` or `1`, so the mask below is skipped:
+                // the invariant is the reason the type exists.
                 masked = typed.ty == Ty::Bool;
                 Some(typed.arg)
             }
@@ -878,7 +877,7 @@ impl BodyLowerer<'_, '_> {
                 // does not implement it.
                 None => diagnostic.note(format!(
                     "`{}` is a window this program did not draw, so its kind is not known here: \
-                     the fields that need one are on a control a `page.custom` lists (§15.32)",
+                     the fields that need one are on a control a `page.custom` lists",
                     handle.base
                 )),
             });
@@ -900,7 +899,7 @@ impl BodyLowerer<'_, '_> {
                 .note(format!(
                     "`{}` sets it and NSIS has no instruction that asks, so a read here would \
                      have to be a value this compiler remembered rather than one the window \
-                     reported (§15.32)",
+                     reported",
                     what.setter()
                 )),
             );
@@ -928,9 +927,9 @@ impl BodyLowerer<'_, '_> {
                 Some(Ty::Str)
             }
             // `BM_GETCHECK` answers `BST_UNCHECKED` or `BST_CHECKED`, which are
-            // 0 and 1. The third answer, `BST_INDETERMINATE`, needs `BS_3STATE`,
-            // and no kind in this table carries it — so the `bool` is a fact
-            // about the styles above rather than a hope (§15.20).
+            // 0 and 1. The third answer, `BST_INDETERMINATE`, needs
+            // `BS_3STATE`, and no kind in this table carries it — so the `bool`
+            // is a fact about the styles above rather than a hope.
             _ => {
                 self.emit(ir::Instruction::new(
                     "SendMessage",
@@ -996,9 +995,9 @@ impl BodyLowerer<'_, '_> {
                 self.emit(ir::Instruction::new("EnableWindow", vec![hwnd(), state]));
             }
             // `ShowWindow`'s are `SW_HIDE` and `SW_SHOW`, which are 0 and 5, so
-            // a literal picks one and anything else is multiplied up. Five times
-            // a value that is 0 or 1 is 0 or 5, and the `bool` invariant is what
-            // makes that an identity rather than a trick (§15.20).
+            // a literal picks one and anything else is multiplied up. Five
+            // times a value that is 0 or 1 is 0 or 5, and the `bool` invariant
+            // is what makes that an identity rather than a trick.
             ControlField::Visible => {
                 let state = match self.constant(value) {
                     Some(ConstValue::Bool(true)) => Some(ir::Arg::int(control::SW_SHOW.into())),
@@ -1178,9 +1177,9 @@ impl BodyLowerer<'_, '_> {
 
     /// `{ "Full", "Minimal" }` as the bit field `SectionSetInstTypes` reads.
     ///
-    /// Compile-time, and it has to be: the names are the block's declaration and
-    /// the positions exist in exactly one place, so a runtime list would be a
-    /// second numbering to keep in step with the first (§13).
+    /// Compile-time, and it has to be: the names are the block's declaration
+    /// and the positions exist in exactly one place, so a runtime list would be
+    /// a second numbering to keep in step with the first.
     fn inst_type_mask(&mut self, value: &Expr) -> Option<i64> {
         let Expr::Table { fields, .. } = value else {
             self.diags.push(
@@ -1191,7 +1190,7 @@ impl BodyLowerer<'_, '_> {
                 )
                 .note(
                     "write `installTypes = { \"Full\" }`, naming types the block declares; the \
-                     positions are the compiler's (§13)",
+                     positions are the compiler's",
                 ),
             );
             return None;

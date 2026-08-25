@@ -1,6 +1,5 @@
-//! §14's census: every `-CMDHELP` line lands in exactly one bucket, and the
-//! join between the generated and hand-written halves is total in both
-//! directions.
+//! The census: every `-CMDHELP` line lands in exactly one bucket, and the join
+//! between the generated and hand-written halves is total in both directions.
 //!
 //! This is the test that makes coverage a computed number rather than a
 //! document somebody remembers to update. An unclassified command fails the
@@ -8,8 +7,8 @@
 //! an annotation list that is not as long as the parameter list it annotates.
 //!
 //! Two of these run against the **checked-in snapshot**, so CI needs no NSIS at
-//! all, and one runs against whatever `makensis` is on `PATH` and skips
-//! cleanly when there is none (§9-7).
+//! all, and one runs against whatever `makensis` is on `PATH` and skips cleanly
+//! when there is none.
 
 use std::collections::BTreeSet;
 use std::process::Command;
@@ -89,8 +88,8 @@ fn every_exposed_row_judges_every_flag() {
     // type, nothing downstream goes wrong loudly.
     //
     // Saying "not this one, and here is why" is a legal answer. `File`'s `/x`
-    // takes a value and repeats; `MessageBox`'s `/SD` belongs with §15.18. What
-    // is refused is silence.
+    // takes a value and repeats; `MessageBox`'s `/SD` belongs with
+    // `messageBox`. What is refused is silence.
     let mismatched: Vec<String> = table::table()
         .iter()
         .filter(|entry| entry.class == Class::Exposed)
@@ -137,9 +136,9 @@ fn every_exposed_row_has_an_installua_name() {
 
 #[test]
 fn the_buckets_and_the_classes_are_one_vocabulary() {
-    // §14 lists seven buckets and §15.23 lists seven `Class` variants, and the
-    // whole point of the ruling is that they are the same seven. A variant
-    // whose `bucket()` is not in `BUCKETS` would be invisible to `coverage`.
+    // There are seven buckets and seven `Class` variants, and the whole point
+    // is that they are the same seven. A variant whose `bucket()` is not in
+    // `BUCKETS` would be invisible to `coverage`.
     let counted: usize = table::census().iter().map(|(_, count)| count).sum();
     assert_eq!(counted, table::table().len());
 }
@@ -162,7 +161,7 @@ fn prose_and_directive_lines_are_classified_as_what_they_are() {
             Note::Directive => assert_eq!(
                 entry.class,
                 Class::Directive,
-                "{} is a preprocessor command (§2)",
+                "{} is a preprocessor command",
                 entry.nsis
             ),
             _ => {}
@@ -314,7 +313,7 @@ fn only_an_exposed_row_is_callable() {
     // replaced it: `builtins::lookup` answers from the census, so a row is
     // callable exactly when its bucket says so. Without the filter, every
     // `Todo` row in the table would become a silently working call the moment
-    // the join found it a shape (§15.23).
+    // the join found it a shape.
     for entry in table::table() {
         let Some(name) = entry.installua else {
             continue;
@@ -330,7 +329,7 @@ fn only_an_exposed_row_is_callable() {
 
 #[test]
 fn the_surface_is_not_the_nsis_argument_list() {
-    // Two of §15.23's distinctions, as one claim about arity: an output is a
+    // Two of the table's distinctions, as one claim about arity: an output is a
     // Lua *return* rather than an argument, and a `Kind::Label` position is the
     // compiler's. `readRegStr` takes three arguments where `ReadRegStr` takes
     // four, and `fileExists` takes one where `IfFileExists` takes three.
@@ -343,7 +342,7 @@ fn the_surface_is_not_the_nsis_argument_list() {
     // And the brackets are real optionality, which is now said by *name* rather
     // than by counting: `CreateShortcut` takes exactly two arguments and six
     // named options, so no call site has to know that the description is the
-    // ninth position (§15.23).
+    // ninth position.
     let shortcut = installua::builtins::lookup("createShortcut").expect("createShortcut");
     assert_eq!(shortcut.arity(), 2..=2);
     let names: Vec<&str> = shortcut.fields().map(|(field, _)| field.name).collect();
@@ -457,8 +456,8 @@ fn an_optional_input_before_anything_else_can_be_filled() {
 
 #[test]
 fn coverage_matches_its_golden() {
-    // The golden is the burndown: a PR that moves twelve commands out of
-    // `todo` shows exactly which twelve here (§14).
+    // The golden is the burndown: a PR that moves twelve commands out of `todo`
+    // shows exactly which twelve here.
     let expected = include_str!("golden/coverage.txt");
     assert_eq!(table::coverage(), expected);
 }

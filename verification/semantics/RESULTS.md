@@ -1,12 +1,12 @@
 # Two runtime checks, because assembling is not correctness
 
 PLAN Phase 0. Both of these produce plausible-looking NSIS when wrong, which is exactly
-the failure mode `makensis -WX` cannot see. They are tier-4 tests (§14) — run under wine,
+the failure mode `makensis -WX` cannot see. They are tier-4 tests — run under wine,
 skip cleanly without it.
 
 ## `//` and `%` match Lua, including the signs
 
-§15.4 rules that an operator Installua *spells* like Lua must *behave* like Lua, and pays
+An operator Installua *spells* like Lua must *behave* like Lua, and the design pays
 for it with a fixup: NSIS's `IntOp /` truncates toward zero and its `%` takes the sign of
 the dividend, where Lua floors and takes the sign of the divisor.
 
@@ -40,7 +40,7 @@ between them, not two branches:
 _generated_sign_8:
 ```
 
-§15.4 estimated "roughly three instructions and a branch per operation". For the paired
+The estimate was "roughly three instructions and a branch per operation". For the paired
 case it is five instructions and one branch for **both**, which is cheaper than the
 estimate — and the pairing is common, since a program computing `a // b` usually wants
 `a % b` too.
@@ -117,12 +117,12 @@ All three numbers are load-bearing. `halves=4` is the *second* of two stack-pass
 arriving through two levels of call, so an argument or return pushed in the wrong order
 swaps it with `kib`. `countdown4=10` is `4+3+2+1`, which only comes out right if the
 recursive caller-save restores `n` at every depth — the compiler emits `Push $0` before the
-recursive call because §15.11's fixpoint put `$0` in `countdown`'s own clobber set, and
+recursive call because the fixpoint put `$0` in `countdown`'s own clobber set, and
 dropping that one line gives `countdown4=4` on an installer that still runs.
 
 `kib=0` is `8 // 1024`, and it carries the sign lattice: `string.len` is non-negative by
 construction, that travels out through the return type, and neither `//` in the program
-pays §15.4's fixup. The generated `budget` is one `IntOp`.
+pays the sign fixup. The generated `budget` is one `IntOp`.
 
 ### Reproducing
 
@@ -160,11 +160,11 @@ goes the other way: `string.sub(v, 1, dot - 1)` becomes `StrCpy $0 $0 <length> <
 where a length and an offset are not the two positions Lua wrote. Getting one of the two
 right and the other wrong yields `"2."` or `""`, and both assemble.
 
-**`div=-8` and `mod=8` are §15.4, and they are the numbers NSIS gets wrong.** `-504 // 64`
+**`div=-8` and `mod=8` are the Lua answers, and they are the numbers NSIS gets wrong.** `-504 // 64`
 truncates to `-7` and `-504 % 64` to `-56` under `IntOp`; Lua floors and takes the sign of
 the divisor, giving `-8` and `8`. The compiler emits the fixup here — and does not emit it
 for `string.len(s) // 1024` in program 4 — because `string.len` is non-negative by
-construction and the subtraction on line 44 is where the lattice loses that (§15.14).
+construction and the subtraction on line 44 is where the lattice loses that.
 
 **`fmt=0042` is `IntFmt`**, which is the whole of `string.format` that NSIS has: one
 integer and one specifier. `%s` and several arguments are `Class::Todo`.

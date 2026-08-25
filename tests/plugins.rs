@@ -1,5 +1,5 @@
 //! `ReserveFile`, both halves — the one NSIS command whose two alternatives are
-//! answered by two different things (§11).
+//! answered by two different things.
 //!
 //! `reserveFile(…)` is the first alternative and an ordinary row: the same
 //! parameter list `file` has, minus `/a`. Nothing here is about it that is not

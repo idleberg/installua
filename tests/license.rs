@@ -1,4 +1,4 @@
-//! A license page whose text is translated — `LicenseLangString` (§15.26).
+//! A license page whose text is translated — `LicenseLangString`.
 //!
 //! NSIS keeps the license out of the language tables it keeps everything else
 //! in: a `LangString` holds a string, a `LicenseLangString` holds a *file*, and
@@ -188,7 +188,7 @@ fn a_key_that_is_not_a_language_is_refused() {
 /// `${LANG_…}` each line names is defined by the `MUI_LANGUAGE` above it, and
 /// every page macro has to precede every one of those.
 ///
-/// Skips cleanly when there is no `makensis`, the same trade §14 makes
+/// Skips cleanly when there is no `makensis`, the same trade the tests make
 /// everywhere else.
 #[test]
 fn a_translated_license_assembles_under_wx() {

@@ -1,4 +1,4 @@
-//! CLI (§9-7): no shelling out to `makensis`, real exit codes, `--stdout`.
+//! CLI: no shelling out to `makensis`, real exit codes, `--stdout`.
 
 use std::path::PathBuf;
 use std::process::ExitCode;

@@ -3,7 +3,7 @@
 //! A golden file would only say the generator is deterministic. What matters is
 //! that the editor and the compiler agree: every field the stub offers is a
 //! field `attributes {}` accepts, every function it declares is callable, and
-//! nothing a `LoweringTarget` would teach appears in it at all (§15.23).
+//! nothing a `LoweringTarget` would teach appears in it at all.
 
 use installua::diag::{Code, Diagnostics};
 use installua::{stubs, table};
@@ -116,8 +116,8 @@ fn page_classes(meta: &str) -> Vec<(String, String)> {
 /// written into the half that has one.
 fn page_program(page: &str, halves: [bool; 2], field: &str) -> String {
     // The start menu page is the one bound to a local, because MUI2 names it
-    // from install-time code (§13) — so it is declared outside the block and
-    // listed inside it.
+    // from install-time code — so it is declared outside the block and listed
+    // inside it.
     let (declare, entry) = if page == "startMenu" {
         ("local it = ".to_string(), "it".to_string())
     } else {
@@ -153,7 +153,8 @@ fn page_program(page: &str, halves: [bool; 2], field: &str) -> String {
 fn every_page_the_compiler_has_is_one_the_stub_offers() {
     // The direction that failed silently: `page.startMenu` compiled, and the
     // stub had never heard of it, so the editor called correct code undefined —
-    // the §1 failure, in the one part of the surface that is hand-written.
+    // the failure the stubs exist to prevent, in the one part of the surface
+    // that is hand-written.
     let meta = meta();
     let classes = page_classes(&meta);
 
@@ -444,9 +445,9 @@ fn every_control_field_and_option_the_stub_offers_is_one_the_compiler_accepts() 
 
 #[test]
 fn nothing_the_compiler_would_reject_is_completed() {
-    // A `LoweringTarget` in the stub is the failure §15.23 names: it would put
-    // `intCmp(a, b, "yes", "no", "maybe")` back into completion and bypass §8's
-    // condition design on day one. Checked against the retired table, since
+    // A `LoweringTarget` in the stub is the failure the table names: it would
+    // put `intCmp(a, b, "yes", "no", "maybe")` back into completion and bypass
+    // the condition design on day one. Checked against the retired table, since
     // that is the same set spelled the way a user would type it.
     let meta = meta();
     for row in installua::retired::all() {
@@ -463,7 +464,7 @@ fn nothing_the_compiler_would_reject_is_completed() {
 fn every_exposed_row_reaches_the_stub() {
     // The other direction: a row classified `exposed` that the generator drops
     // is a name the compiler accepts and the editor calls undefined, which is
-    // the warning-on-correct-code §1 exists to prevent.
+    // the warning-on-correct-code the stubs exist to prevent.
     let meta = meta();
     for entry in table::table().iter().filter(|entry| {
         entry.class == table::Class::Exposed
@@ -478,7 +479,7 @@ fn every_exposed_row_reaches_the_stub() {
     }
 
     // The same claim for the rows that are not functions. A `Kind::Bound`
-    // position means the row is reached through a name (§13): a field of the
+    // position means the row is reached through a name: a field of the
     // `installua.Section` class, or `currentInstType` itself. Dropping one of
     // those from the stub is the same warning-on-correct-code failure, one
     // shape over.
@@ -560,8 +561,8 @@ fn every_alias_the_stub_uses_is_one_it_declares() {
 
 #[test]
 fn the_project_meta_declares_what_a_project_declares() {
-    // §15.28: `include` is frontend-only, so every name an included file
-    // contributes would be an unknown global without this.
+    // `include` is frontend-only, so every name an included file contributes
+    // would be an unknown global without this.
     let source = "\
         func(\"kib\", function(bytes) return bytes // 1024 end)\n\
         state = \"fresh-install\"\n\
@@ -593,9 +594,9 @@ fn a_source_that_does_not_parse_contributes_nothing_and_fails_nothing() {
 
 #[test]
 fn the_selene_std_names_a_replacement_for_every_rejection() {
-    // §14's rule, as a lint: `deprecated = "deny"` in selene.toml makes the
-    // replacement text a failure rather than advice, so a rejection with no
-    // replacement is a lint that only says no.
+    // Warnings are failures, as a lint: `deprecated = "deny"` in selene.toml
+    // makes the replacement text a failure rather than advice, so a rejection
+    // with no replacement is a lint that only says no.
     let std = stubs::selene_std();
     for name in ["require", "pcall", "print", "pairs", "math.floor"] {
         let entry = std

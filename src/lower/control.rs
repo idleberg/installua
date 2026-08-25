@@ -1,14 +1,13 @@
-//! The controls a `page.custom` lists, and the numbers nsDialogs wants for them
-//! (§15.32).
+//! The controls a `page.custom` lists, and the numbers nsDialogs wants for
+//! them.
 //!
 //! `nsDialogs.nsh` spells a control as three defines — a window class, a style
 //! word and an extended style word — and `${NSD_CreateLabel}` is nothing but
 //! those three glued in front of `nsDialogs::CreateControl`. The table below is
-//! that header, read once and written down as numbers, because
-//! `PHASE-6-DIALOGS.md` ruling 5 is that **a program that uses a custom page
-//! includes nothing**: an emitted `${__NSD_Label_STYLE}` would need
-//! `nsDialogs.nsh`, and needing it is the include order this compiler exists to
-//! take off the user (§15.7).
+//! that header, read once and written down as numbers, because **a program that
+//! uses a custom page includes nothing**: an emitted `${__NSD_Label_STYLE}`
+//! would need `nsDialogs.nsh`, and needing it is the include order this
+//! compiler exists to take off the user.
 //!
 //! The style words are folded at compile time rather than emitted as an
 //! `|`-chain, so the output carries one number where the header carries six
@@ -306,7 +305,7 @@ pub const CONTROLS: &[Control] = &[
     // header and no manifest: the plugin is already loaded by the time any
     // control is made. What it does *not* do is open anything — a link is an
     // owner-drawn button that looks like one — so the click is where the URL
-    // lives (§15.32).
+    // lives.
     Control {
         installua: "link",
         class: "LINK",

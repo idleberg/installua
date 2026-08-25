@@ -1,4 +1,5 @@
--- Each line here is a §1 claim under test. The expected diagnostic is named in
+-- Each line here is an editor-tooling claim under test. The expected diagnostic
+-- is named in
 -- the comment; `expected.txt` is the machine-checked version.
 
 attributes {

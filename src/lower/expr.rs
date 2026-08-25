@@ -14,12 +14,11 @@
 //! exit criterion, and it is asserted as a property of the IR rather than
 //! inferred from the absence of a `StrCpy` in the output text — because a
 //! `contains` check passes on output carrying one spurious line, which is the
-//! failure mode this is trying to avoid (§14).
+//! failure mode this is trying to avoid.
 //!
 //! Materialising a boolean instead would burn registers there are only twenty
-//! of, which is nsL's issue #5. The same recursion serves all three callers
-//! §8 names: comparisons, predicates (§15.20) and — once it lands —
-//! `messageBox` (§15.18).
+//! of, which is nsL's issue #5. The same recursion serves all three callers:
+//! comparisons, predicates and — once it lands — `messageBox`.
 
 use crate::ast::*;
 use crate::builtins;
@@ -39,7 +38,7 @@ use super::{Binding, BodyLowerer};
 /// They are two because a flag is not a position: `Delete [/REBOOTOK] filespec`
 /// has one argument whatever the caller writes, and `/REBOOTOK` goes in front
 /// of it. Keeping them apart until [`place`] is what lets the surface be one
-/// unordered options table (§15.23).
+/// unordered options table.
 pub(super) struct Written {
     /// One entry per surface position, in table order: empty where nobody
     /// filled it, and several for the one repeated tail a row may have.
@@ -76,14 +75,14 @@ impl BodyLowerer<'_, '_> {
     /// An expression that needs no instruction: a folded constant, a variable
     /// read, or a concatenation of those.
     ///
-    /// Concatenation being free is the string model paying for itself (§5).
-    /// `"into " .. INSTDIR .. "/bin"` is one quoted argument and no `StrCpy` at
-    /// all, because a literal is *data* and an NSIS variable spliced into it is
-    /// the one `$` that survives unescaped (§15.1).
+    /// Concatenation being free is the string model paying for itself. `"into
+    /// ".. INSTDIR.. "/bin"` is one quoted argument and no `StrCpy` at all,
+    /// because a literal is *data* and an NSIS variable spliced into it is the
+    /// one `$` that survives unescaped.
     pub(super) fn simple(&mut self, expr: &Expr) -> Option<Typed> {
         // A name and a concatenation are looked at structurally *before*
         // folding, because a top-level `<const>` is a `!define` and the output
-        // should say `${APP}` rather than the fourth copy of its value (§7-1).
+        // should say `${APP}` rather than the fourth copy of its value.
         // Everything else — a literal, arithmetic over constants — folds, since
         // there is no name left to preserve.
         if !matches!(
@@ -182,7 +181,7 @@ impl BodyLowerer<'_, '_> {
 
         // Concatenation never needs a destination, even when a side does: the
         // pieces of a template are assembled in the argument, so only the side
-        // that computes something spends a register (§5).
+        // that computes something spends a register.
         if let Expr::Binary {
             op: BinOp::Concat,
             lhs,
@@ -206,7 +205,7 @@ impl BodyLowerer<'_, '_> {
         })
     }
 
-    /// Lowering takes a **destination**, not just a return value (§12).
+    /// Lowering takes a **destination**, not just a return value.
     ///
     /// `local sum = 1 + 1` is `IntOp $0 1 + 1`, not `IntOp $R9 1 + 1` followed
     /// by `StrCpy $0 $R9`. Written the other way round it emits a redundant
@@ -272,11 +271,11 @@ impl BodyLowerer<'_, '_> {
             // `core.selected`. A field is a *handle's* field or nothing: the
             // other two dotted things in the surface — a header's macro and a
             // plugin's method — are only ever callees, and `lang.greeting` is
-            // §15.26's, which is not built yet.
+            // the `languages {}` block's, which is not built yet.
             Expr::Field { base, name, .. } => self.field_read(base, name, dest),
 
             // `local chosen = currentInstType` — a read that is an instruction
-            // and, for the position it answers with, a chain (§13).
+            // and, for the position it answers with, a chain.
             Expr::Name(name) if builtins::owned(&name.text) => self.owned_read(name, dest),
 
             // A bare name that `simple` could not resolve is not a shape this
@@ -297,12 +296,12 @@ impl BodyLowerer<'_, '_> {
     /// `and`/`or` producing a *value* rather than a branch.
     ///
     /// Legal for `bool` and rejected for everything else, and the rejected case
-    /// is the painful one: `local dir = customDir or PROGRAMFILES .. [[\App]]`
+    /// is the painful one: `local dir = customDir or PROGRAMFILES.. [[\App]]`
     /// is the idiom every Lua programmer reaches for. Under Lua's semantics it
     /// is dead code — `customDir` is a register, always holds a string, never
     /// `nil`, so `or` always takes the left branch. Under the meaning the user
     /// intends, `""` is falsy, which contradicts Lua on the value a reader is
-    /// most likely to test. There is no third option (§15.20).
+    /// most likely to test. There is no third option.
     fn logical_value(
         &mut self,
         whole: &Expr,
@@ -327,7 +326,7 @@ impl BodyLowerer<'_, '_> {
                     )
                     .note(
                         "in Lua only `nil` and `false` are falsy, so this would always take the \
-                         left branch; write the comparison you mean, such as `x ~= \"\"` (§15.20)",
+                         left branch; write the comparison you mean, such as `x ~= \"\"`",
                     ),
                 );
                 return None;
@@ -336,9 +335,9 @@ impl BodyLowerer<'_, '_> {
         self.materialise(whole, dest, span)
     }
 
-    /// A boolean that has to survive its fusion — `local exists = fileExists(p)`
-    /// — which is what makes `bool` a runtime type rather than a compile-time
-    /// one (§15.20).
+    /// A boolean that has to survive its fusion — `local exists =
+    /// fileExists(p)` — which is what makes `bool` a runtime type rather than a
+    /// compile-time one.
     ///
     /// It falls out of the CFG rather than needing a shape of its own: branch
     /// to two blocks, each writing a literal, both joining.
@@ -384,7 +383,7 @@ impl BodyLowerer<'_, '_> {
             BinOp::BitAnd => "&",
             BinOp::BitOr => "|",
             // Lua's `~` is NSIS's `^`: the spellings swap, which is precisely
-            // why `^` is rejected at the operator rather than mapped (§6).
+            // why `^` is rejected at the operator rather than mapped.
             BinOp::BitXor => "^",
             BinOp::Shl => "<<",
             // Lua's `>>` zero-fills, which is NSIS's `>>>`.
@@ -396,9 +395,9 @@ impl BodyLowerer<'_, '_> {
         };
 
         // NSIS truncates toward zero and Lua floors, so `//` and `%` disagree
-        // with Lua whenever exactly one operand is negative (§15.4). When the
-        // lattice says neither can be, the fixup is not merely elided — it is
-        // provably unnecessary, which is what §15.14's sign axis buys.
+        // with Lua whenever exactly one operand is negative. When the lattice
+        // says neither can be, the fixup is not merely elided — it is provably
+        // unnecessary, which is what the lattice's sign axis buys.
         let needs_fixup = matches!(op, BinOp::FloorDiv | BinOp::Mod) && sign == Sign::Unknown;
 
         if !needs_fixup {
@@ -420,7 +419,7 @@ impl BodyLowerer<'_, '_> {
         self.signed_division(op, lhs.arg, rhs.arg, dest, span)
     }
 
-    /// The §15.4 fixup, as a CFG rather than as a formula.
+    /// The floor-division fixup, as a CFG rather than as a formula.
     ///
     /// `a // b` and `a % b` are computed into a scratch register and copied out
     /// at the end rather than written straight to `dest`, because `dest` may be
@@ -543,7 +542,7 @@ impl BodyLowerer<'_, '_> {
                 span,
                 format!("arithmetic needs an int, and this is a {}", value.ty),
             )
-            .note("there is no coercion: NSIS's `IntOp` reads whatever is there as a number (§6)"),
+            .note("there is no coercion: NSIS's `IntOp` reads whatever is there as a number"),
         );
         None
     }
@@ -565,7 +564,7 @@ impl BodyLowerer<'_, '_> {
             }
         };
 
-        // Hand-written lowerings first (§15.21's "kind 2"): a command whose
+        // Hand-written lowerings first — the adapter kind: a command whose
         // shape is not one row of the table, because the instruction it becomes
         // depends on a type, or because it is a branch wearing an expression's
         // syntax.
@@ -578,7 +577,7 @@ impl BodyLowerer<'_, '_> {
             }
             // The one table in the surface addressed by string rather than by
             // handle: an install type is a line in a block's field, so there is
-            // nothing for a `local` to bind (§13, ruling 4).
+            // nothing for a `local` to bind.
             "instTypes.getText" | "instTypes.setText" => {
                 return self.inst_types_call(&name, args, dest, span);
             }
@@ -589,7 +588,7 @@ impl BodyLowerer<'_, '_> {
         // types, and the one field in the surface that is called rather than
         // read. `SectionGetInstTypes` gives a bit field, this language has no
         // list to decode it into, and the question a script asks is membership:
-        // so the type's name is the argument and the answer is a `bool` (§13).
+        // so the type's name is the argument and the answer is a `bool`.
         if let Expr::Call { callee, .. } = call
             && let Expr::Field {
                 base, name: field, ..
@@ -665,7 +664,7 @@ impl BodyLowerer<'_, '_> {
                         ))
                         .note(
                             "it is never optimised away — `IfErrors` clears the flag it reads, \
-                             so the call is the side effect (§15.20)",
+                             so the call is the side effect",
                         ),
                     );
                     None
@@ -693,7 +692,7 @@ impl BodyLowerer<'_, '_> {
                             span,
                             format!("`{name}` produces no value"),
                         )
-                        .note(format!("`{}` writes to no register (§15.23)", builtin.nsis)),
+                        .note(format!("`{}` writes to no register", builtin.nsis)),
                     );
                     None
                 }
@@ -772,7 +771,8 @@ impl BodyLowerer<'_, '_> {
     ) -> Option<Written> {
         // The user-facing positions: the inputs, minus the ones the compiler
         // fills. `fileExists(p)` takes one argument where `IfFileExists` takes
-        // three, and that difference is §15.20's whole point.
+        // three, and that difference is the whole point of a `bool`-valued
+        // call.
         let surface: Vec<&table::Param> = builtin.surface().skip(skip).collect();
         let named = builtin.takes_options();
 
@@ -810,7 +810,7 @@ impl BodyLowerer<'_, '_> {
                     given.len()
                 ),
             )
-            .note(format!("it becomes `{}` (§6)", builtin.nsis));
+            .note(format!("it becomes `{}`", builtin.nsis));
             if named {
                 diagnostic = diagnostic.note(format!(
                     "its optional positions are named rather than counted: {}",
@@ -1001,11 +1001,11 @@ impl BodyLowerer<'_, '_> {
     /// it.
     fn coerce(&mut self, param: &table::Param, name: &str, argument: &Expr) -> Option<ir::Arg> {
         let value = self.value(argument)?;
-        // Assignable, not equal. The lattice already says which types
-        // subsume which — `a.join(b) == b` is exactly "a fits where b is
-        // wanted" — and equality got this wrong in one direction that
-        // matters: a literal `0` is `nonneg`, so every `Ty::int()` position
-        // rejected every integer literal (§15.14).
+        // Assignable, not equal. The lattice already says which types subsume
+        // which — `a.join(b) == b` is exactly "a fits where b is wanted" — and
+        // equality got this wrong in one direction that matters: a literal `0`
+        // is `nonneg`, so every `Ty::int()` position rejected every integer
+        // literal.
         if param.ty != Ty::Unknown && value.ty != Ty::Unknown && value.ty.join(param.ty) != param.ty
         {
             let mut diagnostic = Diagnostic::error(
@@ -1013,10 +1013,10 @@ impl BodyLowerer<'_, '_> {
                 argument.span(),
                 format!("`{name}` wants a {}, and this is a {}", param.ty, value.ty),
             )
-            .note("types come from the instruction table, never from an annotation (§15.14)");
-            // `int` is what a user calls both signs (§15.14), so the
-            // message above reads "wants a int, and this is a int" when the
-            // sign is the whole disagreement. Say what it will not say.
+            .note("types come from the instruction table, never from an annotation");
+            // `int` is what a user calls both signs, so the message above reads
+            // "wants a int, and this is a int" when the sign is the whole
+            // disagreement. Say what it will not say.
             if param.ty.is_int() && value.ty.is_int() {
                 diagnostic = diagnostic.note(
                     "this position cannot be negative, and the value is not known to be \
@@ -1026,8 +1026,8 @@ impl BodyLowerer<'_, '_> {
             self.diags.push(diagnostic);
             return None;
         }
-        // Pathness is decided at the parameter, so the expression lowerer
-        // never has to know where its result is going (§15.23).
+        // Pathness is decided at the parameter, so the expression lowerer never
+        // has to know where its result is going.
         Some(if param.kind == table::Kind::Path {
             value.arg.into_path()
         } else {
@@ -1058,7 +1058,7 @@ impl BodyLowerer<'_, '_> {
                     argument.span(),
                     format!("`{name}` wants a {ty}, and this is a {}", value.ty),
                 )
-                .note("types come from the instruction table, never from an annotation (§15.14)"),
+                .note("types come from the instruction table, never from an annotation"),
             );
             return None;
         }
@@ -1095,7 +1095,7 @@ impl BodyLowerer<'_, '_> {
     /// `local high, low = getFileTime(p)`. One call, several outputs.
     ///
     /// The plural is the table's, not the language's: an instruction's output
-    /// *count* is its Lua arity (§15.23), so nothing here decides anything a
+    /// *count* is its Lua arity, so nothing here decides anything a
     /// row has not already said.
     fn builtin_multi(
         &mut self,
@@ -1123,7 +1123,7 @@ impl BodyLowerer<'_, '_> {
                     ),
                 )
                 .note(format!(
-                    "`{}` is what it becomes, and its outputs are its values (§15.23)",
+                    "`{}` is what it becomes, and its outputs are its values",
                     builtin.nsis
                 )),
             );
@@ -1217,8 +1217,7 @@ impl BodyLowerer<'_, '_> {
 
     // -- namespaces --------------------------------------------------------
 
-    /// `fileFunc.getSize(dir, "")` — a call into a namespace a `local` bound
-    /// (§15.27).
+    /// `fileFunc.getSize(dir, "")` — a call into a namespace a `local` bound.
     ///
     /// The header half is a macro expansion, and its calling convention is not
     /// this compiler's choice: `!insertmacro` cannot return anything, so a
@@ -1261,7 +1260,7 @@ impl BodyLowerer<'_, '_> {
                 diagnostic.note(format!(
                     "nothing is declared for `{header}` — a macro's parameter list says nothing \
                      about directions or counts, so the declaration is written rather than \
-                     discovered (§15.27)"
+                     discovered"
                 ))
             };
             self.diags.push(diagnostic);
@@ -1279,7 +1278,7 @@ impl BodyLowerer<'_, '_> {
                         args.len()
                     ),
                 )
-                .note(format!("it becomes `${{{}}}` (§15.27)", entry.nsis)),
+                .note(format!("it becomes `${{{}}}`", entry.nsis)),
             );
             return None;
         }
@@ -1297,7 +1296,7 @@ impl BodyLowerer<'_, '_> {
                             param.ty, value.ty
                         ),
                     )
-                    .note("types come from the declaration, never from an annotation (§15.14)"),
+                    .note("types come from the declaration, never from an annotation"),
                 );
                 return None;
             }
@@ -1319,7 +1318,7 @@ impl BodyLowerer<'_, '_> {
                         dests.len()
                     ),
                 )
-                .note("there is no `nil` to pad with (§3)"),
+                .note("there is no `nil` to pad with"),
             );
             return None;
         }
@@ -1345,13 +1344,13 @@ impl BodyLowerer<'_, '_> {
     /// whitespace dropped so the block sits where the emitter's indentation
     /// puts everything else. Nothing is hoisted, nothing is checked and no
     /// local survives it: it clobbers every register, which is what makes the
-    /// hatch safe to have rather than a hole (§13, §15.11).
+    /// hatch safe to have rather than a hole.
     fn raw(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
         if dest.is_some() {
             self.diags.push(
                 Diagnostic::error(Code::TypeMismatch, span, "`raw` produces no value").note(
                     "it is text handed to `makensis`, so there is nothing here that knows what it \
-                     left in a register — write to a global instead (§13)",
+                     left in a register — write to a global instead",
                 ),
             );
             return None;
@@ -1384,7 +1383,7 @@ impl BodyLowerer<'_, '_> {
         None
     }
 
-    /// `nsExec.execToStack(cmd)` — the first of §15.11's three opaque callees.
+    /// `nsExec.execToStack(cmd)` — the first of the three opaque callees.
     ///
     /// A plugin takes its arguments **inline** and leaves its outputs on the
     /// stack, so the shape is one line plus a `Pop` each. What makes it a *call
@@ -1410,7 +1409,7 @@ impl BodyLowerer<'_, '_> {
                     [] => format!(
                         "nothing is declared for `{plugin}` — a DLL cannot be asked how many \
                          values it pushes, so the count is written down rather than discovered \
-                         (§11)"
+                        "
                     ),
                     methods => format!(
                         "it declares {}",
@@ -1443,7 +1442,7 @@ impl BodyLowerer<'_, '_> {
 
         // `System::Call`'s output count is in its signature: every `.s` pushes
         // one value. That is as far as the signature is read — narrowing the
-        // clobber set from the rest of it is a later optimisation (PLAN §3).
+        // clobber set from the rest of it is a later optimisation.
         let outputs: Vec<Ty> = if entry.nsis == "System::Call" {
             let signature = self.constant(&args[0]).map(|value| value.text());
             let Some(signature) = signature else {
@@ -1455,7 +1454,7 @@ impl BodyLowerer<'_, '_> {
                     )
                     .note(
                         "the number of values it leaves on the stack is the number of `.s` in the \
-                         signature, and a runtime string cannot be counted (§15.11)",
+                         signature, and a runtime string cannot be counted",
                     ),
                 );
                 return None;
@@ -1476,14 +1475,14 @@ impl BodyLowerer<'_, '_> {
                         dests.len()
                     ),
                 )
-                .note("the count comes from the declaration, since nothing can ask the DLL (§11)"),
+                .note("the count comes from the declaration, since nothing can ask the DLL"),
             );
             return None;
         }
 
         // The site is reserved and the saves marked *before* the arguments are
         // lowered, for the same reason a `func` call does it: a save has to
-        // precede instructions this lowerer has not emitted yet (§15.11).
+        // precede instructions this lowerer has not emitted yet.
         let site = self.body.opaque_site(Vec::new(), false, span);
         let current = self.current;
         self.body.push_step(current, ir::Step::Saves(site));
@@ -1503,7 +1502,7 @@ impl BodyLowerer<'_, '_> {
                 Some(slot) => slot.clone(),
                 // A dropped output still comes off the stack: the plugin pushed
                 // it either way, and leaving it there unbalances everything
-                // after it with no diagnostic from NSIS (§3).
+                // after it with no diagnostic from NSIS.
                 None => self.body.vreg(span),
             })
             .collect();
@@ -1515,7 +1514,7 @@ impl BodyLowerer<'_, '_> {
         self.body.calls[site].results = results;
         // Noted for the reservation pass: a DLL `.onInit` can reach has to be
         // at the head of the data block, and nothing after lowering can tell
-        // `nsExec::ExecToStack` from any other opaque line (§11).
+        // `nsExec::ExecToStack` from any other opaque line.
         self.body.plugins.insert(entry.plugin.to_string());
         let current = self.current;
         self.body.push_step(current, ir::Step::Call(site));
@@ -1530,7 +1529,7 @@ impl BodyLowerer<'_, '_> {
     /// instruction rather than in the argument, and a `WriteRegStr` holding
     /// digits is not the same registry entry as a `WriteRegDWORD` holding the
     /// same digits — nothing downstream can recover the difference, which is
-    /// why the lattice picks it here (§15.14).
+    /// why the lattice picks it here.
     fn write_reg(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
         if dest.is_some() {
             self.diags.push(
@@ -1571,7 +1570,7 @@ impl BodyLowerer<'_, '_> {
         None
     }
 
-    /// The `string.*` adapters (§15.21's "kind 2").
+    /// The `string.*` adapters — the hand-written kind.
     ///
     /// These are hand-written lowerings rather than table rows, and the reason
     /// is arithmetic: Lua indexes from 1 and NSIS from 0, so every index
@@ -1605,8 +1604,7 @@ impl BodyLowerer<'_, '_> {
                 let subject = self.value(subject)?;
                 // `${StrCase}` is `StrFunc`, and `StrFunc` refuses to work
                 // unless the function was declared with `${Using:StrFunc}`
-                // first — a missing line aborts the build rather than warning
-                // (§15.21).
+                // first — a missing line aborts the build rather than warning.
                 self.requires.str_func("StrCase");
                 let mode = if name == "string.lower" { "L" } else { "U" };
                 self.emit(
@@ -1738,8 +1736,7 @@ impl BodyLowerer<'_, '_> {
                     // `maxlen` is `j - (i - 1)`, and `i = 1` — the overwhelming
                     // case, since Lua strings start there — makes the
                     // subtraction `- 0`. Emitting it would be a line whose only
-                    // effect is to be read by somebody wondering what it does
-                    // (§9-6).
+                    // effect is to be read by somebody wondering what it does.
                     (Some(ConstValue::Int(1)), _) => to_value.arg,
                     _ => {
                         let slot = self.claim_temp(span);
@@ -1772,12 +1769,12 @@ impl BodyLowerer<'_, '_> {
                 span,
                 format!("`{name}` takes {wanted} argument(s), and {got} were given"),
             )
-            .note("the adapter is hand-written, so the count is what NSIS can express (§15.21)"),
+            .note("the adapter is hand-written, so the count is what NSIS can express"),
         );
         None
     }
 
-    /// `messageBox` (§15.18): an expression whose value is a branch.
+    /// `messageBox`: an expression whose value is a branch.
     ///
     /// The answer is an ordinary string — `"YES"`, `"NO"` — and the jump table
     /// is recovered from the comparison. A one-button dialog has no table at
@@ -1872,7 +1869,7 @@ impl BodyLowerer<'_, '_> {
                     )
                     .note(
                         "a one-button dialog has one outcome, so the comparison below it is \
-                           already decided (§15.18)",
+                           already decided",
                     ),
                 );
                 self.emit(ir::Instruction::new(
@@ -1928,8 +1925,8 @@ impl BodyLowerer<'_, '_> {
     }
 
     /// `messageBox("done")` and `messageBox { text = …, buttons = … }` — the
-    /// positional-or-table pair §15.23 establishes, with `text` as the first
-    /// positional parameter and `buttons` defaulting to `OK`.
+    /// positional-or-table pair the command table establishes, with `text` as
+    /// the first positional parameter and `buttons` defaulting to `OK`.
     fn message_box_fields(&mut self, args: &[Expr], span: Span) -> Option<MessageBoxFields> {
         let [argument] = args else {
             self.diags.push(
@@ -1967,9 +1964,10 @@ impl BodyLowerer<'_, '_> {
                 "text" => text = Some(self.value(value)?),
                 "buttons" => buttons = self.constant(value)?.text(),
                 "icon" => icon = Some(self.constant(value)?.text()),
-                // The `/SD` half of §15.18. It is a field here rather than in
-                // the generic options table because it is only meaningful
-                // against `buttons`, which is checked below (`Offer::Handled`).
+                // The `/SD` half of `messageBox`. It is a field here rather
+                // than in the generic options table because it is only
+                // meaningful against `buttons`, which is checked below
+                // (`Offer::Handled`).
                 "silentAnswer" => silent = Some((self.constant(value)?.text(), name.span)),
                 other => {
                     self.diags.push(
@@ -2016,7 +2014,7 @@ impl BodyLowerer<'_, '_> {
         if !self.resolved.functions.contains_key(&name) {
             // An instruction's outputs are its values, and `GetFileTime` has
             // two of them. This is the only path that can bind both: the
-            // single-value one drops everything past the first (§15.23).
+            // single-value one drops everything past the first.
             if let Some(builtin) = builtins::lookup(&name) {
                 return self.builtin_multi(builtin, args, dests, *span);
             }
@@ -2027,7 +2025,7 @@ impl BodyLowerer<'_, '_> {
     }
 
     /// A call to a `func`, which is the only thing in the language with a
-    /// calling convention (§15.11, §11 program 4).
+    /// calling convention (program 4).
     ///
     /// The three steps here are all the lowerer knows: reserve the site, mark
     /// where the saves go, then evaluate arguments *after* that mark. What the
@@ -2064,7 +2062,7 @@ impl BodyLowerer<'_, '_> {
         for (index, argument) in args.iter().enumerate() {
             let value = self.value(argument)?;
             // What a parameter's type is comes from here — there are no
-            // annotations, so the call sites are the only evidence (§15.14).
+            // annotations, so the call sites are the only evidence.
             self.learned.learn_param(name, index, value.ty);
             lowered.push(value.arg);
         }
@@ -2084,7 +2082,7 @@ impl BodyLowerer<'_, '_> {
                         dests.len()
                     ),
                 )
-                .note("there is no `nil` to pad with (§3)"),
+                .note("there is no `nil` to pad with"),
             );
             return None;
         }
@@ -2095,7 +2093,7 @@ impl BodyLowerer<'_, '_> {
             results.push(match dests.get(index) {
                 Some(slot) => slot.clone(),
                 // A dropped return still needs a slot: the callee pushed it
-                // either way, so it has to come off (§11, program 4).
+                // either way, so it has to come off (program 4).
                 None => self.body.vreg(span),
             });
             types.push(signature.result(index));
@@ -2117,7 +2115,7 @@ impl BodyLowerer<'_, '_> {
     /// The caller decides where lowering continues, because only the caller
     /// knows: an `if` continues in its then-arm and a `while` in its body.
     pub(super) fn branch(&mut self, cond: &Expr, then_b: BlockId, else_b: BlockId, span: Span) {
-        // A `<const>` condition never becomes a branch at all (§7-2).
+        // A `<const>` condition never becomes a branch at all.
         if let Some(ConstValue::Bool(taken)) = self.constant(cond) {
             let target = if taken { then_b } else { else_b };
             let current = self.current;
@@ -2161,8 +2159,8 @@ impl BodyLowerer<'_, '_> {
             } => self.compare(*op, lhs, rhs, then_b, else_b, *span),
 
             // A predicate fuses directly into its branching instruction and
-            // spends no register — the case §15.20 dissolved a whole second
-            // condition shape to reach.
+            // spends no register — the case that dissolved a whole second
+            // condition shape.
             Expr::Call { callee, args, span } => {
                 let predicate = callee_path(callee)
                     .and_then(|name| builtins::lookup(&name))
@@ -2208,7 +2206,7 @@ impl BodyLowerer<'_, '_> {
     /// By-type truthiness — `int` → `~= 0`, `string` → `~= ""` — is rejected
     /// rather than deferred, because it contradicts Lua on `0` and `""`, the
     /// two values a reader is most likely to test, and `lua-language-server`
-    /// reports nothing either way (§15.20).
+    /// reports nothing either way.
     fn branch_on_value(&mut self, cond: &Expr, then_b: BlockId, else_b: BlockId, span: Span) {
         let Some(value) = self.value(cond) else {
             return;
@@ -2225,7 +2223,7 @@ impl BodyLowerer<'_, '_> {
                     span,
                     format!("a condition needs a `bool`, and this is a {}", value.ty),
                 )
-                .note(format!("{replacement} (§15.20)"))
+                .note(replacement)
                 .note(
                     "in Lua every value but `nil` and `false` is truthy, so `if count then` \
                      would run on `0` — a by-type rule would disagree with Lua on exactly the \
@@ -2247,8 +2245,8 @@ impl BodyLowerer<'_, '_> {
     }
 
     /// A comparison. The type lattice, not the operator, decides which
-    /// instruction this becomes — which is why §15.14 is not deferrable past
-    /// the first `if` (§12).
+    /// instruction this becomes — which is why the lattice is not deferrable
+    /// past the first `if`.
     fn compare(
         &mut self,
         op: BinOp,
@@ -2261,7 +2259,7 @@ impl BodyLowerer<'_, '_> {
         // `string.lower(a) == "beta"` is a bare `StrCmp` — no `${StrCase}`, no
         // temporary, no `StrFunc` dependency — because case-insensitivity is
         // what the *instruction* already does. Case conversion for its value
-        // still costs a macro; only the comparison collapses (§15.9).
+        // still costs a macro; only the comparison collapses.
         let folded = case_folded(lhs);
         let folded_rhs = case_folded(rhs);
         let case_sensitive = folded.is_none() && folded_rhs.is_none();
@@ -2302,7 +2300,7 @@ impl BodyLowerer<'_, '_> {
                         )
                         .note(
                             "`StrCmp` has an equal arm and a not-equal arm and nothing else, so \
-                             there is no instruction to lower this to (§15.14)",
+                             there is no instruction to lower this to",
                         )
                         .note("compare `string.len` if length is what is meant"),
                     );
@@ -2311,9 +2309,9 @@ impl BodyLowerer<'_, '_> {
                 Test::Str {
                     lhs: lhs.arg,
                     rhs: rhs.arg,
-                    // `==` is `StrCmpS`. Case-sensitive being the default is the
-                    // reversal from NSIS habit that will bite hardest, and
-                    // `string.lower(a) == string.lower(b)` is the escape (§15.9).
+                    // `==` is `StrCmpS`. Case-sensitive being the default is
+                    // the reversal from NSIS habit that will bite hardest, and
+                    // `string.lower(a) == string.lower(b)` is the escape.
                     case_sensitive,
                     negate: cmp == CmpOp::Ne,
                 }
@@ -2328,7 +2326,7 @@ impl BodyLowerer<'_, '_> {
                     )
                     .note(
                         "defaulting to `StrCmp` would make `\"10\" < \"9\"` true and `10 < 9` \
-                         false, and NSIS objects to neither (§15.14)",
+                         false, and NSIS objects to neither",
                     ),
                 );
                 return;
@@ -2349,7 +2347,7 @@ impl BodyLowerer<'_, '_> {
 
 /// The subject of a `string.lower`/`string.upper` call, when that is what this
 /// expression is. `Some` means the comparison it sits in can drop the case
-/// conversion entirely and compare case-insensitively instead (§15.9).
+/// conversion entirely and compare case-insensitively instead.
 fn case_folded(expr: &Expr) -> Option<&Expr> {
     let Expr::Call { callee, args, .. } = expr else {
         return None;
@@ -2364,9 +2362,9 @@ fn case_folded(expr: &Expr) -> Option<&Expr> {
     }
 }
 
-/// A `messageBox` button set, and the answers it can give. The answer names
-/// are the NSIS return keywords without their `ID` — `IDYES` is the jump-table
-/// token and `"YES"` is the value the user compares against (§15.18).
+/// A `messageBox` button set, and the answers it can give. The answer names are
+/// the NSIS return keywords without their `ID` — `IDYES` is the jump-table
+/// token and `"YES"` is the value the user compares against.
 struct ButtonSet {
     installua: &'static str,
     answers: &'static [&'static str],
@@ -2492,7 +2490,8 @@ fn place(builtin: &table::Instruction, written: Written, dests: Vec<ir::Arg>) ->
         let argument = match param.dir() {
             table::Dir::Out => dests.next(),
             // Neither of these is a surface position, so neither consumes one:
-            // a label is §8's and a fused half is not an argument at all.
+            // a label is the compiler's and a fused half is not an argument at
+            // all.
             table::Dir::In if param.kind == table::Kind::Label => continue,
             table::Dir::In if param.kind == table::Kind::Fused => continue,
             table::Dir::In if param.shape.rep == table::Rep::Many => {
@@ -2549,8 +2548,8 @@ fn arguments(arity: &std::ops::RangeInclusive<usize>) -> String {
 }
 
 /// The dotted name a callee spells: `detailPrint`, `string.len`. Three
-/// namespaces exist and NSIS enforces the boundary between them (§13), so the
-/// path is the key rather than the last segment.
+/// namespaces exist and NSIS enforces the boundary between them, so the path is
+/// the key rather than the last segment.
 fn callee_path(callee: &Expr) -> Option<String> {
     match callee {
         Expr::Name(name) => Some(name.text.clone()),
@@ -2564,7 +2563,7 @@ fn callee_path(callee: &Expr) -> Option<String> {
 
 /// What the sign lattice knows about a result. Cheap propagation answers "can
 /// this be negative" far more often than a declaration would, which is what
-/// turns §15.4's fixup elision from occasional into routine (§15.14).
+/// turns the fixup elision from occasional into routine.
 fn result_sign(op: BinOp, lhs: &Ty, rhs: &Ty) -> Sign {
     let both_nonneg = matches!(
         (lhs.as_int().map(|i| i.sign), rhs.as_int().map(|i| i.sign)),

@@ -1,7 +1,7 @@
-//! The line map, one test per origin kind (§15.22, PLAN Phase 4).
+//! The line map, one test per origin kind.
 //!
-//! §15.22 ends by requiring exactly this: *"all of this is a tested surface —
-//! the mapping is asserted on, not eyeballed, with one test per origin kind."*
+//! The requirement is exactly this: *"all of this is a tested surface — the
+//! mapping is asserted on, not eyeballed, with one test per origin kind."*
 //! There are three kinds, so there are three mapping tests, plus the two
 //! `makensis` message syntaxes that the translation has to survive.
 
@@ -96,7 +96,7 @@ fn a_raw_line_maps_to_its_block_and_says_it_is_unchecked() {
         rendered,
         "install.lua:11:3: error[makensis]: Error in script \"a.nsi\" on line 12 -- aborting \
          creation process\n  note: this line is inside a `raw` block, which nothing in this \
-         compiler checked (§13)"
+         compiler checked"
     );
 }
 
@@ -127,7 +127,7 @@ fn a_generated_line_is_reported_as_a_compiler_bug() {
     assert!(rendered.contains("was kept at out/a.nsi"), "{rendered}");
 }
 
-/// The three lines nobody wrote, each landing on the label §15.22 names for it.
+/// The three lines nobody wrote, each landing on the label named for it.
 #[test]
 fn the_compilers_own_lines_are_labelled_as_its_own() {
     let (text, map) = build();
@@ -148,7 +148,7 @@ fn the_compilers_own_lines_are_labelled_as_its_own() {
     }
 }
 
-/// Both syntaxes §15.22 verified against NSIS 3.12, and the line-less class.
+/// Both syntaxes verified against NSIS 3.12, and the line-less class.
 #[test]
 fn both_makensis_syntaxes_are_recognised() {
     let log = concat!(
@@ -166,8 +166,8 @@ fn both_makensis_syntaxes_are_recognised() {
 }
 
 /// A message with no line is reported rather than attributed. Link-time errors
-/// name a section and not a position, and §15.22 rules that inventing one is
-/// worse than saying there is none.
+/// name a section and not a position, and inventing one is worse than saying
+/// there is none.
 #[test]
 fn a_message_with_no_line_keeps_the_script() {
     let (_, map) = build();

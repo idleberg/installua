@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Drive `lua-language-server` over stdio and ask for completions at a marked
-position, to verify §1's claim that `---@alias` gives completion *inside* a
+position, to verify the claim that `---@alias` gives completion *inside* a
 string literal.
 
 The `--check` mode used by `run.sh` covers diagnostics; completion has no

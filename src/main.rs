@@ -1,4 +1,4 @@
-//! The CLI: a thin shell over the library (§15.12).
+//! The CLI: a thin shell over the library.
 //!
 //! Nothing is decided here. Argument parsing, file reading and exit codes are
 //! the whole of it — every question about the language is answered by a
@@ -26,7 +26,7 @@ use installua::diag::Diagnostics;
     after_help = "\
 `emit` is for wiring Installua into an existing build; `build` owns the \
 `makensis` invocation, which is what lets it rewrite `makensis`'s diagnostics \
-back onto the Lua source (§15.22)."
+back onto the Lua source."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -66,7 +66,7 @@ enum Command {
         stdout: bool,
     },
 
-    /// `-CMDHELP` bucket counts (§14)
+    /// `-CMDHELP` bucket counts
     Coverage,
 
     /// installua.toml, .luarc.json, selene.toml
@@ -159,7 +159,7 @@ fn check(files: &[PathBuf]) -> ExitCode {
         //
         // Following `include` for the same reason it always did: a name an
         // included file declares is not an error, and a `check` that said it
-        // was would be worse than no `check` at all (§15.28).
+        // was would be worse than no `check` at all.
         let mut diags = Diagnostics::new();
         installua::compile_with(&source, &installua::Options::for_file(path), &mut diags);
         report(&diags, path);
@@ -188,7 +188,7 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
 
     // Relative paths in the source resolve against the *source's* directory,
     // not the shell's: a `glob` means the same thing wherever the build is run
-    // from, which is what makes the output reproducible (§14).
+    // from, which is what makes the output reproducible.
     let options = installua::Options::for_file(input);
 
     let mut diags = Diagnostics::new();
@@ -217,8 +217,7 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
     }
 
     // The invocation is ours because the map cannot travel with the artifact:
-    // NSIS can read its own line number and cannot be told a different one
-    // (§15.22).
+    // NSIS can read its own line number and cannot be told a different one.
     let makensis = std::env::var("MAKENSIS").unwrap_or_else(|_| "makensis".to_string());
     let source_name = input.display().to_string();
     match installua::assemble::assemble(&output, &map, &source_name, diags.files(), &makensis) {
@@ -243,7 +242,7 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
     }
 }
 
-/// `installua coverage`: §14's census, printed.
+/// `installua coverage`: the census, printed.
 ///
 /// The output is a golden file, so a PR that moves twelve commands out of
 /// `todo` shows exactly which twelve in its diff. That is the whole reason the
@@ -297,7 +296,7 @@ fn init(root: &Path) -> ExitCode {
 /// Three files, because they serve two tools and one of them is about *this
 /// project* rather than about the language: `lua-language-server` cannot follow
 /// `include`, so the names a project's own sources declare have to be generated
-/// too (§15.28).
+/// too.
 fn stubs(root: &Path) -> ExitCode {
     let meta = root.join(".installua/meta");
     if let Err(error) = std::fs::create_dir_all(&meta) {
@@ -356,7 +355,7 @@ fn stubs(root: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `installua generate table <cmdhelp.txt>`: the generator half of §15.23's join.
+/// `installua generate table <cmdhelp.txt>`: the generator half of the join.
 ///
 /// Prints Rust source; the workflow is a shell redirect into
 /// `src/table/generated.rs`, and `cargo test` fails if the checked-in file and
@@ -379,7 +378,7 @@ fn read(path: &Path) -> Option<String> {
     }
 }
 
-/// Every diagnostic, not just the first (§9-4).
+/// Every diagnostic, not just the first.
 fn report(diags: &Diagnostics, path: &Path) {
     if !diags.is_empty() {
         eprint!("{}", diags.render(&path.display().to_string()));

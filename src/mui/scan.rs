@@ -1,11 +1,11 @@
 //! The snapshot half of the MUI inventory: `Contrib/Modern UI 2`, read.
 //!
-//! The analogue of `makensis -CMDHELP` for the other surface (§14). MUI2 has no
+//! The analogue of `makensis -CMDHELP` for the other surface. MUI2 has no
 //! command that prints its settings, so this reads the headers themselves —
 //! which is not a weaker source but the *same* one the settings live in, and it
 //! is why every tag below is a fact about MUI2's text rather than a judgement
-//! about it. The judgement is in [`super::rows`], and the two are joined the way
-//! the instruction table's two halves are (§15.23).
+//! about it. The judgement is in [`super::rows`], and the two are joined the
+//! way the instruction table's two halves are.
 //!
 //! `Deprecated.nsh` is not read. Every macro in it is a `!error` MUI2 raises on
 //! purpose, so a row for one would be an Installua name for something MUI2
@@ -229,7 +229,7 @@ fn read(
         // The one name MUI2 builds out of an argument that a *user* writes:
         // `MUI_PAGE_FUNCTION_CUSTOM PRE` reads `MUI_PAGE_CUSTOMFUNCTION_PRE`.
         // Expanded from the insertion sites rather than from a list here, so
-        // the three hooks are MUI2's count and not ours (§15.23).
+        // the three hooks are MUI2's count and not ours.
         if let Some(rest) = after(line, "!insertmacro MUI_PAGE_FUNCTION_CUSTOM ") {
             let hook = format!("MUI_PAGE_CUSTOMFUNCTION_{}", word(rest));
             note(&hook, Some(TAG_PAGE));
@@ -321,7 +321,7 @@ fn expansions(line: &str) -> Vec<String> {
 
 /// The uninstaller prefix, removed. MUI2 spells it three ways — the define, the
 /// macro argument `_un`, and the argument `UN` — and all three build the same
-/// pair of names out of one setting (§15.3).
+/// pair of names out of one setting.
 fn normalise(name: &str) -> (String, bool) {
     let mut out = name.trim().to_string();
     let mut un = false;

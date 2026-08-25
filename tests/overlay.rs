@@ -1,5 +1,4 @@
-//! §14's example pairs: every `Exposed` row emits, and the emission is a
-//! golden.
+//! The example pairs: every `Exposed` row emits, and the emission is a golden.
 //!
 //! *"The granular Installua→NSIS assembly tests should not be hand-written per
 //! instruction; they should be impossible to omit."* So the example lives on
@@ -24,9 +23,9 @@ use installua::table::{self, Class};
 /// The whole exposed surface, as one installer.
 fn program() -> String {
     // The two things a row can be reached through rather than called: a section
-    // handle and the block's install types (§13). Neither is an argument, so
-    // neither can live in an example — the example writes `handle.text` and the
-    // program is what makes `handle` a section the block lists.
+    // handle and the block's install types. Neither is an argument, so neither
+    // can live in an example — the example writes `handle.text` and the program
+    // is what makes `handle` a section the block lists.
     //
     // `brandingImage` is here for the same reason one level down: `SetBrandingImage`
     // writes into a control the *script* has to have asked for, and `makensis`
@@ -236,8 +235,8 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
         // The first keyword the snapshot lists — a value chosen by the table
         // rather than by whoever wrote this test. Written *bare* when that
         // keyword is also a sigil-less constant, because a registry root is
-        // `HKCR` and not `"HKCR"` (§15.1), and derived from the same two tables
-        // so that both spellings are compiled here rather than one.
+        // `HKCR` and not `"HKCR"`, and derived from the same two tables so that
+        // both spellings are compiled here rather than one.
         table::Setting::Enum => {
             let member = entry
                 .params
@@ -522,7 +521,7 @@ fn a_setting_the_compressor_would_have_nsis_ignore_is_refused() {
 /// the two fields outright, which is why this one is beside it. `SetCompressor`
 /// leads because NSIS reads the compressor **as of the line** — the dictionary
 /// size written first is ignored even when the compressor below it is LZMA —
-/// and a Lua table has no order to get right (§12).
+/// and a Lua table has no order to get right.
 #[test]
 fn a_setting_the_compressor_reads_is_emitted_after_it() {
     for (written, line) in [
@@ -596,7 +595,7 @@ fn a_repeating_setting_repeats() {
 /// for `addResource` — so what is checked here and nowhere else is the third
 /// case: a value that is *neither*. That it is an error at all is the whole
 /// reason the shape exists; `reslang = "nonsense"` used to reach `makensis` and
-/// come back as a usage line with no Lua position on it (§13).
+/// come back as a usage line with no Lua position on it.
 ///
 /// The keyword is written lower-case on purpose. NSIS compares these with
 /// `_tcsicmp`, so a script that spells it `all` means `ALL`, and letting the
@@ -943,8 +942,8 @@ fn the_attributes_match_their_golden() {
 /// Written here in the worst order there is — every ordering-sensitive field
 /// after the field it has to precede — because the golden above proves only
 /// that *one* order assembles, and the one it records is already the safe one.
-/// A Lua table has no order (§12), so the order the author happened to type is
-/// not something the compiler may pass through.
+/// A Lua table has no order, so the order the author happened to type is not
+/// something the compiler may pass through.
 ///
 /// The three constraints are `installua::lower`'s `ORDERED`, and each was
 /// measured against `makensis` rather than reasoned about. This asserts
@@ -998,7 +997,7 @@ installer {
 
 #[test]
 fn every_exposed_row_carries_an_example() {
-    // §14: this is what makes "added an instruction, forgot the test"
+    // This is what makes "added an instruction, forgot the test"
     // unrepresentable rather than merely discouraged.
     let missing: Vec<&str> = table::overlay::ROWS
         .iter()
@@ -1199,7 +1198,7 @@ fn a_flag_is_reached_by_name_and_placed_by_the_table() {
 /// A flag that carries a value, in the two shapes the table has for it.
 ///
 /// `File`'s `/x` is a list because it repeats, and `MessageBox`'s `/SD` is a
-/// field of §15.18's own table because its value has to be an answer the
+/// field of `messageBox`'s own table because its value has to be an answer the
 /// buttons beside it can give. Neither is a position, and neither is a `bool`.
 #[test]
 fn a_flag_can_carry_a_value() {
@@ -1215,8 +1214,9 @@ fn a_flag_can_carry_a_value() {
             .unwrap_or_else(|| panic!("{}", diags.render("<test>")))
     };
 
-    // One `/x` per element, in the order they were written, each a path: §5's
-    // `/` → `\` applies to an exclusion as much as to the filespec it excludes.
+    // One `/x` per element, in the order they were written, each a path: the
+    // `/` → `\` rewrite applies to an exclusion as much as to the filespec it
+    // excludes.
     let excluded = build(
         "file(\"assets/icon.ico\", { recursive = true, exclude = { \"build/*.tmp\", \"*.log\" } })",
     );
@@ -1365,8 +1365,8 @@ fn every_required_output_is_written_even_when_nothing_binds_it() {
     );
 }
 
-/// Binding more names than the row has outputs. There is no `nil` to pad with
-/// (§3), so this is an arity error rather than a shorter tuple.
+/// Binding more names than the row has outputs. There is no `nil` to pad with,
+/// so this is an arity error rather than a shorter tuple.
 #[test]
 fn binding_more_names_than_a_row_writes_is_an_error() {
     let mut diags = Diagnostics::new();
@@ -1386,7 +1386,7 @@ fn binding_more_names_than_a_row_writes_is_an_error() {
     );
 }
 
-/// Tier 3, with an empty warning allowlist (§14).
+/// Tier 3, with an empty warning allowlist.
 ///
 /// The golden above answers *"did the output change?"*. Only `makensis`
 /// answers *"is the output valid NSIS?"*, and the two are not the same
@@ -1395,7 +1395,7 @@ fn binding_more_names_than_a_row_writes_is_an_error() {
 /// accepts. Phase 6 writes a row per command from a `-CMDHELP` line somebody
 /// read, so that is the failure this is here for.
 ///
-/// Skips cleanly when there is no `makensis`, the same trade §14 makes
+/// Skips cleanly when there is no `makensis`, the same trade the tests make
 /// everywhere else.
 #[test]
 fn the_examples_assemble_under_wx() {

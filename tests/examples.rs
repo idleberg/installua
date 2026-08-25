@@ -4,18 +4,18 @@
 //! is not done until its criterion is mechanically checkable and checked, so it
 //! is checked here rather than asserted in a document.
 //!
-//! Two tiers, and neither substitutes for the other (§14). The generated `.nsi`
+//! Two tiers, and neither substitutes for the other. The generated `.nsi`
 //! beside each program is diffed by **exact equality**, so a change in what the
 //! compiler emits shows up as a diff a human reads; then the same text is
 //! handed to real `makensis` with warnings promoted to errors, because a golden
 //! only proves the compiler agrees with whoever last regenerated it.
 //!
-//! The `expected.nsi` in each directory is Phase 0's **hand-written oracle** and
-//! is deliberately not what this diffs against: where the two differ, PHASE-4.md
-//! records why. Diffing against the oracle would either freeze a hand-written
-//! register numbering the allocator has no reason to reproduce, or quietly
-//! rewrite the oracle every time the compiler changed its mind — and the oracle
-//! is worth more as a fixed point to argue with.
+//! The `expected.nsi` in each directory is the **hand-written oracle** and is
+//! deliberately not what this diffs against: the two differ where the allocator
+//! made a choice by hand. Diffing against the oracle would either freeze a
+//! hand-written register numbering the allocator has no reason to reproduce, or
+//! quietly rewrite the oracle every time the compiler changed its mind — and
+//! the oracle is worth more as a fixed point to argue with.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -23,8 +23,8 @@ use std::process::Command;
 use installua::diag::{Code, Diagnostics};
 
 /// Each program, with the diagnostics it is *expected* to raise — exactly, in
-/// both directions. Program 4 recurses, and §15.11's depth-cliff warning firing
-/// on it is the point rather than a nuisance.
+/// both directions. Program 4 recurses, and the depth-cliff warning firing on
+/// it is the point rather than a nuisance.
 const PROGRAMS: &[(&str, &[Code])] = &[
     ("01-mui-uninstaller", &[]),
     ("02-plugins", &[]),
@@ -38,7 +38,7 @@ fn examples() -> PathBuf {
 }
 
 /// One program's `.nsi`, compiled against its own directory — `glob` resolves
-/// relative to the source rather than to wherever the test runs (§14).
+/// relative to the source rather than to wherever the test runs.
 fn build(name: &str, expected: &[Code]) -> String {
     let directory = examples().join(name);
     let source = std::fs::read_to_string(directory.join("install.lua"))
@@ -71,7 +71,7 @@ fn the_five_programs_match_their_generated_output() {
 /// Tier 3, with an empty warning allowlist: a `$`-sigil mistake, a mis-ordered
 /// `!define` and an unknown `${FOO}` are all warning 6000 plus a silently wrong
 /// installer, so a test that checked only the exit code would pass on precisely
-/// the bugs this compiler exists to prevent (§14).
+/// the bugs this compiler exists to prevent.
 #[test]
 fn the_five_programs_assemble_under_wx() {
     let Some(makensis) = makensis() else {

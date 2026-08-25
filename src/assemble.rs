@@ -1,4 +1,4 @@
-//! Running `makensis`, and rewriting what it says through the line map (§15.22).
+//! Running `makensis`, and rewriting what it says through the line map.
 //!
 //! This is the half of the ruling that makes Installua a build tool rather than
 //! a program that emits a file, and it is forced rather than chosen: NSIS has
@@ -15,10 +15,10 @@
 //! Error: could not resolve label "nowhere" in unnamed install section (0)
 //! ```
 //!
-//! §14 rules that warnings are failures — a `$`-sigil mistake, a mis-ordered
-//! `!define` and an unknown `${FOO}` are all warning 6000 plus a silently wrong
-//! installer — so `-WX` is passed here rather than left to the caller, and both
-//! syntaxes are on the mapped path.
+//! Warnings are failures — a `$`-sigil mistake, a mis-ordered `!define` and an
+//! unknown `${FOO}` are all warning 6000 plus a silently wrong installer — so
+//! `-WX` is passed here rather than left to the caller, and both syntaxes are
+//! on the mapped path.
 
 use std::path::Path;
 use std::process::Command;
@@ -123,7 +123,7 @@ pub fn translate(
         }
         (Some(Origin::Raw(span)), _) => format!(
             "{}:{span}: error[makensis]: {}\n  note: this line is inside a `raw` block, \
-             which nothing in this compiler checked (§13)",
+             which nothing in this compiler checked",
             name(span, source, files),
             message.text
         ),
@@ -133,8 +133,8 @@ pub fn translate(
             message.text
         ),
         // No line, or a line past the end of the map: link-time errors name a
-        // section rather than a position, and §15.22 rules that inventing one
-        // is worse than saying there is none.
+        // section rather than a position, and inventing one is worse than
+        // saying there is none.
         _ => format!(
             "error[makensis]: {}\n  note: this message names no line; the generated script was \
              kept at {script}",
@@ -145,7 +145,7 @@ pub fn translate(
 
 /// Which file a mapped span belongs to. File `0` is spelled the way the caller
 /// spelled it — `installua build` uses the path as typed — and everything else
-/// is an `include`, named relative to it (§15.28).
+/// is an `include`, named relative to it.
 fn name<'a>(span: &crate::diag::Span, source: &'a str, files: &'a Files) -> &'a str {
     if span.file == 0 {
         source
@@ -165,9 +165,9 @@ pub struct Assembly {
 
 /// Runs `makensis -WX` over `script` and translates everything it says.
 ///
-/// `-WX` rather than plain: §14's "warnings are failures" is not a test policy,
-/// it is the rule that keeps a silently wrong installer from shipping, and the
-/// three most common NSIS mistakes are all warning 6000.
+/// `-WX` rather than plain: "warnings are failures" is not a test policy, it is
+/// the rule that keeps a silently wrong installer from shipping, and the three
+/// most common NSIS mistakes are all warning 6000.
 pub fn assemble(
     script: &Path,
     map: &LineMap,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Re-run the §1 tooling verification. Every claim §1 makes about
+# Re-run the editor-tooling verification. Every claim made about
 # lua-language-server, selene and stylua is checked here; RESULTS.md records
 # what came back. Phase 0 artifact — this becomes a real test in Phase 1.
 #
@@ -122,7 +122,7 @@ if need "$SELENE"; then
 	done
 
 	if "$SELENE" escapes.lua 2>&1 | grep -q bad_string_escape; then
-		ok "escapes.lua: \`\\P\` caught (§13 backslash hazard, editor half)"
+		ok "escapes.lua: \`\\P\` caught (backslash hazard, editor half)"
 	else
 		no "escapes.lua: \`\\P\` caught"
 	fi

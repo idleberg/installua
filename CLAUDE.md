@@ -30,9 +30,10 @@ source ─frontend─▶ AST ─resolve─▶ symbols ─lower─▶ CFG ─allo
 
 ## Conventions
 
-**`§N` in comments points to `PREPLAN.md`** (§15 is "Decisions taken"). There
-are ~750 such references in `src/`, and **`PREPLAN.md` is gitignored** — a
-fresh clone has none of what they cite.
+**The comments are the design document.** There is no separate plan file: the
+reasoning that used to live in one has been folded into the doc comments beside
+the code it explains. A change that invalidates a stated reason invalidates the
+comment too — rewrite it in the same commit.
 
 **Generated — regenerate, never hand-edit:**
 

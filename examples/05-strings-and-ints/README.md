@@ -3,7 +3,7 @@
 Assembles clean under `makensis -WX`. Its arithmetic is separately verified under wine
 against real `lua` — see `verification/semantics/`, six boundary cases, six matches.
 
-Where §4 and §5 stop being tables and start being arguments.
+Where the operator and stdlib rules stop being tables and start being arguments.
 
 ## What it settled
 
@@ -20,21 +20,21 @@ Where §4 and §5 stop being tables and start being arguments.
 _generated_sign_8:
 ```
 
-Five instructions and one branch for both operations, against §15.4's estimate of "roughly
+Five instructions and one branch for both operations, against the estimate of "roughly
 three instructions and a branch per operation". Since a program that wants a quotient
-usually wants the remainder too, the paired case is the common one and §15.4's cost
+usually wants the remainder too, the paired case is the common one and the cost
 estimate is pessimistic.
 
 **`freeMib // 1024` emits no fixup and `delta // 64` does**, from the same source
 construct, because the declaration types `driveSpace`'s output as `uint` and `delta` is an
-ordinary `int`. That is §15.14's lattice earning its keep on the first real program, and it
+ordinary `int`. That is the lattice earning its keep on the first real program, and it
 is the answer to PLAN's open empirical question about how often `unknown` shows up: see
 below.
 
 **`lower(a) == lower(b)` really is a bare `StrCmp`.** No `${StrCase}`, no temporary, no
 `StrFunc` dependency. And the contrast is visible one line later: `string.upper(channel)`
 for its *value* costs `${StrCase} $1 "$0" "U"`. Same function, two lowerings, chosen by
-whether the result is compared or used — which is the peephole §15.9 promised.
+whether the result is compared or used — which is the peephole that was promised.
 
 **Two `${Using:StrFunc}` lines, collected and emitted once.** `StrCase` and `StrLoc` are
 reached from two different places (a section and a `func`); the pass emits one line each,
@@ -58,7 +58,7 @@ dead instructions.
 
 ## The type lattice lands on `unknown` zero times
 
-PLAN lists this as §15.14's open empirical question. Across all five programs, every value
+This was the lattice's open empirical question. Across all five programs, every value
 is typed:
 
 | Source of type | Instances |
@@ -80,7 +80,7 @@ ambiguous"*. The diagnostic should say so.
 ## What it left open
 
 **`string.format` is `IntFmt` only for the integer directives, and this program only uses
-one of them.** `%04d` maps cleanly. `%s` is interpolation, which §15.21 already says, but
+one of them.** `%04d` maps cleanly. `%s` is interpolation, which the adapter rule already says, but
 `string.format("%s: %04d", name, n)` mixes the two in one call and has to split into an
 `IntFmt` plus a template. Not hard, not designed.
 

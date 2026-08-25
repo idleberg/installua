@@ -1,4 +1,4 @@
-//! The line map (§15.22): where every line of the `.nsi` came from.
+//! The line map: where every line of the `.nsi` came from.
 //!
 //! **The normal mechanism is unavailable, and that is what makes this a
 //! file.** Every other transpiler pushes its mapping *into* the artifact and
@@ -10,8 +10,8 @@
 //! tool rather than a program that emits a file.
 //!
 //! The population being mapped is small, and that is what makes it affordable.
-//! §14's premise is that a well-formed Installua program does not reach a
-//! `makensis` diagnostic at all, so what survives is §13's escape hatches: a
+//! The premise is that a well-formed Installua program does not reach a
+//! `makensis` diagnostic at all, so what survives is the escape hatches: a
 //! `raw` block, an undeclared header macro, a plugin call, a missing `File`
 //! source. Four categories, not a general source map.
 
@@ -28,7 +28,7 @@ pub enum Origin {
     /// The compiler's own line: an `!include`, a `${Using:StrFunc}`, a label, a
     /// caller-save. **No span**, because inventing the nearest one would point
     /// a user at code that is not responsible — and a `makensis` complaint
-    /// about one of these is by definition a compiler bug (§15.22).
+    /// about one of these is by definition a compiler bug.
     Emitted(&'static str),
 }
 

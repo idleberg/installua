@@ -1,4 +1,4 @@
-//! `languages { … }` and the dialog that picks between its locales (§15.26).
+//! `languages { … }` and the dialog that picks between its locales.
 //!
 //! Two things are under test and they pull in opposite directions. The first is
 //! the transposition: the source is keyed by locale because a translator owns a
@@ -111,9 +111,9 @@ fn a_language_string_read_is_a_reference_and_not_a_copy() {
     assert!(!output.contains("StrCpy"), "{output}");
 }
 
-/// Either half may read one. §15.26's `un.` prefixing is a size optimisation
-/// and not a boundary — verified against `makensis -WX` both ways — so nothing
-/// here stops the uninstaller naming a string the installer also uses.
+/// Either half may read one. The `un.` prefixing is a size optimisation and not
+/// a boundary — verified against `makensis -WX` both ways — so nothing here
+/// stops the uninstaller naming a string the installer also uses.
 #[test]
 fn both_halves_read_the_same_table() {
     let source = format!(
@@ -136,7 +136,7 @@ fn both_halves_read_the_same_table() {
 
 /// `MUI_LANGUAGE` `!warning`s when it is inserted before the page macros, so
 /// the language lines follow every page in both halves whatever order the
-/// blocks were written in (§15.3).
+/// blocks were written in.
 #[test]
 fn the_language_lines_come_after_every_page() {
     let source = format!(
@@ -151,7 +151,7 @@ fn the_language_lines_come_after_every_page() {
 }
 
 /// The block may be written under the code that reads it. Same order-freeness
-/// as every other declaration (§15.6), and it is a separate pass that buys it.
+/// as every other declaration, and it is a separate pass that buys it.
 #[test]
 fn the_block_may_be_written_below_its_readers() {
     let source = format!(
@@ -166,7 +166,7 @@ fn the_block_may_be_written_below_its_readers() {
 /// Three macros nobody writes: the plugin reservation after the language lines,
 /// the dialog first in `.onInit`, and the uninstaller's lookup first in
 /// `un.onInit`. This is the ninth, tenth and eleventh instance of *emitted,
-/// never written* (§15.7).
+/// never written*.
 #[test]
 fn asking_writes_three_macros_the_source_never_names() {
     let output = build(&program(
@@ -253,7 +253,7 @@ fn remember_writes_all_three_registry_defines() {
 
 /// MUI2 guards the stored answer with one `!ifdef` over all three names, so two
 /// out of three is the whole feature off without saying so — the same ruling
-/// the start menu page's `registry` gets (§15.23).
+/// the start menu page's `registry` gets.
 #[test]
 fn a_partial_remember_is_refused_rather_than_half_applied() {
     let errors = errors(&program(
@@ -281,7 +281,7 @@ fn a_string_missing_from_one_locale_is_an_error() {
 }
 
 /// The key set is the 67 `.nlf` files NSIS ships, checked out of a snapshot so
-/// that the answer does not depend on the build machine (§14).
+/// that the answer does not depend on the build machine.
 #[test]
 fn a_name_nsis_does_not_ship_is_refused_with_the_nearest_one() {
     let errors = errors(&program(
@@ -314,7 +314,7 @@ fn a_string_nothing_declares_is_refused() {
     assert!(errors[0].1.contains("nosuch"), "{errors:?}");
 }
 
-/// One block, like every other script-global declaration (§15.10).
+/// One block, like every other script-global declaration.
 #[test]
 fn a_second_block_names_the_first() {
     let source = format!("{TWO}\n{TWO}\n");
@@ -325,7 +325,7 @@ fn a_second_block_names_the_first() {
 }
 
 /// A `LangString` is chosen by the preprocessor, so its text cannot be
-/// computed: there is no run time yet when the table is built (§7-1).
+/// computed: there is no run time yet when the table is built.
 #[test]
 fn a_computed_string_is_refused() {
     let errors = errors(&program(

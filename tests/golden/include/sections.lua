@@ -1,6 +1,6 @@
 -- The sections, in the file that owns them, listed by the file that installs
 -- them. Splitting code is what `include` exists for; splitting data was always
--- possible (§15.28).
+-- possible.
 
 local core = section("Core", function()
   announce("installing")

@@ -1,4 +1,4 @@
-//! A control-flow graph of basic blocks with explicit terminators (§8).
+//! A control-flow graph of basic blocks with explicit terminators.
 //!
 //! This is the structure that keeps labels out of the statement lowerers. nsL's
 //! `ISSUES.md` lists "parse-time state corruption" as a whole *category*, and
@@ -26,12 +26,11 @@ use crate::ir;
 use crate::regs::Slot;
 use crate::types::{Sign, Ty, Width};
 
-/// Every generated label carries this prefix (§15.19). It defends against
-/// header macros and `raw` — `WinVer.nsh` emits `_winver_sp_done` and
-/// `StrFunc` emits labels as generic as `done`, `loop` and `ret` — rather than
-/// against user code, which cannot name a label at all. It is deliberately not
-/// the product name: a rename would otherwise rewrite every golden file for no
-/// semantic change.
+/// Every generated label carries this prefix. It defends against header macros
+/// and `raw` — `WinVer.nsh` emits `_winver_sp_done` and `StrFunc` emits labels
+/// as generic as `done`, `loop` and `ret` — rather than against user code,
+/// which cannot name a label at all. It is deliberately not the product name: a
+/// rename would otherwise rewrite every golden file for no semantic change.
 ///
 /// Uppercase and double-underscored so that a label is unmistakably not a
 /// user's line in a diff, and sorts away from everything a header is likely to
@@ -61,13 +60,13 @@ pub struct Body {
     /// Plugins this body calls a method of, by namespace. Recorded here rather
     /// than counted from the instructions because it is read *per body*: a DLL
     /// has to be reserved when `.onInit` can reach the call, and reachability
-    /// is a question about bodies (§11). A set, since two calls to the same
-    /// plugin are one reservation.
+    /// is a question about bodies. A set, since two calls to the same plugin
+    /// are one reservation.
     pub plugins: BTreeSet<String>,
-    /// The per-body construct counter (§15.25). It resets here rather than
-    /// running monotonically over the program so that inserting an `if` early
-    /// renumbers labels in that body only, which is what keeps §14's whole-file
-    /// goldens diffable.
+    /// The per-body construct counter. It resets here rather than running
+    /// monotonically over the program so that inserting an `if` early renumbers
+    /// labels in that body only, which is what keeps the whole-file goldens
+    /// diffable.
     next_construct: usize,
 }
 
@@ -87,8 +86,7 @@ impl Body {
 
     /// A fresh virtual slot. There is no supply to run out of here: exhaustion
     /// is a fact about *simultaneously live* values, which nothing knows until
-    /// the body is complete, so the allocator raises it and lowering does not
-    /// (§9-3).
+    /// the body is complete, so the allocator raises it and lowering does not.
     pub fn vreg(&mut self, span: Span) -> Slot {
         self.vregs.push(span);
         Slot::Virtual((self.vregs.len() - 1) as u32)
@@ -134,7 +132,7 @@ impl Body {
     }
 
     /// A new block, named deterministically at creation rather than at layout —
-    /// determinism is what makes a golden `.nsi` diffable (§8).
+    /// determinism is what makes a golden `.nsi` diffable.
     pub fn new_block(&mut self, label: impl Into<String>, span: Span) -> BlockId {
         self.blocks.push(BasicBlock::new(label.into(), span));
         BlockId(self.blocks.len() - 1)
@@ -202,7 +200,7 @@ pub struct BasicBlock {
     pub steps: Vec<ir::Step>,
     pub terminator: Terminator,
     /// Where the block came from, for the diagnostics a later pass raises about
-    /// it and for §15.22's line map.
+    /// it and for the line map.
     pub span: Span,
 }
 
@@ -262,13 +260,13 @@ pub enum Test {
         lhs: ir::Arg,
         rhs: ir::Arg,
         /// `==` is `StrCmpS`: case-sensitive is the *default* here and the
-        /// reversal from NSIS habit that will bite hardest (§15.9).
+        /// reversal from NSIS habit that will bite hardest.
         case_sensitive: bool,
         /// `~=` swaps the arms rather than inverting at the call site.
         negate: bool,
     },
     /// The `IntCmp` family. Three arms, so one instruction and no temporaries
-    /// covers all six relational operators (§12).
+    /// covers all six relational operators.
     Int {
         op: CmpOp,
         lhs: ir::Arg,
@@ -276,17 +274,17 @@ pub enum Test {
         family: IntFamily,
     },
     /// `IfFileExists`, `IfErrors`, `IfSilent` — a branching instruction with no
-    /// right-hand side. §15.20 dissolves the second condition shape these used
-    /// to need: `fileExists(p)` is an ordinary `bool`-valued call, and fusing it
-    /// spends no register.
+    /// right-hand side. A `bool`-valued call dissolves the second condition
+    /// shape these used to need: `fileExists(p)` is an ordinary call, and
+    /// fusing it spends no register.
     Predicate {
         name: String,
         args: Vec<ir::Arg>,
         /// The token that introduces each arm, when the instruction wants one.
         /// Empty for `IfFileExists f <then> <else>`, where the arms are
         /// positional; `["IDYES", "IDNO"]` for `MessageBox`, whose arms are
-        /// keyed and **omitted** rather than spelled `0` when they fall through
-        /// (§15.18).
+        /// keyed and **omitted** rather than spelled `0` when they fall
+        /// through.
         keywords: Vec<String>,
     },
 }
@@ -362,9 +360,8 @@ pub enum Arm {
 
 impl CmpOp {
     /// `IntCmp a b <eq> <lt> <gt>` covers every relational operator in one
-    /// instruction — the payoff of §8's "no materialised booleans", and not
-    /// obvious from the NSIS documentation, so it is written down as a table
-    /// (§12).
+    /// instruction — the payoff of "no materialised booleans", and not obvious
+    /// from the NSIS documentation, so it is written down as a table.
     pub fn arms(self) -> [Arm; 3] {
         use Arm::{Else, Then};
         match self {
@@ -392,7 +389,7 @@ impl CmpOp {
 }
 
 /// The `IntCmp` product: width picks the family, sign picks the member. Six
-/// instructions, two axes, exactly as §15.14 factors the type.
+/// instructions, two axes, exactly as the lattice factors the type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IntFamily {
     Int,

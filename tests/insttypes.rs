@@ -1,4 +1,5 @@
-//! Install types at run time: §13 applied to a list instead of a section.
+//! Install types at run time: the binding applied to a list instead of a
+//! section.
 //!
 //! An install type's identity is its position in the block's `installTypes`
 //! list, and every one of these tests is really the same assertion: the number

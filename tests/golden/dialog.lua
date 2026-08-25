@@ -1,4 +1,4 @@
--- A custom page, and the controls it draws (§15.32).
+-- A custom page, and the controls it draws.
 --
 -- Nothing here is `!include`d. `${NSD_CreateLabel}` is `nsDialogs.nsh`'s way of
 -- writing three constants in front of `nsDialogs::CreateControl`, and the
@@ -68,7 +68,7 @@ installer {
 			detailPrint("about to build the dialog")
 		end,
 
-		-- Fields, which are the controls made addressable (§15.32). Each is one
+		-- Fields, which are the controls made addressable. Each is one
 		-- instruction: a control has no flags word to read, edit and write back
 		-- the way a section does.
 		show = function()

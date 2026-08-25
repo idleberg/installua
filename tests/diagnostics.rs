@@ -1,10 +1,10 @@
 //! The diagnostic registry, as a test rather than a promise.
 //!
-//! PLAN §2: *every diagnostic code has a test that produces it, enforced by a
+//! The rule: *every diagnostic code has a test that produces it, enforced by a
 //! registry-walking test, and every rejection names its replacement.* All three
 //! are checked here, and the table is the mechanism — a code added to
 //! `Code::ALL` without a case in `CASES` fails the build, so omission is
-//! unrepresentable (§14).
+//! unrepresentable.
 
 use std::collections::BTreeMap;
 
@@ -177,7 +177,7 @@ const CASES: &[(Code, &str)] = &[
 ///
 /// Twenty-one *declarations* would no longer do it, which is the point: since
 /// Phase 3 this diagnostic reports a fact about the program rather than a fact
-/// about the allocator (§9-3).
+/// about the allocator.
 const EXHAUSTED: &str = concat!(
     "attributes { outFile = \"a.exe\" }\n",
     "installer { section(\"Core\", function()\n",
@@ -210,9 +210,9 @@ const OVERLONG: &str = concat!(
 );
 
 /// Every case compiles against the same two-file in-memory project, so that a
-/// case needing a second file has one and no case needs the disk (§9-2).
-/// `loop.lua` includes itself, which is the only way to write a cycle small
-/// enough to sit in this table.
+/// case needing a second file has one and no case needs the disk. `loop.lua`
+/// includes itself, which is the only way to write a cycle small enough to sit
+/// in this table.
 fn compile(source: &str) -> Diagnostics {
     let sources = BTreeMap::from([
         ("loop.lua".to_string(), "include \"loop.lua\"\n".to_string()),
@@ -237,7 +237,7 @@ fn compile(source: &str) -> Diagnostics {
 /// so an equality check rejected `readMemory(0, 4)` with *"wants a int, and
 /// this is a int"* — a message that cannot be acted on, for a program that is
 /// correct. The lattice already knew better: `a.join(b) == b` is what "a fits
-/// where b is wanted" means (§15.14).
+/// where b is wanted" means.
 ///
 /// The other direction still fails, and must: a `nonneg` position is the one
 /// that elides a fixup, so a value merely known to be an `int` does not belong
@@ -298,7 +298,7 @@ fn every_case_raises_its_code() {
     }
 }
 
-/// PLAN §2: *every rejection names its replacement.* A diagnostic that says
+/// *Every rejection names its replacement.* A diagnostic that says
 /// only "not supported" sends the user back to the NSIS documentation, which is
 /// the thing this compiler exists to stand in front of.
 #[test]
@@ -320,8 +320,8 @@ fn every_rejection_names_its_replacement() {
     }
 }
 
-/// Collect-don't-throw is only observable when more than one error exists
-/// (PLAN §2). Three unrelated mistakes, one run, three diagnostics.
+/// Collect-don't-throw is only observable when more than one error exists.
+/// Three unrelated mistakes, one run, three diagnostics.
 #[test]
 fn errors_are_collected_not_thrown() {
     let diags = compile(

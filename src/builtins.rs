@@ -3,7 +3,8 @@
 //! **The instructions used to live here and no longer do.** Phase 2 needed a
 //! seed table before the `-CMDHELP` join existed; Phase 5 built the join, and a
 //! seed that outlives the thing it seeded is just a second source of truth —
-//! §15.23's exact failure, where a consumer reading two tables sees half an
+//! the exact failure the join exists to prevent, where a consumer reading two
+//! tables sees half an
 //! entry. [`lookup`] now answers from [`crate::table`], so one `exposed(…)` row
 //! makes a command callable, completable and counted at once.
 //!
@@ -13,8 +14,8 @@
 //! written twice.
 //!
 //! Every name outside both is [`crate::diag::Code::NotYetImplemented`], which
-//! is the honest edge of the vertical slice and counted by `installua coverage`
-//! (PLAN §0).
+//! is the honest edge of the vertical slice and counted by `installua
+//! coverage`.
 
 use crate::table::{self, Class, Instruction};
 use crate::types::Ty;
@@ -24,8 +25,8 @@ pub fn lookup(name: &str) -> Option<&'static Instruction> {
 }
 
 /// An NSIS constant: an ordinary read-only name here, joined with `..` rather
-/// than interpolated into a literal (§15.1). `$INSTDIR` inside a string is the
-/// single most common NSIS habit this language does not have.
+/// than interpolated into a literal. `$INSTDIR` inside a string is the single
+/// most common NSIS habit this language does not have.
 #[derive(Clone, Copy, Debug)]
 pub struct Constant {
     pub installua: &'static str,
@@ -34,12 +35,12 @@ pub struct Constant {
     /// Whether the name carries a `$`. `$INSTDIR` is a variable the installer
     /// expands at run time; `HKLM` is a bare keyword that only `Reg*` accepts,
     /// and writing `$HKLM` instead produces warning 6000 and a silently wrong
-    /// installer (§15.1).
+    /// installer.
     pub sigil: bool,
     /// Whether assigning to it is legal. `$INSTDIR` is a variable the user is
     /// *expected* to write — `.onInit` reading a prior install location and
     /// setting it is the canonical shape — while `$EXEDIR` is a fact about the
-    /// machine and assigning to it is a mistake NSIS accepts silently (§13).
+    /// machine and assigning to it is a mistake NSIS accepts silently.
     pub writable: bool,
 }
 
@@ -105,10 +106,10 @@ pub const CONSTANTS: &[Constant] = &[
     constant("PLUGINSDIR", Ty::Str),
     constant("LANGUAGE", Ty::nonneg()),
     // The installer's own window, and the only handle a program can name
-    // without having created the thing it addresses: `getDlgItem(HWNDPARENT, 2)`
-    // reaches the Cancel button MUI2 drew, not one of ours (§15.32). Read-only
-    // for the same reason as `$EXEDIR` — it is a fact about the running
-    // installer, and NSIS accepts a write to it silently.
+    // without having created the thing it addresses: `getDlgItem(HWNDPARENT,
+    // 2)` reaches the Cancel button MUI2 drew, not one of ours. Read-only for
+    // the same reason as `$EXEDIR` — it is a fact about the running installer,
+    // and NSIS accepts a write to it silently.
     constant("HWNDPARENT", Ty::Handle),
     root("HKLM"),
     root("HKCU"),
@@ -122,7 +123,7 @@ pub const CONSTANTS: &[Constant] = &[
 /// read and its write are *instructions*. `currentInstType` is `GetCurInstType`
 /// and `SetCurInstType`, and `instTypes` is a table addressed by string — so
 /// neither may become a `Var`, which is what an unbound assignment target
-/// otherwise does (§13).
+/// otherwise does.
 pub fn owned(name: &str) -> bool {
     matches!(name, "currentInstType" | "instTypes")
 }
@@ -132,7 +133,7 @@ pub fn constant_named(name: &str) -> Option<&'static Constant> {
 }
 
 /// Suggestions for a name that resolved to nothing. Every rejection names its
-/// replacement (PLAN §2), and for a misspelling the replacement is the spelling.
+/// replacement, and for a misspelling the replacement is the spelling.
 pub fn nearest(name: &str) -> Option<&'static str> {
     let lowered = name.to_lowercase();
     table::table()

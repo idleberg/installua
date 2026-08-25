@@ -1,19 +1,19 @@
-//! `include`: source layout, and nothing else (§15.28).
+//! `include`: source layout, and nothing else.
 //!
-//! Two words exist because they belong to two stages. `import "FileFunc"`
-//! emits an `!include` into the output and is therefore *in* the artifact;
-//! `include "strings/de.lua"` merges another file's declarations into this one
-//! and leaves no trace at all. Overloading one name across that boundary is the
-//! staging conflation §2 forbids — a reader must always be able to tell which
-//! stage a line belongs to.
+//! Two words exist because they belong to two stages. `import "FileFunc"` emits
+//! an `!include` into the output and is therefore *in* the artifact; `include
+//! "strings/de.lua"` merges another file's declarations into this one and
+//! leaves no trace at all. Overloading one name across that boundary is the
+//! staging conflation this language forbids — a reader must always be able to
+//! tell which stage a line belongs to.
 //!
 //! What this pass is not: a module system. There is no search path, no export
-//! list, no `return` value and no separately-compilable unit — §15.11 rules the
-//! latter out for good, because clobber sets are whole-program. A file is
-//! spliced into the top-level block of the file that named it, and everything
-//! downstream sees one tree. That is what makes the merge free: resolution is
-//! already order-free (§15.6), so a `func` in one file and its caller in
-//! another need no ordering rule between them either.
+//! list, no `return` value and no separately-compilable unit — the latter is
+//! out for good, because clobber sets are whole-program. A file is spliced into
+//! the top-level block of the file that named it, and everything downstream
+//! sees one tree. That is what makes the merge free: resolution is already
+//! order-free, so a `func` in one file and its caller in another need no
+//! ordering rule between them either.
 //!
 //! Three things a path may not do, all for the same reason — it has to be
 //! readable without running anything:
@@ -34,9 +34,9 @@ use crate::{Options, frontend};
 /// An enum rather than a boxed closure because [`Options`] is `Clone + Debug`
 /// and a closure is neither — and because there are exactly two answers: the
 /// build tool reads the disk, and everything else (tests, an editor, an
-/// embedder) already has the sources in hand. §9-2's requirement that this
-/// crate compile an in-memory string with no file system involved does not stop
-/// being true because a program grew a second file.
+/// embedder) already has the sources in hand. The requirement that this crate
+/// compile an in-memory string with no file system involved does not stop being
+/// true because a program grew a second file.
 #[derive(Clone, Debug, Default)]
 pub enum Loader {
     #[default]
@@ -157,7 +157,7 @@ impl Expander<'_, '_> {
                     "an included path must be a string literal",
                     &[
                         "nothing runs before this pass, so there is no stage that could evaluate \
-                         an expression here (§2)",
+                         an expression here",
                         "the path is relative to this file, and written whole: \
                          `include \"strings/de.lua\"`",
                     ],
@@ -195,7 +195,7 @@ impl Expander<'_, '_> {
                     &[
                         &format!("the loop is {}", chain.join(" → ")),
                         "declarations are order-free, so a file never needs to include the one \
-                         that includes it (§15.6)",
+                         that includes it",
                     ],
                 );
             }

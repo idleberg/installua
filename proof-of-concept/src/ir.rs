@@ -2,10 +2,10 @@
 //! only decides layout and quoting.
 
 pub struct Module {
-    /// `!include`d headers, emitted once and only when something used them (§7-4).
+    /// `!include`d headers, emitted once and only when something used them.
     pub includes: Vec<&'static str>,
     /// `!getdllversion` and `!define`, in source order — the preprocessor is
-    /// textual and strictly sequential, unlike everything below it (§12).
+    /// textual and strictly sequential, unlike everything below it.
     pub directives: Vec<Instruction>,
     /// One-time header init lines (`${StrCase}`), after the includes.
     pub inits: Vec<Instruction>,
@@ -37,8 +37,8 @@ pub struct Section {
     pub body: Vec<Item>,
 }
 
-/// Labels are IR nodes, not strings spliced by the lowering code (§8-2). This
-/// is still a flat list rather than a block graph — that is the next step.
+/// Labels are IR nodes, not strings spliced by the lowering code. This is still
+/// a flat list rather than a block graph — that is the next step.
 pub enum Item {
     Instruction(Instruction),
     Label(String),

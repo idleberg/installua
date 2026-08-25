@@ -66,7 +66,7 @@ generated one:
 ```
 install.lua:3:15: warning[dollar-in-literal]: `$INSTDIR` is emitted as literal text here
   note: did you mean `.. INSTDIR ..`? a string literal is data, never a template:
-        every `$` is emitted as `$$` (§15.1)
+        every `$` is emitted as `$$`
 ```
 
 ### The commands you will use

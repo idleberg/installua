@@ -1,20 +1,19 @@
 //! What the compiler knows about a name before it has finished reading the
-//! program: `func` signatures and global types (§15.14, §15.24).
+//! program: `func` signatures and global types.
 //!
-//! Both are **whole-program** facts, and §15.6 makes the language order-free, so
-//! neither can be learned by one pass in declaration order. A parameter's type
-//! comes from the call sites, which are usually below the declaration; a return
-//! type comes from the body, which the call site is above. The two directions
-//! meet in the middle, and the middle is a fixpoint.
+//! Both are **whole-program** facts, and the language is order-free, so neither
+//! can be learned by one pass in declaration order. A parameter's type comes
+//! from the call sites, which are usually below the declaration; a return type
+//! comes from the body, which the call site is above. The two directions meet
+//! in the middle, and the middle is a fixpoint.
 //!
-//! There are no annotations to fall back on — §15.14 is explicit that types are
-//! inferred and never declared — so this is not an optimisation that could be
-//! skipped. Without it `countdown(n)` cannot know `n` is an int, and `n - 1` has
-//! no lowering.
+//! There are no annotations to fall back on — types are inferred and never
+//! declared — so this is not an optimisation that could be skipped. Without it
+//! `countdown(n)` cannot know `n` is an int, and `n - 1` has no lowering.
 //!
-//! This is also the door §15.11 closes deliberately: a signature that depends on
-//! every call site in the program means there is no separately-compilable unit.
-//! An installer is one program with one output, so nothing wants one.
+//! This is also a door closed deliberately: a signature that depends on every
+//! call site in the program means there is no separately-compilable unit. An
+//! installer is one program with one output, so nothing wants one.
 
 use std::collections::BTreeMap;
 
@@ -62,9 +61,9 @@ impl Signature {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Inferred {
     pub signatures: BTreeMap<String, Signature>,
-    /// A global's type, which §15.24 fixes for the program's lifetime. Carried
-    /// through the fixpoint so that a body lowered before the assignment that
-    /// types a global still sees the right type — the one thing Phase 2 left
+    /// A global's type, fixed for the program's lifetime. Carried through the
+    /// fixpoint so that a body lowered before the assignment that types a
+    /// global still sees the right type — the one thing Phase 2 left
     /// order-dependent.
     pub globals: BTreeMap<String, Ty>,
 }

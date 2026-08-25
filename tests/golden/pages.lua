@@ -1,4 +1,4 @@
--- The page surface (§15.7): every MUI2 setting that belongs to a page rather
+-- The page surface: every MUI2 setting that belongs to a page rather
 -- than to the block, and the two block settings that look page-scoped and are
 -- not.
 --
@@ -14,7 +14,7 @@ attributes {
 }
 
 -- A global, because `DirVar` takes a *variable* and not a value: NSIS stores
--- the chosen directory into it (§15.24).
+-- the chosen directory into it.
 dataDir = ""
 
 -- The one page bound to a `local`, and the only one whose lowering differs
@@ -82,7 +82,7 @@ installer {
 	-- The eighth page, and the only one whose body is the compiler's: `Page
 	-- custom` names a creator and a leave function, so `pre` and `show` are
 	-- inlined either side of the dialog and `leave` becomes the second name on
-	-- the line (§15.32). The header is a `MUI_HEADER_TEXT` call rather than the
+	-- the line. The header is a `MUI_HEADER_TEXT` call rather than the
 	-- `!define` the other five write, because MUI2 never reads a define for a
 	-- page it did not insert.
 	page.custom { "Registration",
@@ -123,7 +123,7 @@ uninstaller {
 	-- The same page with nothing on it, in the other half: no caption, no
 	-- `leave`, no header. `UninstPage custom` with one name after it is the
 	-- shortest line this construct can produce, and `un.` leads the function
-	-- because NSIS spells the half in the name (§15.3).
+	-- because NSIS spells the half in the name.
 	page.custom {},
 
 	page.instFiles {},

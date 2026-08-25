@@ -5,9 +5,9 @@
 //! body's CFG into a flat list by the time anything here runs.
 //!
 //! Every line is written through [`Out::line`], which takes its origin
-//! alongside its text. That is the whole of §15.22's collection half: a line
-//! and its provenance are produced together, so there is no second pass that
-//! could disagree with the first about how many lines there are.
+//! alongside its text. That is the whole of the line map's collection half: a
+//! line and its provenance are produced together, so there is no second pass
+//! that could disagree with the first about how many lines there are.
 
 use crate::ir;
 use crate::layout;
@@ -55,13 +55,13 @@ pub fn emit(module: &ir::Module) -> String {
     emit_mapped(module).0
 }
 
-/// The `.nsi` and its line map (§15.22).
+/// The `.nsi` and its line map.
 pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     let mut out = Out::default();
 
     // 1. `Unicode` leads. A later `raw` then overrides it, rather than being
-    //    silently overridden by a `Unicode` the compiler emitted afterwards
-    //    (§15.16) — last one wins in NSIS, with no diagnostic either way.
+    //    silently overridden by a `Unicode` the compiler emitted afterwards —
+    //    last one wins in NSIS, with no diagnostic either way.
     out.line(
         format!("Unicode {}", boolean(module.unicode)),
         Origin::Emitted("Unicode"),
@@ -87,7 +87,7 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
 
     // 6. `Var`s. A `Var` used before it is declared is a hard error in NSIS,
     //    unlike a `Function`, which is why these are collected rather than
-    //    emitted where they were written (§12). Ahead of the pages because
+    //    emitted where they were written. Ahead of the pages because
     //    `page.directory { variable = … }` names one in a `DirVar`.
     out.section("Var", module.vars.iter().map(|name| format!("Var {name}")));
 
@@ -95,12 +95,12 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     out.section("MUI define", module.mui_defines.iter().map(define_line));
     // Each page brings its own settings with it: MUI2 reads a page-scoped
     // `!define` at the insertion point, so the three lists interleave per page
-    // rather than running one after the other (§15.7).
+    // rather than running one after the other.
     for half in [&module.pages, &module.unpages] {
         for (index, page) in half.iter().enumerate() {
             // A page that carries settings gets a blank line in front of it, so
             // a reader can see where one page's defines end and the next one's
-            // begin. A run of bare `!insertmacro` lines stays a run (§9-6).
+            // begin. A run of bare `!insertmacro` lines stays a run.
             let bare = page.defines.is_empty() && page.undefines.is_empty();
             if index == 0 || !bare {
                 out.blank();
@@ -120,7 +120,7 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     // 7b. The plugin reservations, immediately after the language lines — the
     //     position MUI2 chose for `MUI_RESERVEFILE_LANGDLL`, and the same
     //     argument: `.onInit` runs before anything has been extracted, so a DLL
-    //     it calls has to be at the head of the data block (§11).
+    //     it calls has to be at the head of the data block.
     out.section("reserve", module.reserved.iter().map(line));
 
     // 8. Install types, in the order they were declared. That order is their
@@ -263,8 +263,7 @@ fn body(out: &mut Out, body: &crate::cfg::Body, depth: usize) {
                 );
             }
             // Labels sit one level out from the code they head, as they do in
-            // hand-written NSIS — the output is the only debugger anyone has
-            // (§9-6).
+            // hand-written NSIS — the output is the only debugger anyone has.
             ir::Item::Label(label) => {
                 out.line(
                     format!("{}{label}:", INDENT.repeat(depth.saturating_sub(1))),
@@ -277,7 +276,7 @@ fn body(out: &mut Out, body: &crate::cfg::Body, depth: usize) {
 
 /// One page: its settings, its macro, and the `!undef`s that keep the settings
 /// off the next page. Three runs rather than three lists, because MUI2 reads a
-/// page-scoped `!define` at the insertion point (§15.7).
+/// page-scoped `!define` at the insertion point.
 fn page_lines(page: &ir::Page) -> impl Iterator<Item = String> {
     page.defines
         .iter()
@@ -302,7 +301,7 @@ fn line(instruction: &ir::Instruction) -> String {
     out
 }
 
-/// NSIS quoting for **data** (§12, §15.1).
+/// NSIS quoting for **data**.
 ///
 /// A literal is data and never a template, so every `$` in a text piece is
 /// doubled — which is what keeps an unknown `${NOPE}` from reaching the output
@@ -315,9 +314,9 @@ fn argument(arg: &ir::Arg) -> String {
         // A destination is syntax: a register name and nothing else.
         ir::Arg::Dest(slot) => slot.nsis(),
         // Three shapes need no quotes at all, and leaving them off is the
-        // difference between output a human reads and output they flinch at
-        // (§9-6). All are provably safe: NSIS parses `$0` and `"$0"`
-        // identically, and an integer has nothing in it to quote.
+        // difference between output a human reads and output they flinch at.
+        // All are provably safe: NSIS parses `$0` and `"$0"` identically, and
+        // an integer has nothing in it to quote.
         ir::Arg::Data { pieces, path }
             if matches!(
                 pieces.as_slice(),
@@ -344,7 +343,7 @@ fn argument(arg: &ir::Arg) -> String {
 
 /// One piece, into whatever the caller is building. `path` normalises `/` in
 /// **text** only: what a register holds is runtime data, and a `${…}` is
-/// substituted after this compiler has stopped looking (§5).
+/// substituted after this compiler has stopped looking.
 fn push_piece(out: &mut String, piece: &ir::Piece, path: bool) {
     match piece {
         ir::Piece::Text(text) => {

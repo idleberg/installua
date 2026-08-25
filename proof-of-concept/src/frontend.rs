@@ -1,11 +1,11 @@
-//! Phase 1-2: parse full Lua with full-moon, then run a whitelist pass (§1).
+//! Phase 1-2: parse full Lua with full-moon, then run a whitelist pass.
 //! Anything outside the supported subset is rejected with a real diagnostic
 //! rather than half-supported.
 //!
 //! Two walks over the top level, not one: names are resolved before any body is
-//! lowered, so `import`, `plugin` and `function` bindings work regardless of the
-//! order they appear in. `<const>` is the exception — the preprocessor is
-//! sequential, so constants see only the constants above them (§12).
+//! lowered, so `import`, `plugin` and `function` bindings work regardless of
+//! the order they appear in. `<const>` is the exception — the preprocessor is
+//! sequential, so constants see only the constants above them.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -77,7 +77,7 @@ struct Frontend<'a> {
 }
 
 /// A `<const>` is build-time, so what it holds is NSIS text — `${NAME}` — not a
-/// register and not a copy of its initializer (§7-1).
+/// register and not a copy of its initializer.
 struct ConstDef {
     text: String,
     ty: Ty,
@@ -148,8 +148,8 @@ impl Frontend<'_> {
         }
     }
 
-    /// `local NAME <const> = …` is `!define` (§7-1): the value is build-time,
-    /// the name is `${NAME}` everywhere it is used.
+    /// `local NAME <const> = …` is `!define`: the value is build-time, the name
+    /// is `${NAME}` everywhere it is used.
     fn constant(&mut self, local: &lua::LocalAssignment) {
         let span = node_span(local);
 
@@ -219,7 +219,7 @@ impl Frontend<'_> {
     }
 
     /// `local V <const> = pre.getDllVersion("app.dll")` — the command defines
-    /// `V_1`…`V_4` on the build machine, and `V` names their composition (§7-3).
+    /// `V_1`…`V_4` on the build machine, and `V` names their composition.
     fn pre_call(
         &mut self,
         name: &str,
@@ -315,7 +315,7 @@ impl Frontend<'_> {
         ))
     }
 
-    /// Build-time evaluation (§7-2): the result is NSIS text plus a type, so a
+    /// Build-time evaluation: the result is NSIS text plus a type, so a
     /// constant that refers to another one composes `${A} ${B}` rather than
     /// copying either value.
     fn const_value(&mut self, expression: &lua::Expression) -> Option<(String, Ty)> {
@@ -356,7 +356,7 @@ impl Frontend<'_> {
                 }
                 _ => {
                     // Arithmetic folds, and only folds: `!define /math` exists,
-                    // but a compiler that constant-folds never needs it (§7-2).
+                    // but a compiler that constant-folds never needs it.
                     let op = self.binary_op(binop, span)?;
                     let lhs = self.integer(lhs)?;
                     let rhs = self.integer(rhs)?;
@@ -388,7 +388,7 @@ impl Frontend<'_> {
         match expression {
             lua::Expression::Parentheses { expression, .. } => self.integer(expression),
             lua::Expression::Number(token) => match token.token().token_type() {
-                // §3/§10-7: floats are rejected outright rather than truncated.
+                // Floats are rejected outright rather than truncated.
                 TokenType::Number { text } => match text.parse::<i64>() {
                     Ok(value) => Some(value),
                     Err(_) => {
@@ -442,7 +442,7 @@ impl Frontend<'_> {
                         node_span(local),
                         "a top-level `local` must bind an `import`, a `plugin` or a `<const>`",
                     )
-                    .with_note("there is no build-time value to hold otherwise (§7)"),
+                   .with_note("there is no build-time value to hold otherwise"),
                 ),
                 other => self.diags.push(
                     Diagnostic::error(
@@ -465,8 +465,8 @@ impl Frontend<'_> {
             ));
         }
 
-        // §7-4: emit each `!include` once, only if something used it, in
-        // overlay order so the output stays stable.
+        // Emit each `!include` once, only if something used it, in overlay
+        // order so the output stays stable.
         program.includes = overlay::HEADERS
             .iter()
             .filter(|header| self.used_headers.contains(header.luis))
@@ -500,7 +500,7 @@ impl Frontend<'_> {
         if name.method_name().is_some() || names.len() != 1 {
             self.diags.push(
                 Diagnostic::error("E002", span, "only plain function names are supported")
-                    .with_note("there are no tables to hang a method off (§3)"),
+                   .with_note("there are no tables to hang a method off"),
             );
             return None;
         }
@@ -516,7 +516,7 @@ impl Frontend<'_> {
         if body.parameters().iter().next().is_some() {
             self.diags.push(
                 Diagnostic::error("E004", span, "functions take no parameters yet").with_note(
-                    "parameters need a calling convention, which is still open (§3, §10-3)",
+                    "parameters need a calling convention, which is still open",
                 ),
             );
         }
@@ -642,7 +642,7 @@ impl Frontend<'_> {
     }
 
     /// A section group is a section that contains sections, so its body is
-    /// checked structurally rather than lowered (§13).
+    /// checked structurally rather than lowered.
     fn section_group(&mut self, args: &lua::FunctionArgs, span: Span) -> Option<SectionGroup> {
         let arguments = self.declaration_args("sectionGroup", args, span)?;
         let (name, options, body) = self.name_options_body("sectionGroup", &arguments, span)?;
@@ -871,7 +871,7 @@ impl Frontend<'_> {
         if is_const(local) {
             self.diags.push(
                 Diagnostic::error("E002", span, "`<const>` is only allowed at the top level")
-                    .with_note("it becomes a `!define`, and the preprocessor has no scopes (§7-1)"),
+                   .with_note("it becomes a `!define`, and the preprocessor has no scopes"),
             );
             return None;
         }
@@ -882,7 +882,7 @@ impl Frontend<'_> {
         let ([name], [value]) = (names.as_slice(), expressions.as_slice()) else {
             self.diags.push(
                 Diagnostic::error("E004", span, "`local` binds exactly one name to one value")
-                    .with_note("multiple assignment needs a calling convention (§3)"),
+                   .with_note("multiple assignment needs a calling convention"),
             );
             return None;
         };
@@ -954,7 +954,7 @@ impl Frontend<'_> {
             lua::BinOp::And(_) | lua::BinOp::Or(_) => {
                 self.diags.push(
                     Diagnostic::error("E002", span, "`and` and `or` are not supported yet")
-                        .with_note("short-circuiting needs the block graph in §8; use nested `if`"),
+                        .with_note("short-circuiting needs the block graph; use nested `if`"),
                 );
                 return None;
             }
@@ -972,7 +972,7 @@ impl Frontend<'_> {
     fn unsupported_condition<T>(&mut self, span: Span) -> Option<T> {
         self.diags.push(
             Diagnostic::error("E002", span, "an `if` condition must be a comparison").with_note(
-                "there are no booleans to test: a condition lowers into the branch targets of `IntCmp` (§8)",
+                "there are no booleans to test: a condition lowers into the branch targets of `IntCmp`",
             ),
         );
         None
@@ -989,7 +989,7 @@ impl Frontend<'_> {
             lua::Expression::Var(lua::Var::Name(name)) => {
                 let name = name.token().to_string();
                 // A `<const>` shadows nothing: it is build-time text, and the
-                // register file never hears about it (§7-1).
+                // register file never hears about it.
                 match self.consts.get(&name) {
                     Some(def) => Some(Expr::Const {
                         text: def.text.clone(),
@@ -1044,14 +1044,14 @@ impl Frontend<'_> {
             lua::BinOp::Plus(_) => Some(BinOp::Add),
             lua::BinOp::Minus(_) => Some(BinOp::Sub),
             lua::BinOp::Star(_) => Some(BinOp::Mul),
-            // §4: Lua's `//` is NSIS's `/`, and Lua's `%` is NSIS's `%` with the
+            // Lua's `//` is NSIS's `/`, and Lua's `%` is NSIS's `%` with the
             // opposite sign rule on negatives. Both are accepted; the rounding
             // difference is a documentation problem, not a silent remap.
             lua::BinOp::DoubleSlash(_) => Some(BinOp::Div),
             lua::BinOp::Percent(_) => Some(BinOp::Mod),
-            // §4/§10-7: `/` is float division in Lua but integer division in
-            // NSIS, and `^` is exponentiation in Lua but XOR in NSIS. Both mean
-            // something different than they say, so neither is accepted.
+            // `/` is float division in Lua but integer division in NSIS, and
+            // `^` is exponentiation in Lua but XOR in NSIS. Both mean something
+            // different than they say, so neither is accepted.
             lua::BinOp::Slash(_) | lua::BinOp::Caret(_) => {
                 self.diags.push(
                     Diagnostic::error(
@@ -1078,7 +1078,7 @@ impl Frontend<'_> {
     }
 
     /// A call used for its value: only a macro with an output variable
-    /// qualifies. Everything else has nothing to return (§3, §10-3).
+    /// qualifies. Everything else has nothing to return.
     fn call_expr(&mut self, call: &lua::FunctionCall, span: Span) -> Option<Expr> {
         let target = self.call_target(call)?;
         let Target::Method {
@@ -1089,7 +1089,7 @@ impl Frontend<'_> {
         else {
             self.diags.push(
                 Diagnostic::error("E005", span, "this call does not produce a value")
-                    .with_note("functions and plugins have no return values yet (§3, §10-3)"),
+                   .with_note("functions and plugins have no return values yet"),
             );
             return None;
         };
@@ -1179,7 +1179,7 @@ impl Frontend<'_> {
 
     /// `object.method` is a macro when `object` is an import, and also when it
     /// is an adapted stdlib namespace — `string.upper` is `${StrCase}` wearing
-    /// a Lua name (§5).
+    /// a Lua name.
     ///
     /// The outer `Option` is "a diagnostic was raised"; the inner one is "this
     /// object is not a macro namespace at all".
@@ -1305,16 +1305,16 @@ impl Frontend<'_> {
         Some(PluginCall {
             plugin,
             // Plugin exports are PascalCase by universal convention, so the
-            // camelCase rule (§6) derives the spelling instead of tabulating it.
+            // camelCase rule derives the spelling instead of tabulating it.
             method: pascal_case(method),
             args: arguments,
             span,
         })
     }
 
-    /// `messageBox { … }` (§13). Buttons and icon are two independent flag
-    /// groups sharing one argument; `onYes`/`onNo`/… are the jump table, and
-    /// they are checked against the button set rather than accepted blindly.
+    /// `messageBox { … }`. Buttons and icon are two independent flag groups
+    /// sharing one argument; `onYes`/`onNo`/… are the jump table, and they are
+    /// checked against the button set rather than accepted blindly.
     fn message_box(&mut self, args: &lua::FunctionArgs, span: Span) -> Option<MessageBox> {
         let lua::FunctionArgs::TableConstructor(table) = args else {
             self.diags.push(Diagnostic::error(

@@ -2,8 +2,8 @@
 //!
 //! There are two lowerers — [`Lowerer`](super::Lowerer) for declarations and
 //! `BodyLowerer` for statements — and a handful of shapes belong to both.
-//! `colors` is the first: it is a control's field, written as a statement inside
-//! a page (§15.32), *and* a page's own setting and a block's, written as a
+//! `colors` is the first: it is a control's field, written as a statement
+//! inside a page, *and* a page's own setting and a block's, written as a
 //! declaration. MUI2 spends every one of them on the same `SetCtlColors`, so
 //! they are one parse, one set of diagnostics and one spelling — and this trait
 //! is what lets the two lowerers share it without either one owning the other.

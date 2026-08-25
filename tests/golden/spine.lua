@@ -15,9 +15,9 @@ installer {
 	section("Core", function()
 		detailPrint("the spine assembles")
 		-- Constant folding runs before lowering, so this is one `DetailPrint`
-		-- and no temporaries (§6).
+		-- and no temporaries.
 		detailPrint("built " .. "in " .. 1 .. " pass")
-		-- A literal is data, so `$` is doubled on the way out (§15.1) and this
+		-- A literal is data, so `$` is doubled on the way out and this
 		-- prints a dollar sign rather than expanding anything.
 		detailPrint("costs $5")
 	end),

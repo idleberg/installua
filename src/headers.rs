@@ -1,18 +1,18 @@
-//! Declared foreign macros: what `import "FileFunc"` brings into scope (§15.27).
+//! Declared foreign macros: what `import "FileFunc"` brings into scope.
 //!
-//! **This is a seed, not the mechanism.** §15.27 rules that a header's macros
-//! need a *declaration* rather than a discovery pass — nothing can read
+//! **This is a seed, not the mechanism.** A header's macros need a
+//! *declaration* rather than a discovery pass — nothing can read
 //! `FileFunc.nsh` and recover that `${GetSize}` writes three registers and
 //! takes two arguments, because an `!insertmacro` parameter list carries no
 //! directions — and that declarations live in `.installua/headers/`. Reading
 //! that directory is Phase 5's; this is the subset the five programs reach,
-//! written in the shape those files will parse into (§15.17).
+//! written in the shape those files will parse into.
 //!
 //! Every macro here shares one calling convention, and it is not a choice this
 //! compiler made: a header macro takes its inputs first and its **outputs as
 //! trailing register arguments**, because `!insertmacro` has no way to return a
 //! value. That is why an output is a `Param` position rather than a `returns`
-//! field the way an instruction's is (§15.23).
+//! field the way an instruction's is.
 
 use crate::types::Ty;
 
@@ -24,7 +24,7 @@ use crate::types::Ty;
 #[derive(Clone, Copy, Debug)]
 pub struct Param {
     pub ty: Ty,
-    /// A path position: `/` is normalised to `\` (§5).
+    /// A path position: `/` is normalised to `\`.
     pub path: bool,
 }
 
@@ -58,8 +58,8 @@ pub const MACROS: &[Macro] = &[
         nsis: "GetSize",
         params: &[path(), data(Ty::Str)],
         // Size, files, directories. A byte count cannot be negative, and that
-        // is what makes `size // 1024` a bare `IntOp` with no sign fixup
-        // (§15.4) — the one place program 4's README says the lattice pays.
+        // is what makes `size // 1024` a bare `IntOp` with no sign fixup — the
+        // one place program 4's README says the lattice pays.
         outputs: &[Ty::nonneg(), Ty::nonneg(), Ty::nonneg()],
     },
     Macro {
@@ -81,7 +81,7 @@ pub const MACROS: &[Macro] = &[
     },
 ];
 
-/// One declared plugin method (§11).
+/// One declared plugin method.
 ///
 /// A plugin's **output count** is the thing a declaration exists for. NSIS
 /// gives no way to ask a DLL how many values it pushes, and getting it wrong
@@ -121,7 +121,7 @@ pub const PLUGINS: &[PluginMethod] = &[
         params: &[data(Ty::Str)],
         // Counted from the signature instead: every `.s` in it pushes one
         // value. Parsing the rest of a `System::Call` signature — which would
-        // narrow the clobber set from "everything" — is deferred (PLAN §3).
+        // narrow the clobber set from "everything" — is deferred.
         outputs: &[],
     },
 ];
@@ -141,7 +141,7 @@ pub fn plugin_methods(plugin: &str) -> Vec<&'static str> {
 }
 
 /// A macro by header and method name. The header is half of the key because two
-/// headers may spell the same method differently, and §13's namespace boundary
+/// headers may spell the same method differently, and NSIS's namespace boundary
 /// is what makes that a fact rather than a hazard.
 pub fn lookup(header: &str, method: &str) -> Option<&'static Macro> {
     MACROS

@@ -10,7 +10,7 @@ the settings on each, and the block-level settings that govern all of them.
 
 Installua targets MUI2 and nothing else. It writes every `!insertmacro` and
 `!define` itself, in the order MUI2 requires — **include order is never yours to
-get right** (§15.7), which is the single largest source of broken NSIS scripts.
+get right**, which is the single largest source of broken NSIS scripts.
 
 **Coverage.** All 255 MUI2 names are accounted for: a setting below, one of the
 17 [rejected](#rejected-mui2-names), or one of the 108 that are MUI2's own
@@ -114,7 +114,7 @@ page.directory {
 ### MUI_PAGE_STARTMENU
 
 The one page that must be bound to a local: the local **is** the page's id, and
-it is what `menu.folder` and `menu.write` name (§13).
+it is what `menu.folder` and `menu.write` name.
 
 **Usage** `local menu = page.startMenu { defaultFolder = …, topText = …, checkbox = …, registry = { root = …, key = …, value = … } }`
 · `menu.folder` → `string` · `menu.write(function() … end)`

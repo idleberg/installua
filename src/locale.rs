@@ -11,14 +11,14 @@
 //! define `LoadLanguageFile` writes is that name uppercased. `PortugueseBR` is
 //! `${LANG_PORTUGUESEBR}`, verified against 3.12 rather than assumed.
 //!
-//! The snapshot is checked in for the reason §14 gives for the other two: the
-//! compiler must reject `languages { locales = { Klingon = … } }` on a machine
-//! with no NSIS installed, and a list read from disk at compile time would make
-//! the same source compile differently on two machines.
+//! The snapshot is checked in for the reason the other two are: the compiler
+//! must reject `languages { locales = { Klingon = … } }` on a machine with no
+//! NSIS installed, and a list read from disk at compile time would make the
+//! same source compile differently on two machines.
 
 use std::path::Path;
 
-/// The checked-in snapshot (§14).
+/// The checked-in snapshot.
 const SNAPSHOT: &str = include_str!("../tables/locales-3.12.txt");
 
 /// Every NLF name, sorted, comments dropped.

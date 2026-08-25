@@ -1,15 +1,15 @@
--- Tier 4 (§14): the string adapters and the sign fixups, run under wine.
+-- Tier 4: the string adapters and the sign fixups, run under wine.
 --
 -- Assembling proves nothing here. Every value below has a plausible wrong
 -- answer that `makensis` accepts without a word:
 --
 --   * `string.find` is 0-based in NSIS and 1-based in Lua, and `string.sub`
 --     takes a length where Lua takes an end position — two off-by-ones that
---     cancel only if both are right (§15.21);
+--     cancel only if both are right;
 --   * `//` truncates toward zero in NSIS and floors in Lua, and `%` takes the
 --     sign of the dividend rather than the divisor — they disagree exactly when
 --     one operand is negative, which is the case a golden file cannot reach
---     without running (§15.4).
+--     without running.
 
 local BLOCK <const> = 64
 

@@ -1,5 +1,5 @@
-//! The control surface (§15.32): what a `page.custom` draws, and the four claim
-//! rules it shares with `section`.
+//! The control surface: what a `page.custom` draws, and the four claim rules it
+//! shares with `section`.
 //!
 //! The golden in [`tests/goldens.rs`](goldens.rs) proves a page of controls
 //! emits and assembles. What is here is the half a golden cannot show: the
@@ -59,7 +59,7 @@ fn a_control_is_created_with_no_header_of_any_kind() {
 
 /// Ruling 7, and the reason it is not a register: a handle is popped in the
 /// creator and read in `leave`, which is a different NSIS function, and every
-/// plugin call in between clobbers every register (§15.11).
+/// plugin call in between clobbers every register.
 #[test]
 fn only_a_claimed_control_earns_a_var() {
     let output = build(&program(
@@ -385,7 +385,7 @@ fn a_window_the_program_did_not_draw_has_the_fields_every_window_has() {
 
 /// `ShowWindow`'s two states are 0 and 5, not 0 and 1, so a literal picks one
 /// and anything else is multiplied — which is exact, because a `bool` in this
-/// language is 0 or 1 and nothing else (§15.20).
+/// language is 0 or 1 and nothing else.
 #[test]
 fn visible_is_hide_and_show_rather_than_false_and_true() {
     let literal = build(&page(
@@ -539,9 +539,9 @@ fn a_control_of_the_other_half_is_not_addressable() {
 /// assigned that is not already inside a callback.
 ///
 /// `GetFunctionAddress` stays a `todo` row while the compiler emits it, for the
-/// same reason `SectionGetFlags` did — §3's *"`Call`-by-address has no Lua
-/// shape"* is a statement about the surface, and the address of a generated
-/// function exists in exactly one place.
+/// same reason `SectionGetFlags` did — *"`Call`-by-address has no Lua shape"*
+/// is a statement about the surface, and the address of a generated function
+/// exists in exactly one place.
 #[test]
 fn a_callback_is_registered_where_the_control_is_made() {
     let output = build(&program(
@@ -662,9 +662,9 @@ fn a_callback_carries_the_half_that_owns_it() {
 }
 
 /// The seven instructions the fields and the events write are `lowering-target`
-/// rows and not `todo` ones, which is §5's retired-instruction diagnostic
-/// rather than a census entry: a user who reaches for `SendMessage` is told the
-/// field to write, and gets it in the compiler rather than in a document.
+/// rows and not `todo` ones, which is the retired-instruction diagnostic rather
+/// than a census entry: a user who reaches for `SendMessage` is told the field
+/// to write, and gets it in the compiler rather than in a document.
 ///
 /// None of them could have been `exposed`. A call needs a handle, and every
 /// handle there is belongs to a control this compiler drew — so the field *is*

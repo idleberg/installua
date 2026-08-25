@@ -6,12 +6,12 @@
 //!                                   rows::ROWS  ┘
 //! ```
 //!
-//! The instruction table's census answers *what of NSIS can be written*, and for
-//! the whole of Phase 6 it was the only number there was — which left the `MUI_*`
-//! surface invisible, because a MUI2 setting is a `!define` and not a command, so
-//! no `-CMDHELP` line exists to put it in a bucket. `PLAN.md` carried "roughly
-//! seventy" as an estimate nobody could check. This module is that estimate
-//! replaced by a count.
+//! The instruction table's census answers *what of NSIS can be written*, and
+//! for the whole of Phase 6 it was the only number there was — which left the
+//! `MUI_*` surface invisible, because a MUI2 setting is a `!define` and not a
+//! command, so no `-CMDHELP` line exists to put it in a bucket. "Roughly
+//! seventy" was the estimate, and nobody could check it. This module is that
+//! estimate replaced by a count.
 //!
 //! **No generated Rust.** The instruction table compiles its snapshot into
 //! `table::generated` because a `-CMDHELP` line is a parameter grammar and
@@ -26,7 +26,7 @@ pub mod scan;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-/// The checked-in snapshot, so the census runs with no NSIS installed (§14).
+/// The checked-in snapshot, so the census runs with no NSIS installed.
 const SNAPSHOT: &str = include_str!("../../tables/mui-3.12.txt");
 
 /// What Installua does with one MUI2 name.

@@ -1,4 +1,4 @@
--- Program 1 of five (PLAN Phase 0, §11): a MUI installer with an uninstaller.
+-- Program 1 of five: a MUI installer with an uninstaller.
 --
 -- The point of this one is the *shape* — four blocks, the page world, uninstaller
 -- duality, and the eight things that are emitted rather than written. It stays
@@ -37,7 +37,7 @@ installer {
 	page.instFiles {},
 	page.finish {},
 
-	-- `.onInit`'s leading dot is emitted, never written (§15.7).
+	-- `.onInit`'s leading dot is emitted, never written.
 	onInit(function()
 		local prior = readRegStr(HKLM, REGKEY, "InstallLocation")
 		if prior ~= "" then
@@ -60,7 +60,7 @@ installer {
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
 	end),
 
-	-- An option, so the table form (§15.23): the name stays first and unlabelled
+	-- An option, so the table form: the name stays first and unlabelled
 	-- because it is the parameter, and the switch beside it is named.
 	section { "Start menu shortcut",
 		optional = true,
@@ -71,7 +71,7 @@ installer {
 	},
 }
 
--- One block, and the `un.` prefix has no spelling at all (§15.3).
+-- One block, and the `un.` prefix has no spelling at all.
 uninstaller {
 	icon = "assets/uninstall.ico",
 

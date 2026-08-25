@@ -1,10 +1,10 @@
-# §15.31's plugin hazard is not real
+# The plugin hazard is not real
 
-PLAN Phase 0, task 1b. §15.31 recorded, and explicitly flagged as **unverified**:
+Phase 0, task 1b. The design recorded, and explicitly flagged as **unverified**:
 
 > A plugin is compiled against `NSIS_MAX_STRLEN`, so a vanilla-built plugin in a
 > large-string installer is a genuine hazard — and unlike architecture and charset, NSIS
-> ships no directory convention (`Plugins/x86-unicode`) that distinguishes it, so §13's
+> ships no directory convention (`Plugins/x86-unicode`) that distinguishes it, so the
 > cheap plugin check cannot cover it.
 
 **It is not a hazard, and the missing directory convention is not missing.** The plugin
@@ -47,7 +47,7 @@ including the two that would break first if the size were baked in: the plugin *
 into the installer's variable block**, whose stride *is* the string size (D), and the
 **shared plugin stack** (E, H).
 
-The control column is a second, independent confirmation of §15.31's headline finding:
+The control column is a second, independent confirmation of the headline finding:
 1024 truncates to **1023**, silently, with no diagnostic.
 
 ## Why
@@ -65,10 +65,10 @@ therefore a runtime value, not a compile-time one, and every `pluginapi` helper
 
 ## Consequences
 
-1. **§13's plugin check needs no third axis.** Charset and architecture are directory
+1. **The plugin check needs no third axis.** Charset and architecture are directory
    conventions because they really are ABI-incompatible; string length is not, which is
    why NSIS never invented a directory for it. The check stays as designed.
-2. **§15.31's "Plugins are the unresolved part" is resolved** and should say so, with
+2. **"Plugins are the unresolved part" is resolved** and should say so, with
    the residual risk named rather than the general one.
 3. **The residual risk is a plugin bug, and it is undetectable.** A plugin that declares
    `TCHAR buf[NSIS_MAX_STRLEN]` and then calls `popstring(buf)` overflows a stack buffer
@@ -76,7 +76,7 @@ therefore a runtime value, not a compile-time one, and every `pluginapi` helper
    cannot check for it and must not pretend to. One sentence in the `maxStringLength`
    documentation covers it: raising the limit is trusting your plugins to use
    `popstringn`, and a plugin that does not is broken rather than mismatched.
-4. **No code changes.** §15.31 already said vanilla and large-string builds get
+4. **No code changes.** The design already said vanilla and large-string builds get
    byte-identical output; this removes the only reason that might not have held.
 
 ## Reproducing

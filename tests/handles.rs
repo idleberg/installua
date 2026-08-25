@@ -1,4 +1,4 @@
-//! Section handles: the install-time half of §13's binding.
+//! Section handles: the install-time half of the binding.
 //!
 //! [`tests/components.rs`](components.rs) covers the compile-time half — a
 //! section listed by a block, addressed through a define derived from its
@@ -66,8 +66,8 @@ fn clearing_a_flag_inverts_the_bit_first() {
 }
 
 /// `SF_RO` is 16, and a `bool` in this compiler is `0` or `1` and nothing else
-/// (§15.20) — so a high bit is shifted down before it is masked, rather than
-/// handed back as a truth value that happens to be non-zero.
+/// — so a high bit is shifted down before it is masked, rather than handed back
+/// as a truth value that happens to be non-zero.
 #[test]
 fn a_high_bit_normalises_before_it_is_a_bool() {
     let output = build(&addressing("locked = core.readOnly"));
@@ -168,7 +168,7 @@ fn the_install_types_are_not_a_value() {
 }
 
 /// A name the block never declared is the same error in the read as in the
-/// write: one list of positions, checked in one place (§13).
+/// write: one list of positions, checked in one place.
 #[test]
 fn reading_an_undeclared_install_type_is_an_error() {
     let raised = errors(

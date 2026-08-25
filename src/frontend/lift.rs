@@ -9,13 +9,13 @@
 //! Two rewrites happen on the way through, both cheaper before names mean
 //! anything:
 //!
-//!   * `elseif` desugars into a nested `if` in the else branch (§7), so every
-//!     `If` downstream has exactly one condition and one layout rule.
-//!   * string escapes are decoded (§5), so no later pass re-reads a literal.
+//!   * `elseif` desugars into a nested `if` in the else branch, so every `If`
+//!     downstream has exactly one condition and one layout rule.
+//!   * string escapes are decoded, so no later pass re-reads a literal.
 //!
-//! Everything rejected is rejected *with its replacement named* (PLAN §2) —
-//! a diagnostic that says only "not supported" is a diagnostic that sends the
-//! user back to the NSIS docs.
+//! Everything rejected is rejected *with its replacement named* — a diagnostic
+//! that says only "not supported" is a diagnostic that sends the user back to
+//! the NSIS docs.
 
 use full_moon::ast as lua;
 use full_moon::node::Node;
@@ -25,9 +25,9 @@ use crate::ast::*;
 use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 use crate::frontend::strings::{self, LiteralKind};
 
-/// The closed set of `for … in` iterators (§7). Syntax is enough to check it,
-/// so it is checked here rather than waiting for resolution: `pairs` is the one
-/// a Lua programmer reaches for and the one that can never work.
+/// The closed set of `for … in` iterators. Syntax is enough to check it, so it
+/// is checked here rather than waiting for resolution: `pairs` is the one a Lua
+/// programmer reaches for and the one that can never work.
 const ITERATORS: &[&str] = &["glob", "lines", "range"];
 
 pub fn lift(ast: &lua::Ast, file: u32, diags: &mut Diagnostics) -> Program {
@@ -45,7 +45,7 @@ struct Lifter<'a> {
     diags: &'a mut Diagnostics,
     /// Which source this is, stamped onto every span the pass produces —
     /// `full-moon` measures each file from its own byte zero, so the answer is
-    /// known here and nowhere downstream (§15.28).
+    /// known here and nowhere downstream.
     file: u32,
     /// How many blocks deep the walk is. One thing depends on it: `include` is
     /// a top-level statement, and nesting is the difference between merging a
@@ -55,7 +55,7 @@ struct Lifter<'a> {
 }
 
 /// Where an expression sits, which decides one thing only: whether a function
-/// expression is a declaration body or a value (§3).
+/// expression is a declaration body or a value.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Position {
     /// A direct call argument: `section("Core", function() … end)`.
@@ -66,7 +66,7 @@ enum Position {
 
 impl Lifter<'_> {
     /// Every span this pass produces comes through here, which is what makes
-    /// one field enough to attribute a whole file (§15.28).
+    /// one field enough to attribute a whole file.
     fn span(&self, node: &impl Node) -> Span {
         span_of(node).in_file(self.file)
     }
@@ -117,10 +117,10 @@ impl Lifter<'_> {
             lua::Stmt::FunctionCall(call) => {
                 let call = Stmt::Call(self.function_call(call, span)?);
                 // An `include` merges one file's declarations into another's,
-                // which is something the whole program either does or does
-                // not. Inside a body there is no stage that could decide,
-                // because the deciding would be install-time and the merging
-                // is compile-time (§15.28).
+                // which is something the whole program either does or does not.
+                // Inside a body there is no stage that could decide, because
+                // the deciding would be install-time and the merging is
+                // compile-time.
                 if self.depth > 1
                     && matches!(&call, Stmt::Call(expr) if expr.callee_name() == Some("include"))
                 {
@@ -131,7 +131,7 @@ impl Lifter<'_> {
                             "`include` is a top-level statement",
                         )
                         .note("it merges another file's declarations into this one, so it cannot depend on anything decided at install time")
-                        .note("move it to the top of the file; declarations are order-free (§15.6)"),
+                       .note("move it to the top of the file; declarations are order-free"),
                     );
                     return None;
                 }
@@ -167,7 +167,7 @@ impl Lifter<'_> {
                     Code::FunctionStatement,
                     span,
                     "a `function` statement is not a declaration here",
-                    &["declare it with `func(\"name\", function(…) … end)` (§3)"],
+                    &["declare it with `func(\"name\", function(…) … end)`"],
                 );
                 None
             }
@@ -177,7 +177,7 @@ impl Lifter<'_> {
                     Code::RepeatLoop,
                     span,
                     "`repeat … until` is not supported",
-                    &["use `while` — it rotates to a bottom test and costs the same (§7)"],
+                    &["use `while` — it rotates to a bottom test and costs the same"],
                 );
                 None
             }
@@ -189,7 +189,7 @@ impl Lifter<'_> {
                     "`goto` is not supported",
                     &[
                         "use `continue()` to skip to the next iteration, or `break` to leave the loop",
-                        "labels are owned by the compiler's layout pass (§8)",
+                        "labels are owned by the compiler's layout pass",
                     ],
                 );
                 None
@@ -229,7 +229,7 @@ impl Lifter<'_> {
 
     /// `local x = …`, and `local X <const> = …`, which is a different language
     /// feature wearing the same syntax: build-time, `!define`d, never a
-    /// register (§7-1).
+    /// register.
     fn local(&mut self, local: &lua::LocalAssignment, span: Span) -> Stmt {
         let mut is_const = false;
         for attribute in local.attributes().flatten() {
@@ -259,7 +259,7 @@ impl Lifter<'_> {
         }
     }
 
-    /// The `elseif` desugaring (§7). An `if/elseif/elseif/else` chain becomes a
+    /// The `elseif` desugaring. An `if/elseif/elseif/else` chain becomes a
     /// right-nested tree, built from the tail so the `else` is threaded through
     /// exactly once.
     fn if_stmt(&mut self, node: &lua::If, span: Span) -> Stmt {
@@ -290,7 +290,7 @@ impl Lifter<'_> {
                 span,
             },
             // The condition was already diagnosed; keep a well-formed node so
-            // the rest of the body is still checked (§9-4).
+            // the rest of the body is still checked.
             None => Stmt::Do {
                 block: then_block,
                 span,
@@ -316,7 +316,7 @@ impl Lifter<'_> {
             Some(name) => {
                 let note = match name {
                     "pairs" | "ipairs" => "there are no runtime tables to iterate; \
-                         `glob` walks the build machine and `lines` walks a file (§7)"
+                         `glob` walks the build machine and `lines` walks a file"
                         .to_string(),
                     _ => format!("the iterators are {}", iterator_list()),
                 };
@@ -379,7 +379,7 @@ impl Lifter<'_> {
                         "a function is not a value here",
                         &[
                             "a function expression is a declaration body: it goes directly \
-                             into `func(…)`, `section(…)` or `onInit(…)` (§3)",
+                             into `func(…)`, `section(…)` or `onInit(…)`",
                         ],
                     );
                     return None;
@@ -393,7 +393,7 @@ impl Lifter<'_> {
                             Code::Varargs,
                             self.span(other),
                             "`...` is not a parameter",
-                            &["there is no vararg calling convention; the stack is the ABI (§11)"],
+                            &["there is no vararg calling convention; the stack is the ABI"],
                         ),
                     }
                 }
@@ -416,7 +416,7 @@ impl Lifter<'_> {
                             "`#` is not supported on a string",
                             &[
                                 "use `string.len(s)`: `StrLen` counts UTF-16 code units and \
-                                 Lua's `#` counts UTF-8 bytes, and they agree only on ASCII (§15.29)",
+                                 Lua's `#` counts UTF-8 bytes, and they agree only on ASCII",
                             ],
                         );
                         return None;
@@ -491,7 +491,7 @@ impl Lifter<'_> {
                     Code::FloatDivision,
                     span,
                     "`/` is float division, and there are no floats",
-                    &["use `//`, which is integer division and means what Lua says it means (§6)"],
+                    &["use `//`, which is integer division and means what Lua says it means"],
                 );
                 return None;
             }
@@ -502,7 +502,7 @@ impl Lifter<'_> {
                     "`^` is exponentiation, which NSIS cannot do",
                     &[
                         "NSIS's `^` is bitwise xor, so mapping this across would be silently \
-                         wrong; write `~` for xor, or a multiplication for a small power (§6)",
+                         wrong; write `~` for xor, or a multiplication for a small power",
                     ],
                 );
                 return None;
@@ -553,7 +553,7 @@ impl Lifter<'_> {
                 "`require` does not exist",
                 &[
                     "there is no load at install time; `import \"WinVer\"` pulls in an NSIS \
-                     header and `include` splits a project across files (§11)",
+                     header and `include` splits a project across files",
                 ],
             );
             return None;
@@ -599,7 +599,7 @@ impl Lifter<'_> {
                         "`[…]` indexing is not supported",
                         &[
                             "there are no runtime tables; a compile-time table's fields are \
-                             reached with `.` (§4)",
+                             reached with `.`",
                         ],
                     );
                     return None;
@@ -634,7 +634,7 @@ impl Lifter<'_> {
 
     /// `verbatim` is true for the arguments of `raw`, whose string is NSIS
     /// source rather than data — so `$INSTDIR` in there is correct and warning
-    /// about it would be noise (§13).
+    /// about it would be noise.
     fn args(&mut self, args: &lua::FunctionArgs, verbatim: bool) -> Vec<Expr> {
         match args {
             lua::FunctionArgs::Parentheses { arguments, .. } => arguments
@@ -725,7 +725,7 @@ impl Lifter<'_> {
                     format!("`{text}` is not an integer"),
                     &[
                         "NSIS has no float arithmetic at all, so there is nothing to lower a \
-                         float to (§6)",
+                         float to",
                     ],
                 );
                 None
@@ -762,7 +762,7 @@ impl Lifter<'_> {
                     "`nil` does not exist",
                     &[
                         "every value has a type and a representation; an absent one is spelled \
-                         with the empty string or a `bool` (§3)",
+                         with the empty string or a `bool`",
                     ],
                 );
                 None
@@ -772,7 +772,7 @@ impl Lifter<'_> {
                     Code::Varargs,
                     span,
                     "`...` does not exist",
-                    &["there is no vararg calling convention; the stack is the ABI (§11)"],
+                    &["there is no vararg calling convention; the stack is the ABI"],
                 );
                 None
             }

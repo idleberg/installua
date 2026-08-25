@@ -1,4 +1,4 @@
--- Program 3 of five (PLAN Phase 0, §11): a file-iteration loop.
+-- Program 3 of five: a file-iteration loop.
 --
 -- The point of this one is loops and staging. Three iteration forms appear, and
 -- a reader has to be able to tell which machine each runs on:
@@ -9,7 +9,7 @@
 --
 -- `break` and `continue()` both appear, because they are the two terminators
 -- that have no Lua-to-NSIS analogue: NSIS has only `Goto`, and Lua has no
--- `continue` at all (§8).
+-- `continue` at all.
 
 local APP <const> = "Example3"
 
@@ -57,7 +57,7 @@ installer {
 		detailPrint("read " .. count .. " entries")
 
 		-- A counted loop, and the one place `errors()` is read as the impure
-		-- predicate it is (§15.20).
+		-- predicate it is.
 		for attempt = 1, 3 do
 			clearErrors()
 			createDirectory(INSTDIR .. "/cache")

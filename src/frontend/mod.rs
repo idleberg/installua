@@ -4,8 +4,8 @@
 //!
 //!   1. parse with `full-moon` (real Lua 5.4, no dialect of our own)
 //!   2. the whitelist pass — which Lua forms exist in this language
-//!   3. escape-sequence validation, because `full-moon` accepts
-//!      `"C:\Program Files"` and real Lua does not (§13)
+//!   3. escape-sequence validation, because `full-moon` accepts `"C:\Program
+//!      Files"` and real Lua does not
 //!   4. `elseif` desugaring and float-literal rejection
 //!
 //! Steps 2–4 are one walk. Splitting them into three would mean three ways to
@@ -23,14 +23,14 @@ use crate::diag::{Code, Diagnostic, Diagnostics, Span};
 ///
 /// Returns `None` only when parsing failed outright — a source that parses
 /// always produces a tree, however many diagnostics it also produced, so a
-/// caller can keep checking (§9-4). `include` is *not* followed here: loading
-/// needs a file system, and [`include::load`] is where that is decided.
+/// caller can keep checking. `include` is *not* followed here: loading needs a
+/// file system, and [`include::load`] is where that is decided.
 pub fn check(source: &str, diags: &mut Diagnostics) -> Option<Program> {
     check_file(source, 0, diags)
 }
 
 /// The same, for a source that is one file of several: every span it produces
-/// is stamped with `file` (§15.28).
+/// is stamped with `file`.
 pub fn check_file(source: &str, file: u32, diags: &mut Diagnostics) -> Option<Program> {
     let ast = match full_moon::parse(source) {
         Ok(ast) => ast,

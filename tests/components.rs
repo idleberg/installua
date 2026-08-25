@@ -2,7 +2,7 @@
 //!
 //! The golden in [`tests/goldens.rs`](goldens.rs) proves the whole thing emits
 //! and assembles. What is here is the half a golden cannot show — the binding
-//! §13 asked for, and the six ways of writing it that are rejected.
+//! the binding asked for, and the six ways of writing it that are rejected.
 //!
 //! An install type has no name at run time. NSIS reads a one-based position and
 //! nothing else, so the name a user writes is a *compile-time* name for a
@@ -39,7 +39,7 @@ fn declaring(above: &str, installer: &str) -> String {
     )
 }
 
-/// The whole of §13's compile-time half: a section names an install type, NSIS
+/// The whole of the compile-time half: a section names an install type, NSIS
 /// reads a position, and inserting a type in front of the list renumbers every
 /// section that mentions the ones behind it — without a line of the sections
 /// changing.
@@ -199,9 +199,9 @@ fn a_section_in_no_install_type_writes_no_line() {
     assert!(!output.contains("SectionIn"), "{output}");
 }
 
-/// §15.23's pair is a short form and a long form, not two spellings of one
-/// thing: the moment a section carries an option it takes the table, and the
-/// name stays positional there because it is the parameter NSIS is passed.
+/// The pair is a short form and a long form, not two spellings of one thing:
+/// the moment a section carries an option it takes the table, and the name
+/// stays positional there because it is the parameter NSIS is passed.
 #[test]
 fn a_section_with_options_takes_the_table_form() {
     let short = build(&program(
@@ -450,9 +450,9 @@ fn a_group_is_described_ahead_of_the_sections_under_it() {
     assert!(heading < under, "{output}");
 }
 
-/// §15.3 again: two halves, two generated functions, two blocks. The
-/// uninstaller's is `MUI_UNFUNCTION_DESCRIPTION_*`, which is the same `UN` NSIS
-/// puts in `un.onMouseOverSection`.
+/// Uninstaller duality again: two halves, two generated functions, two blocks.
+/// The uninstaller's is `MUI_UNFUNCTION_DESCRIPTION_*`, which is the same `UN`
+/// NSIS puts in `un.onMouseOverSection`.
 #[test]
 fn each_half_describes_its_own_sections() {
     let output = build(

@@ -1,4 +1,4 @@
-//! The instruction table: one struct, two sources, joined at first use (§15.23).
+//! The instruction table: one struct, two sources, joined at first use.
 //!
 //! ```text
 //! tables/cmdhelp-3.12.txt  ─generate─▶  generated::SKELETONS  ┐
@@ -19,7 +19,7 @@
 //! every skeleton finds its row, every row finds its skeleton, and every row's
 //! annotations are as long as its skeleton's parameter list. That is what makes
 //! coverage a computed number rather than a document somebody remembers to
-//! update (§14).
+//! update.
 
 pub mod cmdhelp;
 pub mod generated;
@@ -30,8 +30,8 @@ use std::sync::OnceLock;
 use crate::types::Ty;
 
 /// Which side of the call a parameter is on. The number of [`Dir::Out`]
-/// parameters **is** the number of Lua return values (§15.23), which is why
-/// multiple returns need no special case anywhere else.
+/// parameters **is** the number of Lua return values, which is why multiple
+/// returns need no special case anywhere else.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dir {
     In,
@@ -41,7 +41,7 @@ pub enum Dir {
 /// A repeated *argument* — `File a b c` — as opposed to a repeated member
 /// inside one argument, which is [`Kind::Flags`]. Only eleven non-preprocessor
 /// commands use either, and they are two different things, so they are two
-/// fields (§15.23).
+/// fields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rep {
     One,
@@ -60,13 +60,13 @@ pub enum Note {
     /// `SubSection deprecated - use SectionGroup`. NSIS prints English where
     /// the syntax would go, so there is no parameter model to read.
     Prose,
-    /// A `!` command. §2 rules the preprocessor out of the surface, so these
-    /// carry no parameter model by decision rather than by failure.
+    /// A `!` command. Staging rules the preprocessor out of the surface, so
+    /// these carry no parameter model by decision rather than by failure.
     Directive,
     /// The line has top-level alternation (`File`, `InstType`, `Exch`): two
-    /// spellings of one command, which §15.23 makes *mutual exclusion between
-    /// options* rather than a second parameter list. What is recorded is the
-    /// first alternative; the overlay owns the `conflicts` sets.
+    /// spellings of one command, which the overlay makes *mutual exclusion
+    /// between options* rather than a second parameter list. What is recorded
+    /// is the first alternative; the overlay owns the `conflicts` sets.
     Alternation,
 }
 
@@ -77,7 +77,7 @@ pub struct Shape {
     pub dir: Dir,
     /// A `$(user_var: …)` position: an NSIS *variable* is demanded, not a
     /// value, so the argument may not be an arbitrary expression spilled to a
-    /// scratch register (§15.23).
+    /// scratch register.
     pub var: bool,
     /// `false` ⇒ bracketed in `-CMDHELP`.
     pub req: bool,
@@ -92,8 +92,8 @@ pub struct Shape {
 /// A flag, as `-CMDHELP` states it. Not a parameter, because its position in
 /// NSIS syntax is arbitrary — leading for `GetDLLVersion`, medial for
 /// `SetCtlColors`, trailing for `SendMessage` — and there is nothing to gain
-/// from making a user learn that (§15.23). The Installua surface takes an
-/// unordered options table; `after` records where the emitter puts it back.
+/// from making a user learn that. The Installua surface takes an unordered
+/// options table; `after` records where the emitter puts it back.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Opt {
     pub nsis: &'static str,
@@ -128,7 +128,7 @@ pub enum Offer {
     List {
         name: &'static str,
         /// The element's kind, applied to each one: `Path` for `/x`, because a
-        /// filespec is a path and §5 turns `/` into `\`.
+        /// filespec is a path and Installua turns `/` into `\`.
         kind: Kind,
     },
     /// A named field holding **one** value, written glued to the flag with an
@@ -152,7 +152,7 @@ pub enum Offer {
     /// lowering that shapes it rather than by [`Instruction::flags`].
     /// `MessageBox`'s `/SD` is the one: the answer it names has to be legal for
     /// the button set beside it, and checking one field against another is a
-    /// thing the generic options table cannot do (§15.18).
+    /// thing the generic options table cannot do.
     Handled(&'static str),
     /// Not offered, with the reason — which as of batch 9 is always the join's
     /// own: a row that says nothing about a flag leaves it here. Every flag on
@@ -182,13 +182,13 @@ impl Flag {
     }
 }
 
-/// §15.2's fourth column and §15.23's `kind`. `Enum` is not written by hand —
-/// it is [`Shape::members`] being non-empty — because the members come from
-/// `-CMDHELP` and transcribing them is how a table drifts.
+/// A parameter's fourth column, and the row's `kind`. `Enum` is not written by
+/// hand — it is [`Shape::members`] being non-empty — because the members come
+/// from `-CMDHELP` and transcribing them is how a table drifts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Value,
-    /// `/` becomes `\` here, and only here (§5).
+    /// `/` becomes `\` here, and only here.
     Path,
     /// The members are the enum's, case-folded on the way in.
     Enum,
@@ -197,9 +197,9 @@ pub enum Kind {
     /// A position the **compiler** fills with a label, and the surface does not
     /// have at all: `IfFileExists f <then> <else>`.
     ///
-    /// §15.23's four kinds have no way to say this, and §15.20 needs it said:
-    /// a predicate is an ordinary `bool`-valued call, so `fileExists(p)` takes
-    /// one argument and the other two positions are §8's business. Without the
+    /// The other four kinds have no way to say this, and a `bool`-valued call
+    /// needs it said: a predicate is an ordinary call, so `fileExists(p)` takes
+    /// one argument and the other two positions are the compiler's. Without the
     /// kind, the generated stub completes `fileExists(path, then, else)` and
     /// teaches the shape this language exists to remove.
     Label,
@@ -224,7 +224,7 @@ pub enum Kind {
     /// neither an argument nor a value here: `SectionSetText ${SEC_core} "…"`
     /// takes its index from the handle the field was written on, and
     /// `SetCurInstType 1` takes its position from the block's `installTypes`
-    /// list (§13).
+    /// list.
     ///
     /// Between [`Kind::Label`] and [`Kind::Fused`] and neither of them. A label
     /// is a jump target the compiler *invents*; a fused position is not a
@@ -245,7 +245,7 @@ pub enum Kind {
 /// [`Instruction::tail_optional`]. The name is written either way, because it
 /// is what the stub and the error message call the position, and it has to be
 /// written by hand because `-CMDHELP` calls them `showmode` and
-/// `hex_string_like_12848412AB` (§15.23).
+/// `hex_string_like_12848412AB`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Field {
     pub name: &'static str,
@@ -265,21 +265,22 @@ pub struct Field {
 /// rather than on the field's name, so a new setting is an overlay line.
 ///
 /// The closed sets are *not* here. `-CMDHELP` prints `DirVerify auto|leave` and
-/// the snapshot records those two words, so [`Setting::Enum`] names the shape and
-/// the generated half names the members — which is the join doing the job it
-/// exists for (§15.23).
+/// the snapshot records those two words, so [`Setting::Enum`] names the shape
+/// and the generated half names the members — which is the join doing the job
+/// it exists for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Setting {
-    /// `Name "${APP}"`: one string. `path` applies §5's `/`-to-`\`, which is
-    /// right for a file the build machine reads and wrong for a caption.
+    /// `Name "${APP}"`: one string. `path` applies the `/`-to-`\` rewrite,
+    /// which is right for a file the build machine reads and wrong for a
+    /// caption.
     Str { path: bool },
-    /// A Lua `bool`, emitted as the pair of words NSIS spells it with
-    /// (§15.16). `CRCCheck` also accepts `force`, and offering it would take a
-    /// third state this field does not have.
+    /// A Lua `bool`, emitted as the pair of words NSIS spells it with.
+    /// `CRCCheck` also accepts `force`, and offering it would take a third
+    /// state this field does not have.
     Bool { on: &'static str, off: &'static str },
     /// One of the bare keywords the snapshot lists. NSIS *ignores* a keyword it
     /// does not know rather than objecting, so the closed set is checked here
-    /// or nowhere (§13).
+    /// or nowhere.
     Enum,
     /// A whole number, emitted bare.
     Int,
@@ -289,7 +290,7 @@ pub enum Setting {
     ///
     /// A *table* and not a list because the keys are the only thing that tells
     /// three strings apart, and because a language whose tables have no order
-    /// (§12) cannot be asked to supply one by counting.
+    /// cannot be asked to supply one by counting.
     Table(&'static [Part]),
     /// `BGGradient off | (topc [bottomc [textc]])`: one bare word, or the
     /// positions behind it. `false` writes the word, because Lua already spells
@@ -309,7 +310,7 @@ pub enum Setting {
     },
     /// `PEAddResource f t n` written once per resource: the field holds a Lua
     /// **array**, and the whole line is emitted once per element, in the order
-    /// the elements were written — the one order a Lua table does have (§12).
+    /// the elements were written — the one order a Lua table does have.
     ///
     /// Not the repetition a *position* has. `Rep::Many` puts many values on one
     /// line and is the snapshot's to say; that a **line** repeats is said only
@@ -361,9 +362,9 @@ pub enum Setting {
     /// one value to it and would be two spellings of one line here.
     ///
     /// The set is on the row and not read off the snapshot, unlike every other
-    /// closed set (§15.23). It has to be: `-CMDHELP` prints `reslang|ALL` and
-    /// the parse takes that for two keywords, when `reslang` is a metavariable
-    /// with no marker to say so — see [`cmdhelp::METAVARIABLES`].
+    /// closed set. It has to be: `-CMDHELP` prints `reslang|ALL` and the parse
+    /// takes that for two keywords, when `reslang` is a metavariable with no
+    /// marker to say so — see [`cmdhelp::METAVARIABLES`].
     Or {
         words: &'static [&'static str],
         of: &'static Setting,
@@ -389,8 +390,8 @@ pub struct Part {
     pub holds: Setting,
 }
 
-/// §14's census bucket. There is exactly one enum, because the buckets and the
-/// overlay's `class` field are the same thing named twice (§15.23).
+/// The census bucket. There is exactly one enum, because the buckets and the
+/// overlay's `class` field are the same thing named twice.
 ///
 /// `Rejected` and `Todo` carry their text rather than a flag: an entry that says
 /// "no" without saying why is indistinguishable from one nobody has looked at.
@@ -398,20 +399,21 @@ pub struct Part {
 pub enum Class {
     /// An Installua callable, with an emission example.
     Exposed,
-    /// A field of one of the four blocks (§15.10, §15.26), and what it holds.
+    /// A field of one of the four blocks, and what it holds.
     Attribute(Setting),
     /// Reachable only as the output of `if`/`messageBox`, never callable. The
     /// emitter needs the shape; the stub generator must not offer it, or
-    /// `intCmp(a, b, "yes", "no", "maybe")` reappears in completion and §8 is
-    /// bypassed on day one (§13).
+    /// `intCmp(a, b, "yes", "no", "maybe")` reappears in completion and the
+    /// compiler's control flow is bypassed on day one.
     ///
-    /// The text is what the user writes instead. §15.23 spells this variant
-    /// without a payload; it carries one here for the same reason `Rejected`
-    /// does — a bucket that says "not callable" without saying what *is* leaves
-    /// the reader exactly where the generic unknown-name error left them (§2) —
-    /// and [`crate::retired`] reads it rather than keeping a second copy.
+    /// The text is what the user writes instead. The snapshot spells this
+    /// variant without a payload; it carries one here for the same reason
+    /// `Rejected` does — a bucket that says "not callable" without saying what
+    /// *is* leaves the reader exactly where the generic unknown-name error left
+    /// them — and [`crate::retired`] reads it rather than keeping a second
+    /// copy.
     LoweringTarget(&'static str),
-    /// A preprocessor `!` command, out of the surface entirely (§2).
+    /// A preprocessor `!` command, out of the surface entirely.
     Directive,
     /// The name is an Installua construct instead, and the text is that
     /// construct: `Function` is `func`, `Return` is `return`.
@@ -424,7 +426,7 @@ pub enum Class {
 
 impl Class {
     /// The bucket's name, which is also `installua coverage`'s row label and
-    /// §14's vocabulary. One name per bucket, spelled once.
+    /// the census's vocabulary. One name per bucket, spelled once.
     pub fn bucket(&self) -> &'static str {
         match self {
             Class::Exposed => "exposed",
@@ -478,7 +480,7 @@ impl Param {
         self.shape.members
     }
 
-    /// Whether a value outside [`Self::members`] is still legal (§15.23).
+    /// Whether a value outside [`Self::members`] is still legal.
     pub fn open(&self) -> bool {
         self.shape.open
     }
@@ -520,10 +522,10 @@ pub struct Instruction {
     /// what the surface does with it.
     pub options: Vec<Flag>,
     /// Mutually exclusive option sets: `File`'s `/oname=` branch against its
-    /// repeated-filespec branch. The error names both spellings (§15.23).
+    /// repeated-filespec branch. The error names both spellings.
     pub conflicts: &'static [&'static [&'static str]],
     pub note: Note,
-    /// A `bool`-valued call rather than a statement (§15.20). See
+    /// A `bool`-valued call rather than a statement. See
     /// [`overlay::Row::predicate`].
     pub predicate: bool,
     /// Where a call is honoured. See [`Place`].
@@ -544,9 +546,9 @@ impl Instruction {
     /// The positions a *user* writes: the inputs, minus the ones the compiler
     /// fills and the ones that are not really positions. A `Kind::Label` is an
     /// argument to NSIS and not to Installua, so `fileExists(p)` takes one
-    /// argument where `IfFileExists` takes three (§15.20); a `Kind::Fused` is
-    /// not an argument to either, and a `Kind::Bound` is the compiler's too —
-    /// the index behind `handle.text` comes from the handle.
+    /// argument where `IfFileExists` takes three; a `Kind::Fused` is not an
+    /// argument to either, and a `Kind::Bound` is the compiler's too — the
+    /// index behind `handle.text` comes from the handle.
     pub fn surface(&self) -> impl Iterator<Item = &Param> {
         self.inputs().filter(|param| {
             param.kind != Kind::Label && param.kind != Kind::Fused && param.kind != Kind::Bound
@@ -554,9 +556,9 @@ impl Instruction {
     }
 
     /// Reached through a name the compiler resolves rather than called: a field
-    /// of a section handle, or `currentInstType` (§13). One [`Kind::Bound`]
-    /// position is what says so, and it is why these rows have an Installua
-    /// spelling that is not a function name.
+    /// of a section handle, or `currentInstType`. One [`Kind::Bound`] position
+    /// is what says so, and it is why these rows have an Installua spelling
+    /// that is not a function name.
     pub fn bound(&self) -> bool {
         self.params.iter().any(|param| param.kind == Kind::Bound)
     }
@@ -569,8 +571,8 @@ impl Instruction {
     /// that position and `abort("stopped")` decides nothing by counting.
     /// `CreateShortcut`'s six optionals do: whether the fourth argument is the
     /// icon file or the icon index depends on whether the third was given. So
-    /// those are named instead (§15.23), and `ExecShell`'s *leading* optional
-    /// has no positional spelling at all.
+    /// those are named instead, and `ExecShell`'s *leading* optional has no
+    /// positional spelling at all.
     pub fn positional(&self) -> impl Iterator<Item = &Param> {
         let tail = self.tail_optional().is_some();
         self.surface().filter(move |param| param.required() || tail)
@@ -605,10 +607,10 @@ impl Instruction {
 
     /// The flags a caller can name, in snapshot order.
     ///
-    /// The other half of the options table, and the half that is not a
-    /// position at all: `Delete [/REBOOTOK] filespec` has one argument and one
-    /// flag, and `delete(p, { rebootOk = true })` writes both without the
-    /// caller ever learning that the flag goes first (§15.23).
+    /// The other half of the options table, and the half that is not a position
+    /// at all: `Delete [/REBOOTOK] filespec` has one argument and one flag, and
+    /// `delete(p, { rebootOk = true })` writes both without the caller ever
+    /// learning that the flag goes first.
     pub fn flags(&self) -> impl Iterator<Item = (&'static str, &Flag)> {
         self.options
             .iter()
@@ -635,8 +637,8 @@ impl Instruction {
     }
 
     /// What the call evaluates to: the first output's type, because that is
-    /// what an output *is* (§15.23). A predicate's branch supplies its own
-    /// `bool` and it has no output register to read.
+    /// what an output *is*. A predicate's branch supplies its own `bool` and it
+    /// has no output register to read.
     pub fn returns(&self) -> Option<Ty> {
         if self.predicate {
             return Some(Ty::Bool);
@@ -662,8 +664,8 @@ impl Instruction {
 }
 
 /// The joined table. Built once, on first use — never rebuilt, and never
-/// mutated, so §9-2's re-entrancy holds: this is shared immutable data rather
-/// than global state.
+/// mutated, so re-entrancy holds: this is shared immutable data rather than
+/// global state.
 pub fn table() -> &'static [Instruction] {
     static TABLE: OnceLock<Vec<Instruction>> = OnceLock::new();
     TABLE.get_or_init(join)
@@ -698,7 +700,7 @@ pub fn census() -> Vec<(&'static str, usize)> {
         .collect()
 }
 
-/// What `installua coverage` prints, and a golden file (§14).
+/// What `installua coverage` prints, and a golden file.
 ///
 /// Counts first, because that is the number anybody quotes; then the `todo`
 /// names with their reasons, because a count that drops by twelve does not say
@@ -731,7 +733,7 @@ pub fn coverage() -> String {
     // The second surface, in the same file. Two censuses and one golden,
     // because "what of NSIS can be written" and "what of MUI2 can be written"
     // are one question to anybody writing an installer, and a number that lives
-    // in a document of its own is a number that goes stale in one (§14).
+    // in a document of its own is a number that goes stale in one.
     out.push_str(&crate::mui::coverage());
 
     out

@@ -83,7 +83,7 @@ fn an_if_without_an_else_jumps_straight_to_the_end() {
 #[test]
 fn comparisons_fuse_into_intcmp_branch_targets() {
     // `~=` is false exactly when the operands are equal, so only the first
-    // target jumps; no boolean is ever materialized (§8).
+    // target jumps; no boolean is ever materialized.
     assert!(
         body_of(&section("if 1 ~= 2 then detailPrint(\"y\") end"))
             .contains("IntCmp 1 2 endif_0 0 0")
@@ -119,8 +119,8 @@ fn elseif_is_desugared_into_a_nested_if() {
 
 #[test]
 fn locals_take_registers_and_temporaries_come_from_the_other_end() {
-    // `1 + 2` and `3 + 4` fold before lowering (§4), so the only `IntOp` left
-    // is the one with a register operand.
+    // `1 + 2` and `3 + 4` fold before lowering, so the only `IntOp` left is the
+    // one with a register operand.
     assert_eq!(
         body_of(&section(
             "local a = 1 + 2\nlocal b = a * (3 + 4)\ndetailPrint(b)"
@@ -162,8 +162,8 @@ fn a_condition_must_be_a_comparison() {
 
 #[test]
 fn operators_that_lie_are_rejected() {
-    // Lua's `/` is float division and `^` is exponentiation; NSIS's are
-    // integer division and XOR (§4).
+    // Lua's `/` is float division and `^` is exponentiation; NSIS's are integer
+    // division and XOR.
     assert!(errors(&section("local a = 4 / 2")).contains("`/` is not supported"));
     assert!(errors(&section("local a = 4 ^ 2")).contains("`^` is not supported"));
 }
@@ -328,7 +328,7 @@ fn all_errors_are_reported_not_just_the_first() {
     assert_eq!(diags.iter().count(), 2);
 }
 
-// --- Compile-time (§7) ---------------------------------------------------
+// --- Compile-time ---------------------------------------------------
 
 #[test]
 fn a_const_becomes_a_define_and_is_used_by_name() {
@@ -396,11 +396,11 @@ fn an_unknown_pre_command_lists_what_exists() {
     assert!(rendered.contains("unknown build-time command `pre.reboot`"));
 }
 
-// --- Strings and arithmetic (§4, §5) -------------------------------------
+// --- Strings and arithmetic -------------------------------------
 
 #[test]
 fn concatenation_is_a_template_not_an_instruction() {
-    // Three operands, one `DetailPrint`, no `StrCpy` anywhere (§4).
+    // Three operands, one `DetailPrint`, no `StrCpy` anywhere.
     assert_eq!(
         body_of(&section(
             "local n = 1\ndetailPrint(\"a\" .. n .. \"b\" .. 2)"
@@ -448,7 +448,7 @@ fn an_adapted_stdlib_name_pulls_in_its_header_and_init_once() {
         "local a = string.upper(\"x\")\nlocal b = string.lower(\"Y\")\ndetailPrint(a)",
     ));
     assert!(out.starts_with("!include \"StrFunc.nsh\"\n\n${StrCase}\n"));
-    // One init for two macros, and the output slot comes first here (§6).
+    // One init for two macros, and the output slot comes first here.
     assert_eq!(out.matches("${StrCase}\n").count(), 1);
     assert!(out.contains("  ${StrCase} $0 \"x\" \"U\"\n"));
     assert!(out.contains("  ${StrCase} $1 \"Y\" \"L\"\n"));
@@ -461,7 +461,7 @@ fn a_rejected_stdlib_name_names_the_adaptations_that_exist() {
     assert!(rendered.contains("adapted from `string`: upper, lower"));
 }
 
-// --- messageBox (§13) ----------------------------------------------------
+// --- messageBox ----------------------------------------------------
 
 #[test]
 fn a_message_box_without_handlers_is_one_instruction() {
@@ -538,7 +538,7 @@ fn handlers_are_checked_against_the_button_set() {
     assert!(rendered.contains("unknown icon `SPLAT`"));
 }
 
-// --- Sections and section groups (§13) -----------------------------------
+// --- Sections and section groups -----------------------------------
 
 #[test]
 fn section_options_become_flags_and_groups_nest() {

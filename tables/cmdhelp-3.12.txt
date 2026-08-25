@@ -1,7 +1,7 @@
 # makensis v3.12
 #
 # `makensis -CMDHELP`, verbatim, checked in so the census runs with no NSIS
-# installed (§14). Regenerate with:
+# installed. Regenerate with:
 #
 #     makensis -CMDHELP > tables/cmdhelp-3.12.txt   # then re-add this header
 #     cargo run -q -- generate table tables/cmdhelp-3.12.txt > src/table/generated.rs

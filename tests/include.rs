@@ -1,5 +1,4 @@
-//! `include`: what it merges, what it refuses, and where a diagnostic lands
-//! (§15.28).
+//! `include`: what it merges, what it refuses, and where a diagnostic lands.
 //!
 //! Most assertions here are about the *second* file — that a name it declares
 //! is usable, that a mistake in it is reported against its own path rather than
@@ -14,8 +13,9 @@ use installua::Options;
 use installua::diag::{Code, Diagnostics};
 use installua::frontend::include::Loader;
 
-/// A project, in memory. No test here touches the disk: §9-2 requires that this
-/// crate compile against strings, and a second file does not change that.
+/// A project, in memory. No test here touches the disk: re-entrancy requires
+/// that this crate compile against strings, and a second file does not change
+/// that.
 fn project(files: &[(&str, &str)]) -> Options {
     let sources: BTreeMap<String, String> = files
         .iter()
@@ -293,9 +293,9 @@ fn a_malformed_include_is_reported_once() {
     assert_eq!(codes, vec![Code::IncludeForm], "{codes:?}");
 }
 
-/// §9-2: an in-memory source with no directory behind it still compiles. It
-/// only cannot `include`, and the diagnostic says which of the two things is
-/// missing rather than blaming the path.
+/// An in-memory source with no directory behind it still compiles. It only
+/// cannot `include`, and the diagnostic says which of the two things is missing
+/// rather than blaming the path.
 #[test]
 fn a_source_with_no_directory_says_so() {
     let mut diags = Diagnostics::new();

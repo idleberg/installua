@@ -1,11 +1,10 @@
-//! The call graph — built once, read three times (§15.11).
+//! The call graph — built once, read three times.
 //!
 //! The three consumers are what makes a whole-program traversal worth its cost:
-//! clobber sets for caller-saves (§15.11), uninstaller reachability (§15.3) and
-//! return-type inference (§15.14). Two of them are here; the third is not,
-//! because `uninstaller {}` has no lowering yet, and building the consumer
-//! before the block it consumes would be inventing the answer to a question
-//! nobody has asked.
+//! clobber sets for caller-saves, uninstaller reachability and return-type
+//! inference. Two of them are here; the third is not, because `uninstaller {}`
+//! has no lowering yet, and building the consumer before the block it consumes
+//! would be inventing the answer to a question nobody has asked.
 //!
 //! **Recursion needs no special case.** It is an SCC whose fixpoint saturates
 //! in one extra round, which is what the condensation buys: process strongly
@@ -14,10 +13,10 @@
 //! itself.
 //!
 //! The one thing this file *cannot* answer is how deep a recursion goes at
-//! runtime, and §3 measured what happens when it goes too deep: at roughly 1300
-//! frames under wine the process dies **silently** — no dialog, no log line, no
-//! error level. A warning naming the iterative form is the honest response to a
-//! failure mode that ships without a symptom.
+//! runtime, and Phase 0 measured what happens when it goes too deep: at roughly
+//! 1300 frames under wine the process dies **silently** — no dialog, no log
+//! line, no error level. A warning naming the iterative form is the honest
+//! response to a failure mode that ships without a symptom.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -34,9 +33,9 @@ pub struct CallGraph {
     /// exactly this order, which is why no separate topological sort is needed.
     pub sccs: Vec<Vec<usize>>,
     /// Where each function was declared, for the diagnostics this file raises.
-    /// Public so a test can build a graph by hand: PLAN §2 noted that the
-    /// clobber fixpoint was exercised once across all five programs, and a
-    /// synthetic graph is how a cycle gets tested without a program around it.
+    /// Public so a test can build a graph by hand: the clobber fixpoint was
+    /// exercised once across all five programs, and a synthetic graph is how a
+    /// cycle gets tested without a program around it.
     pub spans: Vec<Span>,
 }
 
@@ -73,7 +72,7 @@ pub fn build(module: &ir::Module) -> CallGraph {
 }
 
 impl CallGraph {
-    /// The clobber-set fixpoint (§15.11 step 3).
+    /// The clobber-set fixpoint (step 3).
     ///
     /// `direct` is what each body writes itself, from the register allocator.
     /// Within an SCC every member ends up with the union of the whole
@@ -106,7 +105,7 @@ impl CallGraph {
         self.names.iter().cloned().zip(total).collect()
     }
 
-    /// The depth-cliff lint (§15.11, §3).
+    /// The depth-cliff lint.
     pub fn lint_recursion(&self, diags: &mut Diagnostics) {
         for component in &self.sccs {
             let recursive = component.len() > 1
@@ -132,7 +131,7 @@ impl CallGraph {
                 .note(
                     "the exehead recurses natively on `Call`, so the ceiling is the installer \
                      thread's stack: measured at roughly 1300 frames, and it differs per machine \
-                     (§3)",
+                    ",
                 )
                 .note(
                     "past it the process dies silently — no dialog, no log line, no error level \

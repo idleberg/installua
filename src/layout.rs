@@ -1,11 +1,11 @@
 //! The layout pass: CFG in, a flat list of instructions and labels out.
 //!
-//! This is the *only* place in the compiler that knows what a label is (§8).
-//! Every statement lowerer creates blocks and points terminators at them; the
+//! This is the *only* place in the compiler that knows what a label is. Every
+//! statement lowerer creates blocks and points terminators at them; the
 //! decision of which of those blocks needs a name, and what that name is, is
 //! made here and nowhere else.
 //!
-//! Three of §8's four promised consequences are this file:
+//! Three of the four consequences of having no `goto` are this file:
 //!
 //!   * a label is emitted only for a block something jumps to explicitly, so
 //!     the output has far fewer labels than a per-construct scheme emits;
@@ -14,7 +14,7 @@
 //!
 //! And one thing is deliberately *not* here: relative jumps. `IntCmp a b +2` is
 //! correct until a later pass inserts an instruction and then silently wrong,
-//! so a fallthrough is always spelled `0` and a target is always a label (§8).
+//! so a fallthrough is always spelled `0` and a target is always a label.
 
 use std::collections::HashSet;
 
@@ -25,7 +25,7 @@ use crate::map::Origin;
 /// `0` in a branch slot: fall through to the next line.
 const FALLTHROUGH: &str = "0";
 
-/// One laid-out line: what it is, and where it came from (§15.22).
+/// One laid-out line: what it is, and where it came from.
 pub type Line = (ir::Item, Origin);
 
 /// The origin of an instruction, from the span the lowerer stamped on it. An
@@ -57,11 +57,11 @@ pub fn lay_out(body: &Body) -> Vec<Line> {
         let block = body.block(*id);
         debug_assert!(
             !block.label.starts_with('.'),
-            "a leading `.` makes a label global in NSIS, and every label here is body-local (§8)"
+            "a leading `.` makes a label global in NSIS, and every label here is body-local"
         );
         if referenced.contains(id) {
-            // A label is the compiler's own line by construction: §8 gives the
-            // user no spelling for one at all.
+            // A label is the compiler's own line by construction: the user has
+            // no spelling for one at all.
             out.push((
                 ir::Item::Label(block.label.clone()),
                 Origin::Emitted("label"),
@@ -79,15 +79,15 @@ pub fn lay_out(body: &Body) -> Vec<Line> {
 ///
 /// The whole calling convention is these fourteen lines, and it is here rather
 /// than in the lowerer for the same reason labels are: one place decides, and
-/// everywhere else points at it. Program 4 pins every choice in it (§11).
+/// everywhere else points at it. Program 4 pins every choice in it.
 fn expand(body: &Body, step: &ir::Step, out: &mut Vec<Line>) {
     match step {
         // `StrCpy $2 $2` is what a copy out of a scratch register becomes once
-        // the allocator has given both ends the same colour — §15.4's fixup
-        // computes into a scratch precisely so that `x = x // y` is safe, and
-        // when `x` was dead the two coalesce. Dropping it here rather than
+        // the allocator has given both ends the same colour — the division
+        // fixup computes into a scratch precisely so that `x = x // y` is safe,
+        // and when `x` was dead the two coalesce. Dropping it here rather than
         // avoiding it in the lowerer keeps the rule where the register numbers
-        // are (§9-3).
+        // are.
         ir::Step::Instruction(instruction) if self_copy(instruction) => {}
         ir::Step::Instruction(instruction) => out.push((
             ir::Item::Instruction(instruction.clone()),
@@ -113,7 +113,8 @@ fn expand(body: &Body, step: &ir::Step, out: &mut Vec<Line>) {
                 // takes them inline, and a `raw` block is whatever was written.
                 // A `raw` block is the user's text and nothing checked it; a
                 // plugin line is the compiler's, built from a declaration. The
-                // two fail differently and §15.22 reports them differently.
+                // two fail differently and the line map reports them
+                // differently.
                 ir::CallKind::Opaque { lines, raw } => {
                     for line in lines {
                         let origin = match (raw, line.span) {
@@ -184,7 +185,7 @@ fn self_copy(instruction: &ir::Instruction) -> bool {
 /// run next is the one that costs no jump.
 ///
 /// Blocks never reached are simply not in the result, which is how dead code
-/// disappears without anybody writing a pass for it (§8).
+/// disappears without anybody writing a pass for it.
 fn order(body: &Body) -> Vec<BlockId> {
     let mut post = Vec::new();
     let mut seen = HashSet::from([Body::ENTRY]);
@@ -222,7 +223,7 @@ fn terminator(
     let block: &BasicBlock = body.block(id);
     // A terminator is the tail of whatever statement built the block, so the
     // block's span is the best attribution there is — and a `Goto` is nobody's
-    // line but the compiler's (§8).
+    // line but the compiler's.
     let here = Origin::User(block.span);
     match &block.terminator {
         Terminator::Jump(target) if next == Some(*target) => (Vec::new(), Vec::new()),
@@ -262,7 +263,7 @@ fn terminator(
                         (*then_block, *else_block)
                     };
                     // `==` is case-sensitive here, which is the reverse of the
-                    // NSIS habit `StrCmp` teaches (§15.9).
+                    // NSIS habit `StrCmp` teaches.
                     let name = if *case_sensitive { "StrCmpS" } else { "StrCmp" };
                     let arms = vec![arm(equal), arm(not_equal)];
                     let mut args = vec![lhs.clone(), rhs.clone()];
@@ -302,7 +303,7 @@ fn terminator(
                 // A keyed jump table: `MessageBox … IDYES lbl`. An arm that
                 // falls through is left out altogether rather than spelled `0`,
                 // because `MessageBox` has no fall-through slot to put a `0` in
-                // — its arms are optional pairs (§15.18).
+                // — its arms are optional pairs.
                 Test::Predicate {
                     name,
                     args,

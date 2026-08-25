@@ -1,4 +1,4 @@
-//! Where a value lives, before and after allocation (§9-3).
+//! Where a value lives, before and after allocation.
 //!
 //! Phase 2 handed registers out from both ends of the file and never reclaimed
 //! one. That was a placeholder and said so. Here a body is lowered against an
@@ -26,10 +26,10 @@ pub enum Slot {
     Virtual(u32),
     /// A numbered register: `$0`–`$9`, `$R0`–`$R9`.
     Reg(u8),
-    /// A `Var`: a global, which is one slot for the program's lifetime (§15.24)
-    /// and is therefore never allocated, never coloured and — the part that is
-    /// a correctness rule rather than an optimisation — never saved around a
-    /// call (§15.11).
+    /// A `Var`: a global, which is one slot for the program's lifetime and is
+    /// therefore never allocated, never coloured and — the part that is a
+    /// correctness rule rather than an optimisation — never saved around a
+    /// call.
     Global(String),
 }
 

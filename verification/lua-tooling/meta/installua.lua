@@ -1,10 +1,10 @@
 ---@meta
 
--- Hand-written prototype of what `installua stubs` will generate (§1, §15.13).
+-- Hand-written prototype of what `installua stubs` will generate.
 -- Phase 0 only: this exists to verify the LuaLS claims, not to be shipped.
 
 --------------------------------------------------------------------------------
--- Enums, as `---@alias`. The §1 claim under test: an alias of string literals
+-- Enums, as `---@alias`. The claim under test: an alias of string literals
 -- gives completion *inside* a string literal.
 --------------------------------------------------------------------------------
 
@@ -41,7 +41,7 @@
 ---| '"ABORTRETRYIGNORE"'
 
 --------------------------------------------------------------------------------
--- Blocks (§15.10). `(exact)` is aspirational: LuaLS 3.19.1 does not check the
+-- Blocks. `(exact)` is aspirational: LuaLS 3.19.1 does not check the
 -- extra-field direction on a table constructor (finding L1). Kept so the check
 -- starts working the day it lands.
 --------------------------------------------------------------------------------
@@ -119,7 +119,7 @@ function abort(message) end
 function messageBox(options) end
 
 --------------------------------------------------------------------------------
--- Predefined NSIS constants, as ordinary globals (§15.1)
+-- Predefined NSIS constants, as ordinary globals
 --------------------------------------------------------------------------------
 
 ---@type string

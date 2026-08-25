@@ -7,7 +7,7 @@
 //! ```
 //!
 //! `cargo test` fails if this file and the snapshot ever drift, and
-//! again if the snapshot and the local `makensis` do (§14). The
+//! again if the snapshot and the local `makensis` do. The
 //! hand-written half of every row is in `super::overlay`.
 
 use super::{Dir, Note, Opt, Rep, Shape};

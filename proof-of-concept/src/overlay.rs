@@ -1,7 +1,7 @@
-//! The instruction overlay (§6): one data table keyed by Luis name, carrying the
-//! NSIS surface spelling and arity. In the real compiler the arity/param kinds half
-//! is generated from `makensis -CMDHELP` and only the ergonomics live here; the PoC
-//! hand-writes the handful of rows it needs.
+//! The instruction overlay: one data table keyed by Luis name, carrying the
+//! NSIS surface spelling and arity. In the real compiler the arity/param kinds
+//! half is generated from `makensis -CMDHELP` and only the ergonomics live
+//! here; the PoC hand-writes the handful of rows it needs.
 
 use crate::ast::Ty;
 
@@ -84,15 +84,15 @@ pub fn installer_field(name: &str) -> Option<&'static InstallerField> {
 }
 
 /// Options accepted in the table form of `section` and `sectionGroup` — the
-/// flags NSIS spells `/o` and `/e` (§13).
+/// flags NSIS spells `/o` and `/e`.
 pub const SECTION_OPTIONS: &[&str] = &["optional"];
 pub const SECTION_GROUP_OPTIONS: &[&str] = &["expanded"];
 
-/// Foreign macros need a declaration, not a mechanism (§7-4): which header a
-/// lowering requires, how many inputs it takes, whether it writes an output
-/// variable and whether it needs a one-time init. Same data file as the
-/// instruction table above — the compiler emits the `!include` once, and only
-/// if something used it.
+/// Foreign macros need a declaration, not a mechanism: which header a lowering
+/// requires, how many inputs it takes, whether it writes an output variable and
+/// whether it needs a one-time init. Same data file as the instruction table
+/// above — the compiler emits the `!include` once, and only if something used
+/// it.
 #[derive(Debug)]
 pub struct Header {
     /// As written in `import "…"`.
@@ -107,7 +107,7 @@ pub struct Macro {
     /// Spelled without the `${}`; the emitter adds those.
     pub nsis: &'static str,
     pub inputs: usize,
-    /// Output position (§6). `None` means the macro is a statement.
+    /// Output position. `None` means the macro is a statement.
     pub output: Option<Ty>,
     /// `${StrCase} $out "s" "U"` puts its destination first; `${WinVerGetMajor}
     /// $out` puts it last. A position, not a convention.
@@ -116,8 +116,8 @@ pub struct Macro {
     /// one mode of a multi-mode macro.
     pub trailing: &'static [&'static str],
     /// The one-time top-level line the header wants before this macro works.
-    /// `StrFunc` hands out its functions this way (§6, "the overlay carries
-    /// more than ergonomics").
+    /// `StrFunc` hands out its functions this way — the overlay carries more
+    /// than ergonomics.
     pub init: Option<&'static str>,
 }
 
@@ -225,7 +225,7 @@ impl Header {
     }
 }
 
-/// Adapted stdlib names (§5): `string.upper` is not a language feature, it is a
+/// Adapted stdlib names: `string.upper` is not a language feature, it is a
 /// second spelling of a header macro. Same table, so the `!include` and the
 /// init come along for free.
 pub struct StdFn {
@@ -264,8 +264,8 @@ pub fn is_stdlib_object(object: &str) -> bool {
     STDLIB.iter().any(|f| f.object == object)
 }
 
-/// Build-machine commands (§7-3). These are the ones no amount of constant
-/// folding replaces, so they get a visibly different namespace: `pre.`.
+/// Build-machine commands. These are the ones no amount of constant folding
+/// replaces, so they get a visibly different namespace: `pre.`.
 #[derive(Debug)]
 pub struct Pre {
     pub luis: &'static str,
@@ -303,8 +303,8 @@ pub fn pre(name: &str) -> Option<&'static Pre> {
 }
 
 /// `MessageBox` is the one command that is a statement, a flag set and a jump
-/// table at once (§13), so it gets a bespoke lowering — and these tables are
-/// what make its surface checkable rather than a passthrough.
+/// table at once, so it gets a bespoke lowering — and these tables are what
+/// make its surface checkable rather than a passthrough.
 #[derive(Debug)]
 pub struct Button {
     /// The handler field in the Luis table.

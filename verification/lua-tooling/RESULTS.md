@@ -1,7 +1,8 @@
-# §1 verified
+# The editor-tooling premise, verified
 
-PLAN Phase 0, task 1 — *"the highest-priority item in the plan"*, because §1 is the
-premise the whole design rests on and had no evidence behind it.
+Phase 0, task 1 — *"the highest-priority item in the plan"*, because "the source is
+valid Lua, so the Lua tools work" is the premise the whole design rests on and had
+no evidence behind it.
 
 Run `./run.sh` to reproduce. Versions under test:
 
@@ -12,32 +13,32 @@ Run `./run.sh` to reproduce. Versions under test:
 | `selene` | 0.31.0 | Homebrew **and** crates.io — see S1 |
 | `makensis` | 3.12 | Homebrew |
 
-**Verdict: §1 holds, with three corrections.** The claim the design leans hardest on —
+**Verdict: the premise holds, with three corrections.** The claim the design leans hardest on —
 `---@alias` giving completion *inside* a string literal — is true, and so is every
 rejection claim. What failed is smaller than it could have been, but one of the three
-(L1) removes a diagnostic §1 promised the editor would give.
+(L1) removes a diagnostic the premise said the editor would give.
 
 ---
 
 ## What holds
 
-| § claim | Result | Evidence |
+| Claim | Result | Evidence |
 | --- | --- | --- |
 | `---@alias` gives completion **inside string literals** | ✅ | `completion_probe.py`, 4/4 positions — array element, scalar field, nested table arg, and block field completion. A real LSP session, not `--check`. |
 | An `---@alias` member is **type-checked** inside a string literal | ✅ | `bad.lua:11` → `assign-type-mismatch`, listing every legal member |
 | `runtime.builtin = "disable"` turns `require` back into an unknown global | ✅ | `bad.lua:17–21` → `undefined-global` for `require`, `coroutine`, `io`, `os`, `debug` |
 | A generated meta file silences the unknown-global noise | ✅ | `good.lua` is clean at `checklevel=Information` |
 | LuaLS checks arity on `section` | ✅ | `bad.lua:15` → `missing-parameter` |
-| `detailprint` typed from muscle memory is an unknown global with no suggestion | ✅ | `bad.lua:14` → `undefined-global`, exactly as §1 predicted, and no fix-it |
+| `detailprint` typed from muscle memory is an unknown global with no suggestion | ✅ | `bad.lua:14` → `undefined-global`, exactly as predicted, and no fix-it |
 | LuaLS **keeps** `string.gsub`, `pcall`, `math.floor` — flagging them is selene's half | ✅ | none of `bad.lua:24–26` produce a LuaLS diagnostic |
-| A selene custom std can flag §5's rejected names | ✅ | see S2 — and it does better than §1 hoped |
-| selene names a **replacement**, satisfying §14 | ✅ | `deprecated: { message, replace }` prints `= try: include("mymodule")` with argument substitution |
+| A selene custom std can flag the rejected stdlib names | ✅ | see S2 — and it does better than hoped |
+| selene names a **replacement**, as the test strategy requires | ✅ | `deprecated: { message, replace }` prints `= try: include("mymodule")` with argument substitution |
 | `stylua` leaves already-formatted source alone | ✅ | `good.lua` round-trips under `stylua.toml` |
 
-Two bonus findings, neither of which §1 claimed:
+Two bonus findings, neither of which was claimed:
 
-- **selene catches the §13 backslash hazard.** `"C:\Program Files"` → `bad_string_escape`.
-  LuaLS does **not** flag it. So the editor half of §13's invalid-escape check is selene's,
+- **selene catches the backslash hazard.** `"C:\Program Files"` → `bad_string_escape`.
+  LuaLS does **not** flag it. So the editor half of the invalid-escape check is selene's,
   and the compiler still has to do it independently because `full-moon` accepts it.
 - **LuaLS `missing-fields` works.** Omitting a required field of a block *is* reported
   (`Missing required fields in type 'Attributes': outFile`). It is only the *extra*-field
@@ -47,7 +48,7 @@ Two bonus findings, neither of which §1 claimed:
 
 ## L1 — LuaLS does **not** warn on an unknown field in a table constructor
 
-§1 promised *"a warning on an unknown field in `attributes {}`"*. It does not happen, in
+The premise promised *"a warning on an unknown field in `attributes {}`"*. It does not happen, in
 any configuration tried.
 
 ```lua
@@ -80,11 +81,11 @@ arrives at build time rather than as-you-type, and the docs must not promise oth
 Marking the block classes `(exact)` costs nothing and is kept, so the day LuaLS gains the
 check it starts working; `run.sh` fails if that day arrives, so the docs get updated.
 
-*This is the one §1 claim that failed outright.* Nothing in the design depends on it.
+*This is the one claim that failed outright.* Nothing in the design depends on it.
 
 ## S1 — no released `selene` binary can lint Installua
 
-`local X <const> = …` (§7) and `//` (§15.4) are Lua 5.3/5.4 syntax. Getting selene to
+`local X <const> = …` and `//` are Lua 5.3/5.4 syntax. Getting selene to
 parse them needs `selene-lib`'s `lua53`/`lua54` cargo features, and **the published
 `selene` crate hard-disables them**:
 
@@ -117,7 +118,7 @@ filing; until it is fixed, `installua init` must say so rather than assuming `se
 
 ## S2 — the std is YAML, and it must declare **no base**
 
-Two corrections to §1's *"a custom std TOML"*:
+Two corrections to *"a custom std TOML"*:
 
 1. **selene 0.31 reads YAML**, not TOML. TOML is the pre-0.20 format and is rejected.
 2. **Setting `base:` silently overwrites `lua_versions:`.** From
@@ -135,7 +136,7 @@ Two corrections to §1's *"a custom std TOML"*:
    `<const>`; `base: lua54` fails to resolve.
 
    The generated std therefore declares **no base** and lists the whole surface itself.
-   That is not a workaround so much as the right shape: §5 whitelists the stdlib
+   That is not a workaround so much as the right shape: the stdlib is whitelisted
    wholesale, so a base std would only be there to be subtracted from, and dropping it
    retires the entire `removed: true` list. `gen_selene_std.py` is the prototype.
 
@@ -150,13 +151,13 @@ error[deprecated]: standard library function `string.gsub` is deprecated
 ```
 
 That last shape is worth naming: `deprecated` takes a `message` *and* a `replace`
-template with `%1`-style argument substitution, so §14's *"every rejection names its
+template with `%1`-style argument substitution, so *"every rejection names its
 replacement"* is generated data rather than compiler code. `[lints] deprecated = "deny"`
-promotes it from warning to error, which §14's *"warnings are failures"* requires.
+promotes it from warning to error, which *"warnings are failures"* requires.
 
 ## T1 — `stylua` needs a config, and the default one is destructive
 
-§1 said *"stylua, as-is — no work"*. As-is, stylua's default
+The premise said *"stylua, as-is — no work"*. As-is, stylua's default
 `call_parentheses = "Always"` rewrites every block:
 
 ```lua
@@ -165,7 +166,7 @@ installer { … }                   -->   installer({ … })
 messageBox { text = "Go?" }       -->   messageBox({ text = "Go?" })
 ```
 
-Still valid Lua and still compiles, but it defaces the surface syntax §15.10 exists to
+Still valid Lua and still compiles, but it defaces the surface syntax the blocks exist to
 provide, on every save.
 
 The four settings, against the two idioms that matter:
@@ -178,7 +179,7 @@ The four settings, against the two idioms that matter:
 | **`Input`** | ✅ | ✅ | ✅ |
 
 `Input` — preserve what the author wrote — is the only one that leaves all three alone,
-and is what `stylua.toml` uses. `None` is defensible (§1 itself likes the `f "string"`
+and is what `stylua.toml` uses. `None` is defensible (the premise itself likes the `f "string"`
 sugar) and rewrites nothing incorrectly; it is a house-style call rather than a
 correctness one, and `Input` is the choice that never rewrites working code.
 
@@ -190,12 +191,12 @@ change beyond that.
 ## Design changes this produces
 
 1. `installua init` writes **`stylua.toml`** (`call_parentheses = "Input"`) alongside
-   `.luarc.json` and `installua.toml`. §1's *"no work"* for stylua is wrong.
+   `.luarc.json` and `installua.toml`. The *"no work"* claim for stylua is wrong.
 2. The generated selene std is **`installua.yml`**, YAML, **no `base:`**, with
    `lua_versions: [lua54]` — and it enumerates the kept stdlib rather than subtracting
    from a base. Note the near-collision with the `installua.toml` project marker; they
    are different files.
-3. §14's *"every rejection names its replacement"* is satisfied for the **stdlib** half by
+3. *"Every rejection names its replacement"* is satisfied for the **stdlib** half by
    selene `deprecated: { message, replace }`, which is generated data. The compiler still
    owns the other half (unknown commands, rejected syntax).
 4. The docs must **not** claim the editor catches a typo'd attribute name (L1). The
@@ -204,7 +205,7 @@ change beyond that.
    works: detect the `lua version lua54 … feature is not enabled` error and point at the
    source build.
 6. The **invalid-escape check has an editor half after all** — selene's
-   `bad_string_escape`. §13 assumed only the compiler could catch it. The compiler still
+   `bad_string_escape`. The design assumed only the compiler could catch it. The compiler still
    must, since `full-moon` accepts it, but the editor gets there first.
 
 ## Files
@@ -219,5 +220,5 @@ change beyond that.
 | `selene.toml` | ditto, with `deprecated = "deny"` |
 | `good.lua` | legal Installua; must be clean under all three tools |
 | `bad.lua` | one claim per line, each with its expected diagnostic |
-| `escapes.lua` | the §13 backslash hazard |
+| `escapes.lua` | the backslash hazard |
 | `completion_probe.py` | a real LSP session; completion has no headless mode |

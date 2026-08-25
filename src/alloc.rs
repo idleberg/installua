@@ -1,5 +1,5 @@
-//! Liveness-based register allocation (§9-3), and the half of §15.11 that is
-//! local to a body.
+//! Liveness-based register allocation, and the half of the caller-save scheme
+//! that is local to a body.
 //!
 //! nsL hands a register back with `setInUse(false)`, called by whoever
 //! remembers to. Its issue #5 — a user's variable handed out as a temporary —
@@ -9,14 +9,14 @@
 //! register exactly when their live ranges do not overlap. A slot cannot be
 //! stolen while it is live, because "live" is computed rather than remembered.
 //!
-//! The same analysis answers §15.11's question. A caller-save is `live ∩
+//! The same analysis answers the caller-save question. A caller-save is `live ∩
 //! clobbered` at the call, and the left half of that intersection is the
 //! live-out set this pass already has to compute. That is the second of the
-//! three consumers §15.11 promised one traversal would serve.
+//! three consumers one traversal was meant to serve.
 //!
 //! Colouring is greedy over an interference graph, in slot order, taking the
 //! lowest register that fits. Not optimal — optimal is NP-hard and twenty
-//! registers is not where the wins are — but **deterministic**, which §14's
+//! registers is not where the wins are — but **deterministic**, which the
 //! diffed goldens require.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -29,7 +29,7 @@ use crate::regs::{COUNT, Slot};
 /// What allocating one body learned.
 pub struct Allocation {
     /// The registers this body writes: its **direct** clobber set, before
-    /// anything its callees contribute (§15.11 step 2).
+    /// anything its callees contribute (step 2).
     pub clobbers: BTreeSet<u8>,
     /// Registers live across each call site, indexed as [`Body::calls`] is.
     /// The left half of `live ∩ clobbered`.
@@ -120,20 +120,20 @@ pub fn allocate(body: &mut Body, diags: &mut Diagnostics) -> Allocation {
 }
 
 /// Fills in each call site's save list: `live ∩ clobbered`, ascending register
-/// number (§15.11).
+/// number.
 ///
 /// Ascending is not a correctness property — any order works as long as the
 /// restores mirror it — but a save set that reordered between runs would churn
-/// every golden file §14 diffs, so it is pinned.
+/// every golden file the tests diff, so it is pinned.
 pub fn insert_saves(
     body: &mut Body,
     live_across: &[BTreeSet<u8>],
     clobbers: &BTreeMap<String, BTreeSet<u8>>,
 ) {
     for (index, site) in body.calls.iter_mut().enumerate() {
-        // §15.11's three opaque callees clobber everything, so the
-        // intersection collapses to whatever is live: `plugin`, `System::Call`
-        // and `raw` are exactly the callees nothing here has read.
+        // The three opaque callees clobber everything, so the intersection
+        // collapses to whatever is live: `plugin`, `System::Call` and `raw` are
+        // exactly the callees nothing here has read.
         let everything: BTreeSet<u8> = (0..COUNT).collect();
         let clobbered = match &site.kind {
             ir::CallKind::Opaque { .. } => &everything,
@@ -202,7 +202,7 @@ fn dataflow(body: &Body) -> Vec<BTreeSet<usize>> {
 
 /// A step's `(uses, defs)`, as virtual slot numbers. Globals are dropped here
 /// and nowhere else: a `Var` is not allocated, not coloured and — the part that
-/// is correctness rather than thrift — never saved around a call (§15.11).
+/// is correctness rather than thrift — never saved around a call.
 fn step_slots(body: &Body, step: &ir::Step) -> (BTreeSet<usize>, BTreeSet<usize>) {
     let (uses, defs) = match step {
         ir::Step::Instruction(instruction) => (instruction.uses(), instruction.defs()),
@@ -273,7 +273,7 @@ fn colour(body: &Body, interference: &[BTreeSet<usize>], diags: &mut Diagnostics
                     ))
                     .note(
                         "values whose live ranges do not overlap already share a register, so \
-                         this is the real limit rather than an allocator that leaks (§9-3)",
+                         this is the real limit rather than an allocator that leaks",
                     )
                     .note("split the body into `func`s: a call's arguments travel on the stack"),
                 );

@@ -1,4 +1,4 @@
-//! Every golden program, end to end (§14 tiers 2 and 3).
+//! Every golden program, end to end (tiers 2 and 3).
 //!
 //! [`tests/cfg.rs`](cfg.rs) and [`tests/registers.rs`](registers.rs) assert the
 //! properties; this asserts the text, by exact equality against a golden and
@@ -16,7 +16,7 @@ use installua::diag::{Code, Diagnostics};
 /// Each golden, with the diagnostics it is *expected* to raise.
 ///
 /// The list is exact in both directions — an unexpected code fails, and a
-/// missing one fails too. `returns` is recursive, and §15.11's depth-cliff lint
+/// missing one fails too. `returns` is recursive, and the depth-cliff lint
 /// firing on it is the point rather than a nuisance: it is the only tier-2 test
 /// of a warning whose subject compiles perfectly well.
 const GOLDENS: &[(&str, &[Code])] = &[
@@ -45,7 +45,7 @@ fn golden() -> PathBuf {
 
 /// Compiled against `tests/golden` as its base, so a golden can `include`
 /// another file and a relative path means the same thing wherever the test runs
-/// (§15.28) — the arrangement `tests/examples.rs` has always used.
+/// — the arrangement `tests/examples.rs` has always used.
 fn build(name: &str, source: &str, expected: &[Code]) -> String {
     let options = installua::Options::for_file(&golden().join(format!("{name}.lua")));
     let mut diags = Diagnostics::new();
@@ -75,7 +75,7 @@ fn goldens_match_their_expected_output() {
 /// Tier 3, with an empty warning allowlist. A `$`-sigil mistake, a mis-ordered
 /// `!define` and an unknown `${FOO}` are all warning 6000 plus a silently wrong
 /// installer, so a test that checks only the exit code passes on precisely the
-/// bugs this compiler exists to prevent (§14).
+/// bugs this compiler exists to prevent.
 #[test]
 fn goldens_assemble_under_wx() {
     let Some(makensis) = makensis() else {

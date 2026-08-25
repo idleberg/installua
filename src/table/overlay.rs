@@ -1,11 +1,12 @@
-//! The hand-written half of §15.23's table: everything `-CMDHELP` cannot say.
+//! The hand-written half of the command table: everything `-CMDHELP` cannot
+//! say.
 //!
 //! One row per NSIS command, keyed by the NSIS name. What lives here is
 //! judgement — the Installua spelling, the census class, the type of each
 //! position and which positions are paths. What does not live here is anything
 //! `makensis` already prints: arity, optionality, flag names and enum members
 //! all come from [`super::generated`], because transcribing them is how a table
-//! drifts (§14).
+//! drifts.
 //!
 //! **Every command is classified, including the ones that say no.** A command
 //! with no row is a census failure rather than a silent omission, and that is
@@ -47,14 +48,14 @@ pub struct Ann {
     /// "optional" already meant.
     pub fill: Option<&'static str>,
     /// The name this position takes in the trailing options table. Required
-    /// positions are positional and carry none (§15.23).
+    /// positions are positional and carry none.
     pub field: Option<Field>,
 }
 
 pub struct Row {
     pub nsis: &'static str,
-    /// The Installua source that emits this command, and the reason §14 calls
-    /// the granular tests "impossible to omit": the census requires one on
+    /// The Installua source that emits this command, and the reason the
+    /// granular tests are "impossible to omit": the census requires one on
     /// every `Exposed` row, and `tests/overlay.rs` compiles all of them into a
     /// single golden. Adding an instruction without its test is therefore
     /// unrepresentable rather than merely discouraged — which is what makes
@@ -71,11 +72,11 @@ pub struct Row {
     /// The census checks the lengths agree on an `Exposed` row.
     pub options: &'static [Offer],
     /// Mutually exclusive option sets: `File`'s `/oname=` branch against its
-    /// repeated-filespec branch. The error names both spellings (§15.23).
+    /// repeated-filespec branch. The error names both spellings.
     pub conflicts: &'static [&'static [&'static str]],
-    /// A branching instruction read as an ordinary `bool`-valued call (§15.20):
-    /// `if fileExists(p) then` fuses into the branch and `local ok =
-    /// fileExists(p)` materialises, from this one bit.
+    /// A branching instruction read as an ordinary `bool`-valued call: `if
+    /// fileExists(p) then` fuses into the branch and `local ok = fileExists(p)`
+    /// materialises, from this one bit.
     ///
     /// It cannot be derived from [`Kind::Label`], which is the obvious guess:
     /// `MessageBox` has label positions and is not a predicate. The label kind
@@ -97,7 +98,7 @@ const fn ann(ty: Ty, kind: Kind) -> Ann {
 }
 
 /// An optional position, which is a *named field of the trailing options table*
-/// rather than a counted argument (§15.23).
+/// rather than a counted argument.
 ///
 /// The name is the only thing added by hand: `req: false` is the snapshot's and
 /// so is the type of thing that goes there. `-CMDHELP` calls these `showmode`
@@ -227,9 +228,9 @@ const fn exposed(
     }
 }
 
-/// An `Exposed` row whose call site is a question rather than a statement
-/// (§15.20). The `Kind::Label` positions are the compiler's; the surface takes
-/// the ones before them.
+/// An `Exposed` row whose call site is a question rather than a statement. The
+/// `Kind::Label` positions are the compiler's; the surface takes the ones
+/// before them.
 const fn predicate(
     nsis: &'static str,
     installua: &'static str,
@@ -242,7 +243,7 @@ const fn predicate(
     }
 }
 
-/// A field of one of the four blocks (§15.10, §15.26), and what it holds.
+/// A field of one of the four blocks, and what it holds.
 ///
 /// The [`Setting`] is the whole of the row: [`crate::lower`] switches on it
 /// rather than on the field's name, so adding a script-wide setting is this one
@@ -325,7 +326,7 @@ const fn lowering(nsis: &'static str, instead: &'static str) -> Row {
     row(nsis, None, Class::LoweringTarget(instead))
 }
 
-/// The name is an Installua construct instead (§6).
+/// The name is an Installua construct instead.
 const fn language(nsis: &'static str, instead: &'static str) -> Row {
     row(nsis, None, Class::Language(instead))
 }
@@ -335,13 +336,14 @@ const fn rejected(nsis: &'static str, why: &'static str) -> Row {
     row(nsis, None, Class::Rejected(why))
 }
 
-/// A preprocessor command. §2 rules the whole preprocessor out of the surface,
-/// so these carry no parameter model and no reason: the reason is §2.
+/// A preprocessor command. Staging rules the whole preprocessor out of the
+/// surface, so these carry no parameter model and no reason of their own: the
+/// staging rule is the reason.
 const fn directive(nsis: &'static str) -> Row {
     row(nsis, None, Class::Directive)
 }
 
-/// Not yet done, with a one-line reason. The only honest backlog (§14).
+/// Not yet done, with a one-line reason. The only honest backlog.
 ///
 /// Unused as of Phase 6, and kept for the reason the MUI census's twin is: an
 /// empty backlog is a state to be able to *lose*. `-CMDHELP` grows with every
@@ -443,10 +445,7 @@ pub const ROWS: &[Row] = &[
     // `-CMDHELP` prints it with no arguments at all.
     exposed("BringToFront", "bringToFront", &[], "bringToFront()"),
     lowering("Call", "a call: `f(x)`"),
-    rejected(
-        "CallInstDLL",
-        "a plugin is called as `plugin.method(…)` (§11)",
-    ),
+    rejected("CallInstDLL", "a plugin is called as `plugin.method(…)`"),
     attribute("Caption", "caption", STR),
     rejected(
         "ChangeUI",
@@ -472,10 +471,10 @@ pub const ROWS: &[Row] = &[
     attribute("ComponentText", "page.components.topText", STR),
     // The four rows that write *two* registers. A 64-bit value split across a
     // high and a low half is one number in every language that has one, and
-    // Installua does not: §3 has no 64-bit type, so the halves stay halves and
-    // the call binds both. `/ProductVersion` reads the *product* version rather
-    // than the file version out of the same resource, which is a different
-    // question about the same file and so a flag rather than a second name.
+    // Installua does not have one, so the halves stay halves and the call binds
+    // both. `/ProductVersion` reads the *product* version rather than the file
+    // version out of the same resource, which is a different question about the
+    // same file and so a flag rather than a second name.
     flagged(
         exposed(
             "GetDLLVersion",
@@ -491,7 +490,7 @@ pub const ROWS: &[Row] = &[
     ),
     // `Kind::Value` and not `Kind::Path`, for the reason spelled out on
     // `GetFileTimeLocal` below: this path is opened by `makensis` on whatever
-    // host is building, so §5's `/`-to-`\` would break it.
+    // host is building, so the `/`-to-`\` rewrite would break it.
     //
     // The row was never the problem. It waited for a *file*: nothing shipped
     // with NSIS carries a version resource — every plugin and stub answers
@@ -529,7 +528,7 @@ pub const ROWS: &[Row] = &[
         "local high, low = getFileTime(INSTDIR .. \"/app.exe\")\ndetailPrint(high .. \" \" .. low)",
     ),
     // `Kind::Value` rather than `Kind::Path`, and the difference is which
-    // machine reads the string. §5 turns `/` into `\` because that is what
+    // machine reads the string. Installua turns `/` into `\` because that is what
     // *Windows* wants at install time; this path is opened by `makensis` at
     // compile time, on whatever host is building, and a `\` there is a
     // filename character rather than a separator. `assets\icon.ico` is
@@ -570,10 +569,10 @@ pub const ROWS: &[Row] = &[
     // The first of the six the compiler writes behind a control's fields. None
     // of them is `exposed`: a call would need a handle, and the only handles
     // there are belong to controls this compiler drew — so the field *is* the
-    // call, with the kind checked and the register spilled (§15.32).
+    // call, with the kind checked and the register spilled.
     lowering(
         "CreateFont",
-        "a control's `font`: `serial.font = { face = \"Tahoma\", size = 8 }` (§15.32)",
+        "a control's `font`: `serial.font = { face = \"Tahoma\", size = 8 }`",
     ),
     // The row the options table was designed for. Two required positions and
     // six named ones: setting the description used to mean writing all nine
@@ -673,8 +672,8 @@ pub const ROWS: &[Row] = &[
     attribute("DirText", "page.directory.topText", STR),
     rejected("DirShow", "NSIS itself reports this one as not working"),
     // A *variable* rather than a value: NSIS stores the chosen directory into
-    // it, so the field takes a global by name (§15.24) and `Handled` says the
-    // page's own lowering shapes it.
+    // it, so the field takes a global by name and `Handled` says the page's own
+    // lowering shapes it.
     attribute(
         "DirVar",
         "page.directory.variable",
@@ -710,7 +709,7 @@ pub const ROWS: &[Row] = &[
     attribute("CheckBitmap", "installer.checkBitmap", PATH),
     lowering(
         "EnableWindow",
-        "a control's `enabled`: `agree.enabled = false` (§15.32)",
+        "a control's `enabled`: `agree.enabled = false`",
     ),
     exposed(
         "EnumRegKey",
@@ -736,16 +735,16 @@ pub const ROWS: &[Row] = &[
     ),
     lowering(
         "Exch",
-        "nothing: arguments and returns are the calling convention (§15.11)",
+        "nothing: arguments and returns are the calling convention",
     ),
     // The old reason said a command line is *part* path and so could obey
-    // neither `Kind::Path` nor `Kind::Value`, and the half of that which is true
-    // — `Kind::Path` would turn the `/S` in `setup.exe /S` into `\S` — never
-    // implied the other half. §15.2 normalises `/` where **NSIS** demands a
-    // backslash, not where Windows does: Windows accepts forward slashes at the
-    // API level, and `Exec` hands its string to `CreateProcess`, which resolves
-    // the program through that same parser. So the forward slashes go out
-    // unchanged and the program is found.
+    // neither `Kind::Path` nor `Kind::Value`, and the half of that which is
+    // true — `Kind::Path` would turn the `/S` in `setup.exe /S` into `\S` —
+    // never implied the other half. Installua normalises `/` where **NSIS**
+    // demands a backslash, not where Windows does: Windows accepts forward
+    // slashes at the API level, and `Exec` hands its string to `CreateProcess`,
+    // which resolves the program through that same parser. So the forward
+    // slashes go out unchanged and the program is found.
     //
     // This is exactly the ruling `ExecShell`'s `file` position already carries
     // two rows down, for the same reason and in the same words. It was written
@@ -774,11 +773,11 @@ pub const ROWS: &[Row] = &[
     // which the compiler spells. It is also the one optional here that needs no
     // fill: NSIS tells it from `verb` by the leading `/`.
     //
-    // `file` is `Kind::Value` and that is not an oversight. §5's `/`-to-`\`
+    // `file` is `Kind::Value` and that is not an oversight. The `/`-to-`\`
     // rewrite is about a Windows *file* path, and this position is a shell
     // target — a path, a URL, or a registered document. Win32 takes `/` as a
     // separator, so `INSTDIR .. "/readme.txt"` still opens; a URL put through
-    // §5 becomes `https:\\…` and does not.
+    // that rewrite becomes `https:\\…` and does not.
     exposed(
         "ExecShell",
         "execShell",
@@ -827,24 +826,25 @@ pub const ROWS: &[Row] = &[
     ),
     // `Todo` for six phases, and it was always a `Rejected`: the reason names a
     // decision this language already made rather than work nobody has done.
-    // §15.19 iterates a directory on the **build** machine and unrolls the
-    // result, so `for … in glob` is a known list of files by the time anything
-    // runs. The three `Find*` are the other answer — a cursor over whatever is
-    // on the *target* disk at install time — and the two cannot be offered side
-    // by side without the language having two meanings for "the files in this
-    // directory". A row that will not be written is a `rejected`, and calling it
-    // a `todo` for six phases said the opposite to everyone reading the census.
+    // `for … in glob` iterates a directory on the **build** machine and unrolls
+    // the result, so `for … in glob` is a known list of files by the time
+    // anything runs. The three `Find*` are the other answer — a cursor over
+    // whatever is on the *target* disk at install time — and the two cannot be
+    // offered side by side without the language having two meanings for "the
+    // files in this directory". A row that will not be written is a `rejected`,
+    // and calling it a `todo` for six phases said the opposite to everyone
+    // reading the census.
     rejected(
         "FindClose",
-        "iterating the target's disk at install time; §15.19 unrolls `for … in glob` on the build machine instead",
+        "iterating the target's disk at install time; `for … in glob` unrolls on the build machine instead",
     ),
     rejected(
         "FindFirst",
-        "iterating the target's disk at install time; §15.19 unrolls `for … in glob` on the build machine instead",
+        "iterating the target's disk at install time; `for … in glob` unrolls on the build machine instead",
     ),
     rejected(
         "FindNext",
-        "iterating the target's disk at install time; §15.19 unrolls `for … in glob` on the build machine instead",
+        "iterating the target's disk at install time; `for … in glob` unrolls on the build machine instead",
     ),
     // Three of the four flags are booleans and become fields; `/x` is the row
     // `Offer::List` exists for. It takes a filespec *and* repeats, so its field
@@ -874,7 +874,7 @@ pub const ROWS: &[Row] = &[
     // `file`'s parameter list without `/a`, which is the whole of the first
     // alternative — and the snapshot records exactly those three flags, because
     // [`Note::Alternation`] keeps the first alternative and files the rest as
-    // mutual exclusion (§15.23).
+    // mutual exclusion.
     //
     // The second alternative, `/plugin file.dll`, is deliberately not offered
     // and is not [`Offer::Unoffered`] either: a plugin the program calls before
@@ -904,8 +904,8 @@ pub const ROWS: &[Row] = &[
     // `[text (can contain $0)] [text without ignore (can contain $0)]`: two
     // optional strings, once the parser stops reading the commentary and the
     // caption as positions. `$0` in them is NSIS's own runtime substitution and
-    // not a §5 sigil, so both parts are plain `STR` — a path here would be
-    // wrong twice over, since these are sentences shown to a user.
+    // not an Installua sigil, so both parts are plain `STR` — a path here would
+    // be wrong twice over, since these are sentences shown to a user.
     attribute(
         "FileErrorText",
         "fileErrorText",
@@ -1018,10 +1018,10 @@ pub const ROWS: &[Row] = &[
     language("Function", "`func`"),
     language("FunctionEnd", "the end of a `func` body"),
     // The one window row a program calls rather than reaches: every other
-    // control instruction is behind a field, and this is what produces a control
-    // the compiler did not draw. The ids are Microsoft's and MUI2's — 1 is OK, 2
-    // is Cancel, 3 is Back — so they are numbers here rather than names this
-    // compiler invented for someone else's dialog (§15.32).
+    // control instruction is behind a field, and this is what produces a
+    // control the compiler did not draw. The ids are Microsoft's and MUI2's — 1
+    // is OK, 2 is Cancel, 3 is Back — so they are numbers here rather than
+    // names this compiler invented for someone else's dialog.
     exposed(
         "GetDlgItem",
         "getDlgItem",
@@ -1055,8 +1055,8 @@ pub const ROWS: &[Row] = &[
     ),
     // The argument is a `KNOWNFOLDERID` GUID, not a name: NSIS ships no
     // constants for them, so the string is what the user has and the row does
-    // not pretend otherwise (§13). A `knownFolder` table of the common ones is
-    // a header, not an instruction.
+    // not pretend otherwise. A `knownFolder` table of the common ones is a
+    // header, not an instruction.
     exposed(
         "GetKnownFolderPath",
         "getKnownFolderPath",
@@ -1065,7 +1065,7 @@ pub const ROWS: &[Row] = &[
     ),
     // The field is an enum and the result is a *number*, which is the whole
     // reason anybody asks: `getWinVer("MAJOR") >= 10` is a comparison and
-    // `Ty::Str` would have made it a string one (§15.14).
+    // `Ty::Str` would have made it a string one.
     exposed(
         "GetWinVer",
         "getWinVer",
@@ -1097,10 +1097,10 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Label), ann(Ty::Str, Kind::Label)],
         "if aborted() then detailPrint(\"cancelled\") end",
     ),
-    // `IfErrors` **clears** the flag it reads — verified under wine (§15.20) —
-    // so the call is the side effect and eliminating it when its result is
-    // unused would silently break error handling. Nothing eliminates calls
-    // today; when something does, this comment is the reason it must not.
+    // `IfErrors` **clears** the flag it reads — verified under wine — so the
+    // call is the side effect and eliminating it when its result is unused
+    // would silently break error handling. Nothing eliminates calls today; when
+    // something does, this comment is the reason it must not.
     predicate(
         "IfErrors",
         "errors",
@@ -1141,8 +1141,8 @@ pub const ROWS: &[Row] = &[
     // `attributes {}` rather than one being an instruction.
     //
     // `key` is a [`PATH`] for the same reason `readRegStr`'s subkey is: a
-    // registry path is written with `/` here and emitted with `\` (§5), so the
-    // one shape is not spelled two ways depending on which row reaches it.
+    // registry path is written with `/` here and emitted with `\`, so the one
+    // shape is not spelled two ways depending on which row reaches it.
     attribute(
         "InstallDirRegKey",
         "installDirRegKey",
@@ -1163,37 +1163,37 @@ pub const ROWS: &[Row] = &[
     lowering("IntOp", "the arithmetic operators: `a + b`"),
     lowering(
         "IntPtrOp",
-        "the arithmetic operators: pointer width is a type attribute (§15.14)",
+        "the arithmetic operators: pointer width is a type attribute",
     ),
     lowering("IntCmp", "a comparison: `a < b`"),
     lowering(
         "IntCmpU",
-        "a comparison: the unsigned form is chosen from the operands' types (§15.14)",
+        "a comparison: the unsigned form is chosen from the operands' types",
     ),
     lowering(
         "Int64Cmp",
-        "a comparison: 64-bit width is a type attribute, not a spelling (§15.14)",
+        "a comparison: 64-bit width is a type attribute, not a spelling",
     ),
     lowering(
         "Int64CmpU",
-        "a comparison: width and sign are both type attributes (§15.14)",
+        "a comparison: width and sign are both type attributes",
     ),
     lowering(
         "IntPtrCmp",
-        "a comparison: pointer width is a type attribute (§15.14)",
+        "a comparison: pointer width is a type attribute",
     ),
     lowering(
         "IntPtrCmpU",
-        "a comparison: width and sign are both type attributes (§15.14)",
+        "a comparison: width and sign are both type attributes",
     ),
-    lowering("IntFmt", "`string.format` (§15.21)"),
+    lowering("IntFmt", "`string.format`"),
     lowering(
         "Int64Fmt",
-        "`string.format`: 64-bit width is a type attribute (§15.14)",
+        "`string.format`: 64-bit width is a type attribute",
     ),
-    // A predicate over the handle `findWindow` returns, and §15.20 has known
-    // how to lower one of those since batch 8. The two positions after the
-    // handle are the compiler's labels, not the caller's arguments.
+    // A predicate over the handle `findWindow` returns, which the compiler
+    // already knows how to lower. The two positions after the handle are the
+    // compiler's labels, not the caller's arguments.
     predicate(
         "IsWindow",
         "isWindow",
@@ -1207,7 +1207,7 @@ pub const ROWS: &[Row] = &[
     lowering("Goto", "`if`, `while` and `break`"),
     // Written by the compiler, never by a script: `languages {}` is keyed by
     // locale because that is what a translator owns, and NSIS wants it keyed by
-    // name, so the transposition is the lowering (§15.26).
+    // name, so the transposition is the lowering.
     lowering("LangString", "`languages { locales = { … } }`"),
     rejected(
         "LangStringUP",
@@ -1246,7 +1246,7 @@ pub const ROWS: &[Row] = &[
     // `LoadLanguageFile` would load a language the dialog cannot offer.
     rejected(
         "LoadLanguageFile",
-        "`languages { locales = { … } }` loads them through MUI2, which keeps the list the language dialog reads (§15.26)",
+        "`languages { locales = { … } }` loads them through MUI2, which keeps the list the language dialog reads",
     ),
     // Tier 3, immediately: *"Error: LogSet specified, NSIS_CONFIG_LOG not
     // defined."* — not a warning, and not a runtime surprise either. The stock
@@ -1280,8 +1280,8 @@ pub const ROWS: &[Row] = &[
             ],
             "messageBox { text = \"Restart now?\", buttons = \"YESNO\", silentAnswer = \"NO\" }",
         ),
-        // `silentAnswer` is a field of §15.18's own table rather than of the
-        // generic one, because the answer has to be legal for the `buttons`
+        // `silentAnswer` is a field of `messageBox`'s own table rather than of
+        // the generic one, because the answer has to be legal for the `buttons`
         // beside it: `silentAnswer = "YES"` under `buttons = "OKCANCEL"` is an
         // error, and only the hand-shaped lowering can see both fields at once.
         &[handled("silentAnswer")],
@@ -1298,8 +1298,8 @@ pub const ROWS: &[Row] = &[
     // is an alternation, and both halves are written from `page.*`: the seven
     // MUI2 pages become `!insertmacro MUI_PAGE_*`, and `page.custom` becomes
     // the `Page custom` this row spells, with the creator and the leave
-    // function generated around it (§15.32). Nobody writes the line, because
-    // its two arguments are names only the compiler has.
+    // function generated around it. Nobody writes the line, because its two
+    // arguments are names only the compiler has.
     //
     // The other three are `Rejected` now. `PageEx` is the classic page block
     // MUI2 *generates* around every one of its pages — `PageEx directory` …
@@ -1324,11 +1324,11 @@ pub const ROWS: &[Row] = &[
     ),
     lowering(
         "Pop",
-        "nothing: arguments and returns are the calling convention (§15.11)",
+        "nothing: arguments and returns are the calling convention",
     ),
     lowering(
         "Push",
-        "nothing: arguments and returns are the calling convention (§15.11)",
+        "nothing: arguments and returns are the calling convention",
     ),
     exposed("Quit", "os.exit", &[], "os.exit()"),
     exposed(
@@ -1375,10 +1375,10 @@ pub const ROWS: &[Row] = &[
         "local temp = readEnvStr(\"TEMP\")\ndetailPrint(temp)",
     ),
     exposed("Reboot", "reboot", &[], "reboot()"),
-    // Grouped with `InitPluginsDir` under §11 and it does not belong there:
-    // `RegDLL` calls `DllRegisterServer` on a file already on the target and
-    // needs nothing from the plugin directory. `UnRegDLL` is the same row with
-    // the other entry point, and the alphabet reaches it later.
+    // Grouped with `InitPluginsDir` under the plugin rows, and it does not
+    // belong there: `RegDLL` calls `DllRegisterServer` on a file already on the
+    // target and needs nothing from the plugin directory. `UnRegDLL` is the
+    // same row with the other entry point, and the alphabet reaches it later.
     exposed(
         "RegDLL",
         "regDll",
@@ -1431,7 +1431,7 @@ pub const ROWS: &[Row] = &[
     ),
     language("SectionGroupEnd", "the end of a `group`'s section list"),
     // The input is a bare file name rather than a path — `SearchPath` is what
-    // walks `%PATH%` — so §5's `/`-to-`\` rule has nothing to convert and
+    // walks `%PATH%` — so the `/`-to-`\` rule has nothing to convert and
     // `Kind::Value` is the honest annotation. The *result* is a full path, and
     // it is a string like every other output.
     exposed(
@@ -1443,8 +1443,8 @@ pub const ROWS: &[Row] = &[
     // The eight section-indexed rows, reached through a handle rather than
     // called. `${SEC_core}` is the index and the handle is the `local` a block
     // listed, so every one of them carries a [`Kind::Bound`] position and none
-    // of them has an argument list at all: `handle.text = "…"` is a *field*, and
-    // the number NSIS reads appears nowhere in the source (§13).
+    // of them has an argument list at all: `handle.text = "…"` is a *field*,
+    // and the number NSIS reads appears nowhere in the source.
     //
     // The flags pair is one row per direction and four fields per row —
     // `selected`, `readOnly`, `bold`, `expanded` are bits of one word — so its
@@ -1476,7 +1476,7 @@ pub const ROWS: &[Row] = &[
     // bit field NSIS hands back has no list value here to become — and a script
     // asking about install types at run time is asking about one of them. The
     // name is the argument, the answer is a `bool`, and the position is the
-    // compiler's on both sides (§13).
+    // compiler's on both sides.
     exposed(
         "SectionGetInstTypes",
         "handle.installTypes",
@@ -1509,7 +1509,7 @@ pub const ROWS: &[Row] = &[
     ),
     // The four install-type rows, addressed by the name the block declared
     // rather than by a handle: an install type is a line in a block's field and
-    // there is nothing for a `local` to bind (§13, ruling 4).
+    // there is nothing for a `local` to bind.
     //
     // `currentInstType` is a name the compiler owns — the read is one
     // instruction and a comparison chain, the write is another — so it is
@@ -1548,7 +1548,7 @@ pub const ROWS: &[Row] = &[
     // and NSIS has nowhere to put one, so that read is `System::Call`.
     lowering(
         "SendMessage",
-        "a control's fields: `agree.checked = true`, `serial.value = \"\"` (§15.32)",
+        "a control's fields: `agree.checked = true`, `serial.value = \"\"`",
     ),
     // The third row filed under "addresses a window by handle" that takes no
     // handle, after `HideWindow` and `LockWindow`. A group reason is a guess
@@ -1566,7 +1566,7 @@ pub const ROWS: &[Row] = &[
     lowering(
         "SetCtlColors",
         "a control's `colors`: `serial.colors = { text = \"800000\", background = \"transparent\" }` \
-         (§15.32)",
+        ",
     ),
     // Its reason said page callbacks did not exist, and batch 20 gave every
     // page `pre`, `show` and `leave`. The control it writes into is the one
@@ -1585,7 +1585,7 @@ pub const ROWS: &[Row] = &[
     ),
     lowering(
         "LoadAndSetImage",
-        "a `bitmap`'s `image`: `bitmap { image = \"check.bmp\", y = 90, height = 20 }` (§15.32)",
+        "a `bitmap`'s `image`: `bitmap { image = \"check.bmp\", y = 90, height = 20 }`",
     ),
     // The four compression settings and the overwrite default. All five carry
     // the objection that retired itself: they are positional, so a *call* would
@@ -1766,7 +1766,7 @@ pub const ROWS: &[Row] = &[
     attribute("ShowUninstDetails", "showUninstDetails", Setting::Enum),
     lowering(
         "ShowWindow",
-        "a control's `visible`: `badge.visible = false` (§15.32)",
+        "a control's `visible`: `badge.visible = false`",
     ),
     attribute("SilentInstall", "silentInstall", Setting::Enum),
     attribute("SilentUnInstall", "silentUninstall", Setting::Enum),
@@ -1778,14 +1778,14 @@ pub const ROWS: &[Row] = &[
     ),
     lowering(
         "StrCmp",
-        "`string.lower(a) == b`, which folds to one case-insensitive compare (§15.9)",
+        "`string.lower(a) == b`, which folds to one case-insensitive compare",
     ),
-    lowering("StrCmpS", "`==`, which is case-sensitive (§15.9)"),
+    lowering("StrCmpS", "`==`, which is case-sensitive"),
     lowering("StrCpy", "assignment: `x = y`"),
     rejected(
         "UnsafeStrCpy",
         "`StrCpy` with the bounds check removed; assignment is `=`, and \
-         §15.31 checks the length",
+         the compiler checks the length",
     ),
     exposed(
         "StrLen",
@@ -1795,7 +1795,7 @@ pub const ROWS: &[Row] = &[
     ),
     // The five indices are the classic UI's page list, and this language names
     // those pages — so the row is not one field but four, `subCaption` on each
-    // page it numbers, and the block it is written in picks the command (§15.3).
+    // page it numbers, and the block it is written in picks the command.
     //
     // Index 4, *Completed*, is the one MUI2 claims: `MUI_PAGE_INSTFILES` writes
     // `SubCaption 4 " "`. It needs no shape to refuse it, because 3 and 4 are
@@ -1823,15 +1823,15 @@ pub const ROWS: &[Row] = &[
         "NSIS retired it: write `writeUninstaller` from a section",
     ),
     attribute("UninstallCaption", "uninstallCaption", STR),
-    // Already done, under the name §15.3 gives it: `icon` inside `uninstaller
-    // {}` is the same field for the other half, and it lowers to `MUI_UNICON`
-    // rather than to this line, because MUI2 emits `UninstallIcon` itself from
-    // that define and would otherwise win.
+    // Already done, under the name the uninstaller block gives it: `icon`
+    // inside `uninstaller {}` is the same field for the other half, and it
+    // lowers to `MUI_UNICON` rather than to this line, because MUI2 emits
+    // `UninstallIcon` itself from that define and would otherwise win.
     language("UninstallIcon", "`icon` in `uninstaller {}`"),
     language("UninstPage", "`page.*` inside `uninstaller {}`"),
     // `locationText` beside it. `confirm` is the uninstaller's first page and
     // exists in no other half, which is why the field path has no `un.` in it:
-    // the block the page is written in supplies that (§15.3).
+    // the block the page is written in supplies that.
     attribute("UninstallText", "page.confirm.topText", STR),
     // Three indices where the installer has five, and they are not the same
     // three: `confirm` is 0 and `instFiles` is 1, so a page carries both
@@ -1876,12 +1876,12 @@ pub const ROWS: &[Row] = &[
         ],
         "writeRegBin(HKLM, \"Software/Example\", \"Blob\", \"12848412AB\")",
     ),
-    // The row `Offer::Always` exists for. `/REGEDIT5` is spelled like a flag and
-    // behaves like a keyword: NSIS rejects the line without it, and there is no
-    // second form to choose between, so the caller has nothing to decide and
-    // the compiler writes it on every call. The value is a hex string for the
-    // same reason `writeRegBin`'s is — a REG_MULTI_SZ is bytes, and §3 has no
-    // list type to build them from.
+    // The row `Offer::Always` exists for. `/REGEDIT5` is spelled like a flag
+    // and behaves like a keyword: NSIS rejects the line without it, and there
+    // is no second form to choose between, so the caller has nothing to decide
+    // and the compiler writes it on every call. The value is a hex string for
+    // the same reason `writeRegBin`'s is — a REG_MULTI_SZ is bytes, and there
+    // is no list type here to build them from.
     flagged(
         exposed(
             "WriteRegMultiStr",
@@ -1988,8 +1988,8 @@ pub const ROWS: &[Row] = &[
     // Three keywords survive, and none but `ALL` is anywhere in `-CMDHELP`.
     //
     // `Int` and not `Str` on the far side, which is the whole gain: `reslang =
-    // "nonsense"` used to reach `makensis` and come back as a usage line with no
-    // Lua position on it (§13).
+    // "nonsense"` used to reach `makensis` and come back as a usage line with
+    // no Lua position on it.
     attribute(
         "PERemoveResource",
         "portableExecutable.removeResource",
@@ -2030,8 +2030,8 @@ pub const ROWS: &[Row] = &[
         Setting::Enum,
     ),
     // `path` is an XPath into the manifest — `/assembly` — and not a file path,
-    // so it is `STR` and must never be `PATH`: §5 would turn its `/` into `\`
-    // and NSIS would reject the line the compiler built.
+    // so it is `STR` and must never be `PATH`: the path rewrite would turn its
+    // `/` into `\` and NSIS would reject the line the compiler built.
     attribute(
         "ManifestAppendCustomString",
         "manifest.customStrings",
@@ -2092,10 +2092,11 @@ pub const ROWS: &[Row] = &[
     directive("!searchparse"),
     directive("!searchreplace"),
     // The six button and status labels. MUI2 supplies no define for any of
-    // them, so they are ordinary attributes — but they are a §15.26 interaction
-    // rather than a UI one: the default text comes from the NLF of whatever
-    // language is running, and writing one of these overrides *every* language
-    // at once. That is worth a diagnostic and is not a reason to withhold them.
+    // them, so they are ordinary attributes — but they are a `languages {}`
+    // interaction rather than a UI one: the default text comes from the NLF of
+    // whatever language is running, and writing one of these overrides *every*
+    // language at once. That is worth a diagnostic and is not a reason to
+    // withhold them.
     //
     // The four labels of `MiscButtonText` are one line and therefore one field:
     // NSIS reads them by position, so writing only the last still means writing
@@ -2126,29 +2127,30 @@ pub const ROWS: &[Row] = &[
         },
     ),
     attribute("CompletedText", "completedText", STR),
-    // Its old reason — §3's "`Call`-by-address has no Lua shape" — is still true
-    // of the *surface*, and the events are why it stops being a backlog entry
+    // Its old reason — "`Call`-by-address has no Lua shape" — is still true of
+    // the *surface*, and the events are why it stops being a backlog entry
     // anyway: the address of a generated callback exists in exactly one place,
-    // and the program that wants it wrote `onClick`. `GetLabelAddress` keeps the
-    // reason, because §8 owns labels and there is nothing to take the address of.
+    // and the program that wants it wrote `onClick`. `GetLabelAddress` keeps
+    // the reason, because the compiler owns labels and there is nothing to take
+    // the address of.
     lowering(
         "GetFunctionAddress",
-        "an event: `button { \"Check\", onClick = function() … end }` (§15.32)",
+        "an event: `button { \"Check\", onClick = function() … end }`",
     ),
     // The two that stayed behind when `GetFunctionAddress` became a lowering
     // target, and they stayed for a reason that is final rather than pending.
-    // §8 owns labels: there is no label in this language to take the address of,
-    // and §3 has no value type an address could be held in — the number these
-    // produce is only ever consumed by `Call`, which reaches its target by name.
-    // `GetCurrentAddress` is worse still, since "here" in a compiled body is not
-    // a position any Installua program can name.
+    // The compiler owns labels: there is no label in this language to take the
+    // address of, and no value type an address could be held in — the number
+    // these produce is only ever consumed by `Call`, which reaches its target
+    // by name. `GetCurrentAddress` is worse still, since "here" in a compiled
+    // body is not a position any Installua program can name.
     rejected(
         "GetLabelAddress",
-        "§8 owns labels, so there is none to address; `Call` reaches its target by name (§3)",
+        "the compiler owns labels, so there is none to address; `Call` reaches its target by name",
     ),
     rejected(
         "GetCurrentAddress",
-        "the address of the current instruction, which no Installua program has a name for (§3, §8)",
+        "the address of the current instruction, which no Installua program has a name for",
     ),
     directive("!addplugindir"),
     // `ReserveFile /plugin`'s twin, and compiler-written for the same reason:
@@ -2158,7 +2160,7 @@ pub const ROWS: &[Row] = &[
     // and a user has to remember. See [`crate::lower::plugins_dir`].
     lowering("InitPluginsDir", "a body that names `PLUGINSDIR`"),
     attribute("AllowSkipFiles", "allowSkipFiles", ONOFF),
-    language("Var", "a global is declared by assigning to it (§15.24)"),
+    language("Var", "a global is declared by assigning to it"),
     attribute(
         "VIAddVersionKey",
         "versionInfo.keys",

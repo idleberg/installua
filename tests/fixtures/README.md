@@ -40,4 +40,4 @@ the output change?"* and only `makensis` answers *"is the output valid NSIS?"*.
 Swap `CreateShortcut`'s link and target and the golden passes forever — it
 records what the compiler emits and has no opinion on whether NSIS accepts it.
 Phase 6 adds a row per command from a `-CMDHELP` line somebody read, which is
-exactly the situation where that distinction earns its keep (§14).
+exactly the situation where that distinction earns its keep.

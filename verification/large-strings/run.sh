@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PLAN Phase 0, task 1b — reproduce the large-string plugin probe (§15.31).
+# PLAN Phase 0, task 1b — reproduce the large-string plugin probe.
 #
 # Needs wine and network access: the vanilla and strlen_8192 Windows builds of
 # NSIS 3.12 are downloaded, because the hazard is *by construction* about two

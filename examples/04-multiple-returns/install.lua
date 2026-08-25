@@ -1,4 +1,4 @@
--- Program 4 of five (PLAN Phase 0, §11): functions returning multiple values.
+-- Program 4 of five: functions returning multiple values.
 --
 -- This is the program the clobber-set fixpoint exists for. Four call edges,
 -- one of them recursive, and a live value across each one:
@@ -6,7 +6,7 @@
 --   section -> budget -> measure -> ${GetSize}
 --   section -> countdown -> countdown
 --
--- Lua's multiple returns are the feature NSIS was waiting for (§3): `Call` has
+-- Lua's multiple returns are the feature NSIS was waiting for: `Call` has
 -- no argument list, so the stack is the only calling convention there is, and a
 -- language with `return a, b` maps onto it exactly.
 
@@ -35,7 +35,7 @@ func("budget", function(dir)
 end)
 
 -- An SCC of one. The fixpoint saturates in one extra round, which is the whole
--- special case recursion needs (§15.11).
+-- special case recursion needs.
 func("countdown", function(n)
 	if n <= 0 then
 		return 0

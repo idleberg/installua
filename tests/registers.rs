@@ -1,5 +1,5 @@
-//! Phase 3 at the pass boundary (§14 tier 0): liveness, the calling convention
-//! and the clobber fixpoint, asserted as properties of the IR.
+//! Phase 3 at the pass boundary (tier 0): liveness, the calling convention and
+//! the clobber fixpoint, asserted as properties of the IR.
 //!
 //! The distinction matters more here than anywhere else in the compiler. A
 //! caller-save restored one `Exch` out of place produces an installer that
@@ -113,7 +113,7 @@ detailPrint(\"both \" .. a .. b)",
 
 /// A `Var` is user-visible state whose whole purpose is to survive, so it is
 /// not allocated, not coloured, and — the part that is correctness rather than
-/// thrift — never saved around a call (§15.11).
+/// thrift — never saved around a call.
 #[test]
 fn a_global_is_never_allocated() {
     let module = module(
@@ -138,7 +138,7 @@ fn a_global_is_never_allocated() {
 
 /// The three rules program 4 pins, as one sequence: saves first, arguments in
 /// reverse source order, results popped in source order, saves restored in
-/// reverse (§11, §15.11).
+/// reverse.
 #[test]
 fn the_calling_convention_is_program_fours() {
     let module = module(
@@ -195,8 +195,8 @@ fn a_dead_value_is_not_saved() {
 }
 
 /// A returned value nobody binds still has to come off the stack: the callee
-/// pushed it either way, and leaving it there unbalances every call after it
-/// (§11 — "a dropped output still has to be allocated").
+/// pushed it either way, and leaving it there unbalances every call after it —
+/// a dropped output still has to be allocated.
 #[test]
 fn a_dropped_return_still_comes_off_the_stack() {
     let module = module(
@@ -214,7 +214,7 @@ fn a_dropped_return_still_comes_off_the_stack() {
 
 /// Recursion needs no special case: `countdown` is an SCC of one, and the
 /// recursive call site saves `n` precisely because the fixpoint went round the
-/// cycle and put `$0` in `countdown`'s own clobber set (§15.11).
+/// cycle and put `$0` in `countdown`'s own clobber set.
 #[test]
 fn recursion_saves_across_its_own_call() {
     let source = std::fs::read_to_string(
@@ -236,8 +236,8 @@ fn recursion_saves_across_its_own_call() {
 }
 
 /// The fixpoint itself, on a graph with a cycle in it and no program around it.
-/// PLAN §2 recorded that clobber sets were exercised once across all five
-/// programs; this is the synthetic case that says what the algorithm does.
+/// Clobber sets are exercised once across all five programs; this is the
+/// synthetic case that says what the algorithm does.
 ///
 /// ```text
 /// root → a ⇄ b → leaf
@@ -275,7 +275,7 @@ fn a_cycle_shares_one_clobber_set() {
 }
 
 /// Mutual recursion is one component too, and the depth-cliff warning names
-/// both members rather than whichever one happened to be visited first (§3).
+/// both members rather than whichever one happened to be visited first.
 #[test]
 fn mutual_recursion_warns_once_naming_the_cycle() {
     let mut diags = Diagnostics::new();
@@ -304,7 +304,7 @@ fn mutual_recursion_warns_once_naming_the_cycle() {
 
 /// `Call` has no arity — the callee pushes and the caller pops — so two paths
 /// returning different counts is a stack that unbalances at runtime with NSIS
-/// reporting nothing at all (§3).
+/// reporting nothing at all.
 #[test]
 fn returns_must_agree_on_how_many() {
     let mut diags = Diagnostics::new();
@@ -322,8 +322,8 @@ fn returns_must_agree_on_how_many() {
 }
 
 /// A parameter's type comes from the call sites, because there are no
-/// annotations to read (§15.14). `n - 1` has no lowering until `countdown(4)`
-/// has been seen, and the two are in either order.
+/// annotations to read. `n - 1` has no lowering until `countdown(4)` has been
+/// seen, and the two are in either order.
 #[test]
 fn a_parameter_is_typed_by_its_call_sites() {
     let module = module(

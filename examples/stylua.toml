@@ -1,6 +1,6 @@
 # Prototype of what `installua init` writes. Phase 0 finding T1: stylua's
 # default `call_parentheses = "Always"` rewrites `attributes { … }` into
-# `attributes({ … })`, which destroys the block syntax §15.10 is built on.
+# `attributes({ … })`, which destroys the block syntax.
 #
 # "Input" is the only setting that leaves both surface idioms alone:
 #   * `attributes { … }`  — a single-table call, must keep its parens off

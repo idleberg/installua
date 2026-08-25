@@ -8,8 +8,8 @@
 //! Two transformations have already happened by the time a tree of these
 //! exists, because both are cheaper before names mean anything:
 //!
-//!   * `elseif` is desugared into a nested `If` in the else branch (§7), so
-//!     every `If` here has exactly one condition.
+//!   * `elseif` is desugared into a nested `If` in the else branch, so every
+//!     `If` here has exactly one condition.
 //!   * string literals carry their *decoded* value, so no later pass ever
 //!     re-interprets an escape.
 
@@ -30,14 +30,14 @@ pub type Block = Vec<Stmt>;
 #[derive(Clone, Debug)]
 pub enum Stmt {
     /// `local a, b = f()` — and `local X <const> = 5`, which is a different
-    /// thing entirely (build-time, §7-1) but the same syntax.
+    /// thing entirely (build-time) but the same syntax.
     Local {
         names: Vec<Name>,
         is_const: bool,
         values: Vec<Expr>,
         span: Span,
     },
-    /// `x = 1`, and `a, b = f()`. A bare assignment declares a global (§15.24).
+    /// `x = 1`, and `a, b = f()`. A bare assignment declares a global.
     Assign {
         targets: Vec<Expr>,
         values: Vec<Expr>,
@@ -68,7 +68,7 @@ pub enum Stmt {
         span: Span,
     },
     /// `for x in <iterator> do`. Which iterators exist is checked here, not
-    /// later: the set is closed (§7) and syntax is all it takes to see.
+    /// later: the set is closed and syntax is all it takes to see.
     GenericFor {
         names: Vec<Name>,
         iterator: Expr,
@@ -113,14 +113,14 @@ pub struct Name {
 
 #[derive(Clone, Debug)]
 pub enum Expr {
-    /// Integers only. A float literal never gets this far (§6).
+    /// Integers only. A float literal never gets this far.
     Number {
         value: i64,
         span: Span,
     },
     /// Already decoded: `\t` is a tab in here, and a long string is
     /// indistinguishable from a short one, which is correct — the difference is
-    /// lexical (§5).
+    /// lexical.
     Str(StrLit),
     Bool {
         value: bool,
@@ -146,7 +146,7 @@ pub enum Expr {
         args: Vec<Expr>,
         span: Span,
     },
-    /// A declaration body. Only ever a direct call argument (§3).
+    /// A declaration body. Only ever a direct call argument.
     Function {
         params: Vec<Name>,
         block: Block,
@@ -251,15 +251,16 @@ impl TableField {
     }
 }
 
-/// Every operator that survives §6. `/` and `^` are absent because they are
-/// rejected at the operator, not lowered to something close enough.
+/// Every operator that survives the operator rules. `/` and `^` are absent
+/// because they are rejected at the operator, not lowered to something close
+/// enough.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinOp {
     Add,
     Sub,
     Mul,
     /// Lua's `//`. NSIS truncates toward zero and Lua floors, so this carries a
-    /// fixup obligation into Phase 2 (§15.4).
+    /// fixup obligation into Phase 2.
     FloorDiv,
     /// Lua's `%`: sign of the divisor, where NSIS takes the dividend's.
     Mod,
@@ -274,7 +275,7 @@ pub enum BinOp {
     Or,
     BitAnd,
     BitOr,
-    /// Lua's `~`, which is NSIS's `^` — the spellings swap (§6).
+    /// Lua's `~`, which is NSIS's `^` — the spellings swap.
     BitXor,
     Shl,
     /// Lua's `>>` zero-fills, which is NSIS's `>>>`.
@@ -285,6 +286,6 @@ pub enum BinOp {
 pub enum UnOp {
     Neg,
     Not,
-    /// Lua's `~`: bitwise not, one-operand `IntOp` (§6).
+    /// Lua's `~`: bitwise not, one-operand `IntOp`.
     BitNot,
 }

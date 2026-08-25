@@ -1,9 +1,10 @@
-; Hand-written expected output for install.lua — PLAN Phase 0, program 5 of five.
+; Hand-written expected output for install.lua — program 5 of five.
 ;
-; The two `${Using:StrFunc}` lines are §15.21's collect-then-emit pass. Nobody
+; The two `${Using:StrFunc}` lines are the collect-then-emit pass. Nobody
 ; wrote them and the build aborts without them.
 ;
-; The sign fixups are §15.4. `freeMib` is a `uint` from the declaration, so
+; The sign fixups are the division rule. `freeMib` is a `uint` from the
+; declaration, so
 ; `freeMib // 1024` is a bare `IntOp /`. `delta` has no provable sign, so its
 ; `//` and `%` are corrected — and because the divisor is a positive constant
 ; the shared condition collapses to `remainder < 0`, which lets both fixups

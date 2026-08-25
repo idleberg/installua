@@ -1,5 +1,5 @@
-//! The page surface (§15.7): where a MUI2 setting lives, and what it costs to
-//! put it in the wrong place.
+//! The page surface: where a MUI2 setting lives, and what it costs to put it in
+//! the wrong place.
 //!
 //! The golden in [`tests/goldens.rs`](goldens.rs) proves the whole thing emits
 //! and assembles. What is here is the half a golden cannot show — the scoping
@@ -134,9 +134,9 @@ fn a_page_hook_becomes_a_function_the_compiler_names() {
     );
 }
 
-/// The uninstaller's half has no spelling of its own (§15.3): the block the
-/// page is written in supplies both the `MUI_UNPAGE_` prefix and the `un.` on
-/// the functions MUI2 will call.
+/// The uninstaller's half has no spelling of its own: the block the page is
+/// written in supplies both the `MUI_UNPAGE_` prefix and the `un.` on the
+/// functions MUI2 will call.
 #[test]
 fn the_block_supplies_the_half() {
     let output = build(
@@ -256,11 +256,10 @@ fn only_a_page_with_a_header_takes_header_text() {
     );
 }
 
-/// The custom page's header is the one setting that changes *mechanism*
-/// between it and its seven siblings, and the reason is MUI2's: `Page custom`
-/// is a stock NSIS line MUI2 never sees, so a `!define` it reads at insertion
-/// time would do nothing here and then leak onto the next page that does read
-/// it (§15.32).
+/// The custom page's header is the one setting that changes *mechanism* between
+/// it and its seven siblings, and the reason is MUI2's: `Page custom` is a
+/// stock NSIS line MUI2 never sees, so a `!define` it reads at insertion time
+/// would do nothing here and then leak onto the next page that does read it.
 #[test]
 fn a_custom_page_calls_the_header_macro_instead_of_defining_it() {
     let output = build(&program(
@@ -362,9 +361,9 @@ fn the_pages_are_a_closed_set() {
 }
 
 /// `colors` is one field holding two, one and two levels up from the control
-/// field of the same name (§15.32): MUI2 spends both halves on a single
-/// `SetCtlColors`, so a script that could write one alone would be writing a
-/// colour this compiler invented over the one the theme chose.
+/// field of the same name: MUI2 spends both halves on a single `SetCtlColors`,
+/// so a script that could write one alone would be writing a colour this
+/// compiler invented over the one the theme chose.
 #[test]
 fn a_colour_pair_is_one_field_at_every_level() {
     let output = build(&program(
@@ -433,7 +432,7 @@ fn a_colour_that_is_not_six_hex_digits_is_refused() {
 }
 
 /// The header colours are read inside MUI2's `!ifndef`-guarded macro, so they
-/// are the block's and the uninstaller cannot hold a second copy (§15.3).
+/// are the block's and the uninstaller cannot hold a second copy.
 #[test]
 fn the_header_colours_belong_to_the_installer_block() {
     let raised = errors(
@@ -490,7 +489,7 @@ fn an_abort_prompt_that_is_off_writes_nothing() {
 }
 
 /// Both halves, unlike `headerColors`: MUI2 reads `MUI_UNABORTWARNING` in a
-/// second place, so the uninstaller's prompt is its own (§15.3).
+/// second place, so the uninstaller's prompt is its own.
 #[test]
 fn the_uninstaller_has_its_own_abort_prompt() {
     let output = build(
@@ -1139,8 +1138,8 @@ fn the_mui_hooks_are_entries_beside_on_init() {
     assert!(output.contains("Function .onInit\n"), "{output}");
 }
 
-/// §15.3: the uninstaller's are three other defines and an `un.` on the
-/// function, exactly as `MUI_CUSTOMFUNCTION_UN*` and `un.onGUIInit` spell it.
+/// The uninstaller's are three other defines and an `un.` on the function,
+/// exactly as `MUI_CUSTOMFUNCTION_UN*` and `un.onGUIInit` spell it.
 #[test]
 fn each_half_hooks_its_own_callbacks() {
     let output = build(

@@ -1,4 +1,5 @@
-//! `installua stubs` and `installua init`: the editor's half of §1.
+//! `installua stubs` and `installua init`: the editor's half of the premise
+//! that the source is valid Lua.
 //!
 //! Installua's API is globals, so `lua-language-server` sees `installer`,
 //! `section` and `detailPrint` as undefined and lights up every source file
@@ -8,16 +9,17 @@
 //! need them — the entire reason for insisting on valid Lua.
 //!
 //! The fix is generated: a LuaCATS `---@meta` file ([`meta`]) declaring the
-//! API, a selene std ([`selene_std`]) naming a replacement for every §5
+//! API, a selene std ([`selene_std`]) naming a replacement for every stdlib
 //! rejection, and a `.luarc.json` wiring them up ([`luarc`]). All three come
 //! from the same tables the compiler checks against ([`crate::table`],
 //! [`crate::builtins`]), because a hand-maintained second copy drifts — which
-//! is nsL's failure mode in a new place (§9-5).
+//! is nsL's failure mode in a new place.
 //!
 //! **Two tools, two halves.** LuaLS has no "poison this name" annotation, so
-//! the names it keeps and §5 rejects — `pcall`, `math.floor`, `string.gsub` —
+//! the names it keeps and Installua rejects — `pcall`, `math.floor`,
+//! `string.gsub` —
 //! cannot be removed from the stub; they are selene's `deprecated` entries
-//! instead, each naming its replacement (§2). One generator, so the two halves
+//! instead, each naming its replacement. One generator, so the two halves
 //! cannot disagree about what is rejected.
 
 use std::collections::BTreeSet;
@@ -37,7 +39,7 @@ pub fn meta() -> String {
          --\n\
          -- `---@meta` marks this file as definitions-only: it contributes no runtime\n\
          -- code and its own contents are not diagnosed. Everything here comes from the\n\
-         -- same table the compiler checks against (§15.23), so the editor and the\n\
+         -- same table the compiler checks against, so the editor and the\n\
          -- compiler cannot disagree about what exists.\n\n",
     );
 
@@ -54,7 +56,7 @@ pub fn meta() -> String {
 ///
 /// This is the shape that buys completion **inside** a string literal, which is
 /// where most of an installer's interesting values live — and it is generated
-/// from `-CMDHELP`'s own member lists rather than transcribed (§15.23).
+/// from `-CMDHELP`'s own member lists rather than transcribed.
 fn aliases() -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
@@ -96,8 +98,8 @@ fn alias_table() -> Vec<(String, Vec<&'static str>, bool)> {
         let named = match entry.class {
             Class::Exposed => None,
             // Only an enum wants one. A `bool` attribute needs none: NSIS's
-            // `on|off` is a Lua `true|false` here (§15.16), and an alias of the
-            // NSIS spellings would complete the two words this language does not
+            // `on|off` is a Lua `true|false` here, and an alias of the NSIS
+            // spellings would complete the two words this language does not
             // accept.
             Class::Attribute(table::Setting::Enum) => entry.installua,
             // A table's enum parts are named after the *parameter* instead:
@@ -173,7 +175,7 @@ const SPELLINGS: &[(&str, &str)] = &[
     ("supportedos", "SupportedOS"),
 ];
 
-/// The four blocks (§15.10, §15.26).
+/// The four blocks.
 ///
 /// The field *names* are the overlay's — an `Attribute` row carries the field
 /// path a user writes, which is why `versionInfo.product` is spelled that way
@@ -184,7 +186,7 @@ const SPELLINGS: &[(&str, &str)] = &[
 fn blocks() -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
-         -- Blocks (§15.10). Field names come from the overlay's `Attribute` rows.\n\
+         -- Blocks. Field names come from the overlay's `Attribute` rows.\n\
          --------------------------------------------------------------------------------\n\n\
          ---@class (exact) installua.VersionInfo\n\
          ---@field product? string\n\
@@ -234,7 +236,7 @@ fn blocks() -> String {
          ---@param options installua.Languages\n\
          function languages(options) end\n\n\
          --- The strings `languages {}` declared. A read is `$(name)`, resolved\n\
-         --- against `$LANGUAGE` at run time (§15.26).\n\
+         --- against `$LANGUAGE` at run time.\n\
          ---@type table<string, string>\n\
          lang = {}\n\n",
     );
@@ -242,8 +244,7 @@ fn blocks() -> String {
     out
 }
 
-/// The eight pages (§15.7, §15.32), as a table of constructors rather than a
-/// list of names.
+/// The eight pages, as a table of constructors rather than a list of names.
 ///
 /// `page.directory { … }` and not `page("Directory", … )` because the set is
 /// **closed**: MUI2 picks seven of these and a user picks a section's name, so a
@@ -340,7 +341,7 @@ const PAGES: &str = "\
 \n\
 -- The one page bound to a local — `local menu = page.startMenu { … }` — because\n\
 -- MUI2 names it from install-time code: the folder is read back through the id\n\
--- and the shortcut writing is wrapped in it (§13).\n\
+-- and the shortcut writing is wrapped in it.\n\
 ---@class (exact) installua.StartMenu\n\
 ---@field folder string The folder the page chose. Read-only.\n\
 local StartMenu = {}\n\n\
@@ -541,10 +542,10 @@ fn inline_table(
 fn declarations() -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
-         -- Declarations (§15.10). These are language constructs rather than\n\
+         -- Declarations. These are language constructs rather than\n\
          -- instructions, so they are written here rather than generated.\n\
          --------------------------------------------------------------------------------\n\n\
-         -- §15.23's pair: a short form when there is nothing to configure, and a\n\
+         -- Two forms: a short one when there is nothing to configure, and a\n\
          -- table form when there is. The table's array part is the parameters and\n\
          -- its hash part the options, as `file { \"docs/\", recursive = true }` is\n\
          -- `File /r \"docs\\\"`.\n\n\
@@ -573,7 +574,7 @@ fn declarations() -> String {
          ---@return installua.Group\n\
          ---@overload fun(options: installua.GroupOptions): installua.Group\n\
          function group(name, sections) end\n\n\
-         -- What a bound `section` is at install time: the handle §13's binding\n\
+         -- What a bound `section` is at install time: the handle the binding\n\
          -- produces. Every field is readable and writable, and the section index\n\
          -- NSIS reads is the compiler's — it appears in no Installua source.\n\
          ---@class (exact) installua.Selectable\n\
@@ -594,11 +595,11 @@ fn declarations() -> String {
          ---@field expanded boolean Opens the heading in the components tree (`SF_EXPAND`).\n\
          local Group = {}\n\n\
          -- The install type the user picked, by the name the block declared, and\n\
-         -- `\"\"` for the custom one every list has and no list declares (§13).\n\
+         -- `\"\"` for the custom one every list has and no list declares.\n\
          ---@type string\n\
          currentInstType = nil\n\n\
          -- The block's install types, addressed by name because an install type\n\
-         -- is a line in a block's field and there is nothing to bind (§13).\n\
+         -- is a line in a block's field and there is nothing to bind.\n\
          ---@class installua.InstTypes\n\
          instTypes = {}\n\n\
          ---@param name string\n\
@@ -607,14 +608,14 @@ fn declarations() -> String {
          ---@param body fun()\n\
          function onInit(body) end\n\n\
          -- Source layout, not a module system: the file's declarations are\n\
-         -- merged into this one and nothing is emitted (§15.28). The names it\n\
+         -- merged into this one and nothing is emitted. The names it\n\
          -- contributes come from `project.lua` beside this file, since\n\
          -- `lua-language-server` cannot follow the merge itself.\n\
          ---@param path string\n\
          function include(path) end\n\n\
          -- The two iterators, and the halves they run in. `glob` is expanded on\n\
          -- the build machine and its loop is unrolled, so the pattern has to be\n\
-         -- known there (§7); `lines` runs at install time, over a handle\n\
+         -- known there; `lines` runs at install time, over a handle\n\
          -- `fileOpen` returned.\n\
          ---@param pattern string\n\
          ---@return fun(): string\n\
@@ -647,16 +648,16 @@ fn declarations() -> String {
 /// One `function` per `Exposed` row, from the joined table.
 ///
 /// `Out` parameters do not appear in the parameter list: their count **is** the
-/// number of Lua return values (§15.23), so a stub that listed them would be
-/// teaching the NSIS calling convention this language exists to hide.
-/// The control declarations, from the same table that lowers them (§15.32).
+/// number of Lua return values, so a stub that listed them would be teaching
+/// the NSIS calling convention this language exists to hide. The control
+/// declarations, from the same table that lowers them.
 ///
 /// Generated rather than written out, so that a kind added to the table is a
 /// kind the editor completes: fifteen near-identical stubs are exactly the
 /// thing a list should produce.
 fn controls() -> String {
     let mut out = String::from(
-        "-- The controls a `page.custom` draws (§15.32), in §15.23's table form: the\n\
+        "-- The controls a `page.custom` draws, in table form: the\n\
          -- array part is the text the control is drawn with and the hash part is\n\
          -- where it sits. A control is listed by a page's `controls`, and the\n\
          -- `local` it is bound to decides nothing about its position.\n\n\
@@ -714,7 +715,7 @@ fn controls() -> String {
 fn instructions() -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
-         -- Instructions, one per `Class::Exposed` row (§15.23).\n\
+         -- Instructions, one per `Class::Exposed` row.\n\
          --------------------------------------------------------------------------------\n\n",
     );
 
@@ -726,9 +727,9 @@ fn instructions() -> String {
         // A method (`f:read`) belongs to its class above, a field of a section
         // handle (`handle.text`) and `currentInstType` belong to the classes
         // beside it — a `Kind::Bound` position is what says a row is reached
-        // through a name rather than called (§13) — and a name that two NSIS
-        // rows share (`writeReg` is `WriteRegStr` and `WriteRegDWORD`) is
-        // declared once.
+        // through a name rather than called — and a name that two NSIS rows
+        // share (`writeReg` is `WriteRegStr` and `WriteRegDWORD`) is declared
+        // once.
         if name.contains(':') || entry.bound() || HAND_SHAPED.contains(&name) || !seen.insert(name)
         {
             continue;
@@ -777,8 +778,7 @@ fn declaration(
     let mut out = String::new();
     // The completion a reader gets is the call they can write, so the two
     // shapes are said apart: an unambiguous trailing optional is a `?`
-    // parameter, and everything else optional is a named field below
-    // (§15.23).
+    // parameter, and everything else optional is a named field below.
     let mut names = Vec::new();
     for (index, param) in entry.positional().enumerate().skip(skip) {
         let ident = identifier(param.shape.name);
@@ -788,7 +788,7 @@ fn declaration(
     }
     // Both halves of the options table, in one type: the optional positions
     // that are named rather than counted, and the flags, which are mostly
-    // `boolean` because the compiler writes the `/FLAG` itself (§15.23).
+    // `boolean` because the compiler writes the `/FLAG` itself.
     let fields = entry
         .fields()
         .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)));
@@ -806,9 +806,9 @@ fn declaration(
     for param in entry.outputs() {
         let _ = writeln!(out, "---@return {}", lua_type(param));
     }
-    // A predicate has no output *parameter* — the branch supplies the value
-    // — so its return type comes from the builtin rather than from the row
-    // (§15.20). The two tables meet here and nowhere else.
+    // A predicate has no output *parameter* — the branch supplies the value —
+    // so its return type comes from the builtin rather than from the row. The
+    // two tables meet here and nowhere else.
     if builtins::lookup(name).is_some_and(|builtin| builtin.predicate) {
         out.push_str("---@return boolean\n");
     }
@@ -836,17 +836,17 @@ fn flag_type(flag: &table::Flag) -> Option<&'static str> {
 /// skipped here.
 ///
 /// Two of them, and both for a reason the parameter model cannot carry:
-/// `messageBox` takes a text or a table because §15.18 turned a mode string and
-/// a jump table into one value, and `fileOpen` returns the `installua.File`
-/// whose methods are the rest of the file surface. Everything else is generated,
-/// and a third entry here would be a sign the model is missing a field rather
-/// than that the command is special.
+/// `messageBox` takes a text or a table because it turned a mode string and a
+/// jump table into one value, and `fileOpen` returns the `installua.File` whose
+/// methods are the rest of the file surface. Everything else is generated, and
+/// a third entry here would be a sign the model is missing a field rather than
+/// that the command is special.
 const HAND_SHAPED: &[&str] = &["messageBox", "fileOpen"];
 
 fn constants() -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
-         -- Predefined NSIS constants, as ordinary read-only globals (§15.1). A `$` in a\n\
+         -- Predefined NSIS constants, as ordinary read-only globals. A `$` in a\n\
          -- literal is an error; these are joined with `..` instead.\n\
          --------------------------------------------------------------------------------\n\n",
     );
@@ -886,9 +886,9 @@ fn identifier(name: &str) -> String {
 /// name.
 ///
 /// `writeReg` is `WriteRegStr` and `WriteRegDWORD`, and its last argument is a
-/// `string` or an `integer` depending on which — that is the dispatch §15.23
-/// describes, and taking the first row's type would make the other half of it
-/// an editor error on correct code.
+/// `string` or an `integer` depending on which — that is the dispatch the
+/// command table describes, and taking the first row's type would make the
+/// other half of it an editor error on correct code.
 fn union(name: &str, index: usize) -> String {
     let mut types: Vec<String> = Vec::new();
     for entry in exposed().filter(|entry| entry.installua == Some(name)) {
@@ -917,20 +917,20 @@ fn lua_name(ty: Ty) -> &'static str {
         Ty::Str => "string",
         Ty::Bool => "boolean",
         // A handle is opaque by construction: it can be passed along and not
-        // computed with (§15.14), and `any` is the closest LuaCATS gets to
-        // saying so without inviting arithmetic on it.
+        // computed with, and `any` is the closest LuaCATS gets to saying so
+        // without inviting arithmetic on it.
         Ty::Handle | Ty::Unknown => "any",
     }
 }
 
-/// The project meta file §15.28 obliges: every `func` and global the project
+/// The project meta file `include` obliges: every `func` and global the project
 /// declares, so completion and go-to-definition survive `include`.
 ///
 /// `lua-language-server` cannot follow `include` — it is frontend-only and
 /// leaves no trace in the output — so without this, every name an included file
-/// contributes is an unknown global, which is the problem §1 exists to prevent.
-/// It is stale until regenerated, which is already the workflow for the stubs
-/// beside it.
+/// contributes is an unknown global, which is the problem these stubs exist to
+/// prevent. It is stale until regenerated, which is already the workflow for
+/// the stubs beside it.
 pub fn project_meta(sources: &[(String, String)]) -> String {
     let mut out = String::from(
         "---@meta\n\
@@ -938,7 +938,7 @@ pub fn project_meta(sources: &[(String, String)]) -> String {
          -- Generated by `installua stubs` from this project's own sources.\n\
          --\n\
          -- `include` is frontend-only, so `lua-language-server` cannot follow it and\n\
-         -- every name an included file contributes would be an unknown global (§15.28).\n\
+         -- every name an included file contributes would be an unknown global.\n\
          -- Regenerate after adding a `func` or a global.\n\n",
     );
 
@@ -982,16 +982,17 @@ pub fn project_meta(sources: &[(String, String)]) -> String {
 
 /// `.installua/installua.yml`: the selene std.
 ///
-/// Two things live here and nowhere else. The stdlib names LuaLS keeps and §5
-/// rejects, each `deprecated` with the replacement — `deprecated = "deny"` in
-/// `selene.toml` is what makes "every rejection names its replacement" a lint
-/// rather than a docs page. And the API's arities, which selene checks and
-/// LuaCATS does not enforce on a `table` argument.
+/// Two things live here and nowhere else. The stdlib names LuaLS keeps and
+/// Installua rejects, each `deprecated` with the replacement — `deprecated =
+/// "deny"` in `selene.toml` is what makes "every rejection names its
+/// replacement" a lint rather than a docs page. And the API's arities, which
+/// selene checks and LuaCATS does not enforce on a `table` argument.
 pub fn selene_std() -> String {
     let mut out = String::from(
         "# Generated by `installua stubs`. Do not edit.\n\
          #\n\
-         # No `base:`: inheriting `lua54` would re-admit every name §5 rejects, and the\n\
+         # No `base:`: inheriting `lua54` would re-admit every name Installua rejects,\n\
+         # and the\n\
          # rejections are the point. What is listed is what exists.\n\
          lua_versions:\n  - lua54\n\
          name: installua\n\
@@ -1006,9 +1007,9 @@ pub fn selene_std() -> String {
         }
     }
 
-    // Every retired NSIS instruction, from the same table the diagnostic reads
-    // (§5). A user who types `strCmp` gets the answer at lint time as well as
-    // at compile time, with the same text.
+    // Every retired NSIS instruction, from the same table the diagnostic reads.
+    // A user who types `strCmp` gets the answer at lint time as well as at
+    // compile time, with the same text.
     for row in crate::retired::all() {
         let _ = writeln!(
             out,
@@ -1041,10 +1042,10 @@ pub fn selene_std() -> String {
         }
     }
 
-    // A `Kind::Bound` row is reached through a name rather than called (§13).
-    // The dotted ones are fields of a handle and a `local`'s fields are
-    // selene's business anyway; `currentInstType` is a global, and one that is
-    // written as well as read — `SetCurInstType` is the assignment.
+    // A `Kind::Bound` row is reached through a name rather than called. The
+    // dotted ones are fields of a handle and a `local`'s fields are selene's
+    // business anyway; `currentInstType` is a global, and one that is written
+    // as well as read — `SetCurInstType` is the assignment.
     let mut named: BTreeSet<&str> = BTreeSet::new();
     for entry in exposed().filter(|entry| entry.bound()) {
         let Some(name) = entry.installua else {
@@ -1062,12 +1063,12 @@ pub fn selene_std() -> String {
     out
 }
 
-/// The names `lua-language-server` keeps and §5 rejects. Each names its
+/// The names `lua-language-server` keeps and Installua rejects. Each names its
 /// replacement, because a lint that only says no is a lint people disable.
 const REJECTED: &[(&str, &str, &str)] = &[
     (
         "require",
-        "use `include` for source, `import` for NSIS headers (§15.28)",
+        "use `include` for source, `import` for NSIS headers",
         "include(%1)",
     ),
     (
@@ -1115,10 +1116,10 @@ fn escape(text: &str) -> String {
 
 /// `.luarc.json`, written by `installua init`.
 ///
-/// `runtime.builtin: disable` on the libraries §5 rejects wholesale turns
-/// `require` and `coroutine.wrap` back into unknown globals for free, rather
-/// than needing a rejection list — and `lowercase-global` is off because the
-/// API *is* lowercase globals (§15.13).
+/// `runtime.builtin: disable` on the libraries Installua rejects wholesale
+/// turns `require` and `coroutine.wrap` back into unknown globals for free,
+/// rather than needing a rejection list — and `lowercase-global` is off because
+/// the API *is* lowercase globals.
 pub fn luarc() -> String {
     String::from(
         "{\n  \
@@ -1139,12 +1140,12 @@ pub fn luarc() -> String {
 }
 
 /// `installua.toml`: the project marker, and the one file a user has to know
-/// about (§15.13).
+/// about.
 pub fn project_toml(name: &str) -> String {
     format!(
         "# The project marker. Its *presence* is what makes this directory an\n\
          # Installua project: `installua init` writes the editor configuration beside\n\
-         # it, and the generated stubs apply to this directory and no other (§15.13).\n\
+         # it, and the generated stubs apply to this directory and no other.\n\
          [project]\n\
          name = \"{name}\"\n\
          entry = \"install.lua\"\n"
@@ -1152,12 +1153,12 @@ pub fn project_toml(name: &str) -> String {
 }
 
 /// `selene.toml`. `deprecated = \"deny\"` is not decoration: it is what makes
-/// the generated std's replacement text a failure rather than advice (§14).
+/// the generated std's replacement text a failure rather than advice.
 pub fn selene_toml() -> String {
     String::from(
         "std = \"installua\"\n\n\
-         # §14: warnings are failures. `deprecated` is how the generated std names a\n\
-         # replacement for every §5 rejection, so it must not be advisory.\n\
+         # Warnings are failures. `deprecated` is how the generated std names a\n\
+         # replacement for every rejection, so it must not be advisory.\n\
          [lints]\n\
          deprecated = \"deny\"\n",
     )

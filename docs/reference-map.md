@@ -49,7 +49,7 @@ pending — the `todo` bucket of both censuses is empty.
 ## Program structure
 
 A file is a Lua program, read top to bottom, with no preprocessor. Declaration
-order does not matter (§15.6): every top-level name is resolved before any body
+order does not matter: every top-level name is resolved before any body
 is lowered, so a `func` may call one declared below it.
 
 The order of the fields *inside* `attributes {}` does not matter either, and for
@@ -62,7 +62,7 @@ about; the list is `ORDERED` in `src/lower/mod.rs`.
 ### Function / FunctionEnd
 
 Declares a function. Parameters and returns are ordinary Lua; the compiler
-writes the stack traffic NSIS needs (§15.11).
+writes the stack traffic NSIS needs.
 
 **Usage** `func(name, body)` → nothing
 
@@ -124,7 +124,7 @@ uninstaller {
 
 ### Var
 
-Globals are declared by assigning to one at the top level (§15.24). A `local`
+Globals are declared by assigning to one at the top level. A `local`
 inside a body is a register the compiler allocates and reuses.
 
 **Usage** assignment at the top level
@@ -136,7 +136,7 @@ gitDescribe = ""
 ### !include
 
 Source layout, not a module system: the named file's declarations are merged
-into this one and nothing is emitted (§15.28). A path is relative to the file
+into this one and nothing is emitted. A path is relative to the file
 that names it.
 
 **Usage** `include(path)` → nothing
@@ -148,7 +148,7 @@ include("lib/shortcuts.lua")
 ### glob
 
 Walks the **build** machine at compile time and unrolls the result, so the file
-list is fixed before anything ships (§15.19). This is what replaces
+list is fixed before anything ships. This is what replaces
 `FindFirst`/`FindNext`/`FindClose`, which walk the target's disk instead.
 
 **Usage** `for path in glob(pattern) do … end`
@@ -197,7 +197,7 @@ attributes {
 
 | NSIS | Installua | Holds |
 | --- | --- | --- |
-| `Unicode` | `unicode` | boolean — defaults `true`, always emitted first (§15.16) |
+| `Unicode` | `unicode` | boolean — defaults `true`, always emitted first |
 | `CPU` | `cpu` | `"x86"` \| `"amd64"` |
 | `SetCompressor` | `compressor` | `"zlib"` \| `"bzip2"` \| `"lzma"` |
 | `SetCompressionLevel` | `compressionLevel` | int — read only when `compressor` is `"zlib"` or `"bzip2"` |
@@ -381,7 +381,7 @@ group("Extras", {
 ### InstType
 
 The presets the components page offers, listed by name on the block. A section
-joins one through `installTypes`; there are no indices here (§13).
+joins one through `installTypes`; there are no indices here.
 
 **Usage** an `installer`'s or `uninstaller`'s `installTypes = { <name>, … }`
 
@@ -424,7 +424,7 @@ section { "Offline map data",
 ### SectionGetText / SectionSetText / SectionGetFlags / SectionSetFlags / SectionGetSize / SectionSetSize / SectionGetInstTypes / SectionSetInstTypes
 
 A running program addresses a section through the handle `section(…)` returns,
-not through an index (§13). `group(…)` returns the same kind of handle.
+not through an index. `group(…)` returns the same kind of handle.
 
 | NSIS | Installua |
 | --- | --- |
@@ -481,7 +481,7 @@ writeUninstaller(INSTDIR .. "/uninstall.exe")
 
 `page.custom` is the eighth page and the only one that is not a MUI2 macro: it
 is a `Page custom`, and both functions behind it are the compiler's to write
-(§15.32). A control is a call listed in the page's `controls`; the `local` it is
+. A control is a call listed in the page's `controls`; the `local` it is
 bound to is how a running program addresses it, and decides nothing about where
 it sits.
 
@@ -568,7 +568,7 @@ cancel.enabled = false
 
 One block declares every language the installer carries and every string in
 them. It is written **locale-first**, because a translator owns a locale; the
-compiler transposes it into one `LangString` per name (§15.26). Every name has
+compiler transposes it into one `LangString` per name. Every name has
 to appear in every locale — NSIS expands a missing one to nothing, which is a
 blank label on one machine in one country.
 
@@ -623,7 +623,7 @@ True when the running language is written right to left.
 The two halves of this group do different things at different times. `file`
 packs a file from the **build** machine into the installer; everything else
 moves, copies or deletes files on the **target** machine while the installer
-runs. Paths take forward slashes and are normalised on the way out (§5).
+runs. Paths take forward slashes and are normalised on the way out.
 
 ### File
 
@@ -786,7 +786,7 @@ f:close()
 
 Root keys are the predefined globals `HKLM`, `HKCU`, `HKCR`, `HKU`, `HKCC` and
 `SHCTX`. Subkey paths take forward slashes and are rewritten to backslashes on
-the way out (§15.2).
+the way out.
 
 ### WriteRegStr / WriteRegDWORD
 
@@ -916,13 +916,13 @@ The version resource of a DLL — on the target, or on the **build** machine.
 
 Arithmetic and comparison are Lua operators, lowered onto `IntOp` and the
 `*Cmp` family; width and sign are attributes of the type, so there is no
-`Int64Cmp` to write (§15.14). There are no floats.
+`Int64Cmp` to write. There are no floats.
 
 | NSIS | Installua |
 | --- | --- |
 | `StrCpy` | assignment: `x = y` |
 | `StrCmpS` | `==`, which is **case-sensitive** — the reversal that bites hardest |
-| `StrCmp` | `string.lower(a) == b`, which folds to one case-insensitive compare (§15.9) |
+| `StrCmp` | `string.lower(a) == b`, which folds to one case-insensitive compare |
 | `StrLen` | `string.len(s)` → `int` |
 | `IntOp` | `+ - * / % // & \| ~ << >>` |
 | `IntCmp` / `Int64Cmp` / `IntPtrCmp` and the unsigned forms | `< <= > >= == ~=` |
@@ -931,7 +931,7 @@ Arithmetic and comparison are Lua operators, lowered onto `IntOp` and the
 ### The string adapters
 
 Hand-written lowerings onto NSIS instructions and `StrFunc` macros — the
-`${Using:StrFunc}` lines are collected and emitted for you (§15.21).
+`${Using:StrFunc}` lines are collected and emitted for you.
 
 | Installua | Notes |
 | --- | --- |
@@ -965,7 +965,7 @@ end)
 
 NSIS's `Goto`-and-label instructions have no spelling. `IfErrors`,
 `IfFileExists` and the rest are *predicates* — they read as questions inside an
-ordinary `if`, and the compiler writes the labels (§15.20).
+ordinary `if`, and the compiler writes the labels.
 
 ### Goto / Return / Quit
 
@@ -1045,7 +1045,7 @@ dialog, which is what this is for.
 
 Shows a dialog and returns the button the user pressed, by name. Written with a
 table rather than positionally, because the flags NSIS fuses into one argument
-are separate decisions (§15.18).
+are separate decisions.
 
 **Usage** `messageBox { text = …, buttons = …, icon = …, silentAnswer = … }` → `string`
 
@@ -1113,7 +1113,7 @@ setRegView("64")
 
 Names a plugin DLL and returns a table whose methods are its calls. The DLL name
 **is** the namespace, so nothing has to say where the file is; the compiler
-reserves it when `.onInit` can reach the call (§11).
+reserves it when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
@@ -1133,8 +1133,7 @@ end)
 ### import
 
 Brings a declared NSIS header's macros into scope. The `!include` and any
-`${Using:…}` init lines are emitted for you, once, in the right place (§15.21,
-§15.27).
+`${Using:…}` init lines are emitted for you, once, in the right place.
 
 **Usage** `local h = import(header)` · `h.macro(…)`
 
@@ -1158,7 +1157,7 @@ end
 
 Text handed to `makensis` unread. It produces no value, no `local` survives it,
 and a failure inside one is reported as *yours* rather than the compiler's
-(§13, §15.22).
+.
 
 **Usage** `raw [[ … ]]` → nothing
 
@@ -1173,7 +1172,7 @@ raw [[
 ## Constants
 
 Predefined NSIS constants, as ordinary read-only globals. A `$` inside a string
-literal is five dollars, not a variable — join with `..` instead (§15.1).
+literal is five dollars, not a variable — join with `..` instead.
 
 **Paths** `INSTDIR` · `OUTDIR` · `PROGRAMFILES` · `PROGRAMFILES64` ·
 `COMMONFILES` · `DESKTOP` · `STARTMENU` · `SMPROGRAMS` · `APPDATA` ·
@@ -1181,7 +1180,7 @@ literal is five dollars, not a variable — join with `..` instead (§15.1).
 `EXEFILE` · `PLUGINSDIR`
 
 `INSTDIR` and `OUTDIR` are writable; the rest are facts about the machine and
-assigning to one is refused (§13).
+assigning to one is refused.
 
 **Other** `LANGUAGE` · `HWNDPARENT` — the installer's own window
 
@@ -1200,7 +1199,7 @@ is pending: these are decisions.
 
 ### The preprocessor
 
-Installua has no preprocessor — the script *is* a program (§2). All 37 `!`
+Installua has no preprocessor — the script *is* a program. All 37 `!`
 directives are out:
 
 `!addincludedir` · `!addplugindir` · `!appendfile` · `!appendmemfile` ·
@@ -1227,7 +1226,7 @@ here so a search for the NSIS name lands somewhere.
 | --- | --- |
 | `Goto` | `if`, `while`, `break` |
 | `Call` | a call: `f(x)` |
-| `Push` / `Pop` / `Exch` | the calling convention (§15.11) |
+| `Push` / `Pop` / `Exch` | the calling convention |
 | `StrCpy` | assignment |
 | `StrCmp` / `StrCmpS` | `==` |
 | `IntOp` / `IntPtrOp` | the arithmetic operators |
@@ -1275,8 +1274,8 @@ runtime load, `#` rejected on strings, and truthiness only for booleans.
 
 ## Generating this file
 
-This document is hand-written, which is exactly what §14 says a correspondence
-document must not stay. Most of it is already in the tables:
+This document is hand-written, which is exactly what a correspondence document
+must not stay. Most of it is already in the tables:
 
 | Part of an entry | Where it comes from today |
 | --- | --- |

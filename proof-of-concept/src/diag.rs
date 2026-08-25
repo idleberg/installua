@@ -1,4 +1,4 @@
-//! Diagnostics as data (§9-2): collected, never thrown, never blocking.
+//! Diagnostics as data: collected, never thrown, never blocking.
 
 use std::fmt;
 

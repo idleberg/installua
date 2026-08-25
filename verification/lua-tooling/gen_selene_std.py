@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""Prototype of the generated selene std (§1). Phase 0 only — the real one is
+"""Prototype of the generated selene std. Phase 0 only — the real one is
 `installua stubs`' sibling, generated from the overlay in Phase 5.
 
 Two findings are baked in here and both are load-bearing:
 
-  * selene wants YAML, not the TOML §1 assumed.
+  * selene wants YAML, not the TOML that was assumed.
   * There is **no `lua54` base std** in selene, and setting `base:` *overwrites*
     `lua_versions:` rather than merging with it ("Intentionally not a merge" —
     selene-lib/src/standard_library/mod.rs). So a std with any base parses at
     that base's Lua version, and `local X <const> = …` is a parse error.
     The generated std therefore declares **no base** and lists the whole
-    surface itself, which §5's wholesale whitelist makes cheap anyway.
+    surface itself, which the wholesale whitelist makes cheap anyway.
 """
 
 import io
 
-# The Lua stdlib §5 keeps. No base std, so what is not here does not exist —
+# The Lua stdlib Installua keeps. No base std, so what is not here does not
+# exist —
 # which is the mechanism that retires the `removed: true` list entirely.
 KEPT = {
     "string.upper": [("string", True)],
@@ -32,9 +33,9 @@ KEPT = {
 }
 VARIADIC = {"string.format", "math.max", "math.min"}
 
-# §5 rejections that a *reader* will still reach for. Without a base these are
+# Rejections that a *reader* will still reach for. Without a base these are
 # already undefined, but an explicit `deprecated` entry is what lets the
-# diagnostic name a replacement (§14: "every rejection names its replacement").
+# diagnostic name a replacement ("every rejection names its replacement").
 REJECTED = {
     "string.gsub": (
         [("string", True), ("string", True), ("string", True)],
@@ -55,7 +56,7 @@ REJECTED = {
     "setmetatable": ([("any", True), ("any", True)], "there are no metatables", ""),
 }
 
-# The Installua API, as globals (§15.13).
+# The Installua API, as globals.
 API = {
     "attributes": [("table", True)],
     "installer": [("table", True)],
@@ -73,7 +74,7 @@ API = {
     "raw": [("string", True)],
 }
 
-# NSIS constants, as read-only globals (§15.1).
+# NSIS constants, as read-only globals.
 CONSTANTS = ["INSTDIR", "DESKTOP", "PROGRAMFILES64", "TEMP", "APPDATA"]
 
 

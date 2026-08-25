@@ -38,18 +38,18 @@ restores fall out underneath them without a single `Exch`:
 
 Saving *after* the arguments would need an `Exch` per saved register to get the result out
 from underneath, which is both slower and the exact place an off-by-one produces plausible
-NSIS. §15.11 says caller-saves are "push `live ∩ clobbered`, ascending, restored in
+NSIS. Caller-saves are "push `live ∩ clobbered`, ascending, restored in
 reverse" and does not say where they sit relative to the arguments; they sit before.
 
 **Recursion needs no special case.** `countdown` is an SCC of one and its clobber set
-`{$0,$1,$2}` saturates in the first extra round, exactly as §15.11 predicted. The recursive
+`{$0,$1,$2}` saturates in the first extra round, exactly as predicted. The recursive
 call site then does an ordinary caller-save of `n`, because `n` is live across it and the
 callee clobbers `$0`.
 
 **A dropped output still has to be allocated.** `local size, files, _ = fileFunc.getSize(dir, "")`
 uses two of three outputs, but `${GetSize}` writes all three, so the third needs a register
 the allocator knows about. The declaration's output count, not the call site's arity, is
-what the allocator reads — which is §11's "plural outputs are invisible at the call site",
+what the allocator reads — which is "plural outputs are invisible at the call site",
 now with a concrete instance.
 
 ## What it left open
@@ -57,9 +57,9 @@ now with a concrete instance.
 **Header declarations need a sign attribute on their outputs.** `budget` computes
 `size // 1024`, and the golden emits a bare `IntOp $1 $1 / 1024` with no sign fixup. That is
 only correct because `${GetSize}`'s output cannot be negative — a fact that lives nowhere.
-§15.14 gives `int` a `sign` attribute; the header declaration format (§11) has no column
-for it. Without one, every `//` on a header result pays §15.4's fixup for nothing, and
-§15.4's "elided whenever the sign is statically known" quietly stops being the common case.
+The lattice gives `int` a `sign` attribute; the header declaration format has no column
+for it. Without one, every `//` on a header result pays the sign fixup for nothing, and
+"elided whenever the sign is statically known" quietly stops being the common case.
 
 **The convention needs a name and a home before Phase 3, not during it.** Everything above
 is three sentences of documentation and an enormous amount of debugging if it is decided

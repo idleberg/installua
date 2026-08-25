@@ -1,4 +1,4 @@
-//! The type lattice (§15.14).
+//! The type lattice.
 //!
 //! Four types, and `int` carries **attributes** rather than splitting into
 //! siblings:
@@ -15,8 +15,8 @@
 //! member of it. As types they would force every rule to enumerate the product.
 //!
 //! `sign` is the load-bearing one: it is an inferred interval rather than a
-//! `uint` a user declares, and it is what lets §15.4's `//` fixup be elided
-//! rather than emitted defensively at every division.
+//! `uint` a user declares, and it is what lets the `//` fixup be elided rather
+//! than emitted defensively at every division.
 
 use std::fmt;
 
@@ -29,8 +29,8 @@ pub enum Width {
     Ptr,
 }
 
-/// The three-point sign lattice §15.14 asks for. `⊥` is not represented,
-/// because a value with no possible sign is a value that does not exist.
+/// The three-point sign lattice. `⊥` is not represented, because a value with
+/// no possible sign is a value that does not exist.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sign {
     NonNeg,
@@ -51,8 +51,8 @@ pub enum Ty {
     Handle,
     /// The lattice's top. Nothing in this phase produces one — the only source
     /// is a call whose return type needs the interprocedural fixpoint, which is
-    /// Phase 3's — but comparisons already refuse it rather than guessing, which
-    /// is the rule §15.14 exists to state.
+    /// Phase 3's — but comparisons already refuse it rather than guessing,
+    /// which is the rule the lattice exists to state.
     Unknown,
 }
 

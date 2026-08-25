@@ -1,5 +1,5 @@
-//! `languages { … }` — the locale tables and the dialog that picks between them
-//! (§15.26).
+//! `languages { … }` — the locale tables and the dialog that picks between
+//! them.
 //!
 //! ```lua
 //! languages {
@@ -18,17 +18,17 @@
 //! `ask` and `locales` has no exception in it.
 //!
 //! **Locale-first inside `locales`**, so a translator owns one contiguous block
-//! and a file split (§15.28) cuts along the same line. The output is the other
+//! and a file split cuts along the same line. The output is the other
 //! way round — one `LangString` name at a time, every locale — because that is
 //! what NSIS reads, and rearranging it is the compiler's job rather than the
 //! translator's.
 //!
 //! ## What this block is lowered before
 //!
-//! It runs in a pass of its own, before any body, for the reason §15.6 gives:
-//! `lang.greeting` is a read the body lowerer has to resolve, and the block that
-//! declares it may be written underneath the `installer {}` that uses it. Same
-//! argument as [`super::Lowerer::claim_pass`], same answer.
+//! It runs in a pass of its own, before any body, because resolution is
+//! order-free: `lang.greeting` is a read the body lowerer has to resolve, and
+//! the block that declares it may be written underneath the `installer {}` that
+//! uses it. Same argument as [`super::Lowerer::claim_pass`], same answer.
 //!
 //! ## Include order, which is the point
 //!
@@ -44,8 +44,8 @@
 //! | `MUI_UNGETLANGUAGE` | first line of `un.onInit` | the uninstaller has no page to ask on |
 //!
 //! `MUI_LANGDLL_SAVELANGUAGE` is not in the table and is not exposed either:
-//! MUI2's own `instfiles` page inserts it, at `Pages/InstallFiles.nsh:145`. It is
-//! its state, not a setting (§15.23).
+//! MUI2's own `instfiles` page inserts it, at `Pages/InstallFiles.nsh:145`. It
+//! is its state, not a setting.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -62,7 +62,7 @@ struct Locale {
     name: String,
     span: Span,
     /// `LangString` name → text, sorted so the output is stable whatever order
-    /// a translator wrote the entries in (§12: a Lua table has no order).
+    /// a translator wrote the entries in (a Lua table has no order).
     strings: BTreeMap<String, (String, Span)>,
 }
 
@@ -87,7 +87,7 @@ impl Lowerer<'_, '_> {
                     "`languages {}` appears more than once",
                 )
                 .note(format!("the first one is at line {first}"))
-                .note("it is script-global, so there is exactly one (§15.10)"),
+                .note("it is script-global, so there is exactly one"),
             );
         }
 
@@ -284,7 +284,7 @@ impl Lowerer<'_, '_> {
                     &name.text,
                     "a string constant",
                     "a `LangString` is chosen by the preprocessor, so its text cannot be \
-                     computed at run time (§7-1)",
+                     computed at run time",
                 );
                 continue;
             };
@@ -455,10 +455,10 @@ impl Lowerer<'_, '_> {
 
     /// `remember = { root = …, key = …, value = … }` — all three or none.
     ///
-    /// MUI2 guards the variable it stores the answer in with a single
-    /// `!ifdef ROOT & KEY & VALUENAME`, so two out of three is not a partial
-    /// setting: it is the whole feature, silently off. Same shape and same
-    /// argument as the start menu page's `registry` (§15.23).
+    /// MUI2 guards the variable it stores the answer in with a single `!ifdef
+    /// ROOT & KEY & VALUENAME`, so two out of three is not a partial setting:
+    /// it is the whole feature, silently off. Same shape and same argument as
+    /// the start menu page's `registry`.
     fn remember(&mut self, value: &Expr) -> [Option<String>; 3] {
         let mut out: [Option<String>; 3] = [None, None, None];
         let Expr::Table { fields, span } = value else {

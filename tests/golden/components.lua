@@ -15,7 +15,7 @@ attributes {
 installer {
 	installTypes = { "Full", "Minimal" },
 
-	-- Anything with options takes the table form (§15.23): the name is the first
+	-- Anything with options takes the table form: the name is the first
 	-- entry and unlabelled, because it is the parameter NSIS passes, and every
 	-- switch beside it is named.
 	--

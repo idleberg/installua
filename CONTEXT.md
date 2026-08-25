@@ -100,7 +100,7 @@ registers free. Three callers: comparisons, predicates, `messageBox`.
 The rule governing every property of how `makensis` was built — pointer size, charset,
 maximum string length. Such a property may never determine what a source file means, or the
 same program means two things on two machines; it may only be checked against an assumption
-the source states out loud. Applied three times (§15.15, §15.16, §15.31).
+the source states out loud. Applied three times.
 
 **Staging**:
 Which machine a line runs on. Three visibly different spellings: install-time (ordinary

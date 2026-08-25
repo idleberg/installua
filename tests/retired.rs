@@ -1,10 +1,10 @@
-//! The retired-instruction table (PLAN §5), row by row.
+//! The retired-instruction table, row by row.
 //!
 //! PLAN's exit criterion for it: *every retired-instruction row has a test
 //! asserting its diagnostic.* Written as one table-driven test over
 //! [`installua::retired::all`] rather than as a list of cases, because a list
-//! is a thing to forget to add to — the same argument §14 makes for the census
-//! and for overlay examples.
+//! is a thing to forget to add to — the same argument the census makes and for
+//! overlay examples.
 
 use installua::diag::{Code, Diagnostics};
 use installua::retired;
@@ -38,10 +38,10 @@ fn every_retired_row_produces_its_diagnostic() {
             row.installua
         );
 
-        // Every rejection names its replacement (§2), and this is the table
-        // where that rule is mechanically checkable: the note *is* the class's
-        // own text, so a row added to the overlay with an empty reason fails
-        // here rather than shipping a diagnostic that says nothing.
+        // Every rejection names its replacement, and this is the table where
+        // that rule is mechanically checkable: the note *is* the class's own
+        // text, so a row added to the overlay with an empty reason fails here
+        // rather than shipping a diagnostic that says nothing.
         assert!(
             retired[0]
                 .notes
@@ -75,7 +75,7 @@ fn the_users_own_capitalisation_is_quoted_back() {
 fn a_retired_name_is_not_an_unknown_name() {
     // The failure this prevents: `strCmp` falling through to `undefined-name`,
     // which tells an NSIS user the compiler has never heard of the instruction
-    // they use most (§5).
+    // they use most.
     let mut diags = Diagnostics::new();
     installua::compile(&program("intOp"), &mut diags);
 

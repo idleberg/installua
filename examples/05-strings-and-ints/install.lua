@@ -1,12 +1,13 @@
--- Program 5 of five (PLAN Phase 0, §11): mostly string and integer work.
+-- Program 5 of five: mostly string and integer work.
 --
--- This is where §4 and §5 stop being tables and start being arguments. Four
+-- This is where the operator and stdlib rules stop being tables and start being
+-- arguments. Four
 -- things are under test and each has a silent-wrong-answer failure mode:
 --
 --   * `//` and `%` corrected to Lua's meaning where the sign is not provable
 --   * `string.sub`'s 1-based → 0-based conversion, and `string.find`'s
---   * `lower(a) == lower(b)` peepholing to a bare `StrCmp` (§15.9)
---   * `StrFunc` init lines, which abort the build when missing (§15.21)
+--   * `lower(a) == lower(b)` peepholing to a bare `StrCmp`
+--   * `StrFunc` init lines, which abort the build when missing
 
 local APP <const> = "Example5"
 local VERSION <const> = "2.1.0"

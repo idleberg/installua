@@ -1,9 +1,9 @@
-//! Diagnostics as data (PLAN Phase 1, §9-4): span, code, severity, notes.
+//! Diagnostics as data: span, code, severity, notes.
 //!
 //! Collected, never thrown, and never routed through a global sink — the
 //! collector is threaded as `&mut` so that a caller can compile two sources
-//! concurrently in one process (§9-2). Every entry point in this crate takes
-//! one; nothing in this crate owns one.
+//! concurrently in one process. Every entry point in this crate takes one;
+//! nothing in this crate owns one.
 
 use std::fmt;
 
@@ -15,7 +15,7 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Span {
     /// Which source this span is measured in — an index into [`Files`], where
-    /// `0` is always the file the build was started from (§15.28).
+    /// `0` is always the file the build was started from.
     ///
     /// It lives here rather than on [`Diagnostic`] because `include` merges
     /// every file's declarations into one tree before resolution: past the
@@ -61,8 +61,7 @@ impl Span {
 }
 
 /// The sources a set of spans is measured in: index `0` is the file the build
-/// started from, and the rest are what `include` pulled in, in load order
-/// (§15.28).
+/// started from, and the rest are what `include` pulled in, in load order.
 ///
 /// Ordinary owned data, threaded like everything else here — the table is not
 /// a registry and there is no global one.
@@ -127,8 +126,8 @@ impl fmt::Display for Severity {
 /// Every diagnostic this compiler can raise.
 ///
 /// The registry is the point: `Code::ALL` is walked by a test that asserts each
-/// one is actually reachable (PLAN §2). A code with no test that produces it is
-/// a code nobody has checked the wording of.
+/// one is actually reachable. A code with no test that produces it is a code
+/// nobody has checked the wording of.
 ///
 /// Codes are slugs rather than numbers deliberately — a number has to be
 /// allocated, never reused and kept in a table, and buys nothing over a name
@@ -139,31 +138,30 @@ pub enum Code {
     /// `full-moon` could not parse the source as Lua 5.4.
     ParseError,
 
-    // -- frontend: literals (§5)
-    /// A float literal. NSIS has no float arithmetic at all (§6).
+    // -- frontend: literals
+    /// A float literal. NSIS has no float arithmetic at all.
     FloatLiteral,
     /// An escape sequence that is invalid in Lua 5.4. `full-moon` accepts these
-    /// and real Lua does not, so the frontend checks them itself (§13).
+    /// and real Lua does not, so the frontend checks them itself.
     InvalidEscape,
     /// A `$` followed by an identifier character inside a literal — the
-    /// canonical NSIS muscle-memory trap, since literals are data (§15.1).
+    /// canonical NSIS muscle-memory trap, since literals are data.
     DollarInLiteral,
     /// A literal at or over the vanilla `NSIS_MAX_STRLEN` floor, which
-    /// `makensis` truncates at runtime with no diagnostic at all (§15.31).
+    /// `makensis` truncates at runtime with no diagnostic at all.
     OverlongLiteral,
 
-    // -- frontend: operators (§6)
+    // -- frontend: operators
     /// `/` is float division, which does not exist here.
     FloatDivision,
     /// `^` is exponentiation in Lua and *xor* in NSIS; remapping it silently
     /// would be the exact class of bug this compiler exists to prevent.
     Exponentiation,
-    /// `#` on a string counts bytes in Lua and UTF-16 code units in NSIS
-    /// (§15.29).
+    /// `#` on a string counts bytes in Lua and UTF-16 code units in NSIS.
     LengthOperator,
 
-    // -- frontend: statements and expressions (§3, §7)
-    /// `goto` or a `::label::`. §8 owns labels.
+    // -- frontend: statements and expressions
+    /// `goto` or a `::label::`. The compiler owns labels.
     Goto,
     /// `nil`. There is no such value.
     NilValue,
@@ -174,7 +172,7 @@ pub enum Code {
     /// `function f() … end` as a statement. Declarations go through `func`.
     FunctionStatement,
     /// A function expression somewhere other than a call argument — closures
-    /// are declaration bodies, never values (§3).
+    /// are declaration bodies, never values.
     ClosureValue,
     /// `local x <close>`: there is no runtime to close over.
     CloseAttribute,
@@ -182,31 +180,30 @@ pub enum Code {
     UnknownAttribute,
     /// `t[k]`. There are no runtime tables to index.
     IndexExpression,
-    /// A `for … in` over something outside the iterator whitelist (§7).
+    /// A `for … in` over something outside the iterator whitelist.
     UnsupportedIterator,
     /// `require`. Loading is compile-time, and spelled `import`/`include`.
     RuntimeRequire,
 
-    // -- resolution and types (§15.6, §15.14, §15.20, §15.24)
+    // -- resolution and types
     /// A name that resolves to nothing. Resolution is order-free, so this
-    /// really does mean *nowhere in the file* (§15.6).
+    /// really does mean *nowhere in the file*.
     UndefinedName,
     /// A non-`bool` in a condition, or as an operand of `and`/`or`/`not`.
     /// By-type truthiness is not merely inference-dependent, it disagrees with
-    /// Lua on `0` and `""` — the two values a reader is most likely to test
-    /// (§15.20).
+    /// Lua on `0` and `""` — the two values a reader is most likely to test.
     NotBool,
     /// `local x = a or b` on strings: the default-value idiom. Under Lua's
     /// semantics it is dead code, and under the intended NSIS semantics the
-    /// source lies, so there is no reading that works (§15.20).
+    /// source lies, so there is no reading that works.
     OrAsValue,
     /// A comparison whose operands are different types, or whose types are not
     /// known. Defaulting to `StrCmp` is how a compiler becomes a text expander
-    /// with a type system bolted on (§15.14).
+    /// with a type system bolted on.
     TypeMismatch,
     /// A variable assigned two different types. A register is one slot, so this
     /// is NSIS-shaped rather than arbitrary, and it reports the disagreement
-    /// rather than privileging whichever line came first (§15.24).
+    /// rather than privileging whichever line came first.
     TypeConflict,
     /// A call with the wrong number of arguments, or a binding that wants more
     /// values than the callee returns.
@@ -214,29 +211,29 @@ pub enum Code {
     /// A `func` returning a different number of values on two paths. `Call` has
     /// no arity at all — the callee pushes and the caller pops — so a
     /// disagreement is a stack that unbalances at runtime with no diagnostic
-    /// from NSIS (§3).
+    /// from NSIS.
     ReturnArity,
 
     // -- lowering
     /// `break` outside a loop.
     BreakOutsideLoop,
-    /// `continue()` outside a loop. It is a call that jumps (§8), so unlike
-    /// `break` it parses anywhere.
+    /// `continue()` outside a loop. It is a call that jumps, so unlike `break`
+    /// it parses anywhere.
     ContinueOutsideLoop,
     /// More values live at once than NSIS has registers. Unlike Phase 2's
     /// placeholder, this is the real limit: values whose live ranges do not
-    /// overlap already share a register (§9-3).
+    /// overlap already share a register.
     RegisterExhaustion,
     /// A value bound from a dialog that has one button. A **warning**: the
     /// program is well-formed, and the comparison underneath it is simply
-    /// already decided (§15.18).
+    /// already decided.
     ConstantAnswer,
     /// Unbounded recursion. A **warning**, because it is legal and sometimes
-    /// intended — and one worth having, since §3 measured the failure as a
-    /// silent process death at roughly 1300 frames (§15.11).
+    /// intended — and one worth having, since the failure was measured as a
+    /// silent process death at roughly 1300 frames.
     DeepRecursion,
     /// Well-formed, whitelisted, and outside what this version emits. This is
-    /// the honest edge of the vertical slice (PLAN §0), not a parse failure.
+    /// the honest edge of the vertical slice, not a parse failure.
     NotYetImplemented,
     /// A field name that no block accepts.
     UnknownField,
@@ -253,7 +250,7 @@ pub enum Code {
     /// and arriving only under `-WX`.
     IgnoredSetting,
 
-    // -- loading (§15.28)
+    // -- loading
     /// An `include` whose file is missing, unreadable, or has no directory to
     /// resolve against.
     IncludeNotFound,
@@ -263,13 +260,13 @@ pub enum Code {
     IncludeCycle,
     /// An `include` written somewhere it cannot mean anything: inside a body,
     /// or with an argument that is not a string literal. The path has to be
-    /// readable without running anything, which is §2's staging rule and not a
+    /// readable without running anything, which is the staging rule and not a
     /// parser limitation.
     IncludeForm,
 
     /// An NSIS instruction that has a Lua spelling instead: `StrCmp` is `==`,
     /// `IntOp` is `+`, `StrCpy` is assignment. Not an unknown name — the
-    /// compiler knows exactly what it is, and says what to write (§5).
+    /// compiler knows exactly what it is, and says what to write.
     NsisRetired,
 
     /// A call written somewhere NSIS accepts it and then ignores it. `SetSilent`
@@ -387,7 +384,7 @@ pub struct Diagnostic {
     pub span: Span,
     pub message: String,
     /// Notes are a list because a rejection that names its replacement and a
-    /// rejection that explains itself are two different notes (PLAN §2).
+    /// rejection that explains itself are two different notes.
     pub notes: Vec<String>,
 }
 
@@ -419,12 +416,12 @@ impl Diagnostic {
 }
 
 /// The collector. Ordinary owned data: no `static mut`, no thread local, and no
-/// `getCurrent()` in any spelling (§9-2).
+/// `getCurrent()` in any spelling.
 #[derive(Clone, Debug, Default)]
 pub struct Diagnostics {
     items: Vec<Diagnostic>,
     /// The sources the spans are measured in, filled by the loader as it
-    /// follows `include` (§15.28). It sits beside the items because a span is
+    /// follows `include`. It sits beside the items because a span is
     /// not readable without it: `4:12` is a position only once something says
     /// *in which file*.
     files: Files,
@@ -474,7 +471,7 @@ impl Diagnostics {
         &mut self.files
     }
 
-    /// Every diagnostic, in the order raised — not just the first (§9-4).
+    /// Every diagnostic, in the order raised — not just the first.
     ///
     /// `path` names file `0`: the caller knows how it wants the root spelled —
     /// `installua build` uses the path as typed — and every other file is named

@@ -11,18 +11,18 @@ the eight *emitted, never written* prefixes — `$` sigils, `un.`, the `.` on `.
 
 **`INSTDIR` is writable and `PROGRAMFILES64` is not.** `INSTDIR = prior` has to mean
 `StrCpy $INSTDIR $0`, and `PROGRAMFILES64 = x` has to be an error. So the predefined-globals
-table needs a **`writable` column** — it is not one uniform kind of name. §5 lists them all
+table needs a **`writable` column** — it is not one uniform kind of name. The stdlib survey lists them all
 together and does not say this.
 
 **Label scope is per body, verified.** `_generated_endif_0` appears in both `.onInit` and
-`un.onInit` of the assembling output. §15.25 decided the counter resets per body; this
+`un.onInit` of the assembling output. The counter resets per body; this
 confirms `makensis` agrees, rather than the decision resting on inference.
 
 **`writeReg`'s variant selection works on an integer literal.** `NoModify = 1` emits
-`WriteRegDWORD`, the other five emit `WriteRegStr`, from operand type alone (§8).
+`WriteRegDWORD`, the other five emit `WriteRegStr`, from operand type alone.
 
 **`messageBox` fusion spends no register.** `if answer == "NO" then os.exit() end` is one
-`MessageBox` line with one jump target, `IDYES` skipping the body. §15.18's claim that the
+`MessageBox` line with one jump target, `IDYES` skipping the body. The claim that the
 jump table is recovered by fusion holds on the first real use.
 
 ## What it left open
@@ -38,7 +38,7 @@ source.
 **`uninstaller { icon = … }` does not emit inside the uninstaller region.** `MUI_UNICON`
 is a `!define` that MUI reads at interface-init time, so it must precede the **installer's**
 first page macro. The block is a scoping construct for *names*, not a region of the output —
-worth stating in the docs, because "the block is the context" (§15.10) invites the opposite
+worth stating in the docs, because "the block is the context" invites the opposite
 reading.
 
 **`createShortcut` arity.** NSIS's `CreateShortcut` takes up to seven arguments, five of

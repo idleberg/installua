@@ -1,4 +1,4 @@
-//! The MUI inventory's join, asserted in both directions (§14).
+//! The MUI inventory's join, asserted in both directions.
 //!
 //! The instruction table's census test is the model: a skeleton with no overlay
 //! row and an overlay row with no skeleton are both failures, because either one

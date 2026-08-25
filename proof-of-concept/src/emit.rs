@@ -88,8 +88,7 @@ fn body(out: &mut String, items: &[ir::Item], depth: usize) {
                 out.push_str(&line(instruction));
             }
             // Labels sit one level out from the code they head, as they do in
-            // hand-written NSIS — the output is the only debugger anyone has
-            // (§9-6).
+            // hand-written NSIS — the output is the only debugger anyone has.
             ir::Item::Label(label) => {
                 out.push_str(&INDENT.repeat(depth.saturating_sub(1)));
                 out.push_str(&format!("{label}:"));
@@ -111,8 +110,8 @@ fn line(instruction: &ir::Instruction) -> String {
     out
 }
 
-/// NSIS quoting. `$` is left alone: `$VAR` interpolation is a language feature
-/// (§4), and escaping it is part of the string-model decision this PoC defers.
+/// NSIS quoting. `$` is left alone: `$VAR` interpolation is a language feature,
+/// and escaping it is part of the string-model decision this PoC defers.
 fn quote(value: &str) -> String {
     format!("\"{}\"", value.replace('"', "$\\\""))
 }

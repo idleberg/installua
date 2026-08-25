@@ -1,6 +1,7 @@
 //! Install types at run time: `currentInstType`, `instTypes.getText(…)`.
 //!
-//! §13 applied a second time. An install type's identity is its position in the
+//! The same binding a second time. An install type's identity is its position
+//! in the
 //! block's `installTypes` list, and NSIS wants that number everywhere —
 //! `SetCurInstType 1`, `InstTypeSetText 0 "…"`. Here the surface takes the
 //! *name*, so inserting a type at the front of the list renumbers every use
@@ -116,7 +117,7 @@ impl BodyLowerer<'_, '_> {
                 .note(
                     "the list itself is the block's `installTypes` field, decided at compile \
                      time; `instTypes.setText(\"Full\", \"…\")` changes what one of them is \
-                     called (§13)",
+                     called",
                 ),
             );
             return;
@@ -171,7 +172,7 @@ impl BodyLowerer<'_, '_> {
                             span,
                             "`instTypes.setText` produces no value",
                         )
-                        .note("`InstTypeSetText` writes to no register (§15.23)"),
+                        .note("`InstTypeSetText` writes to no register"),
                     );
                     return None;
                 }
@@ -221,9 +222,9 @@ impl BodyLowerer<'_, '_> {
 
     /// A name from the block's `installTypes` list as the position NSIS wants.
     ///
-    /// Compile-time, and it has to be: the names are the block's declaration and
-    /// the positions exist in exactly one place, so resolving one at run time
-    /// would be a second numbering to keep in step with the first (§13).
+    /// Compile-time, and it has to be: the names are the block's declaration
+    /// and the positions exist in exactly one place, so resolving one at run
+    /// time would be a second numbering to keep in step with the first.
     pub(super) fn inst_type_position(&mut self, value: &Expr, what: &str) -> Option<usize> {
         let Some(ConstValue::Str(name)) = self.constant(value) else {
             self.diags.push(
@@ -232,9 +233,7 @@ impl BodyLowerer<'_, '_> {
                     value.span(),
                     format!("`{what}` wants a name the block declared"),
                 )
-                .note(
-                    "the position is resolved at compile time, so the name has to be one too (§13)",
-                ),
+                .note("the position is resolved at compile time, so the name has to be one too"),
             );
             return None;
         };

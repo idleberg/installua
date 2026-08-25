@@ -1,9 +1,9 @@
 //! The judgement half of the MUI inventory: one row per snapshot name.
 //!
-//! The overlay's opposite number (§15.23). `scan` says what MUI2's own text does
-//! with a name and this says what Installua does with it — and the split is the
-//! same one for the same reason: a fact about MUI2 that a human retyped is a
-//! fact that will be wrong after the next release, and a judgement a machine
+//! The overlay's opposite number. `scan` says what MUI2's own text does with a
+//! name and this says what Installua does with it — and the split is the same
+//! one for the same reason: a fact about MUI2 that a human retyped is a fact
+//! that will be wrong after the next release, and a judgement a machine
 //! inferred is one nobody can argue with.
 //!
 //! Four buckets, and `internal` is the largest. That is not a gap: MUI2 keeps
@@ -159,7 +159,7 @@ pub const ROWS: &[Row] = &[
     ),
     rejected(
         "MUI_DISABLE_INSERT_LANGUAGE_AFTER_PAGES_WARNING",
-        "it silences a warning about include order, and the compiler writes `MUI_LANGUAGE` after the pages by construction (§15.7)",
+        "it silences a warning about include order, and the compiler writes `MUI_LANGUAGE` after the pages by construction",
     ),
     internal("MUI_FINISHPAGE"),
     // MUI2's own guard define and a macro of the same name — the `!ifndef`
@@ -411,22 +411,22 @@ pub const ROWS: &[Row] = &[
     ),
     exposed(
         "MUI_LANGDLL_DISPLAY",
-        "written into `.onInit` whenever `languages { ask }` is present, never spelled (§15.26)",
+        "written into `.onInit` whenever `languages { ask }` is present, never spelled",
     ),
     exposed("MUI_LANGDLL_INFO", "languages { ask = { info = \"…\" } }"),
     internal("MUI_LANGDLL_LANGUAGES"),
     internal("MUI_LANGDLL_LANGUAGES_CP"),
     exposed(
         "MUI_LANGDLL_REGISTRY_KEY",
-        "languages { ask = { remember = { key = \"…\" } } }, one of three (§15.23)",
+        "languages { ask = { remember = { key = \"…\" } } }, one of three",
     ),
     exposed(
         "MUI_LANGDLL_REGISTRY_ROOT",
-        "languages { ask = { remember = { root = \"HKCU\" } } }, one of three (§15.23)",
+        "languages { ask = { remember = { root = \"HKCU\" } } }, one of three",
     ),
     exposed(
         "MUI_LANGDLL_REGISTRY_VALUENAME",
-        "languages { ask = { remember = { value = \"…\" } } }, one of three (§15.23)",
+        "languages { ask = { remember = { value = \"…\" } } }, one of three",
     ),
     internal("MUI_LANGDLL_REGISTRY_VARIABLES"),
     // Not a setting and not a gap: MUI2's own `instfiles` page inserts it,
@@ -440,11 +440,11 @@ pub const ROWS: &[Row] = &[
     ),
     exposed(
         "MUI_LANGUAGE",
-        "languages { \"English\" }, written after every page (§15.7)",
+        "languages { \"English\" }, written after every page",
     ),
     rejected(
         "MUI_LANGUAGEEX",
-        "an undocumented second spelling of `MUI_LANGUAGE`; the compiler writes the language lines from `languages {}` (§15.26)",
+        "an undocumented second spelling of `MUI_LANGUAGE`; the compiler writes the language lines from `languages {}`",
     ),
     internal("MUI_LICENSEPAGE"),
     exposed(
@@ -546,7 +546,7 @@ pub const ROWS: &[Row] = &[
     exposed("MUI_PAGE_WELCOME", "installer { page.welcome { … } }"),
     exposed(
         "MUI_RESERVEFILE_LANGDLL",
-        "written after the language lines whenever `languages { ask }` is present, never spelled (§15.26)",
+        "written after the language lines whenever `languages { ask }` is present, never spelled",
     ),
     internal("MUI_SET"),
     internal("MUI_STARTMENUPAGE"),
@@ -607,7 +607,7 @@ pub const ROWS: &[Row] = &[
     // replaces the whole UI, so every `page.*` field, every header image and
     // every colour would be describing a dialog that is no longer there. A user
     // who has built their own `.exe` UI has left this language's model of a
-    // page behind, and `raw` is where that belongs (§10).
+    // page behind, and `raw` is where that belongs.
     rejected(
         "MUI_UI",
         "the dialog resource for the whole UI: replacing it contradicts every `page.*` setting \
@@ -658,7 +658,7 @@ pub const ROWS: &[Row] = &[
     internal("MUI_UNFUNCTION_GUIINIT"),
     exposed(
         "MUI_UNGETLANGUAGE",
-        "written into `un.onInit` whenever `languages { ask }` is present and there is an uninstaller (§15.26)",
+        "written into `un.onInit` whenever `languages { ask }` is present and there is an uninstaller",
     ),
     exposed("MUI_UNICON", "uninstaller { icon = \"app.ico\" }"),
     internal("MUI_UNINSTALLER"),
