@@ -1,0 +1,54 @@
+# Dialer, which ships with NSIS.
+#
+# Five methods, and `Contrib/Dialer/dialer.c` gives all five the same shape:
+# nothing popped, exactly one string pushed on both branches. The strings are
+# `"online"`/`"offline"` except for `autodialHangup`, which is
+# `"success"`/`"failure"`.
+#
+# One caveat, and it is the reason to read this file before trusting the count.
+# Each method resolves its entry point out of `wininet.dll` at call time, and on
+# the branch where `GetProcAddress` fails it sets the **error flag** and pushes
+# nothing at all. The compiler's `Pop` is emitted before anything could test
+# `errors()`, so on that branch the value read is whatever was underneath.
+#
+# Declared anyway, and `StartMenu` is not, on a line worth stating: this arity
+# varies only on a Windows old enough to lack `InternetAutodial`, which means
+# older than 98 or a 95 that never saw IE4, whereas `StartMenu::Select` pushes
+# one value or two depending on whether the *user* pressed Cancel, which is an
+# ordinary path on every run.
+
+[[plugin]]
+name = "Dialer"
+method = "attemptConnect"
+nsis = "Dialer::AttemptConnect"
+params = []
+outputs = ["string"]
+
+[[plugin]]
+name = "Dialer"
+method = "getConnectedState"
+nsis = "Dialer::GetConnectedState"
+params = []
+outputs = ["string"]
+
+[[plugin]]
+name = "Dialer"
+method = "autodialOnline"
+nsis = "Dialer::AutodialOnline"
+params = []
+outputs = ["string"]
+
+[[plugin]]
+name = "Dialer"
+# The unattended twin of `autodialOnline`: same result strings, no prompt.
+method = "autodialUnattended"
+nsis = "Dialer::AutodialUnattended"
+params = []
+outputs = ["string"]
+
+[[plugin]]
+name = "Dialer"
+method = "autodialHangup"
+nsis = "Dialer::AutodialHangup"
+params = []
+outputs = ["string"]

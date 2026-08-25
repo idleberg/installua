@@ -1,0 +1,34 @@
+# Banner, which ships with NSIS.
+#
+# Counts read from `Contrib/Banner/Banner.c`: `show` and `destroy` push nothing,
+# `getWindow` pushes exactly one value.
+#
+# `show` is declared in its one-string form only. Its real parameter list is
+# `[/set id text]... text`, and a repeated flag pair is not a fixed arity — the
+# format has no spelling for one, and inventing a trailing `any` would let a
+# wrong call through rather than catch it. The `/set` form is a `raw`.
+
+[[plugin]]
+name = "Banner"
+method = "show"
+nsis = "Banner::show"
+params = ["string"]
+outputs = []
+
+[[plugin]]
+name = "Banner"
+method = "getWindow"
+nsis = "Banner::getWindow"
+params = []
+# The banner's own HWND, written with `%u` and read back by `GetDlgItem` and
+# friends — `handle` rather than `uint` because arithmetic on it is a mistake.
+outputs = ["handle"]
+
+[[plugin]]
+name = "Banner"
+# The banner is a window, not a page: nothing destroys it for you, and a script
+# that forgets this one leaves it on screen for the rest of the install.
+method = "destroy"
+nsis = "Banner::destroy"
+params = []
+outputs = []

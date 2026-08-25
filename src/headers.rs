@@ -176,9 +176,16 @@ impl std::fmt::Display for Problem {
 /// It stays because it is now documented and called; the rule is what the
 /// *next* entry is measured against.
 const SHIPPED: &[(&str, &str)] = &[
+    ("AdvSplash.toml", include_str!("headers/AdvSplash.toml")),
+    ("Banner.toml", include_str!("headers/Banner.toml")),
+    ("Dialer.toml", include_str!("headers/Dialer.toml")),
     ("FileFunc.toml", include_str!("headers/FileFunc.toml")),
+    ("NSISdl.toml", include_str!("headers/NSISdl.toml")),
+    ("Splash.toml", include_str!("headers/Splash.toml")),
     ("System.toml", include_str!("headers/System.toml")),
+    ("TypeLib.toml", include_str!("headers/TypeLib.toml")),
     ("UserInfo.toml", include_str!("headers/UserInfo.toml")),
+    ("VPatch.toml", include_str!("headers/VPatch.toml")),
     ("WordFunc.toml", include_str!("headers/WordFunc.toml")),
     ("nsExec.toml", include_str!("headers/nsExec.toml")),
     ("nsProcess.toml", include_str!("headers/nsProcess.toml")),

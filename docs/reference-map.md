@@ -1215,9 +1215,26 @@ compiler reserves the DLL when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
-Ships declared: `nsExec.execToStack`, `UserInfo.getAccountType`, `System.call`,
-and third-party `nsProcess.findProcess` / `.killProcess` / `.closeProcess`.
-Anything else — every third-party DLL — is declared by the project in
+Ships declared, all of it read from each plugin's own source rather than its
+wiki page:
+
+| Plugin      | Methods                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| `nsExec`    | `.execToStack` → exit code, output                                                         |
+| `UserInfo`  | `.getAccountType`                                                                          |
+| `System`    | `.call` — outputs come from the signature's `.s`, not from a count                          |
+| `Dialer`    | `.attemptConnect`, `.getConnectedState`, `.autodialOnline`, `.autodialUnattended`, `.autodialHangup` |
+| `NSISdl`    | `.download`, `.downloadQuiet` — plain HTTP only, no HTTPS                                   |
+| `VPatch`    | `.patchFile`, `.getFileCrc32`, `.getFileMd5`                                                |
+| `TypeLib`   | `.register`, `.unregister`, `.getLibVersion` → **minor, major**                             |
+| `Banner`    | `.show`, `.getWindow`, `.destroy`                                                           |
+| `Splash`    | `.show` → `1` closed early, `0` timed out, `-1` error                                       |
+| `AdvSplash` | `.show` — Splash plus fades and a transparent colour                                        |
+| `nsProcess` | `.findProcess`, `.killProcess`, `.closeProcess` — third-party, vendored as the worked example |
+
+Four that ship with NSIS are **deliberately not declared**, and the reasons are
+in [Plugins with no declaration](#plugins-with-no-declaration). Anything else —
+every third-party DLL — is declared by the project in
 [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header), which
 is what supplies the output count nothing can ask the DLL for.
 
@@ -1489,6 +1506,24 @@ here so a search for the NSIS name lands somewhere.
 | `SetCtlColors` / `CreateFont`                                                | a control's `colors` / `font`     |
 | `LoadAndSetImage`                                                            | a `bitmap`'s `image`              |
 | `GetFunctionAddress`                                                         | `onClick` / `onChange`            |
+
+### Plugins with no declaration
+
+Sixteen plugins ship with NSIS. Twelve are [declared](#plugin) or reached
+through a construct; these four are not, and each one is a decision rather than
+a gap. All four remain callable through [`raw`](#raw), which is where a script
+that needs one goes.
+
+| Plugin          | Why not, and what to write instead                                                                                                                                                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Math`          | Its script string reads and writes `$0`–`$R9` **by name**, and the compiler owns the registers — a declaration would describe one string in and nothing out while the call quietly overwrote whatever the allocator had put there. Use the arithmetic operators. |
+| `StartMenu`     | `Select` pushes one value on Cancel and two on success, so there is no count to declare. `page.startMenu` is the page that asks the same question, and [`createShortcut`](#createshortcut) does the rest.                                                          |
+| `BgImage`       | Every method returns a value only after `SetReturn on`, which makes the arity a **mode** rather than a signature — the one shape the format cannot carry.                                                                                                 |
+| `LangDLL`       | Reached through `languages { ask = … }`, which emits `MUI_LANGDLL_DISPLAY`. A second spelling for one dialog is worse than none.                                                                                                                          |
+
+`InstallOptions` and `nsDialogs` are not in that list because they are not
+absences: the first is superseded by [`page.custom`](#windows-and-controls) and the
+second is what `page.custom` emits.
 
 ### Rejected NSIS commands
 

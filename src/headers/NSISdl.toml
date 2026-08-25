@@ -1,0 +1,27 @@
+# NSISdl, which ships with NSIS. **Plain HTTP only** — no HTTPS, which is the
+# fact that decides whether this is the right call at all in 2026.
+#
+# `Contrib/NSISdl/nsisdl.cpp` pops the URL and the local file and ends with a
+# single `PushStringA(error)`, where `error` is `NULL` for success. NSIS's push
+# turns that into `"success"`; anything else is the message.
+
+[[plugin]]
+name = "NSISdl"
+method = "download"
+nsis = "NSISdl::download"
+# The URL is `string`, deliberately not `path`: `path` normalises `/` to `\`,
+# which would turn every URL into a broken one.
+params = ["string", "path"]
+# `"success"`, `"cancel"`, or an error string. Compared as text by every caller,
+# so `string` and not a code.
+outputs = ["string"]
+
+[[plugin]]
+name = "NSISdl"
+# The same function with the progress window suppressed: `download_quiet` in
+# the source calls straight through to `download`, which is why the count here
+# cannot drift from the one above.
+method = "downloadQuiet"
+nsis = "NSISdl::download_quiet"
+params = ["string", "path"]
+outputs = ["string"]

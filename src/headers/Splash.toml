@@ -1,0 +1,16 @@
+# Splash, which ships with NSIS.
+#
+# One pop of the delay, one of the filename, one push of the result — read from
+# `Contrib/Splash/splash.c`, where the single `pushstring` is unconditional.
+
+[[plugin]]
+name = "Splash"
+method = "show"
+nsis = "Splash::show"
+# The path is the bitmap **without** its extension: the plugin appends `.bmp`,
+# and `.wav` for the sound if a file of that name is beside it. `path` all the
+# same, because it is a file position and `/` would ship into one.
+params = ["uint", "path"]
+# `1` if the user closed it early, `0` if it timed out, `-1` on an error. Signed
+# because of that `-1`, and a number because every caller compares it to one.
+outputs = ["int"]

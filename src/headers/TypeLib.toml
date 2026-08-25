@@ -1,0 +1,34 @@
+# TypeLib, which ships with NSIS: registering `.tlb` type libraries.
+#
+# `Contrib/Library/TypeLib/TypeLib.cpp` is short enough to settle every count
+# here. `Register` and `UnRegister` pop one string and push nothing.
+
+[[plugin]]
+name = "TypeLib"
+method = "register"
+nsis = "TypeLib::Register"
+params = ["path"]
+outputs = []
+
+[[plugin]]
+name = "TypeLib"
+method = "unregister"
+nsis = "TypeLib::UnRegister"
+params = ["path"]
+outputs = []
+
+[[plugin]]
+name = "TypeLib"
+method = "getLibVersion"
+nsis = "TypeLib::GetLibVersion"
+params = ["path"]
+# **Minor first.** The source pushes the major version and then the minor, so
+# `Pop` order — which is what this list is — hands back the minor one first:
+# `local minor, major = typeLib.getLibVersion(path)`. `Library.nsh` reads it in
+# exactly that order at its `Pop $R3` / `Pop $R2`, and reversing the two here
+# would compile and be wrong.
+#
+# Two values on **every** branch, failure included: a library that will not load
+# pushes `"0"` twice rather than nothing, so the count is unconditional and a
+# `0.0` result is the error.
+outputs = ["uint", "uint"]

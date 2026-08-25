@@ -1,0 +1,40 @@
+# VPatch, which ships with NSIS: applying a `GenPat`-built binary patch.
+#
+# Counts from `Contrib/VPatch/Source/Plugin/vpatchdll.c`, where every exit path
+# of every method pushes exactly one string — including the early returns for a
+# file that will not open, which is what makes these unconditional.
+
+[[plugin]]
+name = "VPatch"
+method = "patchFile"
+# The export is lower-case `vpatchfile`; the namespace is spelled the way the
+# DLL is named so the call and its `ReserveFile /plugin VPatch.dll` agree.
+nsis = "VPatch::vpatchfile"
+# Patch, source, destination — and the destination is a *new* file. VPatch does
+# not update in place; renaming the result over the original is the caller's
+# step, and the reason the plugin cannot be handed one path twice.
+params = ["path", "path", "path"]
+# `"OK"`, `"OK, new version already installed"`, or one of four failure
+# sentences. Every caller tests the `OK` prefix rather than equality, because
+# the second success string is a success.
+outputs = ["string"]
+
+[[plugin]]
+name = "VPatch"
+# Present only because the plugin is built with `DLL_CHECKSUMS` defined in its
+# `SConscript`, which the shipped DLL is. Undocumented in the readme; read from
+# the source, which is the whole point of doing it that way.
+method = "getFileCrc32"
+nsis = "VPatch::GetFileCRC32"
+params = ["path"]
+# Hex, eight characters, and the **empty string** rather than an error sentence
+# when the file will not open — so a caller checks for `""` before comparing.
+outputs = ["string"]
+
+[[plugin]]
+name = "VPatch"
+method = "getFileMd5"
+nsis = "VPatch::GetFileMD5"
+params = ["path"]
+# 32 hex characters, empty on failure, as `getFileCrc32`.
+outputs = ["string"]
