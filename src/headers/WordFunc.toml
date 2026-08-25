@@ -1,4 +1,155 @@
 # WordFunc.nsh, which ships with NSIS.
+#
+# Everything here is string surgery on the target at install time, and every
+# one of them writes a single register that `!insertmacro` is handed last.
+#
+# **The `S` names are the case-sensitive halves.** NSIS ships each of these as
+# two macros — `WordFind` and `WordFindS` call two different artificial
+# functions with identical arguments — so they are two methods here. The format
+# has no flag that could join them, and inventing one would be inventing a
+# parameter NSIS does not take.
+#
+# Note which way round it is: the *unsuffixed* name is case-**in**sensitive,
+# the opposite of `==`, which lowers to `StrCmpS`. That is not an inconsistency
+# to fix. `==` is case-sensitive because Lua's `==` is, and `import` is the
+# NSIS-shaped surface, where the name a reader arrives with is the one that
+# should work.
+#
+# Every result is a `string`. Several of these answer with a number under one
+# option letter and with text under another — `wordFind(s, " ", "#")` counts
+# words while `wordFind(s, " ", "+1")` returns one — and a type that depended
+# on the value of an argument is not something the declaration can say. The
+# same reasoning is written out under `versionCompare` below, and it predates
+# all of these.
+
+# ── Finding and counting ─────────────────────────────────────────────────────
+
+[[header]]
+name = "WordFunc"
+# `wordFind(string, delimiter, option)`. The option is the whole language of
+# this macro: `"+1"` is the first word, `"-1"` the last, `"#"` the number of
+# words, `"*"` the number of delimiters, and an `E` prefix on any of them sets
+# the error flag instead of returning the input unchanged when the word is not
+# there.
+method = "wordFind"
+nsis = "WordFind"
+params = ["string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+method = "wordFindS"
+nsis = "WordFindS"
+params = ["string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+# What lies between two different delimiters — `wordFind2X(s, "[", "]", "+1")`
+# takes the first bracketed run. The number goes last, after both delimiters,
+# which is the argument order a caller gets wrong from memory.
+method = "wordFind2X"
+nsis = "WordFind2X"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+method = "wordFind2XS"
+nsis = "WordFind2XS"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+# The same with a third marker in the middle: delimiter, centre, delimiter,
+# then the number. Five arguments, and the centre is the one that is easy to
+# read as another delimiter.
+method = "wordFind3X"
+nsis = "WordFind3X"
+params = ["string", "string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+method = "wordFind3XS"
+nsis = "WordFind3XS"
+params = ["string", "string", "string", "string", "string"]
+outputs = ["string"]
+
+# ── Rewriting ────────────────────────────────────────────────────────────────
+
+[[header]]
+name = "WordFunc"
+# `wordReplace(string, word, replacement, number)`. The number says *which*
+# occurrence: `"+1"` the first, `"-1"` the last, `"+"` or `"-"` all of them,
+# and `"{}"` around any of those keeps the surrounding delimiters.
+method = "wordReplace"
+nsis = "WordReplace"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+method = "wordReplaceS"
+nsis = "WordReplaceS"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+# Appends a word unless the string already holds it — the `PATH` idiom, and the
+# reason to prefer it over `..` is that "already there" is what it checks.
+# `wordAdd(string, delimiter, word)`, and the word may carry a leading `-` to
+# mean remove instead.
+method = "wordAdd"
+nsis = "WordAdd"
+params = ["string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+method = "wordAddS"
+nsis = "WordAddS"
+params = ["string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+# Puts a word at a position rather than at the end:
+# `wordInsert(string, delimiter, word, "+2")` makes it the second word.
+method = "wordInsert"
+nsis = "WordInsert"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+method = "wordInsertS"
+nsis = "WordInsertS"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+# `strFilter(string, filter, include, exclude)` — four arguments and only the
+# first is obvious. The filter is a digit combination naming the character
+# classes to keep (`"1"` digits, `"2"` upper case, `"3"` lower case, and pairs
+# like `"12"`), with a leading `-` to drop them instead; `include` and
+# `exclude` are literal character lists that override the filter either way.
+method = "strFilter"
+nsis = "StrFilter"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+method = "strFilterS"
+nsis = "StrFilterS"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+
+# ── Versions ─────────────────────────────────────────────────────────────────
 
 [[header]]
 name = "WordFunc"
@@ -8,4 +159,14 @@ params = ["string", "string"]
 # `"0"`, `"1"` or `"2"` — a string, because that is what the macro leaves in the
 # register and comparing it as an int would be a guess the lattice has no
 # evidence for.
+outputs = ["string"]
+
+[[header]]
+name = "WordFunc"
+# Turns `"1.4.2-beta"` into something `versionCompare` can order, by mapping
+# the letters in the second argument onto digits. The second argument is that
+# character list and defaults to the alphabet when empty.
+method = "versionConvert"
+nsis = "VersionConvert"
+params = ["string", "string"]
 outputs = ["string"]

@@ -183,6 +183,7 @@ const SHIPPED: &[(&str, &str)] = &[
     ("NSISdl.toml", include_str!("headers/NSISdl.toml")),
     ("Splash.toml", include_str!("headers/Splash.toml")),
     ("System.toml", include_str!("headers/System.toml")),
+    ("TextFunc.toml", include_str!("headers/TextFunc.toml")),
     ("TypeLib.toml", include_str!("headers/TypeLib.toml")),
     ("UserInfo.toml", include_str!("headers/UserInfo.toml")),
     ("VPatch.toml", include_str!("headers/VPatch.toml")),

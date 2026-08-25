@@ -1,10 +1,138 @@
 # FileFunc.nsh, which ships with NSIS.
 #
-# Both of these put their outputs *last*: a header macro cannot return
+# Every one of these puts its outputs *last*: a header macro cannot return
 # anything, so `!insertmacro` is handed the registers to write into. That is the
 # convention, not a choice — and it is the reason a declaration exists at all,
 # since `${GetSize} "$dir" "" $0 $1 $2` and `${StrCase} $0 "text" "L"` disagree
 # about which end the destination is.
+#
+# Two of FileFunc's macros are missing here on purpose. `Locate` and `GetDrives`
+# take a **function address**, which `params` has no type for and which nothing
+# emits a `GetFunctionAddress` for. They are a language question rather than a
+# data one and are left undeclared until it is answered — see the `import`
+# section of `docs/reference-map.md`.
+#
+# Every `params` and `outputs` list below was read from the macro body in
+# `NSISDIR/Include/FileFunc.nsh` and checked against `Examples/FileFunc.nsi`,
+# which is the file NSIS itself keeps honest.
+
+# ── The path splitters ───────────────────────────────────────────────────────
+#
+# All five take `path` rather than `string`, and that is load-bearing rather
+# than tidy: they split on `\` and nothing else, so a program that wrote
+# `INSTDIR .. "/lib/app.dll"` and got `string` here would be handed the whole
+# thing back as if it had no parent at all. Their results are `string`, because
+# `path` is an input spelling — it normalises on the way in, and what a macro
+# already wrote is whatever it wrote.
+
+[[header]]
+name = "FileFunc"
+method = "getParent"
+nsis = "GetParent"
+params = ["path"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+method = "getFileName"
+nsis = "GetFileName"
+params = ["path"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# The file name without its extension, so `getFileName` then this — the NSIS
+# name says "base name" and means the last component, not the stem of a path.
+method = "getBaseName"
+nsis = "GetBaseName"
+params = ["path"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# The extension **without** the dot, and empty for a name that has none.
+method = "getFileExt"
+nsis = "GetFileExt"
+params = ["path"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# `C:\` from `C:\dir\file`, and `\\server\share\` from a UNC path — the root a
+# path is relative to, which is why it keeps its trailing separator when
+# `getParent` drops it.
+method = "getRoot"
+nsis = "GetRoot"
+params = ["path"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# For a progress line: shortens the middle to `C:\dir\...\file` so the result
+# fits a width. The second argument is a length with an optional trailing
+# `A`–`D` choosing which end goes — `"35A"` — so it is a `string`, not an `int`.
+method = "bannerTrimPath"
+nsis = "BannerTrimPath"
+params = ["path", "string"]
+outputs = ["string"]
+
+# ── The command line ─────────────────────────────────────────────────────────
+
+[[header]]
+name = "FileFunc"
+# Everything after the executable's own name, unparsed. This is what an
+# `onInit` reads before anything else, and it takes no arguments at all.
+method = "getParameters"
+nsis = "GetParameters"
+params = []
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# One switch out of that string: `getOptions(params, "/D=")` answers with what
+# followed `/D=`, and sets the error flag when the switch is absent — which is
+# the difference from an empty value that was written.
+#
+# The parameters are a `string` and not a `path`: normalising `/` in a command
+# line would turn every switch into a directory separator.
+method = "getOptions"
+nsis = "GetOptions"
+params = ["string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# The same call, case-sensitively — `/S=` and `/s=` stop being the same switch.
+#
+# NSIS ships these as two macros rather than one with an option letter, so they
+# are two methods here; the format has no flag that could join them and adding
+# one would be inventing a parameter NSIS does not take. Note which way round
+# it is: the *unsuffixed* name is the case-insensitive one, the opposite of
+# `==`, which lowers to `StrCmpS` because Lua's `==` is case-sensitive. The
+# names here follow NSIS because `import` is the NSIS-shaped surface.
+method = "getOptionsS"
+nsis = "GetOptionsS"
+params = ["string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# The running executable's own file name, and the directory holding it. Neither
+# takes an argument, and both differ from `$EXEPATH`/`$EXEDIR` only in being
+# available to a header that was written before those existed.
+method = "getExeName"
+nsis = "GetExeName"
+params = []
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+method = "getExePath"
+nsis = "GetExePath"
+params = []
+outputs = ["string"]
+
+# ── Facts about a file on the target ─────────────────────────────────────────
 
 [[header]]
 name = "FileFunc"
@@ -22,3 +150,64 @@ method = "driveSpace"
 nsis = "DriveSpace"
 params = ["path", "string"]
 outputs = ["uint"]
+
+[[header]]
+name = "FileFunc"
+# Seven values, in the order `Examples/FileFunc.nsi` prints them as
+# `$0/$1/$2 ($3)` and `$4:$5:$6`: **day, month, year, weekday, hour, minute,
+# second**. Getting that order wrong is undetectable — every one of them is a
+# two-digit string — which is exactly the kind of fact a declaration is for.
+#
+# The weekday is a name (`"Monday"`), not a number, so all seven are `string`
+# and the numeric ones keep their leading zero: `IntFmt "%.2u"` in the macro
+# body is what puts it there, and `"08"` compared as an int would be fine while
+# `"08"` printed as a date is the point.
+#
+# The option chooses which clock: `"L"` local now, `"LS"` UTC now — both ignore
+# the first argument — and `"A"`/`"C"`/`"M"` the file's access, creation or
+# modification time, with `"AS"`/`"CS"`/`"MS"` the UTC forms.
+method = "getTime"
+nsis = "GetTime"
+params = ["path", "string"]
+outputs = ["string", "string", "string", "string", "string", "string", "string"]
+
+[[header]]
+name = "FileFunc"
+# `"1.4.2.0"` from the file's version resource. A `string` and not four numbers:
+# the macro writes one register, and a program that wants the parts has
+# `string.find` or `wordFind`.
+method = "getFileVersion"
+nsis = "GetFileVersion"
+params = ["path"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# `getFileAttributes(path, "READONLY")` answers `"1"` or `"0"`, and
+# `getFileAttributes(path, "ALL")` answers the whole list joined by `|`. One
+# call with two return shapes chosen by a string, so `string` is the only
+# honest type — the same reason `versionCompare` is not an `int`.
+method = "getFileAttributes"
+nsis = "GetFileAttributes"
+params = ["path", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "FileFunc"
+# `1` has files, `0` is empty, `-1` does not exist. Signed because of that last
+# one, and the three-way answer is why this is not a `bool`: "empty" and
+# "missing" are the two cases an installer actually has to tell apart before
+# calling `rmDir`.
+method = "dirState"
+nsis = "DirState"
+params = ["path"]
+outputs = ["int"]
+
+[[header]]
+name = "FileFunc"
+# Tells the shell to re-read its icons, after a file association changed.
+# Nothing in, nothing out — the whole call is one line with no arguments.
+method = "refreshShellIcons"
+nsis = "RefreshShellIcons"
+params = []
+outputs = []

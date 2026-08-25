@@ -1256,12 +1256,36 @@ Brings a declared NSIS header's macros into scope. The `!include` and any
 
 **Usage** `local h = import(header)` · `h.macro(…)`
 
-Ships declared: `FileFunc.getSize`, `FileFunc.driveSpace`,
-`WordFunc.versionCompare`. Any other header's macros are declared by the project
-in [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header). The
-shipped set is deliberately short: a declaration ships when the fact it records
-is undiscoverable *and* the caller is common, so a macro you can read off
-`NSISDIR/Include` in a minute is yours to declare, in the same format.
+Three headers ship declared, and between them they are the whole of what NSIS
+provides that a fixed argument list can describe:
+
+| Header | Methods | Worth knowing |
+| ------ | ------- | ------------- |
+| `FileFunc` | `getParameters`, `getOptions`, `getOptionsS`, `getParent`, `getFileName`, `getBaseName`, `getFileExt`, `getRoot`, `bannerTrimPath`, `getExeName`, `getExePath`, `getSize`, `driveSpace`, `getTime`, `getFileVersion`, `getFileAttributes`, `dirState`, `refreshShellIcons` | `getTime` returns **day, month, year, weekday, hour, minute, second** — seven strings, and a swapped pair is invisible at runtime. `dirState` is `-1` missing, `0` empty, `1` has files |
+| `WordFunc` | `wordFind`, `wordFind2X`, `wordFind3X`, `wordReplace`, `wordAdd`, `wordInsert`, `strFilter`, `versionCompare`, `versionConvert`, and the `S` half of the first seven | Every result is a `string`: the option argument decides whether the answer is a word or a count, so no narrower type is available |
+| `TextFunc` | `lineRead`, `lineSum`, `fileJoin`, `configRead`, `configReadS`, `configWrite`, `configWriteS`, `fileRecode`, `trimNewLines` | `fileJoin` and `fileRecode` return **nothing** — their result is the file. `trimNewLines` takes a string, not a path, despite what NSIS calls the argument |
+
+**The `S` names are the case-sensitive halves**, and NSIS ships each as its own
+macro rather than as an option, so each is its own method here. Note which way
+round it is: the unsuffixed name is the case-**in**sensitive one, the opposite
+of [`==`](#strings-and-numbers). That is not an inconsistency — `==` is
+case-sensitive because Lua's is, and `import` is the NSIS-shaped surface, where
+the name you arrive with should be the one that works.
+
+**Six macros are deliberately absent**: `FileFunc.Locate`, `FileFunc.GetDrives`,
+`TextFunc.LineFind`, `TextFunc.FileReadFromEnd`, `TextFunc.TextCompare` and
+`TextFunc.TextCompareS` each take a **function address**, and their callbacks
+read and write named registers — `$R9` through `$R6` — which the compiler owns.
+That is behaviour rather than arity, so no `.toml` can carry it, and the
+question of whether the language grows a callback form for them is open rather
+than answered. Until it is, `glob` covers the build-time half of `Locate`'s job,
+and a `fileOpen`/`fileRead` loop covers `LineFind`'s.
+
+Any other header's macros are declared by the project in
+[`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header). A
+declaration ships when the fact it records is undiscoverable *and* the caller is
+common; the argument order of a macro that writes its outputs into trailing
+registers is exactly that, which is why these three arrived together.
 `import` itself needs no declaration: the `!include` is emitted for whatever name
 it is given, so a header reached only through `raw` still gets its line.
 
@@ -1344,12 +1368,17 @@ outputs = ["string"]                  # values pushed, in `Pop` order
 dir = "vendor/plugins"                # only if the DLL is not in NSISDIR
 
 [[header]]
-name = "TextFunc"                     # what `import "…"` is given
-method = "trimNewLines"
-nsis = "TrimNewLines"                 # the macro name, without `${}`
+name = "Brand"                        # what `import "…"` is given, and the
+method = "applyTheme"                 # `!include "Brand.nsh"` that follows
+nsis = "BrandApplyTheme"              # the macro name, without `${}`
 params = ["string"]
 outputs = ["string"]                  # trailing registers, in the order written
 ```
+
+The header here is one of your own, beside the script, because everything NSIS
+ships that a fixed argument list can describe [ships
+declared](#import) — the headers left over are macro frameworks whose value is
+control flow, and those are not signatures at all.
 
 `name`, `method` and `nsis` are required. `nsis` is not derived from `method`,
 because `${StrCase} $0 "text" "L"` puts its destination _first_ and

@@ -1,0 +1,117 @@
+# TextFunc.nsh, which ships with NSIS.
+#
+# Reading and rewriting files on the target at install time, which is the job
+# `glob` cannot do: `glob` walks the *build* machine and unrolls the result
+# before anything ships.
+#
+# Four of TextFunc's macros are missing here on purpose. `LineFind`,
+# `FileReadFromEnd`, `TextCompare` and `TextCompareS` take a **function
+# address**, which `params` has no type for and which nothing emits a
+# `GetFunctionAddress` for. They are a language question rather than a data one
+# — see the `import` section of `docs/reference-map.md`.
+#
+# `TextCompareS` is the reason the `S` pairs below have no flag joining them:
+# its case-sensitive half is deferred while its case-insensitive half is not,
+# and two methods can differ that way where one method with a flag could not.
+
+[[header]]
+name = "TextFunc"
+# One line out of a file, by number. Negative counts from the end, so `-1` is
+# the last line, and that is why the number is a signed `int` — the macro runs
+# `IntOp $1 $1 + 0` on it and then compares it against zero.
+#
+# Line 0 does not exist: numbering starts at 1, and 0 sets the error flag.
+method = "lineRead"
+nsis = "LineRead"
+params = ["path", "int"]
+outputs = ["string"]
+
+[[header]]
+name = "TextFunc"
+# How many lines the file has. `uint` for the same reason `getSize` is one: a
+# count of lines read cannot go negative, so `lines // 2` needs no sign fixup.
+# The error path writes an empty string rather than a number, and the error
+# flag is what says so — the same arrangement `getSize` has.
+method = "lineSum"
+nsis = "LineSum"
+params = ["path"]
+outputs = ["uint"]
+
+[[header]]
+name = "TextFunc"
+# `fileJoin(first, second, output)` — writes `first` then `second` into
+# `output`. Three paths in and **nothing out**: the result is the file, and a
+# program that tries to read a return value here is reading the stack.
+#
+# An empty third argument appends `second` onto `first` in place, which is the
+# common call and the one that makes the missing output easy to overlook.
+method = "fileJoin"
+nsis = "FileJoin"
+params = ["path", "path", "path"]
+outputs = []
+
+[[header]]
+name = "TextFunc"
+# The `name=value` file, without an INI's sections — `configRead(file, "Port=")`
+# answers with what followed. The entry carries its own separator, so the `=`
+# is part of the string a caller passes rather than something the macro adds.
+method = "configRead"
+nsis = "ConfigRead"
+params = ["path", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "TextFunc"
+# The same call, case-sensitively; `Port=` and `port=` stop being one entry.
+#
+# NSIS ships these as two macros with identical arguments, so they are two
+# methods here — the format has no flag that could join them. And note which
+# way round it is: the unsuffixed name is the case-**in**sensitive one, the
+# opposite of `==`, which lowers to `StrCmpS` because Lua's `==` is
+# case-sensitive. These names follow NSIS because `import` is the NSIS-shaped
+# surface, where the name a reader arrives with should be the one that works.
+method = "configReadS"
+nsis = "ConfigReadS"
+params = ["path", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "TextFunc"
+# `configWrite(file, "Port=", "8080")`, answering `"SAME"`, `"CHANGED"`,
+# `"ADDED"` or `"DELETED"` — deleted because an empty value removes the line
+# rather than blanking it, which is the one behaviour here that a caller will
+# not guess.
+#
+# A `string` and not four cases the compiler knows: it is the word the macro
+# leaves in the register, and the error path leaves an empty one.
+method = "configWrite"
+nsis = "ConfigWrite"
+params = ["path", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "TextFunc"
+method = "configWriteS"
+nsis = "ConfigWriteS"
+params = ["path", "string", "string"]
+outputs = ["string"]
+
+[[header]]
+name = "TextFunc"
+# In place, and only two spellings: `"OemToChar"` or `"CharToOem"`. Anything
+# else sets the error flag, which is why the format is a `string` rather than
+# something the declaration could narrow — the macro checks it at install time.
+method = "fileRecode"
+nsis = "FileRecode"
+params = ["path", "string"]
+outputs = []
+
+[[header]]
+name = "TextFunc"
+# The odd one: despite NSIS naming the argument `_FILE`, this trims a
+# **string**, not a file. It strips trailing `$\r` and `$\n` from a value, and
+# it exists because `fileRead` hands back the line ending along with the line.
+method = "trimNewLines"
+nsis = "TrimNewLines"
+params = ["string"]
+outputs = ["string"]
