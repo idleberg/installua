@@ -76,9 +76,31 @@ install.lua:3:15: warning[dollar-in-literal]: `$INSTDIR` is emitted as literal t
 | `installua build <file.lua>` | compile, then run `makensis -WX`. Exits non-zero on any error. |
 | `installua check <file.lua>...` | everything `build` would say, writing nothing and running no `makensis` — the fast gate for CI and editors |
 | `installua emit <file.lua>` | compile to `.nsi` and stop — for wiring into an existing build |
+| `-D NAME=VALUE` | on any of the three: set a build parameter the source declared with `param(…)` |
 | `installua stubs` | regenerate the editor meta files. Run it after adding a `func` or a global. |
 
 `installua --help` lists the rest.
+
+### Build parameters
+
+The version, the channel, the feature flag — the values a CI job sets rather
+than the source:
+
+```lua
+local VERSION <const> = param("VERSION", "1.4.2")
+local SIGNED  <const> = param("SIGNED", false)
+```
+
+```sh
+installua build install.lua -D VERSION=2.0.0 -D SIGNED=true
+```
+
+It replaces NSIS's `!ifndef VERSION` / `!define VERSION "1.4.2"` / `!endif`, and
+fixes that idiom's failure mode: because the parameter is *declared*, a misspelt
+`-D VERSOIN=2.0.0` is an error naming the parameters that do exist, instead of a
+build that quietly ships the default. The default is also the type — `-D
+PORT=abc` against `param("PORT", 8080)` is rejected rather than handed to an
+`IntOp` as a string.
 
 ### Editor support
 

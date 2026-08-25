@@ -159,6 +159,51 @@ for path in glob("assets/docs/*.pdf") do
 end
 ```
 
+### param
+
+A build-time constant the invocation may set. This is what replaces
+`!ifndef VERSION` / `!define VERSION "1.4.2"` / `!endif`, and `-D` is the same
+flag `makensis` spells the same way.
+
+**Usage** `local NAME <const> = param(name, default)` → the value
+
+```lua
+local VERSION <const> = param("VERSION", "1.4.2")
+local PORT    <const> = param("PORT", 8080)
+local SIGNED  <const> = param("SIGNED", false)
+```
+
+```console
+$ installua build install.lua -D VERSION=2.0.0 -D SIGNED=true
+```
+
+Three things follow from the declaration being written in the source rather
+than passed only on the command line:
+
+- **A `-D` naming a parameter the program does not declare is an error.** That
+  is the whole point. NSIS's version fails the other way — a misspelt
+  `-DVERSOIN` defines a second thing nobody reads, the build succeeds, the
+  default ships, and nothing says so.
+- **The default is the type.** `param("PORT", 8080)` makes `PORT` an integer, so
+  `-D PORT=abc` is rejected instead of arriving at an `IntOp` as a string.
+  `param("SIGNED", false)` takes `true` and `false` and nothing else.
+- **The name and the binding are separate.** The string is what `-D` sets; the
+  `local` is what the program reads. They are usually spelled the same and do
+  not have to be.
+
+`param(…)` is a **declaration**, so it stands alone as the whole initialiser of
+a top-level `local … <const>` — not inside a body, and not composed into a
+larger expression. Compose one line further down instead, which costs nothing
+since resolution is order-free:
+
+```lua
+local VERSION <const> = param("VERSION", "1.4.2")
+local FULL    <const> = VERSION .. "-win64"   -- an ordinary <const>
+```
+
+`installua check` takes the same `-D`s, because a program whose parameters are
+overridden is a different program to check.
+
 ---
 
 ## Script attributes
@@ -1281,6 +1326,13 @@ directives are out:
 
 Write `local X <const> = …`, `if`, `include(…)` and a function instead.
 
+Four of those are worth naming, because "out" reads harsher than it is:
+`!define`, `!undef`, `!ifdef` and `!ifndef` are not withheld, they are
+*unnecessary*. A top-level `local X <const> = …` **is** a `!define` — that is
+what it emits — and the `!ifndef`/`!define`/`!endif` sandwich that gives one a
+settable default is [`param`](#param), which does the same job and additionally
+rejects a `-D` nobody declared.
+
 The one that is not out is `!addplugindir`, and it is not out because the
 compiler writes it rather than because you may: it has exactly one legal
 position, and a `dir` on a
@@ -1299,6 +1351,7 @@ here so a search for the NSIS name lands somewhere.
 
 | NSIS                                                                         | What writes it                    |
 | ---------------------------------------------------------------------------- | --------------------------------- |
+| `!define`                                                                    | `local X <const> = …`, `param`    |
 | `Goto`                                                                       | `if`, `while`, `break`            |
 | `Call`                                                                       | a call: `f(x)`                    |
 | `Push` / `Pop` / `Exch`                                                      | the calling convention            |

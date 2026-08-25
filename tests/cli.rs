@@ -30,6 +30,11 @@ installer { page.instFiles {}, section(\"Core\", function() detailPrint(\"x\") e
 /// path in a program is resolved against the file that names it, so a program
 /// under test has to live somewhere a relative path would work from.
 fn run(name: &str, source: &str, command: &str) -> (bool, String) {
+    run_with(name, source, command, &[])
+}
+
+/// The same, plus whatever flags the case is about — `-D` so far.
+fn run_with(name: &str, source: &str, command: &str, flags: &[&str]) -> (bool, String) {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("fixtures");
@@ -39,6 +44,7 @@ fn run(name: &str, source: &str, command: &str) -> (bool, String) {
     let output = Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))
         .arg(command)
         .arg(&script)
+        .args(flags)
         .current_dir(&fixtures)
         .output()
         .expect("run installua");
@@ -127,4 +133,72 @@ fn check_writes_no_nsi() {
 
     assert!(output.status.success(), "`check` failed on a clean program");
     assert!(!there, "`check` wrote `check-writes.nsi`");
+}
+
+/// `-D`: the other half of a build parameter, and the half that only exists
+/// here. The library takes a map; turning `NAME=VALUE` into one is `main.rs`'s
+/// whole contribution to the feature, so this is where it can be wrong.
+mod define {
+    use super::*;
+
+    const PARAMETERISED: &str = "\
+local VERSION <const> = param(\"VERSION\", \"1.4.2\")
+attributes { name = \"A\", outFile = \"a.exe\" }
+installer { page.instFiles {}, section(\"Core\", function() detailPrint(VERSION) end) }
+";
+
+    #[test]
+    fn a_define_reaches_the_compile() {
+        let (passed, output) = run_with(
+            "define-emit.lua",
+            PARAMETERISED,
+            "emit",
+            &["--stdout", "-D", "VERSION=2.0.0"],
+        );
+        assert!(passed, "{output}");
+        assert!(output.contains("!define VERSION \"2.0.0\""), "{output}");
+    }
+
+    /// `check` takes it too. It is the gate for the build CI is about to run,
+    /// and a program whose parameters are overridden is a different program:
+    /// checking it without the `-D`s would be checking something else.
+    #[test]
+    fn check_takes_the_same_defines() {
+        let (passed, output) = run_with(
+            "define-check.lua",
+            PARAMETERISED,
+            "check",
+            &["-D", "VERSION=2.0.0"],
+        );
+        assert!(passed, "{output}");
+    }
+
+    /// A name nothing declares stops the build rather than being ignored —
+    /// which is the entire reason parameters are declared in the source.
+    #[test]
+    fn an_unknown_define_fails_the_command() {
+        let (passed, output) = run_with(
+            "define-unknown.lua",
+            PARAMETERISED,
+            "check",
+            &["-D", "VERSOIN=2.0.0"],
+        );
+        assert!(!passed, "an unknown `-D` was accepted:\n{output}");
+        assert!(output.contains("unknown-param"), "{output}");
+    }
+
+    /// And a `-D` with no value is an *invocation* error, not a diagnostic: the
+    /// shape of the flag is this file's business, and there is no program to
+    /// blame for it.
+    #[test]
+    fn a_define_without_a_value_is_refused() {
+        let (passed, output) = run_with(
+            "define-shapeless.lua",
+            PARAMETERISED,
+            "check",
+            &["-D", "VERSION"],
+        );
+        assert!(!passed, "a valueless `-D` was accepted:\n{output}");
+        assert!(output.contains("has no value"), "{output}");
+    }
 }

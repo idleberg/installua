@@ -264,6 +264,18 @@ pub enum Code {
     /// parser limitation.
     IncludeForm,
 
+    // -- build parameters
+    /// A `param(…)` written somewhere it cannot mean anything: inside a body,
+    /// composed into a larger expression, or with a name that is not a string
+    /// literal. A parameter is a *declaration* — it is what `-D` is checked
+    /// against — so it has to be readable without folding anything first.
+    ParamForm,
+    /// A `-D` naming a parameter the program does not declare. An error rather
+    /// than a shrug, because silently ignoring it is precisely the `!ifndef`
+    /// failure mode parameters exist to retire: the build succeeds, the value
+    /// is the default, and nothing says so.
+    UnknownParam,
+
     /// An NSIS instruction that has a Lua spelling instead: `StrCmp` is `==`,
     /// `IntOp` is `+`, `StrCpy` is assignment. Not an unknown name — the
     /// compiler knows exactly what it is, and says what to write.
@@ -319,6 +331,8 @@ impl Code {
         Code::IncludeNotFound,
         Code::IncludeCycle,
         Code::IncludeForm,
+        Code::ParamForm,
+        Code::UnknownParam,
         Code::NsisRetired,
         Code::WrongPlace,
     ];
@@ -365,6 +379,8 @@ impl Code {
             Code::IncludeNotFound => "include-not-found",
             Code::IncludeCycle => "include-cycle",
             Code::IncludeForm => "include-form",
+            Code::ParamForm => "param-form",
+            Code::UnknownParam => "unknown-param",
             Code::NsisRetired => "nsis-retired",
             Code::WrongPlace => "wrong-place",
         }

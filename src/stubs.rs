@@ -624,6 +624,19 @@ fn declarations() -> String {
          -- `lua-language-server` cannot follow the merge itself.\n\
          ---@param path string\n\
          function include(path) end\n\n\
+         -- A build parameter: a `<const>` the invocation may set with\n\
+         -- `installua build … -D NAME=VALUE`. Only ever the whole initialiser of\n\
+         -- a top-level `local … <const>`, because the set of names has to be\n\
+         -- known before anything folds — that is what makes an unrecognised `-D`\n\
+         -- an error rather than a silent default.\n\
+         --\n\
+         -- The default is also the type declaration: `param(\"PORT\", 8080)`\n\
+         -- makes `-D PORT=abc` a diagnostic.\n\
+         ---@generic T: string|integer|boolean\n\
+         ---@param name string\n\
+         ---@param default T\n\
+         ---@return T\n\
+         function param(name, default) end\n\n\
          -- The two iterators, and the halves they run in. `glob` is expanded on\n\
          -- the build machine and its loop is unrolled, so the pattern has to be\n\
          -- known there; `lines` runs at install time, over a handle\n\
@@ -1067,7 +1080,9 @@ pub fn project_meta(sources: &[(String, String)]) -> String {
         let Some(program) = crate::check(source, &mut diags) else {
             continue;
         };
-        let resolved = crate::resolve::resolve(&program, &mut diags);
+        // No `-D`: what this reads is the `func`s and globals a file declares,
+        // and a parameter's *value* changes none of them.
+        let resolved = crate::resolve::resolve(&program, &crate::Options::default(), &mut diags);
 
         for func in resolved.functions.values() {
             let params = func.params.iter().map(|param| param.text.clone()).collect();
@@ -1236,6 +1251,9 @@ const LANGUAGE: &[(&str, &str)] = &[
     ("func", "      - type: string\n      - type: function\n"),
     ("onInit", "      - type: function\n"),
     ("include", "      - type: string\n"),
+    // The default is typed by the declaration and not by selene: `any` is as
+    // much as a positional model can say about a value whose type is the point.
+    ("param", "      - type: string\n      - type: any\n"),
     ("glob", "      - type: string\n"),
     ("lines", "      - type: any\n"),
     ("import", "      - type: string\n"),

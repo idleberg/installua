@@ -158,9 +158,37 @@ pub struct Global {
     pub span: Span,
 }
 
+/// A build parameter: a `<const>` whose value the invocation may set.
+///
+/// The declaration is what makes `-D` checkable, which is the whole of why
+/// parameters are declared in the source rather than listed in
+/// `installua.toml`. NSIS's own idiom is `!ifndef VERSION / !define VERSION
+/// "1.4.2" / !endif`, and its failure mode is that a misspelt `-DVERSOIN`
+/// defines a second thing nobody reads: the build succeeds, the default ships,
+/// and nothing says so. Here the set of names is known, so a `-D` outside it is
+/// an error.
+#[derive(Clone, Debug)]
+pub struct Param {
+    /// The `<const>` it was bound to, which is also the `!define` it becomes.
+    pub bound: String,
+    /// Where the declaration is, for the diagnostic an ill-typed `-D` raises:
+    /// the flag has no span, and the default beside the name is what says what
+    /// type the flag had to be.
+    pub span: Span,
+    /// The value with the override applied, or the default when there was
+    /// none. Kept beside the [`Const`] rather than only inside it so that
+    /// `installua stubs` and a future `--list-params` have something to read.
+    pub value: ConstValue,
+}
+
 #[derive(Debug, Default)]
 pub struct Resolved<'a> {
     pub consts: BTreeMap<String, Const>,
+    /// Build parameters by the name `-D` sets them under — which is the string
+    /// in the `param(…)` call, not the `<const>` it was bound to. The two are
+    /// usually spelled the same and are not required to be: the string is an
+    /// interface to the outside and the local is the program's own.
+    pub params: BTreeMap<String, Param>,
     /// Top-level `<const>` names in **source order**, because each becomes a
     /// `!define` and the preprocessor is strictly sequential. The map is
     /// alphabetical and the output is not.
@@ -185,12 +213,186 @@ impl Resolved<'_> {
     }
 }
 
-pub fn resolve<'a>(program: &'a Program, diags: &mut Diagnostics) -> Resolved<'a> {
+pub fn resolve<'a>(
+    program: &'a Program,
+    options: &crate::Options,
+    diags: &mut Diagnostics,
+) -> Resolved<'a> {
     let mut resolved = Resolved::default();
     top_level(program, &mut resolved, diags);
-    consts(program, &mut resolved, diags);
+    consts(program, &mut resolved, options, diags);
+    unknown_params(&resolved, options, diags);
     globals(program, &mut resolved);
     resolved
+}
+
+/// The name `param(…)` is spelled with. Not in [`crate::builtins`]: there is no
+/// instruction behind it and nothing to lower — a parameter is gone by the time
+/// any body is walked, exactly as a `<const>` is.
+pub const PARAM: &str = "param";
+
+/// Every `-D` that named nothing, reported once the declarations are all in.
+///
+/// [`Span::default`] because the flag genuinely has no source position — the
+/// same shape [`crate::lower::check_required`] uses for the other diagnostic
+/// that is about the program as a whole rather than a line of it.
+fn unknown_params(resolved: &Resolved, options: &crate::Options, diags: &mut Diagnostics) {
+    for name in options.params.keys() {
+        if resolved.params.contains_key(name) {
+            continue;
+        }
+        let mut diagnostic = Diagnostic::error(
+            Code::UnknownParam,
+            Span::default(),
+            format!("`-D {name}` sets a parameter this program does not declare"),
+        );
+        diagnostic = match resolved.params.keys().next() {
+            Some(_) => diagnostic.note(format!(
+                "it declares {}",
+                resolved
+                    .params
+                    .keys()
+                    .map(|declared| format!("`{declared}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            None => diagnostic.note(format!(
+                "it declares none — write `local {name} <const> = {PARAM}(\"{name}\", …)` at the \
+                 top level"
+            )),
+        };
+        diags.push(diagnostic.note(
+            "an ignored `-D` is the `!ifndef` failure this replaces: the build succeeds with the \
+             default and nothing says so",
+        ));
+    }
+}
+
+/// One `<const>` waiting for its value to fold.
+///
+/// `param` is carried alongside rather than resolved first, because the
+/// override is applied at the moment the default folds — which is the only
+/// moment the default has a *type* for the command line's text to be read as.
+struct Pending<'a> {
+    name: &'a Name,
+    /// The initialiser, or for a parameter its default.
+    value: &'a Expr,
+    /// The name `-D` sets this under, when it is a parameter.
+    param: Option<String>,
+}
+
+/// What a top-level `<const>`'s initialiser is.
+enum Initialiser<'a> {
+    /// An ordinary one: fold the expression and that is the value.
+    Value(&'a Expr),
+    /// `param(name, default)`: fold the default, then let `-D name` replace it.
+    Param {
+        name: String,
+        span: Span,
+        default: &'a Expr,
+    },
+    /// A `param(…)` that does not hold together, already reported.
+    Broken,
+}
+
+/// Reads an initialiser, reporting a malformed `param(…)` where it is written.
+///
+/// **Only the whole initialiser.** `param("V", "1") .. "-beta"` is rejected
+/// rather than folded, because a parameter is a declaration and a declaration
+/// has to be readable without evaluating anything around it — that is what lets
+/// `-D` be checked against a known set of names before a single body is walked.
+/// Composition is not lost, only moved one line: the derived value is an
+/// ordinary `<const>` over the parameter's, and resolution is order-free.
+fn initialiser<'a>(value: &'a Expr, diags: &mut Diagnostics) -> Initialiser<'a> {
+    let Expr::Call { callee, args, span } = value else {
+        return buried(value, diags);
+    };
+    if callee.name() != Some(PARAM) {
+        return buried(value, diags);
+    }
+
+    let [Expr::Str(name), default] = args.as_slice() else {
+        diags.push(
+            Diagnostic::error(
+                Code::ParamForm,
+                *span,
+                format!("`{PARAM}` takes a name and a default"),
+            )
+            .note(format!(
+                "write `local X <const> = {PARAM}(\"X\", \"1.4.2\")`"
+            ))
+            .note(
+                "the name has to be a literal, since it is what `-D` is checked against before \
+                 anything is folded",
+            ),
+        );
+        return Initialiser::Broken;
+    };
+
+    Initialiser::Param {
+        name: name.value.clone(),
+        span: *span,
+        default,
+    }
+}
+
+/// An initialiser that is *not* a `param(…)` — unless one is hiding inside it,
+/// in which case that is the mistake and saying "not a build-time constant"
+/// would point at the wrong half of the line.
+fn buried<'a>(value: &'a Expr, diags: &mut Diagnostics) -> Initialiser<'a> {
+    let Some(span) = mentions_param(value) else {
+        return Initialiser::Value(value);
+    };
+    diags.push(
+        Diagnostic::error(
+            Code::ParamForm,
+            span,
+            format!("`{PARAM}` declares a build parameter, so it stands alone"),
+        )
+        .note("split it: `local RAW <const> = param(…)` and then build this value from `RAW`")
+        .note(
+            "a declaration has to be readable before anything folds, or `-D` has nothing to be \
+             checked against",
+        ),
+    );
+    Initialiser::Broken
+}
+
+/// Where a `param(…)` call appears inside `expr`, if one does.
+///
+/// Only the shapes a `<const>` initialiser can be: a table field or a function
+/// body is not one, and a `param` in either is a *body* use, which
+/// [`crate::lower`] reports where it is written.
+fn mentions_param(expr: &Expr) -> Option<Span> {
+    match expr {
+        Expr::Call { callee, args, span } => {
+            if callee.name() == Some(PARAM) {
+                return Some(*span);
+            }
+            args.iter().find_map(mentions_param)
+        }
+        Expr::Binary { lhs, rhs, .. } => mentions_param(lhs).or_else(|| mentions_param(rhs)),
+        Expr::Unary { operand, .. } => mentions_param(operand),
+        _ => None,
+    }
+}
+
+/// `-D NAME=text`, as the type the default declared.
+///
+/// The default is the type declaration — there is nowhere else for one to
+/// live — so `param("PORT", 8080)` makes `-D PORT=abc` an error rather than a
+/// string arriving at an `IntOp`, and `param("QUIET", false)` accepts exactly
+/// the two words that fold to a boolean.
+fn coerce(text: &str, default: &ConstValue) -> Option<ConstValue> {
+    match default {
+        ConstValue::Int(_) => text.parse().ok().map(ConstValue::Int),
+        ConstValue::Bool(_) => match text {
+            "true" => Some(ConstValue::Bool(true)),
+            "false" => Some(ConstValue::Bool(false)),
+            _ => None,
+        },
+        ConstValue::Str(_) => Some(ConstValue::Str(text.to_string())),
+    }
 }
 
 /// Pass 1a: the declarations, collected without looking inside a body.
@@ -248,8 +450,13 @@ fn top_level<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut 
 
 /// Pass 1b: top-level `<const>`s, folded to a fixpoint so that one may refer to
 /// another regardless of the order they were written in.
-fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Diagnostics) {
-    let mut pending: Vec<(&Name, &Expr)> = Vec::new();
+fn consts<'a>(
+    program: &'a Program,
+    resolved: &mut Resolved<'a>,
+    options: &crate::Options,
+    diags: &mut Diagnostics,
+) {
+    let mut pending: Vec<Pending> = Vec::new();
 
     for stmt in &program.block {
         let Stmt::Local {
@@ -332,10 +539,60 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
 
         for (index, name) in names.iter().enumerate() {
             match values.get(index) {
-                Some(value) => {
-                    resolved.const_order.push(name.text.clone());
-                    pending.push((name, value));
-                }
+                Some(value) => match initialiser(value, diags) {
+                    Initialiser::Value(value) => {
+                        resolved.const_order.push(name.text.clone());
+                        pending.push(Pending {
+                            name,
+                            value,
+                            param: None,
+                        });
+                    }
+                    Initialiser::Param {
+                        name: param,
+                        span,
+                        default,
+                    } => {
+                        // Declared twice is a genuine ambiguity rather than a
+                        // tidiness rule: two defaults for one `-D` name have no
+                        // answer, and resolution being order-free means there
+                        // is no later one to let win.
+                        if let Some(previous) = resolved.params.get(&param) {
+                            diags.push(
+                                Diagnostic::error(
+                                    Code::DuplicateBlock,
+                                    span,
+                                    format!("`{param}` is declared as a parameter more than once"),
+                                )
+                                .note(format!(
+                                    "the first one is at line {}, bound to `{}`",
+                                    previous.span.start_line, previous.bound
+                                ))
+                                .note("a parameter has one default, since `-D` sets it once"),
+                            );
+                            continue;
+                        }
+                        resolved.params.insert(
+                            param.clone(),
+                            Param {
+                                bound: name.text.clone(),
+                                span,
+                                // Replaced the moment the default folds. A
+                                // parameter whose default is not constant never
+                                // gets that far and is reported as the `<const>`
+                                // it failed to be.
+                                value: ConstValue::Bool(false),
+                            },
+                        );
+                        resolved.const_order.push(name.text.clone());
+                        pending.push(Pending {
+                            name,
+                            value: default,
+                            param: Some(param),
+                        });
+                    }
+                    Initialiser::Broken => {}
+                },
                 None => diags.push(
                     Diagnostic::error(
                         Code::BadFieldValue,
@@ -351,40 +608,84 @@ fn consts<'a>(program: &'a Program, resolved: &mut Resolved<'a>, diags: &mut Dia
     // A worklist rather than one pass: `local A <const> = B` is legal above `B`,
     // and saying so costs a loop that almost always runs twice.
     loop {
-        let folded: Vec<(String, Const)> = pending
+        let folded: Vec<(String, Const, Option<String>)> = pending
             .iter()
-            .filter_map(|(name, value)| {
-                let value = fold(value, &|n| resolved.consts.get(n).map(|c| c.value.clone()))?;
+            .filter_map(|entry| {
+                let value = fold(entry.value, &|n| {
+                    resolved.consts.get(n).map(|c| c.value.clone())
+                })?;
                 Some((
-                    name.text.clone(),
+                    entry.name.text.clone(),
                     Const {
                         value,
-                        span: name.span,
+                        span: entry.name.span,
                     },
+                    entry.param.clone(),
                 ))
             })
             .collect();
         if folded.is_empty() {
             break;
         }
-        for (name, value) in folded {
-            resolved.consts.insert(name, value);
+        for (name, mut folded, param) in folded {
+            // The override lands here rather than in `fold`, because this is
+            // the first point at which the default has a *type* for the text on
+            // the command line to be read as.
+            if let Some(param) = param {
+                if let Some(text) = options.params.get(&param) {
+                    match coerce(text, &folded.value) {
+                        Some(value) => folded.value = value,
+                        None => diags.push(
+                            Diagnostic::error(
+                                Code::BadFieldValue,
+                                folded.span,
+                                format!("`-D {param}={text}` is not {}", article(&folded.value)),
+                            )
+                            .note(format!(
+                                "the default here is `{}`, and that is what says what type the \
+                                 flag has to be",
+                                folded.value.text()
+                            )),
+                        ),
+                    }
+                }
+                if let Some(entry) = resolved.params.get_mut(&param) {
+                    entry.value = folded.value.clone();
+                }
+            }
+            resolved.consts.insert(name, folded);
         }
-        pending.retain(|(name, _)| !resolved.consts.contains_key(&name.text));
+        pending.retain(|entry| !resolved.consts.contains_key(&entry.name.text));
     }
 
-    for (name, value) in pending {
-        diags.push(
-            Diagnostic::error(
-                Code::BadFieldValue,
-                value.span(),
+    for Pending { name, value, param } in pending {
+        // A parameter whose default did not fold is reported as a parameter:
+        // the `<const>` wording would send the reader looking at the binding,
+        // and the mistake is in the default beside the name.
+        let (what, note) = match &param {
+            Some(param) => (
+                format!("the default for `{param}` is not a build-time constant"),
+                "a parameter's default is the value a build without a `-D` gets, so it has to be \
+                 known here",
+            ),
+            None => (
                 format!("`{}` is not a build-time constant", name.text),
-            )
-            .note(
                 "a `<const>` folds at compile time, so its value has to be a literal or built \
                  from other `<const>`s",
             ),
-        );
+        };
+        diags.push(Diagnostic::error(Code::BadFieldValue, value.span(), what).note(note));
+    }
+}
+
+/// `an integer` / `a boolean` / `a string`, for the ill-typed-`-D` message.
+fn article(value: &ConstValue) -> &'static str {
+    match value {
+        ConstValue::Int(_) => "an integer",
+        ConstValue::Bool(_) => "`true` or `false`",
+        // Unreachable: every text coerces to a string, so a string-defaulted
+        // parameter has no ill-typed value to report.
+        ConstValue::Str(_) => "a string",
     }
 }
 

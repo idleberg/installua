@@ -76,6 +76,15 @@ pub struct Options {
     /// `.installua/headers/*.toml` declared. Defaulting to the builtins alone
     /// is what keeps an in-memory compile working with no directory to read.
     pub declarations: headers::Declarations,
+    /// `-D NAME=VALUE`: what the invocation says a [`resolve::param`]
+    /// declaration's value is, overriding the default written beside it.
+    ///
+    /// Text rather than a typed value, because a command line is text and the
+    /// type is the declaration's to state: `param("PORT", 8080)` says the
+    /// override is an integer, and `-D PORT=abc` is a diagnostic rather than a
+    /// string quietly reaching an `IntOp`. A name nothing declares is a
+    /// diagnostic too — see [`diag::Code::UnknownParam`].
+    pub params: std::collections::BTreeMap<String, String>,
 }
 
 impl Options {
@@ -160,7 +169,7 @@ pub fn compile_with(
         return None;
     }
 
-    let resolved = resolve::resolve(&program, diags);
+    let resolved = resolve::resolve(&program, options, diags);
     if diags.has_errors() {
         return None;
     }

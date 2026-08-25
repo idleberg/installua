@@ -157,6 +157,16 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\ninclude(1)",
     ),
     (
+        Code::ParamForm,
+        "attributes { outFile = \"a.exe\" }\nlocal V <const> = param(\"V\")",
+    ),
+    // The one case whose trigger is the *invocation* rather than the source:
+    // see [`compile_case`], which is where the `-D` comes from.
+    (
+        Code::UnknownParam,
+        "attributes { outFile = \"a.exe\" }\ninstaller { section(\"Core\", function() end), }",
+    ),
+    (
         Code::NsisRetired,
         "attributes { outFile = \"a.exe\" }\n\
          installer { section(\"Core\", function()\n\
@@ -214,6 +224,27 @@ const OVERLONG: &str = concat!(
 /// includes itself, which is the only way to write a cycle small enough to sit
 /// in this table.
 fn compile(source: &str) -> Diagnostics {
+    compile_with(source, BTreeMap::new())
+}
+
+/// One case's compile, which is [`compile`] for all but one of them.
+///
+/// `unknown-param` is raised by a `-D` naming a parameter the program does not
+/// declare, so its trigger is half invocation and half source — there is no
+/// snippet that raises it on its own. The `-D` cannot go into [`compile`] for
+/// every case either: the diagnostic is raised in `resolve`, which stops the
+/// compile before any of the lowering cases reach the pass that raises theirs.
+fn compile_case(code: Code, source: &str) -> Diagnostics {
+    match code {
+        Code::UnknownParam => compile_with(
+            source,
+            BTreeMap::from([("VERSOIN".to_string(), "2.0.0".to_string())]),
+        ),
+        _ => compile(source),
+    }
+}
+
+fn compile_with(source: &str, params: BTreeMap<String, String>) -> Diagnostics {
     let sources = BTreeMap::from([
         ("loop.lua".to_string(), "include \"loop.lua\"\n".to_string()),
         (
@@ -223,6 +254,7 @@ fn compile(source: &str) -> Diagnostics {
     ]);
     let options = installua::Options {
         loader: Loader::Memory(sources),
+        params,
         ..installua::Options::default()
     };
 
@@ -288,7 +320,7 @@ fn every_code_has_a_case() {
 #[test]
 fn every_case_raises_its_code() {
     for (code, source) in CASES {
-        let diags = compile(source);
+        let diags = compile_case(*code, source);
         assert!(
             diags.contains(*code),
             "`{}` was not raised by its own case; got {:?}",

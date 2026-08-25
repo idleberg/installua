@@ -40,6 +40,10 @@ enum Command {
         /// The programs to check
         #[arg(required = true, value_name = "FILE.LUA")]
         files: Vec<PathBuf>,
+
+        /// Set a build parameter, as `build` would
+        #[arg(short = 'D', value_name = "NAME=VALUE")]
+        define: Vec<String>,
     },
 
     /// Compile to .nsi and stop
@@ -102,6 +106,13 @@ struct BuildArgs {
     /// Write here instead of alongside the input
     #[arg(short, long, value_name = "FILE.NSI")]
     output: Option<PathBuf>,
+
+    /// Set a build parameter declared with `param(…)`
+    ///
+    /// Repeatable. A name the program does not declare is an error, not a
+    /// shrug — see the `unknown-param` diagnostic.
+    #[arg(short = 'D', value_name = "NAME=VALUE")]
+    define: Vec<String>,
 }
 
 /// `installua generate`: the maintainer's half, kept out of the help.
@@ -130,7 +141,7 @@ enum Generate {
 
 fn main() -> ExitCode {
     match Cli::parse().command {
-        Command::Check { files } => check(&files),
+        Command::Check { files, define } => check(&files, &define),
         Command::Emit { args, stdout } => build(&args, stdout, false),
         Command::Build { args, stdout } => build(&args, stdout, true),
         Command::Coverage => coverage(),
@@ -148,18 +159,45 @@ fn main() -> ExitCode {
 /// a program checked without it would be checked against a language missing
 /// whatever it declared. Every diagnostic that followed would be about the
 /// wrong thing.
-fn options(input: &Path) -> Option<installua::Options> {
-    let (options, problems) = installua::Options::for_project(input);
-    if problems.is_empty() {
-        return Some(options);
+fn options(input: &Path, define: &[String]) -> Option<installua::Options> {
+    let (mut options, problems) = installua::Options::for_project(input);
+    if !problems.is_empty() {
+        for problem in &problems {
+            eprintln!("installua: {problem}");
+        }
+        return None;
     }
-    for problem in &problems {
-        eprintln!("installua: {problem}");
-    }
-    None
+    options.params = defines(define)?;
+    Some(options)
 }
 
-fn check(files: &[PathBuf]) -> ExitCode {
+/// `-D NAME=VALUE`, split.
+///
+/// Only the split is done here: whether `NAME` is declared and whether `VALUE`
+/// is the type the declaration wants are both questions about the program, so
+/// they are the compiler's and arrive as ordinary diagnostics. What this
+/// rejects is the shape, which is a question about the invocation — hence the
+/// same exit code a bad flag gets.
+///
+/// The `=` is required. NSIS's `-DNAME` defines a bare name, but a parameter
+/// here is typed by its default, and "no value" would have to mean `true` for
+/// one and `""` for another.
+fn defines(define: &[String]) -> Option<std::collections::BTreeMap<String, String>> {
+    let mut params = std::collections::BTreeMap::new();
+    for entry in define {
+        let Some((name, value)) = entry.split_once('=') else {
+            eprintln!("installua: `-D {entry}` has no value; write `-D {entry}=…`");
+            return None;
+        };
+        if let Some(previous) = params.insert(name.to_string(), value.to_string()) {
+            eprintln!("installua: `-D {name}` was given twice, as `{previous}` and `{value}`");
+            return None;
+        }
+    }
+    Some(params)
+}
+
+fn check(files: &[PathBuf], define: &[String]) -> ExitCode {
     let mut failed = false;
     for path in files {
         let Some(source) = read(path) else {
@@ -179,7 +217,10 @@ fn check(files: &[PathBuf]) -> ExitCode {
         // Following `include` for the same reason it always did: a name an
         // included file declares is not an error, and a `check` that said it
         // was would be worse than no `check` at all.
-        let Some(options) = options(path) else {
+        // The same `-D`s a build would pass, because a program whose parameters
+        // are overridden is a different program to check: `check` is the gate
+        // for exactly the build CI is about to run.
+        let Some(options) = options(path, define) else {
             return ExitCode::from(2);
         };
 
@@ -212,7 +253,7 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
     // Relative paths in the source resolve against the *source's* directory,
     // not the shell's: a `glob` means the same thing wherever the build is run
     // from, which is what makes the output reproducible.
-    let Some(options) = options(input) else {
+    let Some(options) = options(input, &args.define) else {
         return ExitCode::from(2);
     };
 

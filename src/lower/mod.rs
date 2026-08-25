@@ -7475,6 +7475,34 @@ impl BodyLowerer<'_, '_> {
             return;
         }
 
+        // `param` resolves to nothing on purpose: it is read by
+        // [`crate::resolve`] where a `<const>` is declared and is gone by the
+        // time any body is walked. Without this the one construct whose whole
+        // job is to be a declaration gets reported as a missing function.
+        if name.text == crate::resolve::PARAM {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::ParamForm,
+                    name.span,
+                    format!(
+                        "`{}` declares a build parameter, so it stands alone",
+                        name.text
+                    ),
+                )
+                .note(format!(
+                    "write `local {0} <const> = {1}(\"{0}\", …)` at the top level, and read the \
+                     `<const>` here",
+                    "VERSION",
+                    crate::resolve::PARAM
+                ))
+                .note(
+                    "the set of parameter names has to be known before anything folds, or `-D` \
+                     has nothing to be checked against",
+                ),
+            );
+            return;
+        }
+
         let mut diagnostic = Diagnostic::error(
             Code::UndefinedName,
             name.span,

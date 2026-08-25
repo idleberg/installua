@@ -236,7 +236,7 @@ therefore binds to the default target and silently breaks every
 now has a second line depending on it — a `raw` that flips `Unicode` to false
 after slot 1b desynchronises the target.
 
-### Phase 1 — Build parameters
+### Phase 1 — Build parameters (done)
 
 **Why first:** 467 uses across 101 files, the largest `!`-idiom in the corpus,
 and it has *zero* interaction with the spine. Frontend and CLI only. Nothing in
@@ -266,6 +266,30 @@ use.
 needs rewording rather than editing: for `!define`/`!ifndef`/`!undef` the answer
 becomes "you do not need them", not "they are rejected". Census-visible — those
 are `directive(…)` rows in `src/table/overlay.rs`.
+
+**Two things the plan did not say, decided in the writing.**
+
+*The default is the type declaration.* There is nowhere else for one to live,
+and without it `-D PORT=abc` against `param("PORT", 8080)` would reach an
+`IntOp` as a string and NSIS would read it as zero. So the override text is
+coerced against the folded default and an ill-typed one is an error — which is
+also why the override is applied inside the `<const>` worklist rather than in
+`fold`: that is the first moment the default has a type.
+
+*`param` is a declaration, not an expression.* Legal only as the whole
+initialiser of a top-level `local … <const>`. Composition moves one line down
+(`local FULL <const> = VERSION .. "-win64"`), which costs nothing because
+resolution is order-free — and the gain is that the set of parameter names is
+known before anything folds, which is the only reason `-D` can be checked at
+all. A `param` in a body or buried in a larger expression gets its own
+`param-form` diagnostic rather than "not defined" or "not a build-time
+constant", both of which point at the wrong half of the line.
+
+The census did not move: `directive(…)` carries no reason string, so no bucket
+changed and `tests/golden/coverage.txt` is untouched. The reference's directive
+paragraph was reworded, and the "written by the compiler" table gained a
+`!define` row — a top-level `<const>` already emitted one, and a search for the
+NSIS name had nowhere to land.
 
 ### Phase 2 — Top-level `raw` with anchors
 
@@ -362,8 +386,8 @@ the way `FileFunc` and `WordFunc` already are. One at a time, on evidence.
 
 | # | Decision | Recommendation | Blocks |
 | ---: | --- | --- | --- |
-| 1 | Params declared in-source or in `installua.toml`? | in-source `param(name, default)` | Phase 1 |
-| 2 | Undeclared `-D`: error or ignored? | error | Phase 1 |
+| 1 | ~~Params declared in-source or in `installua.toml`?~~ | **closed: in-source.** `param(name, default)`, as the whole initialiser of a top-level `<const>` — which is what gives `-D` a set of names to be checked against | — |
+| 2 | ~~Undeclared `-D`: error or ignored?~~ | **closed: error.** `unknown-param`, naming the parameters that do exist | — |
 | 3 | Anchor vocabulary — two, or more from the start? | two (`head`, `tail`), grow on evidence | Phase 2 |
 | 4 | ~~Is a non-`NSISDIR` plugin directory reachable today?~~ | **closed: no.** A `dir` key on the `[[plugin]]` declaration, emitted by `lower::reserved` as `!addplugindir` at slot 1b | — |
 | 5 | ~~Is the `dir` key per-`[[plugin]]` block, or one project-wide list?~~ | **closed: per-block.** It sits with the declaration it belongs to, and only a plugin the program *calls* emits a line | — |
