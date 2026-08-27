@@ -16,13 +16,19 @@ use installua::headers::{Declarations, Problem};
 use installua::{Options, stubs};
 
 /// One declaration file, with both shapes a project writes.
+///
+/// `nsisunz` deliberately: it is a real plugin (21 of the 984 corpus scripts)
+/// that this compiler does **not** ship a declaration for, so the file below is
+/// one a project would actually have to write. The example used to be `Nsis7z`,
+/// which now ships declared — and a test whose "undeclared" plugin is declared
+/// proves the opposite of what it says.
 const DECLARED: &str = r#"
 # A plugin someone shipped: two inputs, one value pushed.
 [[plugin]]
-name = "Nsis7z"
-method = "extractWithDetails"
-nsis = "Nsis7z::ExtractWithDetails"
-params = ["path", "string"]
+name = "nsisunz"
+method = "unzip"
+nsis = "nsisunz::Unzip"
+params = ["path", "path"]
 outputs = ["string"]
 
 [[header]]
@@ -67,7 +73,7 @@ fn errors(source: &str) -> String {
 fn program(body: &str) -> String {
     format!(
         "attributes {{ outFile = \"a.exe\", name = \"a\" }}\n\
-         local sevenZip = plugin \"Nsis7z\"\n\
+         local nsisunz = plugin \"nsisunz\"\n\
          local textFunc = import \"TextFunc\"\n\
          installer {{\n\
            section(\"Core\", function() {body} end),\n\
@@ -77,16 +83,16 @@ fn program(body: &str) -> String {
 
 /// The line a declared plugin call becomes, exactly. A plugin takes its
 /// arguments inline and pushes its outputs, so it is one line plus a `Pop`
-/// each — and the `path` position is why the first argument comes out with a
-/// backslash it was not written with.
+/// each — and the `path` positions are why both arguments come out with
+/// backslashes they were not written with.
 #[test]
 fn a_declared_plugin_call_emits_the_line_the_declaration_names() {
     let output = build(&program(
-        "local out = sevenZip.extractWithDetails(\"data/archive.7z\", \"\")\ndetailPrint(out)",
+        "local out = nsisunz.unzip(\"data/archive.zip\", \"out/here\")\ndetailPrint(out)",
     ));
     let lines: Vec<&str> = output.lines().map(str::trim).collect();
     assert!(
-        lines.contains(&"Nsis7z::ExtractWithDetails \"data\\archive.7z\" \"\""),
+        lines.contains(&"nsisunz::Unzip \"data\\archive.zip\" \"out\\here\""),
         "{output}"
     );
 }
@@ -121,7 +127,7 @@ fn a_declared_macro_takes_its_output_as_a_trailing_register() {
 #[test]
 fn binding_more_values_than_the_declaration_pushes_is_an_error() {
     let rendered = errors(&program(
-        "local a, b = sevenZip.extractWithDetails(\"data/x.7z\", \"\")",
+        "local a, b = nsisunz.unzip(\"data/x.zip\", \"out\")",
     ));
     assert!(
         rendered.contains("pushes 1 value(s), and 2 are being bound"),
@@ -131,15 +137,12 @@ fn binding_more_values_than_the_declaration_pushes_is_an_error() {
 
 #[test]
 fn a_method_nobody_declared_names_the_directory_that_would_declare_it() {
-    let rendered = errors(&program("sevenZip.extract(\"data/x.7z\")"));
+    let rendered = errors(&program("nsisunz.unzipToLog(\"data/x.zip\", \"out\")"));
     assert!(
-        rendered.contains("`Nsis7z` declares no `extract`"),
+        rendered.contains("`nsisunz` declares no `unzipToLog`"),
         "{rendered}"
     );
-    assert!(
-        rendered.contains("it declares `extractWithDetails`"),
-        "{rendered}"
-    );
+    assert!(rendered.contains("it declares `unzip`"), "{rendered}");
 
     // And a plugin nobody has declared at all names the file that would fix it,
     // which is the whole discoverability of the format.
@@ -251,17 +254,17 @@ fn a_declared_plugin_is_typed_in_the_stub() {
     let meta = stubs::meta(&declared());
 
     assert!(
-        meta.contains("---@class installua.Plugin.Nsis7z\n"),
+        meta.contains("---@class installua.Plugin.nsisunz\n"),
         "{meta}"
     );
     assert!(
-        meta.contains("function installua_Plugin_Nsis7z.extractWithDetails(a1, a2) end"),
+        meta.contains("function installua_Plugin_nsisunz.unzip(a1, a2) end"),
         "{meta}"
     );
-    // The literal-typed overload is what makes `plugin "Nsis7z"` return that
+    // The literal-typed overload is what makes `plugin "nsisunz"` return that
     // class rather than a bare `table`.
     assert!(
-        meta.contains("---@overload fun(name: '\"Nsis7z\"'): installua.Plugin.Nsis7z"),
+        meta.contains("---@overload fun(name: '\"nsisunz\"'): installua.Plugin.nsisunz"),
         "{meta}"
     );
     assert!(
@@ -273,7 +276,7 @@ fn a_declared_plugin_is_typed_in_the_stub() {
     // `local a, b = …` is checked by the editor and the compiler with one count
     // between them.
     let method = meta
-        .split("-- `Nsis7z::ExtractWithDetails`\n")
+        .split("-- `nsisunz::Unzip`\n")
         .nth(1)
         .and_then(|rest| rest.split("function ").next())
         .unwrap_or_default();

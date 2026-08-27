@@ -1,20 +1,10 @@
-# AdvSplash, which ships with NSIS: Splash plus fading and a transparent
-# colour.
+# AdvSplash, ships with NSIS: <https://nsis.sourceforge.io/AdvSplash_plug-in>.
 #
-# Five pops, one push, read from `Contrib/AdvSplash/advsplash.c`. The parameter
-# order is the pop order and nothing else states it.
+# See docs/plugin-reference.md.
 
 [[plugin]]
 name = "AdvSplash"
 method = "show"
-# The plugin's own readme writes `advsplash::show`; NSIS matches the namespace
-# case-insensitively, and this spells it the way the DLL is named so that the
-# emitted call and the `ReserveFile /plugin AdvSplash.dll` beside it agree.
 nsis = "AdvSplash::show"
-# delay, fade in, fade out, key colour, bitmap without its extension. The fades
-# are *not* counted inside the delay, which is the mistake this comment exists
-# to prevent. The key colour is `0xRRGGBB` or `-1` for no transparency — signed
-# for that `-1`, which is why it is not `uint` beside the three durations.
 params = ["uint", "uint", "uint", "int", "path"]
-# As `Splash.show`: `1` closed early, `0` normal, `-1` error.
 outputs = ["int"]

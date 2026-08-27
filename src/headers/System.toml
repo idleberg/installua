@@ -1,12 +1,11 @@
-# System, which ships with NSIS.
+# System, ships with NSIS: <https://nsis.sourceforge.io/System_plug-in>.
+#
+# See docs/plugin-reference.md. `outputs` is empty on purpose: `System::Call`'s
+# count is in its signature, one per `.s`, and the lowering counts it there.
 
 [[plugin]]
 name = "System"
 method = "call"
 nsis = "System::Call"
 params = ["string"]
-# Empty on purpose, and the one entry whose count is *not* read from here:
-# `System::Call`'s outputs are in its signature, one per `.s`, and the lowering
-# counts them there. Parsing the rest of a signature — which would narrow the
-# clobber set from "everything" — is deferred.
 outputs = []

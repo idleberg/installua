@@ -33,6 +33,21 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("walkers", &[]),
 ];
 
+/// Goldens tier 3 cannot reach, and the reason is a missing file rather than a
+/// missing feature.
+///
+/// A plugin call assembles only if the DLL is in `NSISDIR/Plugins`, and the
+/// third-party ones are not there on any machine — `makensis` stops at *Plugin
+/// not found* before it has judged a single line of what `thirdparty.nsi` is
+/// testing. Vendoring five DLLs into this repository to get a green tier 3
+/// would be checking in binaries to prove NSIS can open a file.
+///
+/// So the count is checked and the assembly is not, and that trade is stated
+/// here rather than hidden by an allowlist: what these goldens assert is the
+/// `Pop` count, which is exactly the half tier 3 was never going to catch.
+/// `makensis` accepts a wrong count as readily as a right one.
+const TIER2_ONLY: &[(&str, &[Code])] = &[("thirdparty", &[])];
+
 /// Files tier 3 needs on disk beside the script, because NSIS reads them at
 /// *assembly* time rather than at install time: `LicenseData` opens the licence
 /// and `CheckBitmap` loads the bitmap while `makensis` is still running. The
@@ -66,7 +81,7 @@ fn build(name: &str, source: &str, expected: &[Code]) -> String {
 
 #[test]
 fn goldens_match_their_expected_output() {
-    for (name, expected) in GOLDENS {
+    for (name, expected) in GOLDENS.iter().chain(TIER2_ONLY) {
         let source = std::fs::read_to_string(golden().join(format!("{name}.lua")))
             .unwrap_or_else(|_| panic!("the source for {name}"));
         let want = std::fs::read_to_string(golden().join(format!("{name}.nsi")))

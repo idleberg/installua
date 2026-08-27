@@ -1,23 +1,15 @@
 # nsProcess, third-party: <https://nsis.sourceforge.io/NsProcess_plugin>.
 #
-# Checked against the plugin's own source rather than its wiki page: each of the
-# three pops one string and pushes one `pushint`, which is what makes the count
-# below a fact instead of a reading of the documentation.
+# See docs/plugin-reference.md.
 #
-# `_Unload` is deliberately not declared. It exists so that a script using
-# `/NOUNLOAD` can release the DLL at the end, and Installua emits no
-# `/NOUNLOAD` — NSIS unloads after every call, which is also why NSIS retired
-# `SetPluginUnload`.
+# Absent: `_Unload`, which exists for `/NOUNLOAD` callers; Installua emits no
+# `/NOUNLOAD`.
 
 [[plugin]]
 name = "nsProcess"
 method = "findProcess"
 nsis = "nsProcess::_FindProcess"
 params = ["string"]
-# `0` found, `603` not running, and a documented list of failures above 600.
-# `uint` rather than `string`, because every code is a non-negative number and
-# `if code == 0` is the whole point of the call — a string would compile that
-# comparison as text.
 outputs = ["uint"]
 
 [[plugin]]
@@ -29,8 +21,6 @@ outputs = ["uint"]
 
 [[plugin]]
 name = "nsProcess"
-# Closes the process's windows and waits a few seconds before terminating it,
-# which is the difference from `killProcess` and the reason to prefer it.
 method = "closeProcess"
 nsis = "nsProcess::_CloseProcess"
 params = ["string"]

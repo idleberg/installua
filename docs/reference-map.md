@@ -1215,7 +1215,7 @@ compiler reserves the DLL when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
-Ships declared, all of it read from each plugin's own source rather than its
+Ten that ship with NSIS, read from each plugin's own source rather than its
 wiki page:
 
 | Plugin      | Methods                                                                                    |
@@ -1230,11 +1230,31 @@ wiki page:
 | `Banner`    | `.show`, `.getWindow`, `.destroy`                                                           |
 | `Splash`    | `.show` → `1` closed early, `0` timed out, `-1` error                                       |
 | `AdvSplash` | `.show` — Splash plus fades and a transparent colour                                        |
-| `nsProcess` | `.findProcess`, `.killProcess`, `.closeProcess` — third-party, vendored as the worked example |
 
-Four that ship with NSIS are **deliberately not declared**, and the reasons are
-in [Plugins with no declaration](#plugins-with-no-declaration). Anything else —
-every third-party DLL — is declared by the project in
+And six third-party plugins, on the evidence of a scan of 984 real-world
+scripts. These are **declarations, not bundled DLLs** — the plugin is still
+yours to install, and the file here only supplies the count:
+
+| Plugin           | Scripts | Methods                                                                                    |
+| ---------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `EnVar`          | 95      | `.setHKCU`, `.setHKLM`, `.check`, `.addValue`, `.addValueEx`, `.setValue`, `.setValueEx`, `.deleteValue`, `.delete`, `.update` |
+| `SimpleSC`       | 61      | `.installService`, `.removeService`, `.startService`, `.stopService`, `.existsService`, `.serviceIsRunning`, `.getServiceStatus`, `.setServiceDescription`, `.setServiceStartType`, `.setServiceFailure` |
+| `nsProcess`      | 25      | `.findProcess`, `.killProcess`, `.closeProcess`                                            |
+| `AccessControl`  | 111     | `.getCurrentUserName`, `.nameToSid` — and *only* those two; see below                       |
+| `Nsis7z`         | 5       | `.extract`, `.extractWithDetails` — neither pushes anything at all                          |
+| `nsisFirewall`   | 1       | `.addAuthorizedApplication`, `.removeAuthorizedApplication` — the pre-Vista firewall API     |
+
+The two counts at the bottom are not typos. `nsisFirewall` ships on **arity**
+rather than popularity — two methods, fixed positions, one code each — because
+the rule that governs this list puts the undiscoverable half first. And
+`AccessControl` is the reverse: 111 scripts, of which 109 call something that
+cannot be declared at all.
+
+Four plugins that ship with NSIS, and most of `AccessControl`, are
+**deliberately not declared**; the reasons are in
+[Plugins with no declaration](#plugins-with-no-declaration), and
+[plugin-reference.md](plugin-reference.md) is the per-method detail for the
+third-party set. Anything else is declared by the project in
 [`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header), which
 is what supplies the output count nothing can ask the DLL for.
 
@@ -1432,12 +1452,12 @@ the editor stubs and the linter alike. The file name is yours; the extension is
 `.toml`.
 
 ```toml
-# .installua/headers/nsis7z.toml
+# .installua/headers/nsisunz.toml
 [[plugin]]
-name = "Nsis7z"                       # what `plugin "…"` is given
-method = "extractWithDetails"         # what you call it
-nsis = "Nsis7z::ExtractWithDetails"   # what NSIS is given
-params = ["path", "string"]           # positions, in order
+name = "nsisunz"                      # what `plugin "…"` is given
+method = "unzip"                      # what you call it
+nsis = "nsisunz::Unzip"               # what NSIS is given
+params = ["path", "path"]             # positions, in order
 outputs = ["string"]                  # values pushed, in `Pop` order
 dir = "vendor/plugins"                # only if the DLL is not in NSISDIR
 
@@ -1627,6 +1647,25 @@ that needs one goes.
 `InstallOptions` and `nsDialogs` are not in that list because they are not
 absences: the first is superseded by [`page.custom`](#windows-and-controls) and the
 second is what `page.custom` emits.
+
+#### Third-party plugins that stay out
+
+The same decision, made against a scan of 984 real-world scripts. Each of these
+is common enough to have been considered and turned down for a stated reason —
+and every one of those reasons is about the **declaration format** rather than
+about the plugin, which is what makes the list worth keeping. All remain
+callable through [`raw`](#raw), and any of them can be declared by a project
+in five lines of [its own `.toml`](#declaring-a-third-party-plugin-or-header).
+
+| Plugin                   | Scripts | Why not, and what to write instead                                                                                                                                                                                                                                                        |
+| ------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AccessControl`, all but `.getCurrentUserName` and `.nameToSid` | 111 | Read from `AccessControl.cpp`, because the readme and the wiki page are both wrong about the stack. The mutators and the `Get*Owner`/`Get*Group` readers push a description and then `"error"` on top of it, so one value on success and two on a diagnosed failure — the same shape as `StartMenu::Select` above. `.sidToName` looks declarable and is not: two on success, one on a failed lookup. |
+| `Registry`               | 40      | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, not a raw plugin call — and that form needs a trailing `${registry::Unload}`, which is behaviour rather than arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40.                                          |
+| `SimpleSC.getErrorMessage` | 61    | Takes its argument by `Push` rather than inline: `Push $code` / `SimpleSC::GetErrorMessage` / `Pop $msg`. `params` become the arguments written *after* `Plugin::Method`, so the format has no spelling for it. Three lines of `raw`.                                                        |
+| `LockedList`             | 0       | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature.                                                                                                                                                                             |
+| `Crypto`                 | 0       | Fails the *common* half of the rule outright.                                                                                                                                                                                                                                             |
+| `Nsis7z.extractWithCallback` | 5   | NSIS hands a callback its arguments in registers it names; that map is behaviour and lives in `src/lower/callback.rs`. The same reason the six `FileFunc`/`TextFunc` callback macros give — and, like them, it means a third-party callback cannot be declared at all.                             |
+| `SimpleFC`               | 24      | The maintained successor to `nsisFirewall`, and not declared only because its methods have not been measured — the one entry here that is a gap rather than a decision.                                                                                                                    |
 
 ### Rejected NSIS commands
 

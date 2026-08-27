@@ -1,0 +1,73 @@
+# EnVar, third-party: <https://github.com/GsNSIS/EnVar>.
+#
+# Per-method detail and the sourcing: docs/plugin-reference.md.
+
+[[plugin]]
+name = "EnVar"
+method = "setHKCU"
+nsis = "EnVar::SetHKCU"
+params = []
+outputs = []
+
+[[plugin]]
+name = "EnVar"
+method = "setHKLM"
+nsis = "EnVar::SetHKLM"
+params = []
+outputs = []
+
+[[plugin]]
+name = "EnVar"
+method = "check"
+nsis = "EnVar::Check"
+params = ["string", "path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "EnVar"
+method = "addValue"
+nsis = "EnVar::AddValue"
+params = ["string", "path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "EnVar"
+method = "addValueEx"
+nsis = "EnVar::AddValueEx"
+params = ["string", "path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "EnVar"
+method = "setValue"
+nsis = "EnVar::SetValue"
+params = ["string", "path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "EnVar"
+method = "setValueEx"
+nsis = "EnVar::SetValueEx"
+params = ["string", "path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "EnVar"
+method = "deleteValue"
+nsis = "EnVar::DeleteValue"
+params = ["string", "path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "EnVar"
+method = "delete"
+nsis = "EnVar::Delete"
+params = ["string"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "EnVar"
+method = "update"
+nsis = "EnVar::Update"
+params = ["string", "string"]
+outputs = ["uint"]

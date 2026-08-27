@@ -195,11 +195,18 @@ impl std::fmt::Display for Problem {
 /// It stays because it is now documented and called; the rule is what the
 /// *next* entry is measured against.
 const SHIPPED: &[(&str, &str)] = &[
+    (
+        "AccessControl.toml",
+        include_str!("headers/AccessControl.toml"),
+    ),
     ("AdvSplash.toml", include_str!("headers/AdvSplash.toml")),
     ("Banner.toml", include_str!("headers/Banner.toml")),
     ("Dialer.toml", include_str!("headers/Dialer.toml")),
+    ("EnVar.toml", include_str!("headers/EnVar.toml")),
     ("FileFunc.toml", include_str!("headers/FileFunc.toml")),
     ("NSISdl.toml", include_str!("headers/NSISdl.toml")),
+    ("Nsis7z.toml", include_str!("headers/Nsis7z.toml")),
+    ("SimpleSC.toml", include_str!("headers/SimpleSC.toml")),
     ("Splash.toml", include_str!("headers/Splash.toml")),
     ("System.toml", include_str!("headers/System.toml")),
     ("TextFunc.toml", include_str!("headers/TextFunc.toml")),
@@ -209,6 +216,10 @@ const SHIPPED: &[(&str, &str)] = &[
     ("WordFunc.toml", include_str!("headers/WordFunc.toml")),
     ("nsExec.toml", include_str!("headers/nsExec.toml")),
     ("nsProcess.toml", include_str!("headers/nsProcess.toml")),
+    (
+        "nsisFirewall.toml",
+        include_str!("headers/nsisFirewall.toml"),
+    ),
 ];
 
 /// Where a project's own declarations live, relative to its root.

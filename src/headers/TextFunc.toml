@@ -1,28 +1,13 @@
-# TextFunc.nsh, which ships with NSIS.
+# TextFunc.nsh, ships with NSIS: <https://nsis.sourceforge.io/Docs/AppendixE.html#E.2>.
 #
-# Reading and rewriting files on the target at install time, which is the job
-# `glob` cannot do: `glob` walks the *build* machine and unrolls the result
-# before anything ships.
+# See docs/header-reference.md.
 #
-# Four of these take a **function address**: `LineFind`, `FileReadFromEnd`,
-# `TextCompare` and `TextCompareS`. Their `params` end in `callback`, which
-# says a function goes there and nothing else — which register each argument
-# arrives in is behaviour, and behaviour lives in `src/lower/callback.rs`.
-#
-# Three of the four are `for … in` loops. `lineFind` is not, and that is the
-# one interesting difference in this file: its callback returns the line to
-# write, and "and this is the new value" is not something a loop body can say.
+# `lineFind`, `fileReadFromEnd`, `textCompare` and `textCompareS` take a
+# callback: `params` says only that a function goes there, and the register map
+# is behaviour, in `src/lower/callback.rs`.
 
 [[header]]
 name = "TextFunc"
-# `textFunc.lineFind(input, output, "1:-1", function(line, number) … end)` —
-# the whole file, one line at a time, with the callback deciding what lands in
-# the output.
-#
-# Three answers rather than two, which is why this is not a loop: returning a
-# string writes it, returning `skip` drops the line, and returning `stop` ends
-# the walk. The range is `first:last`, negative counting from the end, and
-# `/NUL` as the output writes nothing at all — a read-only pass.
 method = "lineFind"
 nsis = "LineFind"
 params = ["path", "path", "string", "callback"]
@@ -30,9 +15,6 @@ outputs = []
 
 [[header]]
 name = "TextFunc"
-# `for line, remaining, number in textFunc.fileReadFromEnd(log)` — backwards
-# from the last line. `remaining` counts down and `number` counts up from the
-# start of the file, so "the last ten" and "line 90" both have a name.
 method = "fileReadFromEnd"
 nsis = "FileReadFromEnd"
 params = ["path", "callback"]
@@ -40,13 +22,6 @@ outputs = []
 
 [[header]]
 name = "TextFunc"
-# `for line, number, other, match in textFunc.textCompare(a, b, "FastDiff")`.
-# `other` is the second file's line and `match` its number, `0` when the line
-# matched nothing — the pair that makes this a diff and not a walk.
-#
-# The option picks what the callback is called for: `FastDiff` and `SlowDiff`
-# fire on lines that differ, `FastEqual` and `SlowEqual` on lines that agree.
-# Slow compares every line against every line; fast walks both in step.
 method = "textCompare"
 nsis = "TextCompare"
 params = ["path", "path", "string", "callback"]
@@ -61,11 +36,6 @@ outputs = []
 
 [[header]]
 name = "TextFunc"
-# One line out of a file, by number. Negative counts from the end, so `-1` is
-# the last line, and that is why the number is a signed `int` — the macro runs
-# `IntOp $1 $1 + 0` on it and then compares it against zero.
-#
-# Line 0 does not exist: numbering starts at 1, and 0 sets the error flag.
 method = "lineRead"
 nsis = "LineRead"
 params = ["path", "int"]
@@ -73,10 +43,6 @@ outputs = ["string"]
 
 [[header]]
 name = "TextFunc"
-# How many lines the file has. `uint` for the same reason `getSize` is one: a
-# count of lines read cannot go negative, so `lines // 2` needs no sign fixup.
-# The error path writes an empty string rather than a number, and the error
-# flag is what says so — the same arrangement `getSize` has.
 method = "lineSum"
 nsis = "LineSum"
 params = ["path"]
@@ -84,12 +50,6 @@ outputs = ["uint"]
 
 [[header]]
 name = "TextFunc"
-# `fileJoin(first, second, output)` — writes `first` then `second` into
-# `output`. Three paths in and **nothing out**: the result is the file, and a
-# program that tries to read a return value here is reading the stack.
-#
-# An empty third argument appends `second` onto `first` in place, which is the
-# common call and the one that makes the missing output easy to overlook.
 method = "fileJoin"
 nsis = "FileJoin"
 params = ["path", "path", "path"]
@@ -97,9 +57,6 @@ outputs = []
 
 [[header]]
 name = "TextFunc"
-# The `name=value` file, without an INI's sections — `configRead(file, "Port=")`
-# answers with what followed. The entry carries its own separator, so the `=`
-# is part of the string a caller passes rather than something the macro adds.
 method = "configRead"
 nsis = "ConfigRead"
 params = ["path", "string"]
@@ -107,14 +64,6 @@ outputs = ["string"]
 
 [[header]]
 name = "TextFunc"
-# The same call, case-sensitively; `Port=` and `port=` stop being one entry.
-#
-# NSIS ships these as two macros with identical arguments, so they are two
-# methods here — the format has no flag that could join them. And note which
-# way round it is: the unsuffixed name is the case-**in**sensitive one, the
-# opposite of `==`, which lowers to `StrCmpS` because Lua's `==` is
-# case-sensitive. These names follow NSIS because `import` is the NSIS-shaped
-# surface, where the name a reader arrives with should be the one that works.
 method = "configReadS"
 nsis = "ConfigReadS"
 params = ["path", "string"]
@@ -122,13 +71,6 @@ outputs = ["string"]
 
 [[header]]
 name = "TextFunc"
-# `configWrite(file, "Port=", "8080")`, answering `"SAME"`, `"CHANGED"`,
-# `"ADDED"` or `"DELETED"` — deleted because an empty value removes the line
-# rather than blanking it, which is the one behaviour here that a caller will
-# not guess.
-#
-# A `string` and not four cases the compiler knows: it is the word the macro
-# leaves in the register, and the error path leaves an empty one.
 method = "configWrite"
 nsis = "ConfigWrite"
 params = ["path", "string", "string"]
@@ -143,9 +85,6 @@ outputs = ["string"]
 
 [[header]]
 name = "TextFunc"
-# In place, and only two spellings: `"OemToChar"` or `"CharToOem"`. Anything
-# else sets the error flag, which is why the format is a `string` rather than
-# something the declaration could narrow — the macro checks it at install time.
 method = "fileRecode"
 nsis = "FileRecode"
 params = ["path", "string"]
@@ -153,9 +92,6 @@ outputs = []
 
 [[header]]
 name = "TextFunc"
-# The odd one: despite NSIS naming the argument `_FILE`, this trims a
-# **string**, not a file. It strips trailing `$\r` and `$\n` from a value, and
-# it exists because `fileRead` hands back the line ending along with the line.
 method = "trimNewLines"
 nsis = "TrimNewLines"
 params = ["string"]

@@ -1,0 +1,80 @@
+# NSIS Simple Service, third-party:
+# <https://nsis.sourceforge.io/NSIS_Simple_Service_Plugin>.
+#
+# Per-method detail and the sourcing: docs/plugin-reference.md.
+#
+# Absent:
+# - `GetErrorMessage`, which takes its argument by `Push` rather than inline and
+#   so has no spelling here. Three lines of `raw`.
+# - The ~20 further methods the page documents, none of which has a call site in
+#   the 984-script corpus. Five lines each in a project's own `.installua/headers/`.
+
+[[plugin]]
+name = "SimpleSC"
+method = "installService"
+nsis = "SimpleSC::InstallService"
+params = ["string", "string", "int", "int", "string", "string", "string", "string"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "removeService"
+nsis = "SimpleSC::RemoveService"
+params = ["string"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "startService"
+nsis = "SimpleSC::StartService"
+params = ["string", "string", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "stopService"
+nsis = "SimpleSC::StopService"
+params = ["string", "int", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "existsService"
+nsis = "SimpleSC::ExistsService"
+params = ["string"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "serviceIsRunning"
+nsis = "SimpleSC::ServiceIsRunning"
+params = ["string"]
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "getServiceStatus"
+nsis = "SimpleSC::GetServiceStatus"
+params = ["string"]
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "setServiceDescription"
+nsis = "SimpleSC::SetServiceDescription"
+params = ["string", "string"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "setServiceStartType"
+nsis = "SimpleSC::SetServiceStartType"
+params = ["string", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleSC"
+method = "setServiceFailure"
+nsis = "SimpleSC::SetServiceFailure"
+params = ["string", "int", "string", "string", "int", "int", "int", "int", "int", "int"]
+outputs = ["int"]

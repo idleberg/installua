@@ -1,0 +1,20 @@
+# Nsis7z, third-party: <https://nsis.sourceforge.io/Nsis7z_plug-in>.
+#
+# See docs/plugin-reference.md.
+#
+# Absent: `ExtractWithCallback` — a callback's register map is behaviour, and
+# lives in `src/lower/callback.rs`; no `.toml` can declare one.
+
+[[plugin]]
+name = "Nsis7z"
+method = "extract"
+nsis = "Nsis7z::Extract"
+params = ["path"]
+outputs = []
+
+[[plugin]]
+name = "Nsis7z"
+method = "extractWithDetails"
+nsis = "Nsis7z::ExtractWithDetails"
+params = ["path", "string"]
+outputs = []

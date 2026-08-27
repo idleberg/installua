@@ -1,10 +1,12 @@
-# nsExec, which ships with NSIS.
+# nsExec, ships with NSIS: <https://nsis.sourceforge.io/NsExec_plug-in>.
+#
+# See docs/plugin-reference.md.
+#
+# Absent: `Exec` and `ExecToLog` (one code each) — undeclared, not undeclarable.
 
 [[plugin]]
 name = "nsExec"
 method = "execToStack"
 nsis = "nsExec::ExecToStack"
 params = ["string"]
-# The exit code first, then the captured output — `Pop` order, which is the
-# order the declaration has to state and the source cannot see.
 outputs = ["string", "string"]

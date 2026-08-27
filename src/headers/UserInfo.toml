@@ -1,4 +1,6 @@
-# UserInfo, which ships with NSIS.
+# UserInfo, ships with NSIS: <https://nsis.sourceforge.io/UserInfo_plug-in>.
+#
+# See docs/plugin-reference.md.
 
 [[plugin]]
 name = "UserInfo"

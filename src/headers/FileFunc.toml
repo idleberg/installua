@@ -1,28 +1,9 @@
-# FileFunc.nsh, which ships with NSIS.
+# FileFunc.nsh, ships with NSIS: <https://nsis.sourceforge.io/Docs/AppendixE.html#E.1>.
 #
-# Every one of these puts its outputs *last*: a header macro cannot return
-# anything, so `!insertmacro` is handed the registers to write into. That is the
-# convention, not a choice — and it is the reason a declaration exists at all,
-# since `${GetSize} "$dir" "" $0 $1 $2` and `${StrCase} $0 "text" "L"` disagree
-# about which end the destination is.
+# See docs/header-reference.md.
 #
-# `Locate` and `GetDrives` are the two that take a **function address**. Their
-# `params` end in `callback`, which says a function goes there and nothing
-# else: which register each argument arrives in is behaviour, and behaviour
-# lives in `src/lower/callback.rs` where a test can reach it.
-#
-# Every `params` and `outputs` list below was read from the macro body in
-# `NSISDIR/Include/FileFunc.nsh` and checked against `Examples/FileFunc.nsi`,
-# which is the file NSIS itself keeps honest.
-
-# ── The path splitters ───────────────────────────────────────────────────────
-#
-# All five take `path` rather than `string`, and that is load-bearing rather
-# than tidy: they split on `\` and nothing else, so a program that wrote
-# `INSTDIR .. "/lib/app.dll"` and got `string` here would be handed the whole
-# thing back as if it had no parent at all. Their results are `string`, because
-# `path` is an input spelling — it normalises on the way in, and what a macro
-# already wrote is whatever it wrote.
+# `locate` and `getDrives` take a callback: `params` says only that a function
+# goes there, and the register map is behaviour, in `src/lower/callback.rs`.
 
 [[header]]
 name = "FileFunc"
@@ -40,8 +21,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# The file name without its extension, so `getFileName` then this — the NSIS
-# name says "base name" and means the last component, not the stem of a path.
 method = "getBaseName"
 nsis = "GetBaseName"
 params = ["path"]
@@ -49,7 +28,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# The extension **without** the dot, and empty for a name that has none.
 method = "getFileExt"
 nsis = "GetFileExt"
 params = ["path"]
@@ -57,9 +35,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# `C:\` from `C:\dir\file`, and `\\server\share\` from a UNC path — the root a
-# path is relative to, which is why it keeps its trailing separator when
-# `getParent` drops it.
 method = "getRoot"
 nsis = "GetRoot"
 params = ["path"]
@@ -67,20 +42,13 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# For a progress line: shortens the middle to `C:\dir\...\file` so the result
-# fits a width. The second argument is a length with an optional trailing
-# `A`–`D` choosing which end goes — `"35A"` — so it is a `string`, not an `int`.
 method = "bannerTrimPath"
 nsis = "BannerTrimPath"
 params = ["path", "string"]
 outputs = ["string"]
 
-# ── The command line ─────────────────────────────────────────────────────────
-
 [[header]]
 name = "FileFunc"
-# Everything after the executable's own name, unparsed. This is what an
-# `onInit` reads before anything else, and it takes no arguments at all.
 method = "getParameters"
 nsis = "GetParameters"
 params = []
@@ -88,12 +56,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# One switch out of that string: `getOptions(params, "/D=")` answers with what
-# followed `/D=`, and sets the error flag when the switch is absent — which is
-# the difference from an empty value that was written.
-#
-# The parameters are a `string` and not a `path`: normalising `/` in a command
-# line would turn every switch into a directory separator.
 method = "getOptions"
 nsis = "GetOptions"
 params = ["string", "string"]
@@ -101,14 +63,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# The same call, case-sensitively — `/S=` and `/s=` stop being the same switch.
-#
-# NSIS ships these as two macros rather than one with an option letter, so they
-# are two methods here; the format has no flag that could join them and adding
-# one would be inventing a parameter NSIS does not take. Note which way round
-# it is: the *unsuffixed* name is the case-insensitive one, the opposite of
-# `==`, which lowers to `StrCmpS` because Lua's `==` is case-sensitive. The
-# names here follow NSIS because `import` is the NSIS-shaped surface.
 method = "getOptionsS"
 nsis = "GetOptionsS"
 params = ["string", "string"]
@@ -116,9 +70,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# The running executable's own file name, and the directory holding it. Neither
-# takes an argument, and both differ from `$EXEPATH`/`$EXEDIR` only in being
-# available to a header that was written before those existed.
 method = "getExeName"
 nsis = "GetExeName"
 params = []
@@ -131,23 +82,8 @@ nsis = "GetExePath"
 params = []
 outputs = ["string"]
 
-# ── Walking the target's disk ────────────────────────────────────────────────
-#
-# Both of these are `for … in` loops in Installua, because both answer only
-# "keep going" or "stop" — which is what a loop body says by running to the end
-# or hitting `break`.
-
 [[header]]
 name = "FileFunc"
-# `for path, directory, name, size in fileFunc.locate(INSTDIR, "/L=F")`.
-#
-# The options are the second argument and select what is walked: `/L=F` files
-# only, `/L=D` directories, `/M=*.tmp` a mask, `/S=1M-` a size bound, `/G=0` no
-# recursion. The default walks everything under the path, recursively.
-#
-# This is the one macro with no other spelling in the language. `glob` walks
-# the **build** machine and unrolls before anything ships; this walks the disk
-# the installer is standing on.
 method = "locate"
 nsis = "Locate"
 params = ["path", "string", "callback"]
@@ -155,24 +91,16 @@ outputs = []
 
 [[header]]
 name = "FileFunc"
-# `for drive, kind in fileFunc.getDrives("HDD+CDROM")`, where `kind` is one of
-# `FDD`, `HDD`, `NET`, `CDROM` or `RAM`. The argument is a `+`-joined list of
-# those same words, or `ALL` for every drive letter regardless of type.
 method = "getDrives"
 nsis = "GetDrives"
 params = ["string", "callback"]
 outputs = []
-
-# ── Facts about a file on the target ─────────────────────────────────────────
 
 [[header]]
 name = "FileFunc"
 method = "getSize"
 nsis = "GetSize"
 params = ["path", "string"]
-# Size, files, directories. A byte count cannot be negative, and that is what
-# makes `size // 1024` a bare `IntOp` with no sign fixup — the one place
-# program 4's README says the lattice pays.
 outputs = ["uint", "uint", "uint"]
 
 [[header]]
@@ -184,19 +112,6 @@ outputs = ["uint"]
 
 [[header]]
 name = "FileFunc"
-# Seven values, in the order `Examples/FileFunc.nsi` prints them as
-# `$0/$1/$2 ($3)` and `$4:$5:$6`: **day, month, year, weekday, hour, minute,
-# second**. Getting that order wrong is undetectable — every one of them is a
-# two-digit string — which is exactly the kind of fact a declaration is for.
-#
-# The weekday is a name (`"Monday"`), not a number, so all seven are `string`
-# and the numeric ones keep their leading zero: `IntFmt "%.2u"` in the macro
-# body is what puts it there, and `"08"` compared as an int would be fine while
-# `"08"` printed as a date is the point.
-#
-# The option chooses which clock: `"L"` local now, `"LS"` UTC now — both ignore
-# the first argument — and `"A"`/`"C"`/`"M"` the file's access, creation or
-# modification time, with `"AS"`/`"CS"`/`"MS"` the UTC forms.
 method = "getTime"
 nsis = "GetTime"
 params = ["path", "string"]
@@ -204,9 +119,6 @@ outputs = ["string", "string", "string", "string", "string", "string", "string"]
 
 [[header]]
 name = "FileFunc"
-# `"1.4.2.0"` from the file's version resource. A `string` and not four numbers:
-# the macro writes one register, and a program that wants the parts has
-# `string.find` or `wordFind`.
 method = "getFileVersion"
 nsis = "GetFileVersion"
 params = ["path"]
@@ -214,10 +126,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# `getFileAttributes(path, "READONLY")` answers `"1"` or `"0"`, and
-# `getFileAttributes(path, "ALL")` answers the whole list joined by `|`. One
-# call with two return shapes chosen by a string, so `string` is the only
-# honest type — the same reason `versionCompare` is not an `int`.
 method = "getFileAttributes"
 nsis = "GetFileAttributes"
 params = ["path", "string"]
@@ -225,10 +133,6 @@ outputs = ["string"]
 
 [[header]]
 name = "FileFunc"
-# `1` has files, `0` is empty, `-1` does not exist. Signed because of that last
-# one, and the three-way answer is why this is not a `bool`: "empty" and
-# "missing" are the two cases an installer actually has to tell apart before
-# calling `rmDir`.
 method = "dirState"
 nsis = "DirState"
 params = ["path"]
@@ -236,8 +140,6 @@ outputs = ["int"]
 
 [[header]]
 name = "FileFunc"
-# Tells the shell to re-read its icons, after a file association changed.
-# Nothing in, nothing out — the whole call is one line with no arguments.
 method = "refreshShellIcons"
 nsis = "RefreshShellIcons"
 params = []
