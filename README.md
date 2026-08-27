@@ -162,29 +162,33 @@ Installua nor NSIS has one.
 
 ## Third-party plugins and headers
 
-Installua ships declarations for a handful of plugin methods and header macros —
-`nsExec::ExecToStack`, `UserInfo::GetAccountType`, `System::Call`, `${GetSize}`,
-`${DriveSpace}`, `${VersionCompare}`, and third-party `nsProcess` — and your
-installer will reach past them almost immediately. Anything else is **declared
-by your project**, in one small file per plugin or header:
+Installua ships declarations for the plugin methods and header macros a real
+installer reaches for first — `nsExec::ExecToStack`, `UserInfo::GetAccountType`,
+`System::Call`, `${GetSize}`, `${DriveSpace}`, `${VersionCompare}`, and six
+third-party plugins picked on a scan of 984 real-world scripts: `EnVar`,
+`SimpleSC`, `nsProcess`, `Nsis7z`, `nsisFirewall` and two methods of
+`AccessControl` ([the full list](docs/plugin-reference.md)). A declaration is
+not a bundled DLL — installing the plugin is still yours — and your installer
+will reach past the set almost immediately. Anything else is **declared by your
+project**, in one small file per plugin or header:
 
 ```toml
-# .installua/headers/nsis7z.toml
+# .installua/headers/nsisunz.toml
 [[plugin]]
-name = "Nsis7z"                       # what `plugin "…"` is given
-method = "extractWithDetails"         # what you call it
-nsis = "Nsis7z::ExtractWithDetails"   # what NSIS is given
-params = ["path", "string"]
+name = "nsisunz"                      # what `plugin "…"` is given
+method = "unzip"                      # what you call it
+nsis = "nsisunz::Unzip"               # what NSIS is given
+params = ["path", "path"]
 outputs = ["string"]                  # values pushed, in `Pop` order
 dir = "vendor/plugins"                # only if the DLL is not in NSISDIR
 ```
 
 ```lua
-local sevenZip = plugin "Nsis7z"
+local nsisunz = plugin "nsisunz"
 
 section("Core", function()
-	local details = sevenZip.extractWithDetails("data/payload.7z", "")
-	detailPrint(details)
+	local result = nsisunz.unzip("data/payload.zip", INSTDIR)
+	detailPrint(result)
 end)
 ```
 
