@@ -809,6 +809,7 @@ declared in five lines of your own `.toml`.
 | Plugin | Scripts | Why |
 | ------ | ------- | --- |
 | `Registry` | 40 | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, which needs a trailing `${registry::Unload}` — behaviour, not arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40. |
+| `nsJSON` | 3 | Its node path is a **variable number of positional strings** — one to four across the corpus — and `params` is a fixed list. [Below](#nsjsons-blocker-is-its-path-not-its-flags). |
 | `Inetc.post` | 2 | Its body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch. A `params` entry is emitted after the flags, and there is no spelling for one that comes first. |
 | `SimpleFC` | 24 | The maintained successor to `nsisFirewall`. Not measured yet — the one entry here that is a gap rather than a decision. |
 | `SimpleSC.getErrorMessage` | 61 | Takes its argument by `Push` — [above](#simplescgeterrormessage-is-not-declarable). |
@@ -820,6 +821,49 @@ declared in five lines of your own `.toml`.
 example of a plugin you declare yourself, in
 [README.md](../README.md#third-party-plugins-and-headers) and in
 `tests/declarations.rs`. It stays undeclared so that example stays copy-pasteable.
+
+### nsJSON's blocker is its path, not its flags
+
+The recorded reason was the repeated, ordered flag run its readme advertises:
+
+```nsis
+nsJSON::Get /index 0 /index 1 /index 3 /index 0 /end
+```
+
+A table has unique keys and no order, so that shape genuinely has no encoding
+here. But **no corpus script writes it** — 25 call sites across three files, and
+the repeated-`/index` form appears in none of them. It is a documentation
+example, not a usage.
+
+What the sites do write is a node path of **positional strings**, and its length
+is the problem:
+
+```nsis
+nsJSON::Get "tag_name" /end
+nsJSON::Get /tree Manifest "builds" "windows" "${ARCH}" "url" /end
+nsJSON::Set /tree metrics "Data" "products" "Wii U USB Helper" /value `"$v"` /end
+```
+
+One segment to four, chosen per call. `params` is a fixed list, so a declaration
+would have to pick a depth and be wrong at every other one — and being wrong
+here is not a type error, it is a `Pop` count.
+
+Two of the 25 also interleave — `nsJSON::Get "assets" /index 0 "size" /end`
+puts a flag *between* two positionals, in an order the caller chose. That is the
+shape flags cannot carry, and it is a path query wearing flag syntax rather than
+a flag list.
+
+Two further facts for whoever revisits this. `/tree`, `/value`, `/file` and
+`/http` are ordinary valued flags, but `/value` and `/file` come **after** the
+path rather than before it — so the leading-only rule does not describe this
+plugin either. And `/end` is mandatory for the reason it is mandatory on
+`Inetc`: the readme says outright that it *"must be added to the end of the list
+to prevent stack corruption"*, and this compiler's caller-saves are exactly the
+stack it would corrupt.
+
+A repetition spelling would not unlock this plugin. A variadic `params` tail
+would unlock 23 of the 25 sites, and is the thing to design if nsJSON is ever
+wanted. Until then it is `raw`.
 
 ### `Nsis7z.extractWithCallback` takes an address, not a callback
 

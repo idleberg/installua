@@ -1568,9 +1568,10 @@ order the table names them: a table has no order, and two calls naming the same
 flags have to emit the same line. They are plugin-only — `!insertmacro` takes
 its arguments by position, so a macro's option string is one of its `params`.
 
-Flags with a repeated, *ordered* spelling — `nsJSON::Get /index 0 /index 1` —
-have no table encoding and are not declarable. See
-[plugin-reference.md](plugin-reference.md#what-stays-out).
+A table has unique keys and no order, so a flag written **more than once** —
+`nsJSON::Get /index 0 /index 1` — has no encoding here and is not declarable.
+Neither is one written *between* two positional arguments. Both belong to
+`nsJSON`; see [plugin-reference.md](plugin-reference.md#what-stays-out).
 
 **`terminator` is for a plugin that reads its arguments in a loop.** `inetc`
 takes url/file pairs until it pops the token `/END`, and a call that omits it
@@ -1770,6 +1771,7 @@ in five lines of [its own `.toml`](#declaring-a-third-party-plugin-or-header).
 | `LockedList`             | 0       | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature.                                                                                                                                                                             |
 | `Crypto`                 | 0       | Fails the *common* half of the rule outright.                                                                                                                                                                                                                                             |
 | `Nsis7z.extractWithCallback` | 5   | Not the register protocol the six `FileFunc`/`TextFunc` macros use — it pushes its two values on the stack. It stays out a step earlier than that: its second argument is the **address** of a function, `params` has no type for one, and `GetFunctionAddress` has no Lua spelling. See [plugin-reference.md](plugin-reference.md#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
+| `nsJSON`                 | 3       | Its node path is a **variable number of positional strings** — one to four across 25 call sites — and `params` is a fixed list, so a declaration would have to pick a depth and miscount the `Pop`s at every other one. The repeated `/index` run its readme advertises turns out to appear in no script at all. See [plugin-reference.md](plugin-reference.md#nsjsons-blocker-is-its-path-not-its-flags). |
 | `Inetc.post`             | 2       | Its POST body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch — and a `params` entry is emitted after the flags. `get`, `head` and `put` ship declared; only this entry point has an argument in front. |
 | `SimpleFC`               | 24      | The maintained successor to `nsisFirewall`, and not declared only because its methods have not been measured — the one entry here that is a gap rather than a decision.                                                                                                                    |
 
