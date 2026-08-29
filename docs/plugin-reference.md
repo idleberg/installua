@@ -310,11 +310,33 @@ pushed nothing at all, and the `Pop` Installua emits would take a caller-save.
 That is the same hazard [tagged outputs](#the-hazard-this-cannot-cover)
 document, reached a different way.
 
-The folder comes back **prefixed with `>`** when the user ticks a
-`/checknoshortcuts` box, and it is a sub-folder name rather than a full path —
-joining it to `$SMPROGRAMS` is the caller's step. Neither that flag nor
-`/autoadd`, `/noicon`, `/rtl`, `/text` or `/lastused` has a spelling yet, so
-only the unadorned call is reachable.
+`.select` takes all six of the page's flags, in a table written last:
+
+| Flag | Emits | Effect |
+| ---- | ----- | ------ |
+| `autoadd = true` | `/autoadd` | appends the program name to the chosen folder |
+| `noicon = true` | `/noicon` | drops the icon in the top-left corner |
+| `rtl = true` | `/rtl` | lays every control out right-to-left |
+| `text = "…"` | `/text "…"` | replaces the page's top text |
+| `lastused = "…"` | `/lastused "…"` | seeds the edit box, for remembering a choice |
+| `checknoshortcuts = "…"` | `/checknoshortcuts "…"` | adds a checkbox with that label |
+
+```lua
+local outcome, folder = startMenu.select("Example", {
+	lastused = INSTDIR,
+	autoadd = true,
+})
+-- StartMenu::Select /autoadd /lastused $INSTDIR "Example"
+```
+
+The readme is unusually direct about why a table is the right surface here:
+*"the order of the switches doesn't matter but the required parameter must come
+after all of them"*. That is the declaration's job in one sentence — you name
+the flags in any order and it places them, ahead of the argument, every time.
+
+The folder comes back **prefixed with `>`** when the user ticks the
+`checknoshortcuts` box, and it is a sub-folder name rather than a full path —
+joining it to `$SMPROGRAMS` is the caller's step.
 
 `page.startMenu` is the built-in page that asks the same question through MUI2
 and remembers the answer in the registry; reach for this plugin when you want
@@ -615,13 +637,30 @@ name without a domain (`GetUserName`, not `GetUserNameEx`) and never checks the
 result, so a failed lookup pushes an empty string rather than a sentinel — test
 emptiness, not equality.
 
-### What is still out of reach
+### The two flags, and the eleven methods that ignore them
 
-Every mutator takes optional `/NOINHERIT` and `/SID` flags in **first**
-position, and the format has no spelling for a flag — the same absence `Banner`
-records for `/set` and `nsExec` for `/TIMEOUT`. That is
-[`PLUGINS-PLAN.md` phase 2a](../PLUGINS-PLAN.md), and it is now the only part of
-this plugin Installua cannot reach.
+`/noinherit` and `/sid` are parsed by `PopFileArgs` and `PopRegKeyArgs`, which
+every method but the three SID helpers goes through — so all 22 *accept* both.
+They are declared on the 14 that **act** on one:
+
+| Flag | Declared on | Read by |
+| ---- | ----------- | ------- |
+| `noinherit` | `grant`, `set`, `deny`, `revoke`, `clear` — on file and reg key | `ChangeDACL`, `ClearACL` |
+| `sid` | `getFileOwner`, `getFileGroup`, `getRegKeyOwner`, `getRegKeyGroup` | `GetOwner` |
+
+```lua
+accessControl.grantOnFile(INSTDIR, "(BU)", "FullAccess", { noinherit = true })
+-- AccessControl::GrantOnFile /noinherit $INSTDIR "(BU)" "FullAccess"
+```
+
+The other eleven are the interesting half. `setFileOwner` and `setFileGroup`
+reach `ChangeOwner`, which reads neither. `enableFileInheritance` and
+`disableFileInheritance` are worse than that: `ChangeInheritance` *does* read
+`noInherit`, but the dispatcher overwrites it with the enable-or-disable choice
+one line before the call, so a `/noinherit` on those two is parsed, stored and
+discarded. Declaring it there would have been a flag that compiles, assembles
+and does nothing — which is the same class of mistake as a wrong output count,
+and caught only by reading `AccessControl.cpp`.
 
 ---
 

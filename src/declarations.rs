@@ -66,6 +66,53 @@ pub struct Param {
     pub callback: bool,
 }
 
+/// How a flag carries its value.
+///
+/// Three spellings because the corpus has three, and no plugin lets you pick:
+/// `NSISdl::download /TIMEOUT=5000` glues, `nsisunz::Unzip /text "Extracting"`
+/// does not, and `AccessControl::GrantOnFile /noinherit` has nothing to carry.
+/// Which one a flag uses is the plugin's, so it is written down beside it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Carry {
+    /// The flag word alone. The call site writes `true` or `false`, and `false`
+    /// writes nothing — the flag *is* the value.
+    Bare,
+    /// Glued with `=`, as `/TIMEOUT=5000`.
+    Joined,
+    /// A token of its own, after the flag: `/text "…"`.
+    Separate,
+}
+
+/// One leading flag a plugin method accepts.
+///
+/// **Flags are leading and unordered, and that is why they are a table rather
+/// than parameters.** Every flag on every plugin declared here comes ahead of
+/// the fixed arguments — `AccessControl::GrantOnFile /noinherit "$INSTDIR" …` —
+/// and no plugin gives two of them a meaningful order. So the call site names
+/// them and this list places them: what the user writes last is emitted first,
+/// in the order declared here, and a call that names none is character for
+/// character the call it was before flags existed.
+///
+/// A `Vec<Flag>` rather than a map for the reason [`PluginMethod::tagged`] is a
+/// list: nothing name-keyed reaches the lowerer, and a declaration's order is
+/// the only order there is to emit in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Flag {
+    /// The options-table key: `{ noinherit = true }`.
+    pub name: String,
+    /// The flag as NSIS spells it, `/` and all. Written rather than derived
+    /// from [`name`](Self::name) for the reason `nsis` is on every block:
+    /// `/TIMEOUT` is upper, `/checknoshortcuts` is lower, and a compiler that
+    /// guessed would emit a flag the plugin silently takes for a positional
+    /// argument.
+    pub nsis: String,
+    /// The value's type, and [`Ty::Bool`] for a [`Carry::Bare`] flag.
+    pub ty: Ty,
+    /// A path value: `/` is normalised to `\`, as in a [`Param`].
+    pub path: bool,
+    pub carry: Carry,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Macro {
     /// Whether a project declared this, as opposed to it shipping here.
@@ -104,6 +151,9 @@ pub struct PluginMethod {
     /// One per value the plugin leaves on the stack **on every path**, in `Pop`
     /// order.
     pub outputs: Vec<Ty>,
+    /// The leading flags this method accepts, in the order they are emitted.
+    /// Empty for most methods; see [`Flag`].
+    pub flags: Vec<Flag>,
     /// First-popped values that mean [`more`](Self::more) follows.
     ///
     /// A great many plugins push a *variable* number of values, and the first
@@ -373,6 +423,7 @@ impl Declarations {
             nsis,
             params,
             outputs,
+            flags,
             tagged,
             more,
             dir,
@@ -404,6 +455,7 @@ impl Declarations {
                 nsis,
                 params,
                 outputs,
+                flags,
                 tagged,
                 more,
                 dir,
@@ -525,13 +577,24 @@ impl Declarations {
 /// The declaration file format.
 ///
 /// A deliberately small subset of TOML — array-of-tables headers and flat
-/// `key = value` lines, where a value is a string or a one-line array of
-/// strings — parsed here rather than by a dependency. The whole grammar fits on
-/// a screen, the messages can name the field the user got wrong, and a compiler
-/// that reads five keys does not need a deserialiser to do it. What a full
-/// parser would buy is syntax this format does not use.
+/// `key = value` lines, where a value is a string, an array of strings, or an
+/// array of inline tables — parsed here rather than by a dependency. The
+/// messages can name the field the user got wrong, and a compiler that reads
+/// six keys does not need a deserialiser to do it.
+///
+/// `flags` is what bought the last two shapes, and it is worth saying what it
+/// cost. Before it, a value was one line and held no structure, and the module
+/// could claim a full parser would buy syntax the format does not use. A flag
+/// is four fields — [`Flag::name`], `nsis`, a type and a
+/// [`Carry`](super::Carry) — so it is a record however it is written, and the
+/// alternative spelling was a `[[plugin.flag]]` sub-block per flag, which needs
+/// no new syntax at all. That lost on the files rather than on the parser:
+/// `AccessControl` has 22 methods taking two flags each, and 44 four-line
+/// blocks would have doubled the file and stopped `[[plugin]]` from meaning
+/// "here is a method". Two shapes here buy one line per flag there, and the
+/// files stay valid TOML either way.
 mod parse {
-    use super::{Param, Problem};
+    use super::{Carry, Flag, Param, Problem};
     use crate::types::{Int, Sign, Ty, Width};
 
     /// One `[[plugin]]` or `[[header]]` block, checked.
@@ -542,6 +605,7 @@ mod parse {
         pub nsis: String,
         pub params: Vec<Param>,
         pub outputs: Vec<Ty>,
+        pub flags: Vec<Flag>,
         pub tagged: Vec<String>,
         pub more: Vec<Ty>,
         pub dir: Option<String>,
@@ -561,6 +625,7 @@ mod parse {
         nsis: Option<String>,
         params: Option<Vec<Param>>,
         outputs: Option<Vec<Ty>>,
+        flags: Option<Vec<Flag>>,
         tagged: Option<Vec<String>>,
         more: Option<Vec<Ty>>,
         dir: Option<String>,
@@ -578,9 +643,8 @@ mod parse {
             });
         };
 
-        for (index, raw) in text.lines().enumerate() {
-            let line = index + 1;
-            let content = strip(raw);
+        for (line, joined) in logical(text) {
+            let content = joined.as_str();
             if content.is_empty() {
                 continue;
             }
@@ -695,6 +759,30 @@ mod parse {
                         "`more` wants an array of quoted type names on one line".to_string(),
                     ),
                 },
+                // `flags` is a plugin's alone, and for a reason about NSIS
+                // rather than about tidiness: a flag is a token on a plugin's
+                // *call line*, which `!insertmacro` has no equivalent of. A
+                // `/M=*.txt` reaching a macro is one of its positional
+                // arguments and nothing else — `${GetSize} "$dir" "/M=*.txt"`
+                // is exactly that — so a macro's flags are already its
+                // `params`, and a second spelling for them would emit an
+                // argument in a position the macro does not have.
+                "flags" if !block.plugin => complain(
+                    line,
+                    "`flags` is a plugin field: a macro takes `!insertmacro` arguments by \
+                     position, so an option string is one of its `params`"
+                        .to_string(),
+                ),
+                "flags" => match tables(value) {
+                    Some(entries) => {
+                        block.flags = Some(flags(&entries, line, &mut complain));
+                    }
+                    None => complain(
+                        line,
+                        "`flags` wants an array of `{ name = \"…\", nsis = \"/…\" }` tables"
+                            .to_string(),
+                    ),
+                },
                 // `dir` is a plugin's alone. A header is `!include`d and NSIS
                 // searches for one along `!addincludedir`, which is a different
                 // directive with a different position — accepting the key here
@@ -713,8 +801,8 @@ mod parse {
                     line,
                     format!(
                         "`{other}` is not a declaration field; the fields are `name`, `method`, \
-                         `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `tagged`, \
-                         `more` and `dir`"
+                         `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `flags`, \
+                         `tagged`, `more` and `dir`"
                     ),
                 ),
             }
@@ -726,8 +814,181 @@ mod parse {
         records
     }
 
+    /// The file's lines, with a value that wraps joined onto the line it opened
+    /// on.
+    ///
+    /// A `flags` list is one entry per line and does not fit on one, so the
+    /// line-per-field rule the rest of the format keeps had to bend for it. It
+    /// bends by *depth* rather than by a continuation marker: a line that
+    /// leaves a `[` or a `{` open is unfinished, which is the same thing TOML
+    /// means by it, so nothing new is written in the file to say so.
+    ///
+    /// The joined line keeps the number it *opened* on, because that is where
+    /// the reader has to go to fix it — a message pointing at the closing `]`
+    /// of a nine-line list names the wrong end of the mistake.
+    ///
+    /// Comments come off each physical line first, so a `#` on a wrapped line
+    /// is a comment rather than the rest of the value.
+    fn logical(text: &str) -> Vec<(usize, String)> {
+        let mut lines: Vec<(usize, String)> = Vec::new();
+        let mut open = 0;
+        for (index, raw) in text.lines().enumerate() {
+            let content = strip(raw);
+            match lines.last_mut() {
+                Some((_, started)) if open > 0 => {
+                    started.push(' ');
+                    started.push_str(content);
+                }
+                _ if content.is_empty() => continue,
+                _ => lines.push((index + 1, content.to_string())),
+            }
+            // A negative depth is a stray `]`, and it is not reported here: the
+            // value parsers say what the field wanted, which names the field.
+            // Clamping keeps one typo from swallowing the rest of the file.
+            open = (open + depth(content)).max(0);
+        }
+        lines
+    }
+
+    /// How many brackets a line leaves open. Quoted text is skipped, because a
+    /// plugin's NSIS name is written in a string and `System::Call`'s signature
+    /// has braces in it.
+    fn depth(content: &str) -> i32 {
+        let mut quoted = false;
+        let mut depth = 0;
+        for byte in content.bytes() {
+            match byte {
+                b'"' => quoted = !quoted,
+                b'[' | b'{' if !quoted => depth += 1,
+                b']' | b'}' if !quoted => depth -= 1,
+                _ => {}
+            }
+        }
+        depth
+    }
+
     const VOCABULARY: &str = "the types are `string`, `path`, `int`, `uint`, `int64`, `intptr`, \
                               `bool`, `handle`, `any` and `callback`";
+
+    /// A `flags` list, checked. Like [`types`], an unreadable entry is dropped
+    /// rather than guessed at: a flag the compiler invented would emit a token
+    /// the plugin reads as a positional argument.
+    fn flags(
+        entries: &[Vec<(String, String)>],
+        line: usize,
+        complain: &mut impl FnMut(usize, String),
+    ) -> Vec<Flag> {
+        let mut flags = Vec::new();
+        for entry in entries {
+            let field = |wanted: &str| {
+                entry
+                    .iter()
+                    .find(|(key, _)| key == wanted)
+                    .and_then(|(_, value)| string(value))
+            };
+            if let Some((key, _)) = entry
+                .iter()
+                .find(|(key, _)| !matches!(key.as_str(), "name" | "nsis" | "ty" | "value"))
+            {
+                complain(
+                    line,
+                    format!(
+                        "`{key}` is not a flag field; a flag is `name`, `nsis` and — when it \
+                         carries a value — `ty` and `value`"
+                    ),
+                );
+                continue;
+            }
+            let (Some(name), Some(nsis)) = (field("name"), field("nsis")) else {
+                complain(
+                    line,
+                    "a flag needs `name`, the options-table key, and `nsis`, the flag as the \
+                     plugin spells it"
+                        .to_string(),
+                );
+                continue;
+            };
+            if !nsis.starts_with('/') {
+                complain(
+                    line,
+                    format!(
+                        "`{nsis}` is not a flag: NSIS reads a token without a leading `/` as an \
+                         argument, and the plugin would take it for one"
+                    ),
+                );
+                continue;
+            }
+
+            // `ty` and `value` are one field in two halves, as `tagged` and
+            // `more` are. A `ty` with no `value` types something that is never
+            // written — a bare flag is its own value — and a `value` with no
+            // `ty` says where to put a value nothing checks, which is the hole
+            // `fits` was unified to close.
+            let (ty, carry) = match (field("ty"), field("value")) {
+                (None, None) => (
+                    Param {
+                        ty: Ty::Bool,
+                        path: false,
+                        callback: false,
+                    },
+                    Carry::Bare,
+                ),
+                (Some(_), None) | (None, Some(_)) => {
+                    complain(
+                        line,
+                        format!(
+                            "`{name}` gives one of `ty` and `value`, and they are one field in \
+                             two halves — the type of what it carries, and whether `{nsis}` \
+                             glues it on with `=` or writes it as the next token"
+                        ),
+                    );
+                    continue;
+                }
+                (Some(word), Some(carry)) => {
+                    let Some(param) = ty(&word) else {
+                        complain(line, format!("`{word}` is not a type; {VOCABULARY}"));
+                        continue;
+                    };
+                    // A flag is a token on a call line and a callback is an
+                    // address the compiler writes a function for. There is no
+                    // spelling in which one is the other.
+                    if param.callback {
+                        complain(
+                            line,
+                            format!(
+                                "`{name}` cannot carry a `callback`: a flag is a token, and \
+                                     a callback is a function this compiler emits"
+                            ),
+                        );
+                        continue;
+                    }
+                    let carry = match carry.as_str() {
+                        "joined" => Carry::Joined,
+                        "separate" => Carry::Separate,
+                        other => {
+                            complain(
+                                line,
+                                format!(
+                                    "`{other}` is not a `value` spelling; a flag's value is \
+                                     `joined` — `{nsis}=x` — or `separate` — `{nsis} x`"
+                                ),
+                            );
+                            continue;
+                        }
+                    };
+                    (param, carry)
+                }
+            };
+            flags.push(Flag {
+                name,
+                nsis,
+                ty: ty.ty,
+                path: ty.path,
+                carry,
+            });
+        }
+        flags
+    }
 
     /// A type list, checked. An unreadable word is dropped rather than
     /// substituted: a `params` list one short is a wrong arity, and the CLI
@@ -842,6 +1103,7 @@ mod parse {
             nsis,
             params: block.params.unwrap_or_default(),
             outputs,
+            flags: block.flags.unwrap_or_default(),
             tagged,
             more,
             dir: block.dir,
@@ -883,14 +1145,66 @@ mod parse {
     }
 
     fn array(value: &str) -> Option<Vec<String>> {
-        let inside = value.strip_prefix('[')?.strip_suffix(']')?.trim();
+        items(value, '[', ']')?
+            .iter()
+            .map(|item| string(item))
+            .collect()
+    }
+
+    /// An array of inline tables, each a list of `key = value` pairs in the
+    /// order written. A list rather than a map because the only consumer is
+    /// [`flags`], which reports an unknown key by name and wants to say which
+    /// one — and four pairs are not worth a hash.
+    fn tables(value: &str) -> Option<Vec<Vec<(String, String)>>> {
+        items(value, '[', ']')?
+            .iter()
+            .map(|item| {
+                items(item, '{', '}')?
+                    .iter()
+                    .map(|pair| {
+                        let (key, value) = pair.split_once('=')?;
+                        Some((key.trim().to_string(), value.trim().to_string()))
+                    })
+                    .collect::<Option<Vec<_>>>()
+            })
+            .collect()
+    }
+
+    /// The top-level items of a bracketed list, trimmed.
+    ///
+    /// Separators are commas at depth zero and outside quotes, so a `{ … }`
+    /// holding commas is one item and so is a string holding one. The naive
+    /// `split(',')` this replaces could not have either, which was invisible
+    /// while every value was a one-word type name.
+    ///
+    /// A trailing comma is allowed and produces no empty item, because a list
+    /// written one entry per line grows by copying the line above it.
+    fn items(value: &str, open: char, close: char) -> Option<Vec<&str>> {
+        let inside = value.trim().strip_prefix(open)?.strip_suffix(close)?.trim();
         if inside.is_empty() {
             return Some(Vec::new());
         }
-        inside
-            .split(',')
-            .map(|item| string(item.trim()))
-            .collect::<Option<Vec<String>>>()
+        let mut items = Vec::new();
+        let mut start = 0;
+        let mut quoted = false;
+        let mut depth = 0;
+        for (index, byte) in inside.bytes().enumerate() {
+            match byte {
+                b'"' => quoted = !quoted,
+                b'[' | b'{' if !quoted => depth += 1,
+                b']' | b'}' if !quoted => depth -= 1,
+                b',' if !quoted && depth == 0 => {
+                    items.push(inside[start..index].trim());
+                    start = index + 1;
+                }
+                _ => {}
+            }
+        }
+        let last = inside[start..].trim();
+        if !last.is_empty() {
+            items.push(last);
+        }
+        Some(items)
     }
 
     /// The type vocabulary. `path` is `string` plus the normalisation, and is

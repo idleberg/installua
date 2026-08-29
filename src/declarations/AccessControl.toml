@@ -2,9 +2,6 @@
 #
 # See docs/plugin-reference.md — read from `AccessControl.cpp`, because the
 # readme, the wiki page and the corpus each imply a different set here.
-#
-# Absent: none of the 25 exported methods. The leading `/noinherit` and `/sid`
-# flags have no spelling yet, so the calls they modify are unreachable.
 
 [[plugin]]
 name = "AccessControl"
@@ -32,6 +29,7 @@ params = ["path", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -41,6 +39,7 @@ params = ["path", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -50,6 +49,7 @@ params = ["path", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -59,6 +59,7 @@ params = ["path", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -68,6 +69,7 @@ params = ["path", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -95,6 +97,7 @@ params = ["path"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "sid", nsis = "/sid" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -104,6 +107,7 @@ params = ["path"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "sid", nsis = "/sid" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -131,6 +135,7 @@ params = ["string", "string", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -140,6 +145,7 @@ params = ["string", "string", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -149,6 +155,7 @@ params = ["string", "string", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -158,6 +165,7 @@ params = ["string", "string", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -167,6 +175,7 @@ params = ["string", "string", "string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "noinherit", nsis = "/noinherit" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -194,6 +203,7 @@ params = ["string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "sid", nsis = "/sid" }]
 
 [[plugin]]
 name = "AccessControl"
@@ -203,6 +213,7 @@ params = ["string", "string"]
 outputs = ["string"]
 tagged = ["error"]
 more = ["string"]
+flags = [{ name = "sid", nsis = "/sid" }]
 
 [[plugin]]
 name = "AccessControl"

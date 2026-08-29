@@ -79,6 +79,33 @@ __GENERATED_else_1:
 __GENERATED_endif_1:
 SectionEnd
 
+Section "Flags"
+  AccessControl::GetFileOwner /sid $INSTDIR
+  Pop $0
+  StrCpy $1 ""
+  StrCmpS $0 "error" 0 __GENERATED_tail_0
+  Pop $1
+__GENERATED_tail_0:
+  Push $0
+  AccessControl::GetFileOwner $INSTDIR
+  Pop $1
+  StrCpy $2 ""
+  StrCmpS $1 "error" 0 __GENERATED_tail_1
+  Pop $2
+__GENERATED_tail_1:
+  Pop $0
+  DetailPrint "$0$1"
+  StartMenu::Select /autoadd /text "Pick one" /lastused $INSTDIR "Example"
+  Pop $0
+  StrCpy $1 ""
+  StrCmpS $0 "success" 0 __GENERATED_tail_2
+  Pop $1
+__GENERATED_tail_2:
+  StrCmpS $0 "success" 0 __GENERATED_endif_0
+  DetailPrint $1
+__GENERATED_endif_0:
+SectionEnd
+
 Section "Start Menu"
   StartMenu::Select "Example"
   Pop $0

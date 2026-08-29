@@ -23,6 +23,7 @@
 use crate::ast::*;
 use crate::builtins;
 use crate::cfg::{self, BlockId, CmpOp, Terminator, Test};
+use crate::declarations;
 use crate::diag::{Code, Diagnostic, Span};
 use crate::ir;
 use crate::regs::Slot;
@@ -935,7 +936,13 @@ impl BodyLowerer<'_, '_> {
                                 );
                                 return None;
                             };
-                            let element = self.flag_value(kind, Ty::Str, &key.text, value)?;
+                            let element = self.flag_value(
+                                Ty::Str,
+                                kind == table::Kind::Path,
+                                &key.text,
+                                Self::FROM_TABLE,
+                                value,
+                            )?;
                             flags[flag].push(Some(element));
                         }
                     }
@@ -943,7 +950,13 @@ impl BodyLowerer<'_, '_> {
                     // field holds the value itself rather than a `bool`,
                     // because there is nothing else `/IMGID=` could mean.
                     table::Offer::Valued { ty, kind, .. } => {
-                        let element = self.flag_value(kind, ty, &key.text, value)?;
+                        let element = self.flag_value(
+                            ty,
+                            kind == table::Kind::Path,
+                            &key.text,
+                            Self::FROM_TABLE,
+                            value,
+                        )?;
                         flags[flag].push(Some(element));
                     }
                     // Only reachable if a row grew a `Handled` flag without the
@@ -1086,29 +1099,135 @@ impl BodyLowerer<'_, '_> {
         })
     }
 
-    /// One element of a [`table::Offer::List`] field, checked and converted for
-    /// the flag it follows.
+    /// The value a flag carries, checked and converted for it.
     ///
     /// Not [`Self::coerce`], because a flag is not a position and has no
-    /// [`table::Param`] to check against: the kind and the type are the whole
-    /// of what the table says about the value. A repeated flag's elements are
-    /// always `str`; a [`table::Offer::Valued`] carries its own type, because
-    /// `/IMGID=` and `/TIMEOUT=` take a number.
+    /// [`table::Param`] to check against: a type and whether it is a path are
+    /// the whole of what is known about the value. A repeated builtin flag's
+    /// elements are always `str`; a [`table::Offer::Valued`] and a declared
+    /// [`declarations::Flag`] each carry their own type, because `/IMGID=` and
+    /// `/TIMEOUT=` take a number.
+    ///
+    /// `source` for the reason [`Self::fits`] takes one — a builtin flag's type
+    /// is the instruction table's and a declared one's is the file's, and the
+    /// two are fixed in different places.
     fn flag_value(
         &mut self,
-        kind: table::Kind,
         ty: Ty,
+        path: bool,
         name: &str,
+        source: &str,
         argument: &Expr,
     ) -> Option<ir::Arg> {
         let value = self.value(argument)?;
-        if !self.fits(ty, value.ty, name, Self::FROM_TABLE, argument.span()) {
+        if !self.fits(ty, value.ty, name, source, argument.span()) {
             return None;
         }
-        Some(match kind {
-            table::Kind::Path => value.arg.into_path(),
-            _ => value.arg,
+        Some(if path {
+            value.arg.into_path()
+        } else {
+            value.arg
         })
+    }
+
+    /// A declared plugin method's leading flags, from the options table the
+    /// call site wrote last.
+    ///
+    /// Not the builtin path above, and the difference is worth naming. An
+    /// instruction's options table holds two kinds of key — an optional
+    /// *position* and a flag — because `-CMDHELP` rows have both, and half that
+    /// function is deciding which kind a name is. A declaration has no optional
+    /// positions: [`declarations::Param`] is a slot in a fixed list, `params`
+    /// is a count the arity check already made, and so every key here is a flag
+    /// or it is nothing.
+    ///
+    /// The result is in **declaration order, not call order**. A table has no
+    /// order to keep, and two calls that name the same flags in different order
+    /// have to emit the same line or the goldens would be recording which way
+    /// somebody happened to type it.
+    fn plugin_flags(
+        &mut self,
+        plugin: &str,
+        method: &str,
+        declared: &[declarations::Flag],
+        options: Option<&Vec<TableField>>,
+        span: Span,
+    ) -> Option<Vec<ir::Arg>> {
+        // One slot per declared flag, filled by name and then read in order.
+        let mut given: Vec<Option<&Expr>> = vec![None; declared.len()];
+        for field in options.into_iter().flatten() {
+            let TableField::Named { name: key, value } = field else {
+                self.todo(span, "a positional entry in a plugin's options table");
+                return None;
+            };
+            let Some(index) = declared.iter().position(|flag| flag.name == key.text) else {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        key.span,
+                        format!("`{plugin}.{method}` has no flag `{}`", key.text),
+                    )
+                    .note(format!("its flags are {}", declared_flags(declared))),
+                );
+                return None;
+            };
+            if given[index].is_some() {
+                self.diags.push(Diagnostic::error(
+                    Code::UnknownField,
+                    key.span,
+                    format!("`{}` is set twice", key.text),
+                ));
+                return None;
+            }
+            given[index] = Some(value);
+        }
+
+        let mut args = Vec::new();
+        for (flag, value) in declared.iter().zip(given) {
+            let Some(value) = value else { continue };
+            let name = format!("{plugin}.{method}.{}", flag.name);
+            match flag.carry {
+                // A bare flag *is* its value, so the field is the presence: the
+                // token goes in or it does not. That makes it the one place a
+                // build-time constant is required rather than preferred — a
+                // register cannot decide whether a token was written, because
+                // the line is assembled before anything runs.
+                declarations::Carry::Bare => match value {
+                    Expr::Bool { value: true, .. } => args.push(ir::Arg::raw(&flag.nsis)),
+                    Expr::Bool { value: false, .. } => {}
+                    other => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::BadFieldValue,
+                                other.span(),
+                                format!("`{}` is on or off", flag.name),
+                            )
+                            .note(format!(
+                                "write `{} = true`, and the compiler writes `{}`",
+                                flag.name, flag.nsis
+                            )),
+                        );
+                        return None;
+                    }
+                },
+                // A carried value is an ordinary expression, register and all:
+                // the corpus writes `/FLAGS=$R0` and `/index $R1`, so glueing
+                // is a concatenation at emit time rather than a string the
+                // declaration could have pre-built.
+                declarations::Carry::Joined => {
+                    let lowered =
+                        self.flag_value(flag.ty, flag.path, &name, Self::FROM_DECLARATION, value)?;
+                    args.push(ir::Arg::prefixed(format!("{}=", flag.nsis), lowered));
+                }
+                declarations::Carry::Separate => {
+                    let lowered =
+                        self.flag_value(flag.ty, flag.path, &name, Self::FROM_DECLARATION, value)?;
+                    args.push(ir::Arg::raw(&flag.nsis));
+                    args.push(lowered);
+                }
+            }
+        }
+        Some(args)
     }
 
     /// The registers the instruction writes, given the ones a caller asked to
@@ -1629,21 +1748,43 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
 
+        // The options table is the last argument when the method declares any
+        // flag to put in one. A method with no flags never splits it off, so
+        // `f({…})` there stays what it always was — a table where a value was
+        // wanted — and the arity message stays the one it was before flags
+        // existed.
+        let (args, options) = match args.split_last() {
+            Some((Expr::Table { fields, .. }, rest)) if !entry.flags.is_empty() => {
+                (rest, Some(fields))
+            }
+            _ => (args, None),
+        };
+
         if args.len() != entry.params.len() {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::WrongArity,
-                    span,
-                    format!(
-                        "`{plugin}.{method}` takes {} argument(s), and {} were given",
-                        entry.params.len(),
-                        args.len()
-                    ),
-                )
-                .note(format!("it becomes `{}`", entry.nsis)),
-            );
+            let mut diagnostic = Diagnostic::error(
+                Code::WrongArity,
+                span,
+                format!(
+                    "`{plugin}.{method}` takes {} argument(s), and {} were given",
+                    entry.params.len(),
+                    args.len()
+                ),
+            )
+            .note(format!("it becomes `{}`", entry.nsis));
+            // A method with flags has one more argument than its `params`, and
+            // a caller who counted them is owed the reason rather than left to
+            // find it: the table is not a position, and it is not counted here.
+            if !entry.flags.is_empty() {
+                diagnostic = diagnostic.note(format!(
+                    "its flags are named rather than counted, in a table written last: {}",
+                    declared_flags(&entry.flags)
+                ));
+            }
+            self.diags.push(diagnostic);
             return None;
         }
+
+        let leading = self.plugin_flags(plugin, method, &entry.flags, options, span)?;
 
         // `System::Call`'s output count is in its signature: every `.s` pushes
         // one value. That is as far as the signature is read — narrowing the
@@ -1713,7 +1854,12 @@ impl BodyLowerer<'_, '_> {
         let current = self.current;
         self.body.push_step(current, ir::Step::Saves(site));
 
-        let mut lowered = Vec::with_capacity(args.len());
+        // Flags first, and the fixed arguments after them: every flag in the
+        // corpus is leading, and the table that named them was written last.
+        // That inversion is the whole reason position is the declaration's
+        // rather than the call site's.
+        let mut lowered = leading;
+        lowered.reserve(args.len());
         for (argument, param) in args.iter().zip(entry.params) {
             let value = self.value(argument)?;
             // A plugin's parameter types were declared and never read until
@@ -2718,12 +2864,10 @@ fn place(builtin: &table::Instruction, written: Written, dests: Vec<ir::Arg>) ->
                     // pieces, because `Arg::Raw` reads nothing and hiding a
                     // register from liveness is not a formatting decision.
                     (table::Offer::Valued { .. }, Some(value)) => {
-                        emitted.push(match value.as_text() {
-                            Some(text) => ir::Arg::raw(format!("{}={text}", flag.opt.nsis)),
-                            None => {
-                                ir::Arg::str(format!("{}=", flag.opt.nsis)).concat(value.clone())
-                            }
-                        });
+                        emitted.push(ir::Arg::prefixed(
+                            format!("{}=", flag.opt.nsis),
+                            value.clone(),
+                        ));
                     }
                     _ => {
                         emitted.push(ir::Arg::raw(flag.opt.nsis));
@@ -2777,6 +2921,20 @@ fn place(builtin: &table::Instruction, written: Written, dests: Vec<ir::Arg>) ->
 ///
 /// Positions and flags are one list, because a caller writing `{ … }` has no
 /// reason to know which half a name comes from.
+/// A declared method's flags, for the diagnostic that names them.
+///
+/// The NSIS spelling comes along, because it is the half the reader is holding
+/// when they get here: a flag is looked up in a plugin's readme as `/NOINHERIT`
+/// and written in Lua as `noinherit`, and a message naming only one of the two
+/// makes them guess the other.
+fn declared_flags(flags: &[declarations::Flag]) -> String {
+    flags
+        .iter()
+        .map(|flag| format!("`{}` (`{}`)", flag.name, flag.nsis))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn options(builtin: &table::Instruction) -> String {
     builtin
         .option_names()

@@ -367,6 +367,65 @@ fn a_declaration_checks_its_parameter_types() {
     );
 }
 
+/// A flag is a name, and the three ways of getting the name wrong all say so.
+///
+/// The surface's whole claim is that a flag is reached by name rather than by
+/// position, so the failures worth testing are the ones a name has: a flag the
+/// method does not declare, the same one named twice, and a bare flag given
+/// something that is not `true` or `false`. None of the three is a type error
+/// and none would be caught by `fits`, which is why they are here rather than
+/// beside it.
+///
+/// The last is the one with a reason behind it. A bare flag *is* its value —
+/// the token goes on the line or it does not — and the line is assembled before
+/// anything runs, so a register cannot decide it. `{ sid = $someVar }` is not a
+/// dynamic flag, it is a flag whose presence nothing can know.
+#[test]
+fn a_flag_is_reached_by_name() {
+    let head = "local accessControl = plugin \"AccessControl\"\n\
+                attributes { outFile = \"a.exe\" }\n\
+                installer { section(\"Core\", function()\n";
+    let tail = "detailPrint(who)\n\
+                end), }";
+
+    let undeclared = compile(&format!(
+        "{head}local who = accessControl.getFileOwner(INSTDIR, {{ noinherit = true }})\n{tail}"
+    ));
+    assert!(
+        undeclared.contains(Code::UnknownField),
+        "`/noinherit` is not read by `GetOwner`, so it is not declared there:\n{}",
+        undeclared.render("<test>")
+    );
+
+    let twice = compile(&format!(
+        "{head}local who = accessControl.getFileOwner(INSTDIR, {{ sid = true, sid = false }})\n\
+         {tail}"
+    ));
+    assert!(
+        twice.contains(Code::UnknownField),
+        "naming one flag twice is a mistake rather than a last-one-wins:\n{}",
+        twice.render("<test>")
+    );
+
+    let computed = compile(&format!(
+        "{head}local who = accessControl.getFileOwner(INSTDIR, {{ sid = INSTDIR }})\n{tail}"
+    ));
+    assert!(
+        computed.contains(Code::BadFieldValue),
+        "a bare flag's presence is decided when the line is written, not when it runs:\n{}",
+        computed.render("<test>")
+    );
+
+    let named = compile(&format!(
+        "{head}local who = accessControl.getFileOwner(INSTDIR, {{ sid = true }})\n{tail}"
+    ));
+    assert!(
+        named.is_empty(),
+        "the flag the declaration does list is not a mistake:\n{}",
+        named.render("<test>")
+    );
+}
+
 #[test]
 fn every_code_has_a_case() {
     let missing: Vec<&str> = Code::ALL

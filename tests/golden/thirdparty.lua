@@ -125,6 +125,35 @@ installer {
 		end
 	end),
 
+	-- **Flags, the third thing a declaration carries.** Every one below is
+	-- written *last*, in a table, and emitted *first*, ahead of the fixed
+	-- arguments -- which is the whole reason position is the declaration's
+	-- rather than the call site's. StartMenu's own readme puts it plainly:
+	-- "the order of the switches doesn't matter but the required parameter
+	-- must come after all of them".
+	section("Flags", function()
+		-- `/sid` alone, and it is a `bool` at the call site because the flag
+		-- *is* the value. `false` writes nothing rather than writing an off
+		-- switch, since NSIS has no spelling for one.
+		local owner = accessControl.getFileOwner(INSTDIR, { sid = true })
+		local plain = accessControl.getFileOwner(INSTDIR, { sid = false })
+		detailPrint(owner .. plain)
+
+		-- Three flags named in an order nobody chose, emitted in the order
+		-- the declaration lists them: `/autoadd`, then `/text`, then
+		-- `/lastused`. Two calls naming the same flags differently have to
+		-- emit the same line, or this file would be recording which way it
+		-- was typed.
+		local outcome, folder = startMenu.select("Example", {
+			lastused = INSTDIR,
+			autoadd = true,
+			text = "Pick one",
+		})
+		if outcome == "success" then
+			detailPrint(folder)
+		end
+	end),
+
 	section("Start Menu", function()
 		-- **The opposite polarity, and the reason `tagged` is a list of
 		-- literals rather than the word "error".** StartMenu pushes its extra

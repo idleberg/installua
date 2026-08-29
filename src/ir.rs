@@ -585,6 +585,31 @@ impl Arg {
         Arg::Raw(value.into())
     }
 
+    /// A value with syntax glued to the front of it, as one token:
+    /// `/TIMEOUT=5000`.
+    ///
+    /// A joined flag cannot be built in a declaration and cannot be two
+    /// arguments. Not in the declaration, because the corpus writes
+    /// `/FLAGS=$R0` and `/index $R1` — the value is an expression, and a
+    /// register's contents are not known until it runs. Not as two arguments,
+    /// because NSIS splits a call line on whitespace and the plugin would see
+    /// `/TIMEOUT=` and `5000` as two of them.
+    ///
+    /// So it is a [`Piece::Text`] ahead of the value's own pieces, which also
+    /// gets the quoting right for free: the emitter quotes the token as a
+    /// whole, and `"/SOURCE=$Path"` is how the corpus writes it too.
+    pub fn prefixed(text: impl Into<String>, value: Arg) -> Self {
+        let text = text.into();
+        // A literal is glued as text so the output reads the way a hand-written
+        // script does — `/TIMEOUT=5000`, unquoted. Anything holding a register
+        // keeps its pieces, because [`Arg::Raw`] reads nothing and hiding a
+        // register from liveness is not a formatting decision.
+        match value.as_text() {
+            Some(literal) => Arg::raw(format!("{text}{literal}")),
+            None => Arg::str(text).concat(value),
+        }
+    }
+
     pub fn data(pieces: Vec<Piece>) -> Self {
         Arg::Data {
             pieces,

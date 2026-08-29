@@ -1523,6 +1523,54 @@ one value for `tagged` to be about. See
 [plugin-reference.md](plugin-reference.md#tagged-outputs) for the lines this
 emits and for the one failure it cannot cover.
 
+**`flags` is for the `/SWITCH` tokens a plugin takes ahead of its arguments.**
+They are named at the call site, in a table written **last**, and emitted
+**first** — position is the declaration's, not yours:
+
+```toml
+[[plugin]]
+name = "StartMenu"
+method = "select"
+nsis = "StartMenu::Select"
+params = ["string"]
+outputs = ["string"]
+tagged = ["success"]
+more = ["string"]
+flags = [
+  { name = "autoadd", nsis = "/autoadd" },                            # on or off
+  { name = "text", nsis = "/text", ty = "string", value = "separate" },
+  { name = "timeout", nsis = "/TIMEOUT", ty = "int", value = "joined" },
+]
+```
+
+```lua
+startMenu.select("Example", { lastused = INSTDIR, autoadd = true })
+-- StartMenu::Select /autoadd /lastused $INSTDIR "Example"
+```
+
+`name` is the table key and `nsis` is the token, written out rather than derived
+— `/NOINHERIT` is upper and `/checknoshortcuts` is lower, and a token NSIS does
+not recognise as a flag becomes a positional argument without complaint.
+
+A flag with no `ty` **is** its value: the table field is `true` or `false`, and
+`false` writes nothing, because NSIS has no spelling for an off switch. It has
+to be a literal rather than a variable — the call line is assembled before
+anything runs, so nothing at runtime can decide whether a token was written.
+
+`ty` and `value` are one field in two halves, like `tagged` and `more`. `value`
+is `joined` for `/TIMEOUT=5000` or `separate` for `/text "…"`, and the value
+itself is an ordinary expression, register and all: `/FLAGS=$R0` is a shape the
+corpus uses.
+
+The order flags are emitted in is the order they are **declared**, never the
+order the table names them: a table has no order, and two calls naming the same
+flags have to emit the same line. They are plugin-only — `!insertmacro` takes
+its arguments by position, so a macro's option string is one of its `params`.
+
+Flags with a repeated, *ordered* spelling — `nsJSON::Get /index 0 /index 1` —
+have no table encoding and are not declarable. See
+[plugin-reference.md](plugin-reference.md#what-stays-out).
+
 **`dir` is for a DLL that does not live in `NSISDIR/Plugins`** — a plugin
 vendored into your own repository. It is relative to the project root, and the
 compiler emits one `!addplugindir` for it, in the one position the directive is
