@@ -734,3 +734,28 @@ declared in five lines of your own `.toml`.
 example of a plugin you declare yourself, in
 [README.md](../README.md#third-party-plugins-and-headers) and in
 `tests/declarations.rs`. It stays undeclared so that example stays copy-pasteable.
+
+### `/NOUNLOAD` belongs to nobody
+
+It is the most common flag in the corpus — **99 sites**, two and a half times
+the next one — and it is not in any `flags` list here, nor can a project put it
+in one.
+
+It was never a plugin's option. `Source/script.cpp:5151` reads it off the front
+of *any* plugin call, before the method's own arguments, and passes it to
+`EW_REGISTERDLL` as the bit that decides whether the DLL is freed after the
+call. So it describes NSIS's loader, not the method — there is no signature for
+it to be part of, and a declaration that named it would be claiming the plugin
+parses a token the plugin never sees.
+
+It is also **deprecated**, and has been since 2.42 (December 2008): *"Deprecated
+/NOUNLOAD and SetPluginsUnload to make scripts simpler and safer"*. The plugin
+API that replaced it lets a DLL that must stay resident say so itself. `makensis`
+still accepts the token, and warns only when it is written in the wrong place
+(`DW_PLUGIN_NOUNLOAD_PLACEMENT`) — the case where a plugin has a `/NOUNLOAD`
+parameter of its own is the one that warning exists to catch.
+
+So Installua emits none, offers no spelling for it, and treats unloading as the
+compiler's business the way it treats register allocation. The one visible
+consequence is [`nsProcess._Unload`](#nsprocess), which exists to release a DLL
+that was kept loaded and therefore has nothing to do here.
