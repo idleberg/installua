@@ -1285,7 +1285,7 @@ impl BodyLowerer<'_, '_> {
                     "nothing is declared for `{header}` — a macro's parameter list says nothing \
                      about directions or counts, so the declaration is written rather than \
                      discovered: put one in `{}/`",
-                    crate::headers::DIRECTORY
+                    crate::declarations::DIRECTORY
                 ))
             };
             self.diags.push(diagnostic);
@@ -1387,7 +1387,7 @@ impl BodyLowerer<'_, '_> {
         method: &str,
         args: &[Expr],
         dests: &[Slot],
-        entry: &crate::headers::Macro,
+        entry: &crate::declarations::Macro,
         span: Span,
     ) -> Option<Vec<Ty>> {
         let Some(protocol) = super::callback::protocol(&entry.nsis) else {
@@ -1545,6 +1545,27 @@ impl BodyLowerer<'_, '_> {
         None
     }
 
+    /// What a conditional return holds on the path where the plugin did not
+    /// push it.
+    ///
+    /// Not a single sentinel, because the slot keeps its declared type either
+    /// way and NSIS has no null: an empty string is falsy, printable and what
+    /// every NSIS script means by "no message", while a numeric slot holding
+    /// `""` compares as `0` in `IntCmp` and as neither in `StrCmp`, which is a
+    /// value that behaves differently depending on who reads it. So a number
+    /// gets `0` and a string gets `""`, and each is the identity its own
+    /// comparisons already treat as empty.
+    ///
+    /// There is no honest default for [`Ty::Unknown`] — the point of `any` is
+    /// that nothing here knows what a value is — so it takes the string one,
+    /// which is what `any` degrades to everywhere else in the lattice.
+    fn default_for(ty: &Ty) -> String {
+        match ty {
+            Ty::Int(_) | Ty::Bool | Ty::Handle => "0".to_string(),
+            Ty::Str | Ty::Unknown => String::new(),
+        }
+    }
+
     /// `nsExec.execToStack(cmd)` — the first of the three opaque callees.
     ///
     /// A plugin takes its arguments **inline** and leaves its outputs on the
@@ -1573,7 +1594,7 @@ impl BodyLowerer<'_, '_> {
                             "nothing is declared for `{plugin}` — a DLL cannot be asked how many \
                          values it pushes, so the count is written down rather than discovered: \
                          put one in `{}/`",
-                            crate::headers::DIRECTORY
+                            crate::declarations::DIRECTORY
                         ),
                         methods => format!(
                             "it declares {}",
@@ -1626,7 +1647,15 @@ impl BodyLowerer<'_, '_> {
             };
             vec![Ty::Str; signature.matches(".s").count()]
         } else {
-            entry.outputs.to_vec()
+            // A tagged method's tail is part of its Lua arity, not a second
+            // shape: `local ok, why = accessControl.grantOnFile(…)` binds two
+            // names because two values exist to bind, and the one that is only
+            // sometimes on the stack reads `""` when it was not. The
+            // conditional half of that is `layout`'s to emit — see
+            // [`ir::Tail`] — and from here it is one flat list.
+            let mut outputs = entry.outputs.to_vec();
+            outputs.extend(entry.more.iter().copied());
+            outputs
         };
 
         if dests.len() > outputs.len() {
@@ -1640,7 +1669,20 @@ impl BodyLowerer<'_, '_> {
                         dests.len()
                     ),
                 )
-                .note("the count comes from the declaration, since nothing can ask the DLL"),
+                .note(match entry.tagged.as_slice() {
+                    [] => "the count comes from the declaration, since nothing can ask the DLL"
+                        .to_string(),
+                    tags => format!(
+                        "{} of those follow only when the first is {}, and read `\"\"` when it \
+                         is not — the count comes from the declaration, since nothing can ask \
+                         the DLL",
+                        entry.more.len(),
+                        tags.iter()
+                            .map(|tag| format!("`{tag}`"))
+                            .collect::<Vec<_>>()
+                            .join(" or ")
+                    ),
+                }),
             );
             return None;
         }
@@ -1677,6 +1719,15 @@ impl BodyLowerer<'_, '_> {
             raw: false,
         };
         self.body.calls[site].results = results;
+        if !entry.tagged.is_empty() {
+            self.body.calls[site].tail = Some(ir::Tail {
+                tags: entry.tagged.clone(),
+                // Defaulted by type, not always `""`: the tail keeps the type
+                // the declaration gave it on both paths, and an `int` slot
+                // holding an empty string would be a lie the lattice believes.
+                defaults: entry.more.iter().map(Self::default_for).collect(),
+            });
+        }
         // Noted for the reservation pass: a DLL `.onInit` can reach has to be
         // at the head of the data block, and nothing after lowering can tell
         // `nsExec::ExecToStack` from any other opaque line.

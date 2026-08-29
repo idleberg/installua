@@ -1,8 +1,8 @@
-# nsExec, ships with NSIS: <https://nsis.sourceforge.io/NsExec_plug-in>.
+# nsExec, ships with NSIS: `NSISDIR/Docs/nsExec/nsExec.txt`.
 #
 # See docs/plugin-reference.md.
 #
-# Absent: `Exec` and `ExecToLog` (one code each) — undeclared, not undeclarable.
+# Absent: `Exec` and `ExecToLog` (one code each) -- undeclared, not undeclarable.
 
 [[plugin]]
 name = "nsExec"

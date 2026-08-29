@@ -1,4 +1,5 @@
-# TypeLib, ships with NSIS: <https://nsis.sourceforge.io/TypeLib_plug-in>.
+# TypeLib, ships with NSIS. No shipped doc; counts read from the source,
+# `Contrib/Library/TypeLib/TypeLib.cpp`.
 #
 # See docs/plugin-reference.md.
 

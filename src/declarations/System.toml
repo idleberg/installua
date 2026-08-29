@@ -1,4 +1,4 @@
-# System, ships with NSIS: <https://nsis.sourceforge.io/System_plug-in>.
+# System, ships with NSIS: `NSISDIR/Docs/System/System.html`.
 #
 # See docs/plugin-reference.md. `outputs` is empty on purpose: `System::Call`'s
 # count is in its signature, one per `.s`, and the lowering counts it there.

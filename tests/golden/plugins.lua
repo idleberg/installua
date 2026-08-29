@@ -3,7 +3,7 @@
 --
 -- Every call below is a `Pop` count the compiler could not have discovered.
 -- `Dialer.getConnectedState` pops one, `TypeLib.getLibVersion` pops two, and
--- `Banner.show` pops none -- and a wrong number in `src/headers/*.toml` would
+-- `Banner.show` pops none -- and a wrong number in `src/declarations/*.toml` would
 -- not fail here, it would shift every later `Pop` by one and still assemble.
 -- That is what makes this golden worth reading line by line.
 

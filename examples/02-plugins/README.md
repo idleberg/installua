@@ -9,7 +9,7 @@ The stack-ABI program. All three opaque callees appear — `plugin`, `System::Ca
 
 **`Push`, `Pop` and `Exch` need no Installua spelling, and that is a decision the plugin
 declarations pay for.** `local rc, out = nsExec.execToStack(cmd)` is only expressible
-because the declaration in `.installua/headers/` says the call leaves two values on the
+because the declaration in `.installua/declarations/` says the call leaves two values on the
 stack. Without it the surface degenerates to a `pop()` builtin, which reintroduces exactly
 the "output position is not a convention" problem the five programs identify for header macros. So
 plugin declarations carry an **output count** and are not optional for any plugin whose

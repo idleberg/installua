@@ -1,8 +1,8 @@
-//! `.installua/headers/*.toml`: what a project declares for itself.
+//! `.installua/declarations/*.toml`: what a project declares for itself.
 //!
 //! What ships declared is a handful, and an installer reaches past it almost
 //! immediately. A plugin becomes ordinary by being *declared* — whether that
-//! happens in `src/headers/*.toml` here or in a project's own directory, since
+//! happens in `src/declarations/*.toml` here or in a project's own directory, since
 //! both go through one parser — so what these check is that one declaration
 //! reaches all three readers: the compiler's arity check, the emitted line, and
 //! the editor stub.
@@ -11,8 +11,8 @@
 //! a `read_dir` around [`Declarations::parse`], and a test that wrote files
 //! would be testing `std::fs`.
 
+use installua::declarations::{Declarations, Problem};
 use installua::diag::Diagnostics;
-use installua::headers::{Declarations, Problem};
 use installua::{Options, stubs};
 
 /// One declaration file, with both shapes a project writes.
@@ -151,7 +151,7 @@ fn a_method_nobody_declared_names_the_directory_that_would_declare_it() {
          local other = plugin \"Whatever\"\n\
          installer { section(\"Core\", function() other.go() end) }\n",
     );
-    assert!(rendered.contains(".installua/headers/"), "{rendered}");
+    assert!(rendered.contains(".installua/declarations/"), "{rendered}");
 }
 
 /// A project file may correct a builtin. What ships is a file someone wrote
@@ -509,4 +509,160 @@ fn each_callback_shape_names_the_other_one() {
          }\n",
     );
     assert!(loop_form.contains("is not a loop"), "{loop_form}");
+}
+
+// -- tagged outputs: an arity that depends on the outcome -------------------
+
+/// The shape `tagged` exists for, as the exact lines it becomes.
+///
+/// `StartMenu::Select` rather than a synthetic plugin, because the polarity is
+/// the whole point and this one has the *unusual* polarity: the extra value
+/// follows `"success"`, not a failure. Read from `Contrib/StartMenu/StartMenu.c`
+/// — the readme's "pushes the folder after success" is one sentence describing
+/// two arities.
+///
+/// Three lines carry the design and none of them is the `Pop`:
+///
+///   * the `StrCpy` comes **first**, so the tail slot is written on every path
+///     and the allocator never sees a conditional definition;
+///   * the test is `StrCmpS`, so a folder that differs from the tag only in
+///     case is a different value;
+///   * the target is a **label**, not `+2`, because a later pass inserting a
+///     line is exactly how a relative jump goes silently wrong.
+#[test]
+fn a_tagged_plugin_pops_its_tail_only_when_the_tag_matches() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local startMenu = plugin \"StartMenu\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             local outcome, folder = startMenu.select(\"Example\")\n\
+             detailPrint(outcome .. folder)\n\
+           end),\n\
+         }\n",
+    );
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    let start = lines
+        .iter()
+        .position(|line| line.starts_with("StartMenu::Select"))
+        .expect("the call is emitted");
+    assert_eq!(
+        &lines[start..start + 6],
+        [
+            "StartMenu::Select \"Example\"",
+            "Pop $0",
+            "StrCpy $1 \"\"",
+            "StrCmpS $0 \"success\" 0 __GENERATED_tail_0",
+            "Pop $1",
+            "__GENERATED_tail_0:",
+        ],
+        "{output}"
+    );
+}
+
+/// A tail the caller does not bind still comes off the stack.
+///
+/// The same rule as an ignored plain output, and for a stronger reason: the
+/// plugin pushed it on that path, so leaving it there shifts every later `Pop`
+/// by one and NSIS reports none of it. What the caller wanted has no bearing
+/// on what the stack holds.
+#[test]
+fn an_unbound_tail_is_still_popped() {
+    let output = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local startMenu = plugin \"StartMenu\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             local outcome = startMenu.select(\"Example\")\n\
+             detailPrint(outcome)\n\
+           end),\n\
+         }\n",
+    );
+    assert_eq!(
+        output
+            .lines()
+            .filter(|line| line.trim().starts_with("Pop "))
+            .count(),
+        2,
+        "{output}"
+    );
+}
+
+/// Both halves of the tail are part of the Lua arity, so binding past them is
+/// the same error binding past `outputs` is — and the note says which of the
+/// values only sometimes exist, since that is the part a reader cannot infer
+/// from the count.
+#[test]
+fn binding_past_the_tail_names_the_tag() {
+    let rendered = errors(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local startMenu = plugin \"StartMenu\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             local a, b, c = startMenu.select(\"Example\")\n\
+           end),\n\
+         }\n",
+    );
+    assert!(
+        rendered.contains("pushes 2 value(s), and 3 are being bound"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("follow only when the first is `success`"),
+        "{rendered}"
+    );
+}
+
+/// The three ways a `tagged` block can be written and mean nothing.
+///
+/// Synthetic declarations on purpose: what is under test is the parser's
+/// refusal, and a real plugin would only add a name to argue about. Each of
+/// these would otherwise *compile* — into an unbalanced stack rather than into
+/// a diagnostic, which is the failure mode the whole file format exists to
+/// prevent.
+#[test]
+fn half_a_tag_is_refused() {
+    let problems = |text: &str| -> Vec<Problem> {
+        let mut declarations = Declarations::builtin();
+        let mut problems = Vec::new();
+        declarations.parse("test.toml", text, &mut problems);
+        problems
+    };
+
+    // `tagged` with nothing to pop, and `more` with nothing to test.
+    for half in ["tagged = [\"error\"]", "more = [\"string\"]"] {
+        let found = problems(&format!(
+            "[[plugin]]\nname = \"P\"\nmethod = \"m\"\nnsis = \"P::M\"\n\
+             params = []\noutputs = [\"string\"]\n{half}\n"
+        ));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found[0].message.contains("one field in two halves"),
+            "{found:?}"
+        );
+    }
+
+    // A tag with no first value to be.
+    let found = problems(
+        "[[plugin]]\nname = \"P\"\nmethod = \"m\"\nnsis = \"P::M\"\n\
+         params = []\noutputs = []\ntagged = [\"error\"]\nmore = [\"string\"]\n",
+    );
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].message.contains("`outputs` has to declare one"),
+        "{found:?}"
+    );
+
+    // And a macro cannot have one at all: its outputs are registers written on
+    // every path, so there is no first value and no arity to vary.
+    let found = problems(
+        "[[header]]\nname = \"H\"\nmethod = \"m\"\nnsis = \"M\"\n\
+         params = []\noutputs = [\"string\"]\ntagged = [\"error\"]\nmore = [\"string\"]\n",
+    );
+    assert!(
+        found
+            .iter()
+            .any(|problem| problem.message.contains("is a plugin field")),
+        "{found:?}"
+    );
 }

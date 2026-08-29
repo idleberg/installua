@@ -9,7 +9,7 @@
 //!
 //! Two sources, one table and **one format**. [`Declarations::builtin`] parses
 //! the files in [`SHIPPED`] and [`Declarations::load`] parses whatever
-//! `.installua/headers/*.toml` holds, through the same parser — so what ships
+//! `.installua/declarations/*.toml` holds, through the same parser — so what ships
 //! here is not a privileged kind of declaration, it is the same five lines a
 //! project writes, and adding a plugin is a `.toml` file rather than a code
 //! change. A project may redeclare one of ours and wins when it does, because a
@@ -26,6 +26,10 @@
 //! field the way an instruction's is. A plugin's outputs are on the stack
 //! instead, in `Pop` order — which is why the two are separate lists here and
 //! not one shape with a flag.
+//!
+//! The stack is also why only a *plugin* can have a variable arity. A macro's
+//! outputs are registers written on every path; a plugin's are a depth, and a
+//! great many plugins vary it — see [`PluginMethod::tagged`].
 
 use std::path::Path;
 
@@ -97,8 +101,32 @@ pub struct PluginMethod {
     /// The full `Plugin::Method` spelling.
     pub nsis: String,
     pub params: Vec<Param>,
-    /// One per value the plugin leaves on the stack, in `Pop` order.
+    /// One per value the plugin leaves on the stack **on every path**, in `Pop`
+    /// order.
     pub outputs: Vec<Ty>,
+    /// First-popped values that mean [`more`](Self::more) follows.
+    ///
+    /// A great many plugins push a *variable* number of values, and the first
+    /// one says how many: `AccessControl::GrantOnFile` pushes `"ok"` alone or
+    /// `"error"` and a message, and `StartMenu::Select` pushes `"success"`
+    /// **and** a folder or one of `"cancel"` and an error alone. Without a
+    /// spelling for that, a declaration has to pick a path and be wrong on the
+    /// other — which is not a wrong *type*, it is an unbalanced stack, and
+    /// NSIS diagnoses neither.
+    ///
+    /// A **list of literals** rather than a flag, because the polarity is the
+    /// plugin's to choose and the two above chose opposite ones: hardcoding
+    /// `"error"` would describe AccessControl and misdescribe StartMenu by
+    /// exactly one value. And a list of literals rather than a predicate,
+    /// because the test has to be one the compiler can emit — a `StrCmpS`
+    /// against a constant — not a parse of whatever the tag happens to say.
+    ///
+    /// Empty when the arity is fixed, which is the common case and the one
+    /// every field above was written for.
+    pub tagged: Vec<String>,
+    /// The values that follow when the first popped one is in
+    /// [`tagged`](Self::tagged). Empty exactly when `tagged` is.
+    pub more: Vec<Ty>,
     /// Where the DLL lives, when it is not in `NSISDIR/Plugins`. Relative to
     /// the project root; [`crate::lower::addplugindir`] absolutises it.
     ///
@@ -157,11 +185,11 @@ impl std::fmt::Display for Problem {
 /// the first time either grows a field. Three things follow from it — a plugin
 /// added here is five lines of TOML and no Rust, the parser is exercised by this
 /// crate's own data on every run, and the files can be copied into a project's
-/// `.installua/headers/` verbatim by anyone who needs to correct one.
+/// `.installua/declarations/` verbatim by anyone who needs to correct one.
 ///
 /// The cost is parsing a few kilobytes per [`Declarations::builtin`], and that a
 /// malformed file here would be a run-time surprise rather than a compile error
-/// — which `tests/headers.rs` turns back into a build failure by asserting that
+/// — which `tests/declarations.rs` turns back into a build failure by asserting that
 /// this parses clean.
 ///
 /// # What earns a slot here
@@ -180,7 +208,7 @@ impl std::fmt::Display for Problem {
 /// because withholding something every `.onInit` needs is merely rude.
 ///
 /// *Common* is what keeps this from becoming a mirror of `NSISDIR/Include`.
-/// A macro nobody reaches for is a project's own `.installua/headers/` file,
+/// A macro nobody reaches for is a project's own `.installua/declarations/` file,
 /// and the format is identical precisely so that costs a project nothing.
 ///
 /// The rule cuts one way that is easy to miss: a header whose value is
@@ -197,33 +225,43 @@ impl std::fmt::Display for Problem {
 const SHIPPED: &[(&str, &str)] = &[
     (
         "AccessControl.toml",
-        include_str!("headers/AccessControl.toml"),
+        include_str!("declarations/AccessControl.toml"),
     ),
-    ("AdvSplash.toml", include_str!("headers/AdvSplash.toml")),
-    ("Banner.toml", include_str!("headers/Banner.toml")),
-    ("Dialer.toml", include_str!("headers/Dialer.toml")),
-    ("EnVar.toml", include_str!("headers/EnVar.toml")),
-    ("FileFunc.toml", include_str!("headers/FileFunc.toml")),
-    ("NSISdl.toml", include_str!("headers/NSISdl.toml")),
-    ("Nsis7z.toml", include_str!("headers/Nsis7z.toml")),
-    ("SimpleSC.toml", include_str!("headers/SimpleSC.toml")),
-    ("Splash.toml", include_str!("headers/Splash.toml")),
-    ("System.toml", include_str!("headers/System.toml")),
-    ("TextFunc.toml", include_str!("headers/TextFunc.toml")),
-    ("TypeLib.toml", include_str!("headers/TypeLib.toml")),
-    ("UserInfo.toml", include_str!("headers/UserInfo.toml")),
-    ("VPatch.toml", include_str!("headers/VPatch.toml")),
-    ("WordFunc.toml", include_str!("headers/WordFunc.toml")),
-    ("nsExec.toml", include_str!("headers/nsExec.toml")),
-    ("nsProcess.toml", include_str!("headers/nsProcess.toml")),
+    (
+        "AdvSplash.toml",
+        include_str!("declarations/AdvSplash.toml"),
+    ),
+    ("Banner.toml", include_str!("declarations/Banner.toml")),
+    ("Dialer.toml", include_str!("declarations/Dialer.toml")),
+    ("EnVar.toml", include_str!("declarations/EnVar.toml")),
+    ("FileFunc.toml", include_str!("declarations/FileFunc.toml")),
+    ("NSISdl.toml", include_str!("declarations/NSISdl.toml")),
+    ("Nsis7z.toml", include_str!("declarations/Nsis7z.toml")),
+    ("SimpleSC.toml", include_str!("declarations/SimpleSC.toml")),
+    ("Splash.toml", include_str!("declarations/Splash.toml")),
+    (
+        "StartMenu.toml",
+        include_str!("declarations/StartMenu.toml"),
+    ),
+    ("System.toml", include_str!("declarations/System.toml")),
+    ("TextFunc.toml", include_str!("declarations/TextFunc.toml")),
+    ("TypeLib.toml", include_str!("declarations/TypeLib.toml")),
+    ("UserInfo.toml", include_str!("declarations/UserInfo.toml")),
+    ("VPatch.toml", include_str!("declarations/VPatch.toml")),
+    ("WordFunc.toml", include_str!("declarations/WordFunc.toml")),
+    ("nsExec.toml", include_str!("declarations/nsExec.toml")),
+    (
+        "nsProcess.toml",
+        include_str!("declarations/nsProcess.toml"),
+    ),
     (
         "nsisFirewall.toml",
-        include_str!("headers/nsisFirewall.toml"),
+        include_str!("declarations/nsisFirewall.toml"),
     ),
 ];
 
 /// Where a project's own declarations live, relative to its root.
-pub const DIRECTORY: &str = ".installua/headers";
+pub const DIRECTORY: &str = ".installua/declarations";
 
 impl Default for Declarations {
     fn default() -> Declarations {
@@ -236,7 +274,7 @@ impl Declarations {
     ///
     /// Problems are dropped rather than returned, because there is nothing a
     /// caller could do about a file compiled into the binary: the check that
-    /// matters happens in `tests/headers.rs`, where a malformed shipped file
+    /// matters happens in `tests/declarations.rs`, where a malformed shipped file
     /// fails the build instead of the installer.
     pub fn builtin() -> Declarations {
         Declarations::shipped().0
@@ -272,7 +310,7 @@ impl Declarations {
     /// The builtins plus every `*.toml` in `dir`, in file-name order.
     ///
     /// A missing directory is not a problem: a project that declares nothing is
-    /// the common case, and an error there would make `.installua/headers/`
+    /// the common case, and an error there would make `.installua/declarations/`
     /// mandatory ceremony. A directory that cannot be *read* is a problem,
     /// because that is a permission or a typo rather than an absence.
     pub fn load(dir: &Path) -> (Declarations, Vec<Problem>) {
@@ -335,6 +373,8 @@ impl Declarations {
             nsis,
             params,
             outputs,
+            tagged,
+            more,
             dir,
             file,
             line,
@@ -364,6 +404,8 @@ impl Declarations {
                 nsis,
                 params,
                 outputs,
+                tagged,
+                more,
                 dir,
             });
         } else {
@@ -500,6 +542,8 @@ mod parse {
         pub nsis: String,
         pub params: Vec<Param>,
         pub outputs: Vec<Ty>,
+        pub tagged: Vec<String>,
+        pub more: Vec<Ty>,
         pub dir: Option<String>,
         pub file: String,
         /// The line the block opened on, so "already declared" points at the
@@ -517,6 +561,8 @@ mod parse {
         nsis: Option<String>,
         params: Option<Vec<Param>>,
         outputs: Option<Vec<Ty>>,
+        tagged: Option<Vec<String>>,
+        more: Option<Vec<Ty>>,
         dir: Option<String>,
     }
 
@@ -613,6 +659,42 @@ mod parse {
                         "`outputs` wants an array of quoted type names on one line".to_string(),
                     ),
                 },
+                // `tagged` and `more` describe a *stack* whose depth the first
+                // popped value decides, and a header macro pushes nothing: its
+                // outputs are trailing registers `!insertmacro` writes on every
+                // path, so there is no first value to test and no arity to
+                // vary.
+                "tagged" | "more" if !block.plugin => complain(
+                    line,
+                    format!(
+                        "`{key}` is a plugin field: a macro writes its outputs into registers, \
+                         so its arity cannot depend on what it returned"
+                    ),
+                ),
+                // Literals, not types: this is the text the emitted `StrCmpS`
+                // compares against, and it is whatever the plugin's source
+                // spells — `"error"`, `"success"`, `"cancel"`.
+                "tagged" => match array(value) {
+                    Some(words) => block.tagged = Some(words),
+                    None => complain(
+                        line,
+                        "`tagged` wants an array of quoted first-values on one line".to_string(),
+                    ),
+                },
+                "more" => match array(value) {
+                    Some(words) => {
+                        block.more = Some(
+                            types(&words, line, true, &mut complain)
+                                .into_iter()
+                                .map(|param| param.ty)
+                                .collect(),
+                        );
+                    }
+                    None => complain(
+                        line,
+                        "`more` wants an array of quoted type names on one line".to_string(),
+                    ),
+                },
                 // `dir` is a plugin's alone. A header is `!include`d and NSIS
                 // searches for one along `!addincludedir`, which is a different
                 // directive with a different position — accepting the key here
@@ -631,7 +713,8 @@ mod parse {
                     line,
                     format!(
                         "`{other}` is not a declaration field; the fields are `name`, `method`, \
-                         `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `dir`"
+                         `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `tagged`, \
+                         `more` and `dir`"
                     ),
                 ),
             }
@@ -710,13 +793,57 @@ mod parse {
             );
             return;
         };
+        let outputs = block.outputs.unwrap_or_default();
+        let tagged = block.tagged.unwrap_or_default();
+        let more = block.more.unwrap_or_default();
+
+        // Three checks, and each rules out a declaration that would *compile*
+        // into an unbalanced stack rather than into a diagnostic.
+        //
+        // Half a pair is the common typo and the worst outcome: `tagged` alone
+        // names a condition with nothing to do, and `more` alone names values
+        // with no condition — a plugin whose extra value is popped always, or
+        // never. Neither is a shape any plugin has.
+        //
+        // And `tagged` tests the **first popped value**, so a declaration
+        // without one is testing nothing. That is not a degenerate case to
+        // allow: a plugin that pushes a conditional value and nothing else
+        // pushes *nothing* on the other path, which is a boolean the stack
+        // cannot carry.
+        let (tagged, more) = match (tagged.is_empty(), more.is_empty()) {
+            (true, true) => (tagged, more),
+            (false, true) | (true, false) => {
+                complain(
+                    block.line,
+                    "`tagged` and `more` are one field in two halves — the first says when the \
+                     extra values follow and the second says what they are, and neither means \
+                     anything alone"
+                        .to_string(),
+                );
+                (Vec::new(), Vec::new())
+            }
+            (false, false) if outputs.is_empty() => {
+                complain(
+                    block.line,
+                    "`tagged` tests the first value the plugin pushes, so `outputs` has to \
+                     declare one: a value pushed on only some paths cannot be the value that \
+                     says which path it was"
+                        .to_string(),
+                );
+                (Vec::new(), Vec::new())
+            }
+            (false, false) => (tagged, more),
+        };
+
         records.push(Record {
             plugin: block.plugin,
             name,
             method,
             nsis,
             params: block.params.unwrap_or_default(),
-            outputs: block.outputs.unwrap_or_default(),
+            outputs,
+            tagged,
+            more,
             dir: block.dir,
             file: file.to_string(),
             line: block.line,

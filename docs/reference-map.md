@@ -1215,7 +1215,7 @@ compiler reserves the DLL when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
-Ten that ship with NSIS, read from each plugin's own source rather than its
+Eleven that ship with NSIS, read from each plugin's own source rather than its
 wiki page:
 
 | Plugin      | Methods                                                                                    |
@@ -1230,6 +1230,7 @@ wiki page:
 | `Banner`    | `.show`, `.getWindow`, `.destroy`                                                           |
 | `Splash`    | `.show` → `1` closed early, `0` timed out, `-1` error                                       |
 | `AdvSplash` | `.show` — Splash plus fades and a transparent colour                                        |
+| `StartMenu` | `.select`, `.init`, `.show` — the folder follows `"success"`, and only then                 |
 
 And six third-party plugins, on the evidence of a scan of 984 real-world
 scripts. These are **declarations, not bundled DLLs** — the plugin is still
@@ -1240,22 +1241,26 @@ yours to install, and the file here only supplies the count:
 | `EnVar`          | 95      | `.setHKCU`, `.setHKLM`, `.check`, `.addValue`, `.addValueEx`, `.setValue`, `.setValueEx`, `.deleteValue`, `.delete`, `.update` |
 | `SimpleSC`       | 61      | `.installService`, `.removeService`, `.startService`, `.stopService`, `.existsService`, `.serviceIsRunning`, `.getServiceStatus`, `.setServiceDescription`, `.setServiceStartType`, `.setServiceFailure` |
 | `nsProcess`      | 25      | `.findProcess`, `.killProcess`, `.closeProcess`                                            |
-| `AccessControl`  | 111     | `.getCurrentUserName`, `.nameToSid` — and *only* those two; see below                       |
+| `AccessControl`  | 111     | all 25 — every mutator and reader on files and registry keys, plus the three SID helpers    |
 | `Nsis7z`         | 5       | `.extract`, `.extractWithDetails` — neither pushes anything at all                          |
 | `nsisFirewall`   | 1       | `.addAuthorizedApplication`, `.removeAuthorizedApplication` — the pre-Vista firewall API     |
 
-The two counts at the bottom are not typos. `nsisFirewall` ships on **arity**
-rather than popularity — two methods, fixed positions, one code each — because
-the rule that governs this list puts the undiscoverable half first. And
-`AccessControl` is the reverse: 111 scripts, of which 109 call something that
-cannot be declared at all.
+The count at the bottom is not a typo. `nsisFirewall` ships on **arity** rather
+than popularity — two methods, fixed positions, one code each — because the rule
+that governs this list puts the undiscoverable half first.
 
-Four plugins that ship with NSIS, and most of `AccessControl`, are
-**deliberately not declared**; the reasons are in
+`AccessControl` is the other end of the same rule. Twenty-three of its
+twenty-five methods push a number of values that depends on the outcome, which
+is a fact no reading of its documentation supplies and no `outputs` list could
+state; they are declared with [`tagged`](plugin-reference.md#tagged-outputs),
+which says what the first popped value has to be for the rest to follow.
+
+Three plugins that ship with NSIS are **deliberately not declared**; the reasons
+are in
 [Plugins with no declaration](#plugins-with-no-declaration), and
 [plugin-reference.md](plugin-reference.md) is the per-method detail for the
 third-party set. Anything else is declared by the project in
-[`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header), which
+[`.installua/declarations/*.toml`](#declaring-a-third-party-plugin-or-header), which
 is what supplies the output count nothing can ask the DLL for.
 
 ```lua
@@ -1296,7 +1301,7 @@ the name you arrive with should be the one that works.
 rather than as calls — see [walkers](#walkers) below.
 
 Any other header's macros are declared by the project in
-[`.installua/headers/*.toml`](#declaring-a-third-party-plugin-or-header). A
+[`.installua/declarations/*.toml`](#declaring-a-third-party-plugin-or-header). A
 declaration ships when the fact it records is undiscoverable *and* the caller is
 common; the argument order of a macro that writes its outputs into trailing
 registers is exactly that, which is why these three arrived together.
@@ -1447,12 +1452,12 @@ naming it, and an anchor is outside every body.
 
 ### Declaring a third-party plugin or header
 
-One file per plugin or header in `.installua/headers/`, read by the compiler,
+One file per plugin or header in `.installua/declarations/`, read by the compiler,
 the editor stubs and the linter alike. The file name is yours; the extension is
 `.toml`.
 
 ```toml
-# .installua/headers/nsisunz.toml
+# .installua/declarations/nsisunz.toml
 [[plugin]]
 name = "nsisunz"                      # what `plugin "…"` is given
 method = "unzip"                      # what you call it
@@ -1490,6 +1495,34 @@ values it pushes, so `local rc, out = …` is checked against this list and
 nothing else. A count that is too small unbalances the stack, with no diagnostic
 from NSIS or from anybody.
 
+**`tagged` and `more` are for a count that is not a number.** A great many
+plugins push a different number of values depending on the outcome and say
+which by the first value they push:
+
+```toml
+[[plugin]]
+name = "AccessControl"
+method = "grantOnFile"
+nsis = "AccessControl::GrantOnFile"
+params = ["path", "string", "string"]
+outputs = ["string"]                  # every path pushes this
+tagged = ["error"]                    # when it is one of these …
+more = ["string"]                     # … these follow it
+```
+
+Both lists are part of the Lua arity — `local ok, why = …` binds two — and the
+tail reads `""` (or `0`, for a numeric type) on the path where the plugin
+pushed nothing. `tagged` is a **list of literals** rather than a fixed spelling
+because the polarity is the plugin's to choose: `AccessControl` tags its
+failure, `StartMenu::Select` tags its *success*. The two are declared the same
+way and mean opposite things.
+
+The pair is plugin-only — a macro writes its outputs into registers on every
+path, so there is no first value to test — and `outputs` must declare at least
+one value for `tagged` to be about. See
+[plugin-reference.md](plugin-reference.md#tagged-outputs) for the lines this
+emits and for the one failure it cannot cover.
+
 **`dir` is for a DLL that does not live in `NSISDIR/Plugins`** — a plugin
 vendored into your own repository. It is relative to the project root, and the
 compiler emits one `!addplugindir` for it, in the one position the directive is
@@ -1507,8 +1540,8 @@ own files is a mistake, and says so.
 Run `installua stubs` after adding a declaration: the compiler reads the `.toml`
 on every build, but the editor reads the generated stub.
 
-What ships declared lives in `src/headers/*.toml` in this repository, in this
-same format and read by this same parser — copy one into `.installua/headers/`
+What ships declared lives in `src/declarations/*.toml` in this repository, in this
+same format and read by this same parser — copy one into `.installua/declarations/`
 to correct it, or send it back as a pull request so nobody else has to.
 
 ---
@@ -1632,15 +1665,14 @@ here so a search for the NSIS name lands somewhere.
 
 ### Plugins with no declaration
 
-Sixteen plugins ship with NSIS. Twelve are [declared](#plugin) or reached
-through a construct; these four are not, and each one is a decision rather than
-a gap. All four remain callable through [`raw`](#raw), which is where a script
+Sixteen plugins ship with NSIS. Thirteen are [declared](#plugin) or reached
+through a construct; these three are not, and each one is a decision rather than
+a gap. All three remain callable through [`raw`](#raw), which is where a script
 that needs one goes.
 
 | Plugin          | Why not, and what to write instead                                                                                                                                                                                                                       |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Math`          | Its script string reads and writes `$0`–`$R9` **by name**, and the compiler owns the registers — a declaration would describe one string in and nothing out while the call quietly overwrote whatever the allocator had put there. Use the arithmetic operators. |
-| `StartMenu`     | `Select` pushes one value on Cancel and two on success, so there is no count to declare. `page.startMenu` is the page that asks the same question, and [`createShortcut`](#createshortcut) does the rest.                                                          |
 | `BgImage`       | Every method returns a value only after `SetReturn on`, which makes the arity a **mode** rather than a signature — the one shape the format cannot carry.                                                                                                 |
 | `LangDLL`       | Reached through `languages { ask = … }`, which emits `MUI_LANGDLL_DISPLAY`. A second spelling for one dialog is worse than none.                                                                                                                          |
 
@@ -1659,7 +1691,6 @@ in five lines of [its own `.toml`](#declaring-a-third-party-plugin-or-header).
 
 | Plugin                   | Scripts | Why not, and what to write instead                                                                                                                                                                                                                                                        |
 | ------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AccessControl`, all but `.getCurrentUserName` and `.nameToSid` | 111 | Read from `AccessControl.cpp`, because the readme and the wiki page are both wrong about the stack. The mutators and the `Get*Owner`/`Get*Group` readers push a description and then `"error"` on top of it, so one value on success and two on a diagnosed failure — the same shape as `StartMenu::Select` above. `.sidToName` looks declarable and is not: two on success, one on a failed lookup. |
 | `Registry`               | 40      | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, not a raw plugin call — and that form needs a trailing `${registry::Unload}`, which is behaviour rather than arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40.                                          |
 | `SimpleSC.getErrorMessage` | 61    | Takes its argument by `Push` rather than inline: `Push $code` / `SimpleSC::GetErrorMessage` / `Pop $msg`. `params` become the arguments written *after* `Plugin::Method`, so the format has no spelling for it. Three lines of `raw`.                                                        |
 | `LockedList`             | 0       | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature.                                                                                                                                                                             |

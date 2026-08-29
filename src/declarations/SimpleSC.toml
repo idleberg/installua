@@ -7,7 +7,7 @@
 # - `GetErrorMessage`, which takes its argument by `Push` rather than inline and
 #   so has no spelling here. Three lines of `raw`.
 # - The ~20 further methods the page documents, none of which has a call site in
-#   the 984-script corpus. Five lines each in a project's own `.installua/headers/`.
+#   the 984-script corpus. Five lines each in a project's own `.installua/declarations/`.
 
 [[plugin]]
 name = "SimpleSC"

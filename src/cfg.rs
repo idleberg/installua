@@ -101,6 +101,7 @@ impl Body {
             kind: ir::CallKind::Function,
             args: Vec::new(),
             results: Vec::new(),
+            tail: None,
             saves: Vec::new(),
             span,
         });
@@ -116,6 +117,7 @@ impl Body {
             kind: ir::CallKind::Opaque { lines, raw },
             args: Vec::new(),
             results: Vec::new(),
+            tail: None,
             saves: Vec::new(),
             span,
         });

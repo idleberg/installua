@@ -33,7 +33,7 @@ The second is what turns a documented count into a measured one, and it caught
 argument arrives by `Push` — something no reading of the documentation would
 have found.
 
-**Where the two still disagree, read the source.** That happened once, on
+**Where the two still disagree, read the source.** That happened on
 [AccessControl](#accesscontrol), and it was worth the trouble: the readme, the
 wiki page and the corpus each imply a *different* set of declarable methods, and
 all three are wrong. Documentation describes the path its author was thinking
@@ -41,9 +41,85 @@ about, and an arity is a claim about every path.
 
 ---
 
+# Tagged outputs
+
+A great many plugins push a number of values that **depends on the outcome**,
+and say which by the first value they push. `AccessControl::GrantOnFile` pushes
+`"ok"` alone, or `"error"` and a description underneath it;
+`StartMenu::Select` pushes `"success"` **and** a folder, or `"cancel"` or an
+error message alone.
+
+A flat `outputs` list has to pick one of those and be wrong on the other — and
+being wrong is not a wrong type. It is an unbalanced stack: every later `Pop` in
+the section shifts by one, and neither Installua nor NSIS says a word. So the
+declaration says it instead:
+
+```toml
+[[plugin]]
+name = "AccessControl"
+method = "grantOnFile"
+nsis = "AccessControl::GrantOnFile"
+params = ["path", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+```
+
+`outputs` is what comes back on **every** path; `more` is what follows when the
+first popped value is one of `tagged`. Both are part of the Lua arity:
+
+```lua
+local granted, why = accessControl.grantOnFile(INSTDIR, "(BU)", "FullAccess")
+if granted == "error" then
+    detailPrint("ACL not set: " .. why)
+end
+```
+
+which becomes
+
+```nsis
+AccessControl::GrantOnFile $INSTDIR "(BU)" "FullAccess"
+Pop $0
+StrCpy $1 ""
+StrCmpS $0 "error" 0 __GENERATED_tail_0
+Pop $1
+__GENERATED_tail_0:
+```
+
+Three things about that emission are deliberate. **The default is written
+first**, so `$1` is defined on both paths and the register allocator never sees
+a conditional definition — which is what keeps this out of the control-flow
+graph entirely. The test is `StrCmpS`, so a payload differing from a tag only in
+case is a different value. And the target is a label rather than `+2`, because a
+relative jump is correct until a later pass inserts a line.
+
+**`tagged` is a list of literals, not the word "error".** The polarity is the
+plugin's to choose, and the two above chose opposite ones: a design that
+hardcoded the failure spelling would describe AccessControl and misdescribe
+StartMenu by exactly one value, on every run that worked.
+
+A tail the caller does not bind is still popped. The plugin put it there; what
+the caller wanted has no bearing on what the stack holds.
+
+## The hazard this cannot cover
+
+The `Pop` is emitted because the declaration says the value is there. A plugin
+that pushes its tag and then **fails to push the tail** — AccessControl does
+exactly this when `LocalAlloc` fails — leaves the `Pop` to take whatever is
+underneath, which is a caller-save, and the stack is corrupt from there on.
+
+Nothing can detect it: NSIS offers no way to ask how deep the stack is, and the
+value popped is a perfectly good string. Every hand-written NSIS script that
+tests `== error` and pops again has the identical bug. It is an out-of-memory
+path on a plugin that just allocated, so it is documented rather than defended
+against — the defence would be to not pop at all, which is wrong on every other
+run.
+
+---
+
 # Plugins that ship with NSIS
 
-Ten, every count read from the plugin's own source under `NSISDIR/Contrib`
+Eleven, every count read from the plugin's own source under `NSISDIR/Contrib`
 rather than from its readme.
 
 ## nsExec
@@ -96,11 +172,11 @@ its entry point out of `wininet.dll` at call time, and on the branch where
 `Pop` is emitted before anything could test `errors()`, so on that branch the
 value read is whatever was underneath.
 
-Declared anyway, and `StartMenu` is not, on a line worth stating: this arity
-varies only on a Windows old enough to lack `InternetAutodial` — older than 98,
-or a 95 that never saw IE4 — whereas `StartMenu::Select` pushes one value or two
-depending on whether the *user* pressed Cancel, which is an ordinary path on
-every run.
+Declared anyway, on a line worth stating: this arity varies only on a Windows
+old enough to lack `InternetAutodial` — older than 98, or a 95 that never saw
+IE4. It is not the [tagged-output](#tagged-outputs) shape, which varies on an
+ordinary path and has a first value that says which; here there is no value at
+all to test, and the branch is unreachable on anything this century.
 
 ## NSISdl
 
@@ -208,6 +284,41 @@ The `patchFile` export is lower-case `vpatchfile`; the namespace is spelled the
 way the DLL is named, so the emitted call and its `ReserveFile /plugin
 VPatch.dll` agree. `AdvSplash` is spelled for the same reason — its readme
 writes `advsplash::show`, and NSIS matches the namespace case-insensitively.
+
+## StartMenu
+
+The custom page that asks which Start Menu folder to put shortcuts in, and the
+[tagged-output](#tagged-outputs) shape with the *unusual* polarity.
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.select(defaultFolder)` | `string` | `"success"` + the folder, or `"cancel"` or a message alone |
+| `.init(defaultFolder)` | `string` | the page's `HWND`, or an error string |
+| `.show()` | — | the same as `.select` |
+
+**Source: `Contrib/StartMenu/StartMenu.c`.** `Select` is `Init`, a `popstring`
+that discards the `HWND`, then `Show` — so the three arities are one mechanism:
+the dialog procedure pushes the folder and then `"success"` on top of it, or
+`"cancel"` alone, and a failed `Init` leaves its error string where `Select`'s
+`popstring` never reaches it.
+
+Use `.init` / `.show` in place of `.select` only when the page's controls need
+restyling in between; that is the pair's whole purpose, and `GetDlgItem` on the
+returned handle is how the readme does it. **Check `.init`'s result before
+calling `.show`** — on the path where `Init` failed, `Show` returns having
+pushed nothing at all, and the `Pop` Installua emits would take a caller-save.
+That is the same hazard [tagged outputs](#the-hazard-this-cannot-cover)
+document, reached a different way.
+
+The folder comes back **prefixed with `>`** when the user ticks a
+`/checknoshortcuts` box, and it is a sub-folder name rather than a full path —
+joining it to `$SMPROGRAMS` is the caller's step. Neither that flag nor
+`/autoadd`, `/noicon`, `/rtl`, `/text` or `/lastused` has a spelling yet, so
+only the unadorned call is reachable.
+
+`page.startMenu` is the built-in page that asks the same question through MUI2
+and remembers the answer in the registry; reach for this plugin when you want
+the dialog somewhere a page cannot go.
 
 ---
 
@@ -399,50 +510,58 @@ release the DLL, and Installua emits no `/NOUNLOAD`.
 ## AccessControl
 
 ACLs, 111 corpus scripts — the most-used third-party plugin in the corpus, and
-the one with two declared methods out of twenty-five.
+all twenty-five of its methods are declared.
 
-**Source: `AccessControl.cpp`.** This is the one plugin in the third-party set
-where the source had to settle it: the readme and the wiki page are both wrong
-about the stack, in opposite directions, and either one on its own leads to a
-different — wrong — set of declarations.
+**Source: `AccessControl.cpp`.** This is the plugin where the source had to
+settle it, twice. The readme and the wiki page are both wrong about the stack in
+opposite directions, and either on its own leads to a different — wrong — set of
+declarations. Twenty-three of the twenty-five are declarable only because the
+format has [`tagged`](#tagged-outputs), and the remaining two were misread here
+until the source was read a second time.
 
-| Method | Arguments | Returns |
-| ------ | --------- | ------- |
-| `.getCurrentUserName()` | — | user name |
-| `.nameToSid(name)` | `string` | SID |
+### Every method's arity
 
-`getCurrentUserName` gives the bare account name without a domain
-(`GetUserName`, not `GetUserNameEx`). Pair the two when a trustee argument needs
-a SID. `nameToSid` takes `"Administrator"`, `"Everyone"` or
-`"Domain\Administrator"` — the parenthesised `(BU)` and `(S-1-5-32-545)` trustee
-spellings are inputs to the methods this file does *not* declare.
-
-**Neither has a usable failure sentinel.** `getCurrentUserName` never checks
-`GetUserName`'s result, so a failed lookup pushes an empty string;
-`nameToSid` pushes the sentence `Cannot look up name. Error code: N` rather than
-`"error"`. Test the `S-1-` prefix, not equality.
-
-### Why only two
-
-The plugin has **two error conventions**, and only one of them keeps the count
-fixed.
-
-The mutators and the object readers route every diagnosed failure through
-`ABORT_s`/`ABORT_d`, which push a **description** and then jump to a cleanup
-that pushes `"error"` on top of it:
+Twenty-two of them are one shape. The mutators and the object readers route
+every diagnosed failure through `ABORT_s`/`ABORT_d`, which push a **description**
+and then jump to a cleanup that pushes `"error"` on top of it:
 
 ```c
 #define ABORT_s(x, y) { showerror_s(TEXT(x), y); goto cleanup; }
 ...
-if (ret != 0) pushstring(TEXT("error"));
+if (ret) pushstring(TEXT("error"));
 ```
 
 So `GrantOnFile`, `SetOnFile`, `DenyOnFile`, `RevokeOnFile`, `ClearOnFile`,
-`SetFileOwner`, the whole `*OnRegKey` family, the inheritance pair, and the
-`Get*Owner`/`Get*Group` readers push **one value on success and two on a
-diagnosed failure** — and one again on an undiagnosed one, where the allocation
-itself failed. That is the **tagged-output** shape: the arity is an outcome
-rather than a signature, and `outputs` cannot state it.
+`SetFileOwner`, `SetFileGroup`, the inheritance pair, the `Get*Owner` /
+`Get*Group` readers and the whole `*OnRegKey` family push **`"ok"` alone, or
+`"error"` and a description underneath it** — which is exactly `tagged =
+["error"]`, `more = ["string"]`.
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.enableFileInheritance(path)` | `path` | `"ok"`, or `"error"` + why |
+| `.disableFileInheritance(path)` | `path` | the same |
+| `.grantOnFile(path, trustee, permissions)` | `path`, `string`, `string` | the same |
+| `.setOnFile(…)` / `.denyOnFile(…)` / `.revokeOnFile(…)` / `.clearOnFile(…)` | the same three | the same |
+| `.setFileOwner(path, trustee)` | `path`, `string` | the same |
+| `.setFileGroup(path, trustee)` | `path`, `string` | the same |
+| `.getFileOwner(path)` | `path` | the **owner**, or `"error"` + why |
+| `.getFileGroup(path)` | `path` | the group, or `"error"` + why |
+| `.enableRegKeyInheritance(root, key)` | `string`, `string` | `"ok"`, or `"error"` + why |
+| `.disableRegKeyInheritance(root, key)` | `string`, `string` | the same |
+| `.grantOnRegKey(root, key, trustee, permissions)` | four `string` | the same |
+| `.setOnRegKey(…)` / `.denyOnRegKey(…)` / `.revokeOnRegKey(…)` / `.clearOnRegKey(…)` | the same four | the same |
+| `.setRegKeyOwner(root, key, trustee)` | three `string` | the same |
+| `.setRegKeyGroup(root, key, trustee)` | three `string` | the same |
+| `.getRegKeyOwner(root, key)` | `string`, `string` | the owner, or `"error"` + why |
+| `.getRegKeyGroup(root, key)` | `string`, `string` | the group, or `"error"` + why |
+| `.nameToSid(name)` | `string` | the SID, or `"error"` + why |
+| `.sidToName(sid)` | `string` | domain, then name — **always two** |
+| `.getCurrentUserName()` | — | user name, **always one** |
+
+Note that `getFileOwner`'s success value is the payload rather than a tag: only
+the *failure* side is a fixed string, which is why `tagged` is a list of
+first-values to test and never a tag to parse.
 
 The wiki's examples all pop once:
 
@@ -452,7 +571,8 @@ Pop $0 ; "error" on errors
 ```
 
 That is a happy-path example, and on the error path it leaks the description
-onto the stack. The corpus has the correct idiom:
+onto the stack. The corpus has the correct idiom, and it is the one Installua
+now emits:
 
 ```nsis
 AccessControl::GrantOnFile "$INSTDIR" "(BU)" "FullAccess"
@@ -462,29 +582,46 @@ ${If} $R0 == error
 ${EndIf}
 ```
 
-The three SID helpers use no `ABORT` at all — each has a hand-rolled error path,
-and the counts differ per method:
+### The three SID helpers, read twice
+
+These use no `ABORT` at all — each has a hand-rolled error path — and an
+**earlier version of this page got two of them wrong**, in a way worth
+recording because it is the same mistake the readme makes. `NameToSid` and
+`SidToName` both end with the file's standard trailing line:
+
+```c
+  if (ret) pushstring(TEXT("error"));
+```
+
+Reading only the body of each function suggests the failure path pushes a
+message and stops. It does not: `ret` is still `1` there, so `"error"` goes on
+**top** of the message and both come back.
 
 | | Success | Failed lookup | Allocation failure |
 | --- | --- | --- | --- |
 | `GetCurrentUserName` | 1 (name) | 1 (empty string) | 1 (`"error"`) |
-| `NameToSid` | 1 (SID) | 1 (message) | 1 (`"error"`) |
-| `SidToName` | **2** (name, domain) | **1** (message) | 1 (`"error"`) |
+| `NameToSid` | 1 (SID) | **2** (`"error"`, message) | 1 (`"error"`) |
+| `SidToName` | **2** (name, domain) | **2** (`"error"`, message) | 1 (`"error"`) |
 
-`SidToName` is the one that looks declarable and is not. On a failed lookup it
-writes a message, pushes it, and sets `ret = 0` — so the trailing `"error"`
-never fires, and one value comes back where success gives two. The readme
-presents it as `Pop $Domain` / `Pop $Username`, which describes the success path
-only; both corpus call sites pop twice because both assume the readme.
+So `NameToSid` is tagged like the other twenty-two, and `SidToName` is
+**uniform at two** — the arity does not vary at all, and the pair is
+`(domain, name)` on success and `("error", message)` on failure. The readme
+presents it as `Pop $Domain` / `Pop $Username`, which is right about the success
+path and silent about the other; both corpus call sites pop twice because both
+assume the readme, and both are correct by accident.
 
-One more gap that outlives the tagged-output question: every mutator takes an
-optional `/NOINHERIT` flag in first position, and the format has no spelling for
-a flag — the same absence `Banner` records for `/set` and `nsExec` for
-`/TIMEOUT`.
+`getCurrentUserName` is the genuinely uniform one. It gives the bare account
+name without a domain (`GetUserName`, not `GetUserNameEx`) and never checks the
+result, so a failed lookup pushes an empty string rather than a sentinel — test
+emptiness, not equality.
 
-This is the plugin that motivates
-[`PLUGINS-PLAN.md` phase 2b](../PLUGINS-PLAN.md): 111 corpus scripts, and 109 of
-them call something this file cannot describe.
+### What is still out of reach
+
+Every mutator takes optional `/NOINHERIT` and `/SID` flags in **first**
+position, and the format has no spelling for a flag — the same absence `Banner`
+records for `/set` and `nsExec` for `/TIMEOUT`. That is
+[`PLUGINS-PLAN.md` phase 2a](../PLUGINS-PLAN.md), and it is now the only part of
+this plugin Installua cannot reach.
 
 ---
 
@@ -496,7 +633,6 @@ declared in five lines of your own `.toml`.
 
 | Plugin | Scripts | Why |
 | ------ | ------- | --- |
-| `AccessControl`, all but `.getCurrentUserName` and `.nameToSid` | 111 | Two error conventions, and only the SID helpers keep the count fixed — [above](#why-only-two). `.sidToName` looks declarable and is not. |
 | `Registry` | 40 | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, which needs a trailing `${registry::Unload}` — behaviour, not arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40. |
 | `SimpleFC` | 24 | The maintained successor to `nsisFirewall`. Not measured yet — the one entry here that is a gap rather than a decision. |
 | `SimpleSC.getErrorMessage` | 61 | Takes its argument by `Push` — [above](#simplescgeterrormessage-is-not-declarable). |
@@ -507,4 +643,4 @@ declared in five lines of your own `.toml`.
 `nsisunz` is not in this table and is not declared either: it is the worked
 example of a plugin you declare yourself, in
 [README.md](../README.md#third-party-plugins-and-headers) and in
-`tests/headers.rs`. It stays undeclared so that example stays copy-pasteable.
+`tests/declarations.rs`. It stays undeclared so that example stays copy-pasteable.

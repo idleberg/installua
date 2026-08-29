@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use installua::headers::Declarations;
+use installua::declarations::Declarations;
 
 /// Which of the two namespaces a spelling reaches into.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

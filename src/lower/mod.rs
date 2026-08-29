@@ -7754,7 +7754,12 @@ impl BodyLowerer<'_, '_> {
     /// function. The last is the one a reader hits by writing `for … in
     /// fileFunc.getSize(…)`, and "that is not a walker" is more use than
     /// "unsupported iterator".
-    fn walker(&mut self, base: &str, method: &Name, span: Span) -> Option<crate::headers::Macro> {
+    fn walker(
+        &mut self,
+        base: &str,
+        method: &Name,
+        span: Span,
+    ) -> Option<crate::declarations::Macro> {
         let namespace = self.resolved.namespaces.get(base).cloned();
         let header = match namespace {
             Some(crate::resolve::Namespace::Header(header)) => header,
@@ -7826,10 +7831,10 @@ impl BodyLowerer<'_, '_> {
         base: &str,
         method: &Name,
         args: &[Expr],
-        entry: &crate::headers::Macro,
+        entry: &crate::declarations::Macro,
         span: Span,
     ) -> Option<Vec<ir::Arg>> {
-        let before: Vec<crate::headers::Param> = entry
+        let before: Vec<crate::declarations::Param> = entry
             .params
             .iter()
             .copied()

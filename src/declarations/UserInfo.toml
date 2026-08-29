@@ -1,4 +1,5 @@
-# UserInfo, ships with NSIS: <https://nsis.sourceforge.io/UserInfo_plug-in>.
+# UserInfo, ships with NSIS. No shipped doc; counts read from the source,
+# `Contrib/UserInfo/UserInfo.c`.
 #
 # See docs/plugin-reference.md.
 

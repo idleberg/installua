@@ -5,7 +5,7 @@
 -- program uses all three, with live values across each of them.
 --
 -- Note what is *not* here: `Push`, `Pop` and `Exch` have no Installua spelling.
--- A plugin's output count comes from its declaration in `.installua/headers/`,
+-- A plugin's output count comes from its declaration in `.installua/declarations/`,
 -- which is what makes `local rc, out = …` legal at all.
 
 local APP <const> = "Example2"

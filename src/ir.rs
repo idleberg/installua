@@ -382,11 +382,43 @@ pub struct CallSite {
     /// Where the returned values land, in source order. A dropped return still
     /// gets one: the callee pushed it either way, so it has to come off.
     pub results: Vec<Slot>,
+    /// Set when the callee's arity depends on its first pushed value, and the
+    /// trailing [`Tail::defaults`]`.len()` of [`results`](Self::results) come
+    /// off only on some paths.
+    pub tail: Option<Tail>,
     /// `live ∩ clobbered`, ascending. Empty until [`crate::alloc`] fills it,
     /// and empty afterwards too whenever the intersection really is empty —
     /// which is the common case, and the whole argument for caller-saves.
     pub saves: Vec<Slot>,
     pub span: Span,
+}
+
+/// A call site's **conditional** returns: the ones that are on the stack only
+/// when the first popped value says so. See [`crate::declarations::PluginMethod::tagged`]
+/// for why a plugin has these at all.
+///
+/// The slots themselves stay in [`CallSite::results`] rather than moving here,
+/// and that is the whole trick. A conditional `Pop` reads like a branch, and a
+/// branch in the middle of a call site would mean a CFG diamond — which would
+/// have to exist before [`crate::alloc`] runs, would split the call's own
+/// liveness, and would put control flow somewhere the lowerer has no block
+/// boundary. Instead the tail is **pre-defaulted**: `layout` writes each tail
+/// slot before testing the tag, so every slot is defined on every path, the
+/// allocator sees a call that defines all its results exactly as before, and
+/// the conditional part is a straight run of lines inside one block.
+///
+/// So this is a layout-local fact, and it is on the call site only because
+/// layout is handed a [`CallSite`] and nothing else.
+#[derive(Clone, Debug)]
+pub struct Tail {
+    /// First-popped values that mean the tail is there. Compared with
+    /// `StrCmpS`, so the match is exact — a payload that differs from a tag
+    /// only in case is a different value, and guessing otherwise would pop a
+    /// caller-save.
+    pub tags: Vec<String>,
+    /// What each tail slot holds when the tag did *not* match, one per
+    /// conditional trailing result. Written unconditionally, ahead of the test.
+    pub defaults: Vec<String>,
 }
 
 /// `name` is a `String` and not `&'static str` because macro invocations

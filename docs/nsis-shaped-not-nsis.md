@@ -172,7 +172,7 @@ and it costs exactly what you would expect:
 - a long string is required, not merely preferred: a `"…"` literal would be lexed as Lua
   and mangle your `\` and `$\n`.
 
-Third-party headers and plugins are declared in `.installua/headers/*.toml`, which the
+Third-party headers and plugins are declared in `.installua/declarations/*.toml`, which the
 compiler, the editor stubs and the linter all read — five lines per method, and the call
 is then as ordinary as `detailPrint`. Declaring one is not ceremony:
 `${StrCase} $0 "text" "L"` puts its destination _first_ and `${GetSize} "$dir" "" $0 $1 $2`

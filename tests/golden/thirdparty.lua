@@ -1,12 +1,17 @@
--- The five third-party plugins that ship declared, and the one fact each
--- declaration carries: how many values come back.
+-- The plugins that ship declared, and the one fact each declaration carries:
+-- how many values come back.
 --
 -- Read this the way `plugins.lua` asks to be read -- every call below is a
 -- `Pop` count nothing could have discovered, and a wrong number in
--- `src/headers/*.toml` would not fail here. It would shift every later `Pop` by
+-- `src/declarations/*.toml` would not fail here. It would shift every later `Pop` by
 -- one and still assemble.
 --
--- Tier 2 only. None of these DLLs is in `NSISDIR/Plugins` on any machine, so
+-- The last two sections are the second thing a declaration can carry: a count
+-- that is not a *number*. A plugin whose first pushed value decides whether
+-- more follow is declared with `tagged`, and the two below tag opposite
+-- outcomes on purpose.
+--
+-- Tier 2 only. Most of these DLLs are in `NSISDIR/Plugins` on no machine, so
 -- `makensis` would stop at *Plugin not found* long before it judged anything
 -- this file is testing. `tests/goldens.rs` keeps it out of the tier-3 list on
 -- purpose, and says so there.
@@ -16,6 +21,7 @@ local enVar = plugin "EnVar"
 local nsis7z = plugin "Nsis7z"
 local nsisFirewall = plugin "nsisFirewall"
 local simpleSC = plugin "SimpleSC"
+local startMenu = plugin "StartMenu"
 
 attributes {
 	name = "Third Party",
@@ -85,17 +91,51 @@ installer {
 		if allowed ~= 0 then
 			detailPrint("firewall rule not added")
 		end
+	end),
 
-		-- The two AccessControl methods whose count does not depend on the
-		-- outcome -- one value on every path through each. Everything else the
-		-- plugin exports pushes one on success and two on a diagnosed failure,
-		-- which is an outcome rather than a signature.
-		--
-		-- `nameToSid` is also where the absent sentinel shows: a failed lookup
-		-- comes back as a sentence, not as `"error"`, so there is nothing to
-		-- compare against and the prefix is what a caller tests.
+	section("Permissions", function()
+		-- The shape 22 of AccessControl's 25 methods have: `"ok"` alone, or
+		-- `"error"` and a message underneath it. Dropping the message would be
+		-- a stack leak rather than a lost diagnostic, which is why the second
+		-- name is not optional in the emitted `Pop` even when the caller has no
+		-- use for it.
+		local granted, why = accessControl.grantOnFile(INSTDIR, "(BU)", "FullAccess")
+		if granted == "error" then
+			detailPrint("ACL not set: " .. why)
+		end
+
+		-- The uniform one: `getCurrentUserName` pushes exactly one value on
+		-- every path, and `"error"` is that value rather than a tag on top of
+		-- one. So there is nothing to test and nothing to default.
 		local user = accessControl.getCurrentUserName()
-		local sid = accessControl.nameToSid(user)
-		detailPrint(user .. " is " .. sid)
+
+		-- **A tagged arity.** `nameToSid` pushes the SID alone, or a sentence
+		-- and `"error"` on top of it -- so the count is one *or* two and the
+		-- first value is which. `tagged` is what says so, and the second name
+		-- here reads `""` on the path where nothing was pushed.
+		--
+		-- Binding only `sid` would still be correct: the message comes off the
+		-- stack either way, because the plugin put it there and leaving it
+		-- would shift every later `Pop` by one.
+		local sid, unknown = accessControl.nameToSid(user)
+		if sid == "error" then
+			detailPrint(unknown)
+		else
+			detailPrint(user .. " is " .. sid)
+		end
+	end),
+
+	section("Start Menu", function()
+		-- **The opposite polarity, and the reason `tagged` is a list of
+		-- literals rather than the word "error".** StartMenu pushes its extra
+		-- value on *success*: `"success"` and the folder, or `"cancel"` or an
+		-- error message alone. A design that hardcoded the failure spelling
+		-- would pop one value too few on every run that worked, and NSIS would
+		-- not say a word about it.
+		local outcome, folder = startMenu.select("Example")
+		if outcome == "success" then
+			setOutPath(INSTDIR)
+			createShortcut(SMPROGRAMS .. "/" .. folder .. "/Example.lnk", INSTDIR .. "/app.exe")
+		end
 	end),
 }

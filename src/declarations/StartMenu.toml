@@ -1,0 +1,34 @@
+# StartMenu, shipped with NSIS: <https://nsis.sourceforge.io/Docs/StartMenu/Readme.txt>.
+#
+# See docs/plugin-reference.md — read from `Contrib/StartMenu/StartMenu.c`,
+# because the readme's "pushes the folder after success" is a sentence about
+# two different arities.
+#
+# Absent: none of the 3 exported methods. The leading `/autoadd`, `/noicon`,
+# `/rtl`, `/text`, `/lastused` and `/checknoshortcuts` flags have no spelling
+# yet, so only the unadorned call is reachable.
+
+[[plugin]]
+name = "StartMenu"
+method = "select"
+nsis = "StartMenu::Select"
+params = ["string"]
+outputs = ["string"]
+tagged = ["success"]
+more = ["string"]
+
+[[plugin]]
+name = "StartMenu"
+method = "init"
+nsis = "StartMenu::Init"
+params = ["string"]
+outputs = ["handle"]
+
+[[plugin]]
+name = "StartMenu"
+method = "show"
+nsis = "StartMenu::Show"
+params = []
+outputs = ["string"]
+tagged = ["success"]
+more = ["string"]

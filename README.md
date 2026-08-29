@@ -173,7 +173,7 @@ will reach past the set almost immediately. Anything else is **declared by your
 project**, in one small file per plugin or header:
 
 ```toml
-# .installua/headers/nsisunz.toml
+# .installua/declarations/nsisunz.toml
 [[plugin]]
 name = "nsisunz"                      # what `plugin "…"` is given
 method = "unzip"                      # what you call it
@@ -218,7 +218,7 @@ all — you only need one to call its macros as `header.macro(…)`.
 The full format, the type vocabulary and the rules for redeclaring a builtin are
 in [docs/reference-map.md](docs/reference-map.md#declaring-a-third-party-plugin-or-header).
 What ships declared is written in that same format, in
-[src/headers/](src/headers/) — a plugin worth having here is a pull request
+[src/declarations/](src/declarations/) — a plugin worth having here is a pull request
 holding one `.toml` file and no Rust.
 
 What is still yours is `raw` — for a plugin with no declaration yet, and for the

@@ -1,0 +1,228 @@
+# AccessControl, third-party: <https://nsis.sourceforge.io/AccessControl_plug-in>.
+#
+# See docs/plugin-reference.md — read from `AccessControl.cpp`, because the
+# readme, the wiki page and the corpus each imply a different set here.
+#
+# Absent: none of the 25 exported methods. The leading `/noinherit` and `/sid`
+# flags have no spelling yet, so the calls they modify are unreachable.
+
+[[plugin]]
+name = "AccessControl"
+method = "enableFileInheritance"
+nsis = "AccessControl::EnableFileInheritance"
+params = ["path"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "disableFileInheritance"
+nsis = "AccessControl::DisableFileInheritance"
+params = ["path"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "grantOnFile"
+nsis = "AccessControl::GrantOnFile"
+params = ["path", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "setOnFile"
+nsis = "AccessControl::SetOnFile"
+params = ["path", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "denyOnFile"
+nsis = "AccessControl::DenyOnFile"
+params = ["path", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "revokeOnFile"
+nsis = "AccessControl::RevokeOnFile"
+params = ["path", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "clearOnFile"
+nsis = "AccessControl::ClearOnFile"
+params = ["path", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "setFileOwner"
+nsis = "AccessControl::SetFileOwner"
+params = ["path", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "setFileGroup"
+nsis = "AccessControl::SetFileGroup"
+params = ["path", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "getFileOwner"
+nsis = "AccessControl::GetFileOwner"
+params = ["path"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "getFileGroup"
+nsis = "AccessControl::GetFileGroup"
+params = ["path"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "enableRegKeyInheritance"
+nsis = "AccessControl::EnableRegKeyInheritance"
+params = ["string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "disableRegKeyInheritance"
+nsis = "AccessControl::DisableRegKeyInheritance"
+params = ["string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "grantOnRegKey"
+nsis = "AccessControl::GrantOnRegKey"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "setOnRegKey"
+nsis = "AccessControl::SetOnRegKey"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "denyOnRegKey"
+nsis = "AccessControl::DenyOnRegKey"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "revokeOnRegKey"
+nsis = "AccessControl::RevokeOnRegKey"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "clearOnRegKey"
+nsis = "AccessControl::ClearOnRegKey"
+params = ["string", "string", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "setRegKeyOwner"
+nsis = "AccessControl::SetRegKeyOwner"
+params = ["string", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "setRegKeyGroup"
+nsis = "AccessControl::SetRegKeyGroup"
+params = ["string", "string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "getRegKeyOwner"
+nsis = "AccessControl::GetRegKeyOwner"
+params = ["string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "getRegKeyGroup"
+nsis = "AccessControl::GetRegKeyGroup"
+params = ["string", "string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "nameToSid"
+nsis = "AccessControl::NameToSid"
+params = ["string"]
+outputs = ["string"]
+tagged = ["error"]
+more = ["string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "sidToName"
+nsis = "AccessControl::SidToName"
+params = ["string"]
+outputs = ["string", "string"]
+
+[[plugin]]
+name = "AccessControl"
+method = "getCurrentUserName"
+nsis = "AccessControl::GetCurrentUserName"
+params = []
+outputs = ["string"]

@@ -26,7 +26,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use crate::builtins;
-use crate::headers;
+use crate::declarations;
 use crate::lower::{self, control};
 use crate::table::{self, Class, Param};
 use crate::types::Ty;
@@ -35,10 +35,10 @@ use crate::types::Ty;
 ///
 /// Takes the declarations rather than reading the builtins, because a
 /// third-party plugin is only *declared* in a project's own
-/// `.installua/headers/*.toml` — and a stub that stopped at the builtins would
+/// `.installua/declarations/*.toml` — and a stub that stopped at the builtins would
 /// leave exactly the calls a user had to write down themselves untyped, which
 /// is the case the declaration file exists for.
-pub fn meta(declared: &headers::Declarations) -> String {
+pub fn meta(declared: &declarations::Declarations) -> String {
     let mut out = String::from(
         "---@meta\n\
          \n\
@@ -694,11 +694,11 @@ fn declarations() -> String {
 /// Parameters are `a1`, `a2`, …: a declaration says what a position *is* and
 /// not what it is called, and inventing names that read like documentation
 /// would be inventing documentation.
-fn foreign(declared: &headers::Declarations) -> String {
+fn foreign(declared: &declarations::Declarations) -> String {
     let mut out = String::from(
         "--------------------------------------------------------------------------------\n\
          -- Foreign code: plugins and headers, from the builtin declarations and from\n\
-         -- this project's own `.installua/headers/*.toml`.\n\
+         -- this project's own `.installua/declarations/*.toml`.\n\
          --------------------------------------------------------------------------------\n\n",
     );
 
@@ -709,10 +709,16 @@ fn foreign(declared: &headers::Declarations) -> String {
             if entry.plugin != name {
                 continue;
             }
+            // A tagged method's conditional returns are returns: the editor is
+            // told about all of them, because the caller may bind all of them
+            // and the ones that were not pushed read `""`. Which is which is
+            // the compiler's business and not a type.
+            let mut outputs = entry.outputs.clone();
+            outputs.extend(entry.more.iter().copied());
             out.push_str(&foreign_method(
                 &format!("{}.{}", local(&class), entry.installua),
                 &entry.params,
-                &entry.outputs,
+                &outputs,
                 &entry.nsis,
             ));
         }
@@ -757,7 +763,12 @@ fn foreign(declared: &headers::Declarations) -> String {
 /// One declared method, as a `function` on its class. The NSIS line it becomes
 /// is the comment, because that is the one thing a reader cannot infer from the
 /// Lua spelling and the one thing they will search the NSIS docs for.
-fn foreign_method(spelling: &str, params: &[headers::Param], outputs: &[Ty], nsis: &str) -> String {
+fn foreign_method(
+    spelling: &str,
+    params: &[declarations::Param],
+    outputs: &[Ty],
+    nsis: &str,
+) -> String {
     if params.iter().any(|param| param.callback) {
         return walker_method(spelling, params, nsis);
     }
@@ -785,7 +796,7 @@ fn foreign_method(spelling: &str, params: &[headers::Param], outputs: &[Ty], nsi
 ///
 /// The parameter names come from [`crate::lower::callback`], because they are
 /// the only names a reader has for values NSIS chose — a declaration has none.
-fn walker_method(spelling: &str, params: &[headers::Param], nsis: &str) -> String {
+fn walker_method(spelling: &str, params: &[declarations::Param], nsis: &str) -> String {
     // `nsis` arrives spelled the way it will be *written* — `${Locate}` for a
     // header, bare for a plugin — because that is what the comment above the
     // stub says. The protocol table is keyed by the declaration's own `nsis`

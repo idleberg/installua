@@ -195,8 +195,8 @@ mod add_plugin_dir {
     fn options(
         toml: &str,
         base: Option<PathBuf>,
-    ) -> (installua::Options, Vec<installua::headers::Problem>) {
-        let mut declarations = installua::headers::Declarations::builtin();
+    ) -> (installua::Options, Vec<installua::declarations::Problem>) {
+        let mut declarations = installua::declarations::Declarations::builtin();
         let mut problems = Vec::new();
         declarations.parse("vendor.toml", toml, &mut problems);
         (

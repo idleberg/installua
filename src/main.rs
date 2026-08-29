@@ -163,7 +163,7 @@ fn main() -> ExitCode {
 /// The options a command compiles under, or `None` when the project's own
 /// declarations are unreadable.
 ///
-/// A malformed `.installua/headers/*.toml` stops the command rather than
+/// A malformed `.installua/declarations/*.toml` stops the command rather than
 /// warning: the file exists to tell the compiler what a plugin's arity is, and
 /// a program checked without it would be checked against a language missing
 /// whatever it declared. Every diagnostic that followed would be about the
@@ -416,7 +416,7 @@ fn stubs(root: &Path) -> ExitCode {
     // command for the reason it stops a build: stubs generated without it would
     // quietly leave out whatever it declared.
     let (declarations, problems) =
-        installua::headers::Declarations::load(&root.join(installua::headers::DIRECTORY));
+        installua::declarations::Declarations::load(&root.join(installua::declarations::DIRECTORY));
     if !problems.is_empty() {
         for problem in &problems {
             eprintln!("installua: {problem}");

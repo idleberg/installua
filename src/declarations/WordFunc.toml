@@ -1,4 +1,4 @@
-# WordFunc.nsh, ships with NSIS: <https://nsis.sourceforge.io/Docs/AppendixE.html#E.3>.
+# WordFunc.nsh, ships with NSIS: <https://nsis.sourceforge.io/Docs/AppendixE.html>.
 #
 # See docs/header-reference.md. The `S` twins are the case-sensitive halves;
 # NSIS ships each as two macros, so they are two methods here.

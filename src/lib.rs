@@ -33,10 +33,10 @@ pub mod ast;
 pub mod builtins;
 pub mod callgraph;
 pub mod cfg;
+pub mod declarations;
 pub mod diag;
 pub mod emit;
 pub mod frontend;
-pub mod headers;
 pub mod ir;
 pub mod layout;
 pub mod locale;
@@ -73,9 +73,9 @@ pub struct Options {
     /// Where `include` reads from. [`Loader::Disk`] by default.
     pub loader: frontend::include::Loader,
     /// What `import` and `plugin` may call: the builtins, plus whatever
-    /// `.installua/headers/*.toml` declared. Defaulting to the builtins alone
+    /// `.installua/declarations/*.toml` declared. Defaulting to the builtins alone
     /// is what keeps an in-memory compile working with no directory to read.
-    pub declarations: headers::Declarations,
+    pub declarations: declarations::Declarations,
     /// `-D NAME=VALUE`: what the invocation says a [`resolve::param`]
     /// declaration's value is, overriding the default written beside it.
     ///
@@ -100,21 +100,21 @@ impl Options {
     }
 
     /// [`Options::for_file`], plus the declarations in
-    /// `<base>/.installua/headers`.
+    /// `<base>/.installua/declarations`.
     ///
     /// The problems come back rather than being folded into a [`Diagnostics`]:
     /// a malformed declaration file has no span in any Lua source, and a caller
     /// that compiled anyway would be checking the program against a language
     /// missing whatever that file was supposed to add. The CLI prints them and
     /// stops.
-    pub fn for_project(input: &std::path::Path) -> (Options, Vec<headers::Problem>) {
+    pub fn for_project(input: &std::path::Path) -> (Options, Vec<declarations::Problem>) {
         let options = Options::for_file(input);
         let dir = options
             .base
             .clone()
             .unwrap_or_default()
-            .join(headers::DIRECTORY);
-        let (declarations, problems) = headers::Declarations::load(&dir);
+            .join(declarations::DIRECTORY);
+        let (declarations, problems) = declarations::Declarations::load(&dir);
         (
             Options {
                 declarations,

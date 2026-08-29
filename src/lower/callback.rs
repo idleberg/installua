@@ -11,7 +11,7 @@
 //! string pushed on the stack. `LineFind` goes further and reads `$R9` again
 //! afterwards, so its first argument is an in/out parameter.
 //!
-//! That is behaviour, not arity, and [`crate::headers`]' rule is that behaviour
+//! That is behaviour, not arity, and [`crate::declarations`]' rule is that behaviour
 //! stays out of a declaration file. The reason is not tidiness: a register map
 //! written down wrongly emits NSIS that assembles and runs, handing the caller
 //! a directory where it asked for a file name. Nothing downstream can catch it,

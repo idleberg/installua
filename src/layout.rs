@@ -106,8 +106,8 @@ fn expand(body: &Body, step: &ir::Step, out: &mut Vec<Line>) {
             }
         }
 
-        ir::Step::Call(site) => {
-            let site = &body.calls[*site];
+        ir::Step::Call(index) => {
+            let site = &body.calls[*index];
             match &site.kind {
                 // An opaque callee already carries its arguments: a plugin
                 // takes them inline, and a `raw` block is whatever was written.
@@ -140,12 +140,18 @@ fn expand(body: &Body, step: &ir::Step, out: &mut Vec<Line>) {
                 }
             }
             // The callee pushed its returns in reverse too, so these come off in
-            // source order.
-            for result in &site.results {
+            // source order. A tagged callee pushed only some of them, and the
+            // split is by count: everything but the tail is unconditional.
+            let conditional = site.tail.as_ref().map_or(0, |tail| tail.defaults.len());
+            let (always, sometimes) = site.results.split_at(site.results.len() - conditional);
+            for result in always {
                 out.push((
                     instruction("Pop", vec![ir::Arg::dest(result.clone())]),
                     Origin::User(site.span),
                 ));
+            }
+            if let Some(tail) = &site.tail {
+                tail_pops(*index, site, tail, sometimes, out);
             }
             for save in site.saves.iter().rev() {
                 out.push((
@@ -155,6 +161,90 @@ fn expand(body: &Body, step: &ir::Step, out: &mut Vec<Line>) {
             }
         }
     }
+}
+
+/// The conditional half of a tagged call's returns.
+///
+/// ```nsis
+///   AccessControl::GrantOnFile "$INSTDIR" "(BU)" "FullAccess"
+///   Pop $0
+///   StrCpy $1 ""
+///   StrCmpS $0 "error" 0 __GENERATED_tail_3
+///   Pop $1
+/// __GENERATED_tail_3:
+/// ```
+///
+/// **The default comes first, and it is what keeps this out of the CFG.** Both
+/// slots are then written on every path, so `$1` is an ordinary definition of
+/// the call's and [`crate::alloc`] never learns that anything here is
+/// conditional — which is why this is thirty lines in `layout` rather than a
+/// diamond in `lower`. It also makes the Lua honest: a caller that binds the
+/// tail and reads it after an untagged call reads `""`, not whatever the
+/// register held before.
+///
+/// The label is named from the **call-site index**, which is per body and
+/// unique, and is emitted here rather than through the `referenced` set because
+/// its only jump is the one written two lines above it.
+///
+/// # The hazard this cannot cover
+///
+/// The `Pop` is emitted because the declaration says the value is there. When
+/// the plugin pushes its tag and then *fails to push the tail* — AccessControl
+/// does exactly this if `LocalAlloc` fails — the `Pop` takes whatever is
+/// underneath, which is a caller-save, and the stack is corrupt from there on.
+/// Nothing here can detect it, and every hand-written NSIS script that tests
+/// `== error` has the identical bug. It is an out-of-memory path, and it is
+/// documented in `docs/plugin-reference.md` rather than defended against,
+/// because the defence would be to not pop at all.
+fn tail_pops(
+    index: usize,
+    site: &ir::CallSite,
+    tail: &ir::Tail,
+    slots: &[crate::regs::Slot],
+    out: &mut Vec<Line>,
+) {
+    let done = format!("{}tail_{index}", crate::cfg::LABEL_PREFIX);
+    let matched = format!("{}tagged_{index}", crate::cfg::LABEL_PREFIX);
+
+    for (slot, default) in slots.iter().zip(&tail.defaults) {
+        out.push((
+            instruction(
+                "StrCpy",
+                vec![ir::Arg::dest(slot.clone()), ir::Arg::str(default.clone())],
+            ),
+            Origin::User(site.span),
+        ));
+    }
+
+    // The tag is the value popped first, which is `results[0]` — the tail is
+    // never the thing being tested, since it is the thing being decided.
+    let tag = ir::Arg::slot(site.results[0].clone());
+    let last = tail.tags.len() - 1;
+    for (position, literal) in tail.tags.iter().enumerate() {
+        // Every arm but the last jumps *forward into* the pops, because a
+        // second tag means the run of `StrCmpS`es needs somewhere to agree.
+        // With one tag — every plugin measured so far — this is the single
+        // line the doc comment shows.
+        let arms = if position == last {
+            vec![ir::Arg::raw(FALLTHROUGH), ir::Arg::raw(done.clone())]
+        } else {
+            vec![ir::Arg::raw(matched.clone()), ir::Arg::raw(FALLTHROUGH)]
+        };
+        let mut args = vec![tag.clone(), ir::Arg::str(literal.clone())];
+        args.extend(arms);
+        out.push((instruction("StrCmpS", args), Origin::User(site.span)));
+    }
+    if last > 0 {
+        out.push((ir::Item::Label(matched), Origin::Emitted("label")));
+    }
+
+    for slot in slots {
+        out.push((
+            instruction("Pop", vec![ir::Arg::dest(slot.clone())]),
+            Origin::User(site.span),
+        ));
+    }
+    out.push((ir::Item::Label(done), Origin::Emitted("label")));
 }
 
 /// `StrCpy $2 $2`: a copy of a register into itself, and nothing else. The
