@@ -666,3 +666,81 @@ fn half_a_tag_is_refused() {
         "{found:?}"
     );
 }
+
+/// A terminator is emitted last, after the flags *and* after the arguments —
+/// the one thing in a declaration that lands to the right of `params`.
+///
+/// `inetc::get` is why it exists: it reads url/file pairs off the stack until
+/// it pops `/END`, and the value under the last argument here is a caller-save.
+/// So the token is not a call-site choice, and this test is that the call site
+/// cannot influence it — the source names no terminator and the line has one.
+#[test]
+fn a_terminator_is_emitted_after_the_arguments() {
+    let mut declarations = Declarations::builtin();
+    let mut problems = Vec::new();
+    declarations.parse(
+        "test.toml",
+        "[[plugin]]\nname = \"Looper\"\nmethod = \"fetch\"\nnsis = \"Looper::Fetch\"\n\
+         params = [\"string\", \"path\"]\noutputs = [\"string\"]\nterminator = \"/END\"\n\
+         flags = [{ name = \"silent\", nsis = \"/SILENT\" }]\n",
+        &mut problems,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+
+    let mut diags = Diagnostics::new();
+    let output = installua::build_with(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local looper = plugin \"Looper\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             local out = looper.fetch(\"http://example.com/x\", \"out/x\", { silent = true })\n\
+             detailPrint(out)\n\
+           end),\n\
+         }\n",
+        &Options {
+            declarations,
+            ..Options::default()
+        },
+        &mut diags,
+    );
+    assert!(diags.is_empty(), "{}", diags.render("<test>"));
+    let output = output.expect("compiles");
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    assert!(
+        lines.contains(&"Looper::Fetch /SILENT \"http://example.com/x\" \"out\\x\" /END"),
+        "{output}"
+    );
+}
+
+/// A terminator has to be a switch, and has to be a plugin's.
+///
+/// Both refusals are about the same confusion: a token with no `/` is one the
+/// plugin reads as an argument, and a macro's arguments are counted by
+/// `!insertmacro` rather than marked.
+#[test]
+fn a_terminator_that_is_not_a_switch_is_refused() {
+    let problems = |text: &str| -> Vec<Problem> {
+        let mut declarations = Declarations::builtin();
+        let mut problems = Vec::new();
+        declarations.parse("test.toml", text, &mut problems);
+        problems
+    };
+
+    let found = problems(
+        "[[plugin]]\nname = \"P\"\nmethod = \"m\"\nnsis = \"P::M\"\n\
+         params = []\noutputs = []\nterminator = \"END\"\n",
+    );
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].message.contains("wants a switch"), "{found:?}");
+
+    let found = problems(
+        "[[header]]\nname = \"H\"\nmethod = \"m\"\nnsis = \"M\"\n\
+         params = []\noutputs = []\nterminator = \"/END\"\n",
+    );
+    assert!(
+        found
+            .iter()
+            .any(|problem| problem.message.contains("is a plugin field")),
+        "{found:?}"
+    );
+}

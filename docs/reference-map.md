@@ -1232,7 +1232,7 @@ wiki page:
 | `AdvSplash` | `.show` — Splash plus fades and a transparent colour                                        |
 | `StartMenu` | `.select`, `.init`, `.show` — the folder follows `"success"`, and only then                 |
 
-And six third-party plugins, on the evidence of a scan of 984 real-world
+And seven third-party plugins, on the evidence of a scan of 984 real-world
 scripts. These are **declarations, not bundled DLLs** — the plugin is still
 yours to install, and the file here only supplies the count:
 
@@ -1241,6 +1241,7 @@ yours to install, and the file here only supplies the count:
 | `EnVar`          | 95      | `.setHKCU`, `.setHKLM`, `.check`, `.addValue`, `.addValueEx`, `.setValue`, `.setValueEx`, `.deleteValue`, `.delete`, `.update` |
 | `SimpleSC`       | 61      | `.installService`, `.removeService`, `.startService`, `.stopService`, `.existsService`, `.serviceIsRunning`, `.getServiceStatus`, `.setServiceDescription`, `.setServiceStartType`, `.setServiceFailure` |
 | `nsProcess`      | 25      | `.findProcess`, `.killProcess`, `.closeProcess`                                            |
+| `Inetc`          | 46      | `.get`, `.head`, `.put` — eighteen flags and a mandatory `/END`; `.post` stays out          |
 | `AccessControl`  | 111     | all 25 — every mutator and reader on files and registry keys, plus the three SID helpers    |
 | `Nsis7z`         | 5       | `.extract`, `.extractWithDetails` — neither pushes anything at all                          |
 | `nsisFirewall`   | 1       | `.addAuthorizedApplication`, `.removeAuthorizedApplication` — the pre-Vista firewall API     |
@@ -1571,6 +1572,31 @@ Flags with a repeated, *ordered* spelling — `nsJSON::Get /index 0 /index 1` �
 have no table encoding and are not declarable. See
 [plugin-reference.md](plugin-reference.md#what-stays-out).
 
+**`terminator` is for a plugin that reads its arguments in a loop.** `inetc`
+takes url/file pairs until it pops the token `/END`, and a call that omits it
+keeps popping — past its own arguments and into whatever lies underneath, which
+under this compiler is a caller-saved register:
+
+```toml
+[[plugin]]
+name = "Inetc"
+method = "get"
+nsis = "inetc::get"
+params = ["string", "path"]
+outputs = ["string"]
+terminator = "/END"
+```
+
+```lua
+inetc.get(url, PLUGINSDIR .. "/tool.zip", { silent = true })
+-- inetc::get /SILENT "…" "$PLUGINSDIR\tool.zip" /END
+```
+
+So it is not a flag and not an option: it is emitted after the fixed arguments
+on **every** call, and the call site can neither set it nor leave it off. It
+must begin with `/`, because a token that does not is one the plugin will read
+as an argument — a fixed trailing argument belongs in `params`.
+
 **`dir` is for a DLL that does not live in `NSISDIR/Plugins`** — a plugin
 vendored into your own repository. It is relative to the project root, and the
 compiler emits one `!addplugindir` for it, in the one position the directive is
@@ -1744,6 +1770,7 @@ in five lines of [its own `.toml`](#declaring-a-third-party-plugin-or-header).
 | `LockedList`             | 0       | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature.                                                                                                                                                                             |
 | `Crypto`                 | 0       | Fails the *common* half of the rule outright.                                                                                                                                                                                                                                             |
 | `Nsis7z.extractWithCallback` | 5   | Not the register protocol the six `FileFunc`/`TextFunc` macros use — it pushes its two values on the stack. It stays out a step earlier than that: its second argument is the **address** of a function, `params` has no type for one, and `GetFunctionAddress` has no Lua spelling. See [plugin-reference.md](plugin-reference.md#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
+| `Inetc.post`             | 2       | Its POST body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch — and a `params` entry is emitted after the flags. `get`, `head` and `put` ship declared; only this entry point has an argument in front. |
 | `SimpleFC`               | 24      | The maintained successor to `nsisFirewall`, and not declared only because its methods have not been measured — the one entry here that is a gap rather than a decision.                                                                                                                    |
 
 ### Rejected NSIS commands

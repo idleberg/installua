@@ -532,6 +532,91 @@ extracted, and `SetOverwrite` is not honoured.
 
 `extractWithCallback` is [not declarable](#what-stays-out).
 
+## Inetc
+
+HTTP and FTP transfer, 46 corpus scripts — the second-most-used third-party
+plugin here, and the one with the widest flag surface.
+Source: `Contrib/Inetc/inetc.cpp`, checked against
+<https://nsis.sourceforge.io/Inetc_plug-in>.
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.get(url, file)` | `string`, `path` | status (`string`) |
+| `.head(url, file)` | `string`, `path` | status (`string`) |
+| `.put(url, file)` | `string`, `path` | status (`string`) |
+
+`"OK"` is success and every other value is an error **sentence** rather than a
+code — `"Terminated"`, `"Cancelled"`, a WinInet message with its number spliced
+in. So the test is a string comparison and the value is worth printing as it
+stands.
+
+`head` requests the headers only and writes the raw response to the file;
+`put` uploads the local file to the URL, with the arguments in the same order —
+the URL is still first.
+
+### `/END` is not optional here
+
+`inetc.cpp:880` does not count arguments. It reads url/file pairs off the stack
+in a loop and stops on `/END`:
+
+```c
+while(!popstring(url) && lstrcmpi(url, TEXT("/end")) != 0)
+{
+    if(popstring(fn) != 0 || lstrcmpi(url, TEXT("/end")) == 0) break;
+```
+
+The plugin's own wiki calls `/END` optional, *"required if you stores other vars
+in the stack"* — which is a description of every call this compiler emits. A
+plugin call sits between `layout`'s caller-saves, so the value under the last
+argument is a live register: without the terminator, `inetc` would take it for a
+third URL, pop again for its file name, and the restore afterwards would collect
+whatever the loop left.
+
+That is why it is [`terminator`](reference-map.md#declaring-a-third-party-plugin-or-header)
+in the declaration and not a flag. It is emitted on every call, and a call site
+can neither leave it off nor spell it.
+
+### Eighteen flags
+
+All leading, all order-free — `inetc.cpp:1381` loops `while(!popstring(url) &&
+*url == TEXT('/'))` and pushes the first non-switch token back — and every
+valued one carries its value in a **separate** token.
+
+| Flag | Value | What it does |
+| ---- | ----- | ------------ |
+| `silent` `weaksecurity` `nocancel` `nocookies` `noproxy` | — | hide the UI; accept a bad certificate; lock Cancel; drop cookies; ignore IE's proxy |
+| `caption` `banner` `popup` `canceltext` `question` | `string` | the four progress presentations and the confirm text |
+| `proxy` `username` `password` `useragent` `header` | `string` | connection settings; `header` is a raw request header |
+| `connecttimeout` `receivetimeout` | `uint` | seconds |
+| `resume` | `string` | retry prompt; `""` accepts the default |
+
+**All three entry points take all eighteen**, and the wiki says otherwise — its
+`put` synopsis omits `/RESUME`, `/QUESTION` and `/HEADER`, and its `head` entry
+is one sentence long. The source settles it the other way: `put`, `head` and
+`post` each set a global and then *call `get`*, so there is one flag parser and
+one flag set. The three declarations are identical apart from the method name.
+
+```lua
+local status = inetc.get(url, PLUGINSDIR .. "/toolchain.zip", {
+	caption = "Fetching the toolchain",
+	silent = true,
+	connecttimeout = 30,
+})
+-- inetc::get /CONNECTTIMEOUT 30 /SILENT /CAPTION "Fetching the toolchain" … /END
+```
+
+Note the emitted order: `Inetc.toml` lists the flags in the order `inetc.cpp`
+checks them, and the call site's order is discarded. It has to be — the plugin
+accepts them in any order, and two calls naming the same three must not emit two
+different lines.
+
+`/TRANSLATE` stays out for the reason it stays out of `NSISdl`: it carries eight
+or nine further positional strings. `/TOSTACK` and `/TOSTACKCONV` stay out for a
+new one — they push the downloaded body *underneath* the status, so a flag would
+be changing `outputs`, and `outputs` is the one thing a declaration is for.
+
+`post` is [not declarable](#what-stays-out).
+
 ## nsisFirewall
 
 Firewall exceptions, 1 corpus script.
@@ -724,6 +809,7 @@ declared in five lines of your own `.toml`.
 | Plugin | Scripts | Why |
 | ------ | ------- | --- |
 | `Registry` | 40 | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, which needs a trailing `${registry::Unload}` — behaviour, not arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40. |
+| `Inetc.post` | 2 | Its body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch. A `params` entry is emitted after the flags, and there is no spelling for one that comes first. |
 | `SimpleFC` | 24 | The maintained successor to `nsisFirewall`. Not measured yet — the one entry here that is a gap rather than a decision. |
 | `SimpleSC.getErrorMessage` | 61 | Takes its argument by `Push` — [above](#simplescgeterrormessage-is-not-declarable). |
 | `Nsis7z.extractWithCallback` | 5 | Its second argument is a **function address**, and no `params` type spells one — [below](#nsis7zextractwithcallback-takes-an-address-not-a-callback). |

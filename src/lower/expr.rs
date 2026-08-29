@@ -1883,6 +1883,14 @@ impl BodyLowerer<'_, '_> {
             });
         }
 
+        // And the terminator after them, on every call that declares one. Not
+        // optional and not a flag: the plugins that read one read their
+        // arguments off the stack in a loop, and what lies underneath is
+        // `layout`'s caller-saves. See [`crate::declarations::PluginMethod::terminator`].
+        if let Some(terminator) = &entry.terminator {
+            lowered.push(ir::Arg::raw(terminator));
+        }
+
         let results = (0..outputs.len())
             .map(|index| match dests.get(index) {
                 Some(slot) => slot.clone(),

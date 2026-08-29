@@ -177,6 +177,23 @@ pub struct PluginMethod {
     /// The values that follow when the first popped one is in
     /// [`tagged`](Self::tagged). Empty exactly when `tagged` is.
     pub more: Vec<Ty>,
+    /// A token emitted **after** the fixed arguments, on every call.
+    ///
+    /// One plugin family needs it and needs it unconditionally. `inetc::get`
+    /// reads url/file pairs off the stack in a loop and stops on `/end`
+    /// (`inetc.cpp:880`) — so with no terminator it keeps popping past its own
+    /// arguments and takes whatever is underneath for another pair. Under a
+    /// hand-written script that is usually the end of the stack and the loop
+    /// quietly fails; under this compiler it is a **caller-save**, because
+    /// [`crate::layout`] pushes live registers around an opaque call. The
+    /// download would consume one and the restore would take the url's place.
+    ///
+    /// So it is not a flag the call site may set: it is part of the method's
+    /// spelling, the declaration carries it, and every emitted call ends with
+    /// it. That is also why it is a `String` rather than a `bool` — `inetc`
+    /// spells it `/end` and `InetBgDL` spells it `/END`, and nothing here
+    /// guesses at a plugin's case.
+    pub terminator: Option<String>,
     /// Where the DLL lives, when it is not in `NSISDIR/Plugins`. Relative to
     /// the project root; [`crate::lower::addplugindir`] absolutises it.
     ///
@@ -285,6 +302,7 @@ const SHIPPED: &[(&str, &str)] = &[
     ("Dialer.toml", include_str!("declarations/Dialer.toml")),
     ("EnVar.toml", include_str!("declarations/EnVar.toml")),
     ("FileFunc.toml", include_str!("declarations/FileFunc.toml")),
+    ("Inetc.toml", include_str!("declarations/Inetc.toml")),
     ("NSISdl.toml", include_str!("declarations/NSISdl.toml")),
     ("Nsis7z.toml", include_str!("declarations/Nsis7z.toml")),
     ("SimpleSC.toml", include_str!("declarations/SimpleSC.toml")),
@@ -426,6 +444,7 @@ impl Declarations {
             flags,
             tagged,
             more,
+            terminator,
             dir,
             file,
             line,
@@ -458,6 +477,7 @@ impl Declarations {
                 flags,
                 tagged,
                 more,
+                terminator,
                 dir,
             });
         } else {
@@ -608,6 +628,7 @@ mod parse {
         pub flags: Vec<Flag>,
         pub tagged: Vec<String>,
         pub more: Vec<Ty>,
+        pub terminator: Option<String>,
         pub dir: Option<String>,
         pub file: String,
         /// The line the block opened on, so "already declared" points at the
@@ -628,6 +649,7 @@ mod parse {
         flags: Option<Vec<Flag>>,
         tagged: Option<Vec<String>>,
         more: Option<Vec<Ty>>,
+        terminator: Option<String>,
         dir: Option<String>,
     }
 
@@ -783,6 +805,30 @@ mod parse {
                             .to_string(),
                     ),
                 },
+                // `terminator` is a plugin's alone, for the same reason `flags`
+                // is: it is a token on a call line, and `!insertmacro` has no
+                // line to put one on.
+                "terminator" if !block.plugin => complain(
+                    line,
+                    "`terminator` is a plugin field: a macro's arguments are counted by \
+                     `!insertmacro`, so nothing has to mark where they stop"
+                        .to_string(),
+                ),
+                "terminator" => match string(value) {
+                    // Checked for the `/` because a terminator that is not one
+                    // is indistinguishable from a positional argument, and the
+                    // plugin reading it would take it for one. `params` is
+                    // where a fixed trailing argument belongs.
+                    Some(text) if text.starts_with('/') => block.terminator = Some(text),
+                    Some(text) => complain(
+                        line,
+                        format!(
+                            "`terminator` wants a switch: `{text}` has no `/`, and a plugin \
+                             cannot tell one from an argument"
+                        ),
+                    ),
+                    None => complain(line, "`terminator` wants a quoted string".to_string()),
+                },
                 // `dir` is a plugin's alone. A header is `!include`d and NSIS
                 // searches for one along `!addincludedir`, which is a different
                 // directive with a different position — accepting the key here
@@ -802,7 +848,7 @@ mod parse {
                     format!(
                         "`{other}` is not a declaration field; the fields are `name`, `method`, \
                          `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `flags`, \
-                         `tagged`, `more` and `dir`"
+                         `tagged`, `more`, `terminator` and `dir`"
                     ),
                 ),
             }
@@ -1106,6 +1152,7 @@ mod parse {
             flags: block.flags.unwrap_or_default(),
             tagged,
             more,
+            terminator: block.terminator,
             dir: block.dir,
             file: file.to_string(),
             line: block.line,

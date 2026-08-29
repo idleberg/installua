@@ -106,6 +106,15 @@ __GENERATED_tail_2:
 __GENERATED_endif_0:
 SectionEnd
 
+Section "Download"
+  InitPluginsDir
+  inetc::get /CONNECTTIMEOUT 30 /SILENT /CAPTION "Fetching the toolchain" "https://example.com/toolchain.zip" "$PLUGINSDIR\toolchain.zip" /END
+  Pop $0
+  StrCmpS $0 "OK" __GENERATED_endif_0 0
+  DetailPrint $0
+__GENERATED_endif_0:
+SectionEnd
+
 Section "Start Menu"
   StartMenu::Select "Example"
   Pop $0

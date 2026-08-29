@@ -1,0 +1,90 @@
+# Inetc, third-party: <https://nsis.sourceforge.io/Inetc_plug-in>.
+#
+# See docs/plugin-reference.md.
+#
+# Absent: `post`, whose body is popped before the flags and so cannot follow
+# them; and the `/TRANSLATE`, `/TOSTACK` and `/TOSTACKCONV` flags.
+
+[[plugin]]
+name = "Inetc"
+method = "get"
+nsis = "inetc::get"
+params = ["string", "path"]
+outputs = ["string"]
+terminator = "/END"
+flags = [
+  { name = "proxy", nsis = "/PROXY", ty = "string", value = "separate" },
+  { name = "username", nsis = "/USERNAME", ty = "string", value = "separate" },
+  { name = "password", nsis = "/PASSWORD", ty = "string", value = "separate" },
+  { name = "noproxy", nsis = "/NOPROXY" },
+  { name = "nocancel", nsis = "/NOCANCEL" },
+  { name = "connecttimeout", nsis = "/CONNECTTIMEOUT", ty = "uint", value = "separate" },
+  { name = "receivetimeout", nsis = "/RECEIVETIMEOUT", ty = "uint", value = "separate" },
+  { name = "silent", nsis = "/SILENT" },
+  { name = "weaksecurity", nsis = "/WEAKSECURITY" },
+  { name = "caption", nsis = "/CAPTION", ty = "string", value = "separate" },
+  { name = "nocookies", nsis = "/NOCOOKIES" },
+  { name = "resume", nsis = "/RESUME", ty = "string", value = "separate" },
+  { name = "popup", nsis = "/POPUP", ty = "string", value = "separate" },
+  { name = "banner", nsis = "/BANNER", ty = "string", value = "separate" },
+  { name = "canceltext", nsis = "/CANCELTEXT", ty = "string", value = "separate" },
+  { name = "question", nsis = "/QUESTION", ty = "string", value = "separate" },
+  { name = "useragent", nsis = "/USERAGENT", ty = "string", value = "separate" },
+  { name = "header", nsis = "/HEADER", ty = "string", value = "separate" },
+]
+
+[[plugin]]
+name = "Inetc"
+method = "head"
+nsis = "inetc::head"
+params = ["string", "path"]
+outputs = ["string"]
+terminator = "/END"
+flags = [
+  { name = "proxy", nsis = "/PROXY", ty = "string", value = "separate" },
+  { name = "username", nsis = "/USERNAME", ty = "string", value = "separate" },
+  { name = "password", nsis = "/PASSWORD", ty = "string", value = "separate" },
+  { name = "noproxy", nsis = "/NOPROXY" },
+  { name = "nocancel", nsis = "/NOCANCEL" },
+  { name = "connecttimeout", nsis = "/CONNECTTIMEOUT", ty = "uint", value = "separate" },
+  { name = "receivetimeout", nsis = "/RECEIVETIMEOUT", ty = "uint", value = "separate" },
+  { name = "silent", nsis = "/SILENT" },
+  { name = "weaksecurity", nsis = "/WEAKSECURITY" },
+  { name = "caption", nsis = "/CAPTION", ty = "string", value = "separate" },
+  { name = "nocookies", nsis = "/NOCOOKIES" },
+  { name = "resume", nsis = "/RESUME", ty = "string", value = "separate" },
+  { name = "popup", nsis = "/POPUP", ty = "string", value = "separate" },
+  { name = "banner", nsis = "/BANNER", ty = "string", value = "separate" },
+  { name = "canceltext", nsis = "/CANCELTEXT", ty = "string", value = "separate" },
+  { name = "question", nsis = "/QUESTION", ty = "string", value = "separate" },
+  { name = "useragent", nsis = "/USERAGENT", ty = "string", value = "separate" },
+  { name = "header", nsis = "/HEADER", ty = "string", value = "separate" },
+]
+
+[[plugin]]
+name = "Inetc"
+method = "put"
+nsis = "inetc::put"
+params = ["string", "path"]
+outputs = ["string"]
+terminator = "/END"
+flags = [
+  { name = "proxy", nsis = "/PROXY", ty = "string", value = "separate" },
+  { name = "username", nsis = "/USERNAME", ty = "string", value = "separate" },
+  { name = "password", nsis = "/PASSWORD", ty = "string", value = "separate" },
+  { name = "noproxy", nsis = "/NOPROXY" },
+  { name = "nocancel", nsis = "/NOCANCEL" },
+  { name = "connecttimeout", nsis = "/CONNECTTIMEOUT", ty = "uint", value = "separate" },
+  { name = "receivetimeout", nsis = "/RECEIVETIMEOUT", ty = "uint", value = "separate" },
+  { name = "silent", nsis = "/SILENT" },
+  { name = "weaksecurity", nsis = "/WEAKSECURITY" },
+  { name = "caption", nsis = "/CAPTION", ty = "string", value = "separate" },
+  { name = "nocookies", nsis = "/NOCOOKIES" },
+  { name = "resume", nsis = "/RESUME", ty = "string", value = "separate" },
+  { name = "popup", nsis = "/POPUP", ty = "string", value = "separate" },
+  { name = "banner", nsis = "/BANNER", ty = "string", value = "separate" },
+  { name = "canceltext", nsis = "/CANCELTEXT", ty = "string", value = "separate" },
+  { name = "question", nsis = "/QUESTION", ty = "string", value = "separate" },
+  { name = "useragent", nsis = "/USERAGENT", ty = "string", value = "separate" },
+  { name = "header", nsis = "/HEADER", ty = "string", value = "separate" },
+]

@@ -18,6 +18,7 @@
 
 local accessControl = plugin "AccessControl"
 local enVar = plugin "EnVar"
+local inetc = plugin "Inetc"
 local nsis7z = plugin "Nsis7z"
 local nsisFirewall = plugin "nsisFirewall"
 local simpleSC = plugin "SimpleSC"
@@ -151,6 +152,33 @@ installer {
 		})
 		if outcome == "success" then
 			detailPrint(folder)
+		end
+	end),
+
+	-- **A terminator, the fourth thing a declaration carries.** `inetc::get`
+	-- does not count its arguments: it reads url/file pairs off the stack in a
+	-- loop and stops on `/END`. Everything after the two arguments below is
+	-- `layout`'s caller-saves, so a call without the terminator would take one
+	-- for a third url and the download would go looking for `$0`.
+	--
+	-- That is why it is in `Inetc.toml` rather than in the flags table -- the
+	-- call site cannot leave it off, cannot spell it, and cannot see it.
+	section("Download", function()
+		-- Three flags out of eighteen, named in no order and emitted in the
+		-- declaration's: `/CONNECTTIMEOUT`, then `/SILENT`, then `/CAPTION`.
+		-- Two of the three carry a value in a *separate* token, which is the
+		-- spelling `/TIMEOUT=` on `NSISdl` is not.
+		local status = inetc.get(
+			"https://example.com/toolchain.zip",
+			PLUGINSDIR .. "/toolchain.zip",
+			{ caption = "Fetching the toolchain", silent = true, connecttimeout = 30 }
+		)
+
+		-- `"OK"` and nothing else means success -- every other value is an
+		-- error sentence rather than a code, which is why this is a string
+		-- comparison and why the message is worth printing as it stands.
+		if status ~= "OK" then
+			detailPrint(status)
 		end
 	end),
 
