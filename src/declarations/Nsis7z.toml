@@ -2,8 +2,8 @@
 #
 # See docs/plugin-reference.md.
 #
-# Absent: `ExtractWithCallback` — a callback's register map is behaviour, and
-# lives in `src/lower/callback.rs`; no `.toml` can declare one.
+# Absent: `ExtractWithCallback` — its argument is a function address, and there
+# is no `params` type for one; see docs/plugin-reference.md.
 
 [[plugin]]
 name = "Nsis7z"

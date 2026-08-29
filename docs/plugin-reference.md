@@ -726,7 +726,7 @@ declared in five lines of your own `.toml`.
 | `Registry` | 40 | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, which needs a trailing `${registry::Unload}` — behaviour, not arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40. |
 | `SimpleFC` | 24 | The maintained successor to `nsisFirewall`. Not measured yet — the one entry here that is a gap rather than a decision. |
 | `SimpleSC.getErrorMessage` | 61 | Takes its argument by `Push` — [above](#simplescgeterrormessage-is-not-declarable). |
-| `Nsis7z.extractWithCallback` | 5 | NSIS hands a callback its arguments in registers it names. That map is behaviour and lives in `src/lower/callback.rs`, keyed by macro name — which means a third-party callback cannot be declared at all, here or in a project's own file. The same reason the six `FileFunc`/`TextFunc` callback macros give. |
+| `Nsis7z.extractWithCallback` | 5 | Its second argument is a **function address**, and no `params` type spells one — [below](#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
 | `LockedList` | 0 | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature. |
 | `Crypto` | 0 | Fails the *common* half of the rule outright. |
 
@@ -734,6 +734,47 @@ declared in five lines of your own `.toml`.
 example of a plugin you declare yourself, in
 [README.md](../README.md#third-party-plugins-and-headers) and in
 `tests/declarations.rs`. It stays undeclared so that example stays copy-pasteable.
+
+### `Nsis7z.extractWithCallback` takes an address, not a callback
+
+The obvious reading is that it is an eighth member of the family
+`src/lower/callback.rs` covers, turned down for the reason the six
+`FileFunc`/`TextFunc` macros give: NSIS hands a callback its arguments in
+registers it names, that map is behaviour, and behaviour stays out of a `.toml`.
+
+**`nsis7z.cpp` does not do that.** Its handler pushes both values on the stack
+and runs the code segment:
+
+```c
+pushint((int)totalSize);
+pushint((int)completedSize);
+g_pluginExtra->ExecuteCodeSegment(progressCallback-1, 0);
+```
+
+So the body pops completed first and total second — which is what the plugin's
+own example does, and the only place that order is written down — and pushes
+nothing back. There is no sentinel, so no way to cancel the extraction, and no
+register protocol to get wrong.
+
+The reason it stays out is a step earlier than the protocol. The plugin does not
+take a function; it takes the **address** of one, which the script obtains
+separately:
+
+```nsis
+GetFunctionAddress $R9 CallbackTest
+Nsis7z::ExtractWithCallback "Test.7z" $R9
+```
+
+`params` has no type for an address, and `GetFunctionAddress` has no Lua
+spelling — it is a `todo` row that the compiler emits only for the nsDialogs
+event handlers it generates itself, where the function's address exists in
+exactly one place. Declaring this method would mean giving a plugin argument the
+address of a user-written function, which is the surface that row exists to
+withhold.
+
+Worth recording for whoever revisits it: the body **must** pop exactly two, and
+the plugin fires the callback once per progress tick. A body that pops one
+leaves an int on the stack on every tick of every extraction.
 
 ### `/NOUNLOAD` belongs to nobody
 
