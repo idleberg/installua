@@ -3,6 +3,7 @@
 # See docs/plugin-reference.md.
 #
 # Absent: `Exec` and `ExecToLog` (one code each) -- undeclared, not undeclarable.
+# All three flags are declared.
 
 [[plugin]]
 name = "nsExec"
@@ -10,3 +11,8 @@ method = "execToStack"
 nsis = "nsExec::ExecToStack"
 params = ["string"]
 outputs = ["string", "string"]
+flags = [
+  { name = "timeout", nsis = "/TIMEOUT", ty = "int", value = "joined" },
+  { name = "oem", nsis = "/OEM" },
+  { name = "mbcs", nsis = "/MBCS" },
+]

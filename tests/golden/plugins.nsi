@@ -8,7 +8,7 @@ Section "Update"
   Dialer::GetConnectedState
   Pop $0
   StrCmpS $0 "online" 0 __GENERATED_endif_0
-  NSISdl::download "http://example.com/data.pat" "$PLUGINSDIR\data.pat"
+  NSISdl::download /TIMEOUT=30000 /NOIEPROXY "http://example.com/data.pat" "$PLUGINSDIR\data.pat"
   Pop $0
   DetailPrint $0
 __GENERATED_endif_0:
@@ -31,4 +31,8 @@ Section "Show"
   IntCmp $0 1 0 __GENERATED_endif_0 __GENERATED_endif_0
   DetailPrint "impatient"
 __GENERATED_endif_0:
+  nsExec::ExecToStack /TIMEOUT=5000 /OEM "cmd.exe /c ver"
+  Pop $0
+  Pop $1
+  DetailPrint "$0$1"
 SectionEnd

@@ -9,6 +9,7 @@
 
 local Banner = plugin "Banner"
 local Dialer = plugin "Dialer"
+local nsExec = plugin "nsExec"
 local NSISdl = plugin "NSISdl"
 local Splash = plugin "Splash"
 local TypeLib = plugin "TypeLib"
@@ -29,9 +30,16 @@ installer {
 			-- The URL is a `string` parameter and stays as written; the file
 			-- beside it is a `path` and its `/` becomes `\`. Both in one call
 			-- is the reason those are separate types.
+			-- The flags are named *last*, in a table, and emitted *first*: the
+			-- position is the declaration's, not the call site's. `noieproxy`
+			-- is written before `timeout` here and comes out after it, because
+			-- `NSISdl.toml` lists them in the order `nsisdl.cpp` reads them.
+			-- `/TIMEOUT` glues its value on with `=`; a bare flag *is* its
+			-- value, so `true` writes the token and `false` writes nothing.
 			local status = NSISdl.download(
 				"http://example.com/data.pat",
-				PLUGINSDIR .. "/data.pat"
+				PLUGINSDIR .. "/data.pat",
+				{ noieproxy = true, timeout = 30000 }
 			)
 			detailPrint(status)
 		end
@@ -64,5 +72,15 @@ installer {
 		if closed == 1 then
 			detailPrint("impatient")
 		end
+
+		-- Two values out, and two flags in. `nsexec.c` loops back over its
+		-- flag checks, so any order the call site writes would work here --
+		-- the emission order is still the declaration's, so that two calls
+		-- naming the same flags cannot emit two different lines.
+		local code, output = nsExec.execToStack("cmd.exe /c ver", {
+			oem = true,
+			timeout = 5000,
+		})
+		detailPrint(code .. output)
 	end),
 }

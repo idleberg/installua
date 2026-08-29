@@ -132,6 +132,32 @@ The exit code comes off first, then the captured output. That is `Pop` order,
 and it is the order nothing in the source states — it is the reason
 `local rc, out = nsExec.execToStack(…)` is legal at all.
 
+All three of its flags are declared, in a table written last:
+
+| Flag | Emits | Effect |
+| ---- | ----- | ------ |
+| `timeout = 5000` | `/TIMEOUT=5000` | milliseconds to wait *for output*, reset on every byte received |
+| `oem = true` | `/OEM` | converts the captured output from OEM to ANSI |
+| `mbcs = true` | `/MBCS` | treats the output as ANSI rather than detecting Unicode |
+
+```lua
+local code, output = nsExec.execToStack("cmd.exe /c ver", {
+	oem = true,
+	timeout = 5000,
+})
+-- nsExec::ExecToStack /TIMEOUT=5000 /OEM "cmd.exe /c ver"
+```
+
+`nsexec.c` reads its flags in a loop — `goto params` after each match — so the
+order a call site writes them in genuinely does not matter to the plugin. It
+matters here anyway: emission follows the declaration, so two calls naming the
+same flags emit the same line.
+
+**A timeout is not an error the return value distinguishes by shape.** On one
+the plugin pushes the string `"timeout"` where an exit code would be, and on a
+failure to launch, `"error"` — both in the same slot as a number, which is why
+the first output is a `string`.
+
 ## UserInfo
 
 | Method | Arguments | Returns |
@@ -192,6 +218,31 @@ The URL is a `string` and deliberately not a `path`: `path` normalises `/` to
 `\`, which would turn every URL into a broken one. `downloadQuiet` is the same
 function with the progress window suppressed — `download_quiet` in the source
 calls straight through to `download`, which is why the two counts cannot drift.
+
+Three of its five flags are declared, on both methods:
+
+| Flag | Emits | Effect |
+| ---- | ----- | ------ |
+| `timeout = 30000` | `/TIMEOUT=30000` | milliseconds without data before it gives up; 30000 is the plugin's own default |
+| `proxy = "host:port"` | `/PROXY "host:port"` | uses that proxy instead of Internet Explorer's |
+| `noieproxy = true` | `/NOIEPROXY` | connects direct, ignoring Internet Explorer's proxy |
+
+```lua
+local status = NSISdl.download(url, PLUGINSDIR .. "/data.pat", {
+	noieproxy = true,
+	timeout = 30000,
+})
+-- NSISdl::download /TIMEOUT=30000 /NOIEPROXY "…" "$PLUGINSDIR\data.pat"
+```
+
+**Unlike nsExec, `nsisdl.cpp` checks each flag exactly once, in that order**, so
+a call that wrote `/NOIEPROXY` before `/TIMEOUT=` would have the timeout read as
+the URL. The declaration lists them in the source's order and emits in
+declaration order, which is what makes the call site's order free.
+
+`/TRANSLATE` and `/TRANSLATE2` stay undeclared. Each is a flag followed by eight
+or nine further positional strings — the localised progress texts — and that is
+not a shape `flags` can spell: a flag carries one value or none.
 
 ## Splash
 

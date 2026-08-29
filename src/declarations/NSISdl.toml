@@ -1,6 +1,9 @@
 # NSISdl, ships with NSIS: `NSISDIR/Docs/NSISdl/ReadMe.txt`.
 #
 # See docs/plugin-reference.md.
+#
+# Absent: the `/TRANSLATE` and `/TRANSLATE2` flags, which carry eight and nine
+# further positional strings -- not a flag shape this format can spell.
 
 [[plugin]]
 name = "NSISdl"
@@ -8,6 +11,11 @@ method = "download"
 nsis = "NSISdl::download"
 params = ["string", "path"]
 outputs = ["string"]
+flags = [
+  { name = "timeout", nsis = "/TIMEOUT", ty = "int", value = "joined" },
+  { name = "proxy", nsis = "/PROXY", ty = "string", value = "separate" },
+  { name = "noieproxy", nsis = "/NOIEPROXY" },
+]
 
 [[plugin]]
 name = "NSISdl"
@@ -15,3 +23,8 @@ method = "downloadQuiet"
 nsis = "NSISdl::download_quiet"
 params = ["string", "path"]
 outputs = ["string"]
+flags = [
+  { name = "timeout", nsis = "/TIMEOUT", ty = "int", value = "joined" },
+  { name = "proxy", nsis = "/PROXY", ty = "string", value = "separate" },
+  { name = "noieproxy", nsis = "/NOIEPROXY" },
+]
