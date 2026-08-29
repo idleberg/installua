@@ -1016,33 +1016,65 @@ impl BodyLowerer<'_, '_> {
         })
     }
 
+    /// Whether a value of type `given` may be written into a position typed
+    /// `wanted`, complaining at `span` when it may not.
+    ///
+    /// **Assignable, not equal.** The lattice already says which types subsume
+    /// which — `a.join(b) == b` is exactly "a fits where b is wanted" — and
+    /// equality gets it wrong in one direction that matters: a literal `0` is
+    /// `nonneg`, so an `int` position spelled with `!=` rejects every integer
+    /// literal and says `wants a int, and this is a int` while doing it.
+    ///
+    /// One function rather than one check per caller, because there are four
+    /// callers and the three that existed before this one disagreed: two used
+    /// the join, [`Self::header_call`] used `!=` and so refused `lineRead(f,
+    /// 3)`, and [`Self::plugin_call`] read `param.path` without ever reading
+    /// `param.ty` — which made every `params` type in `src/declarations/*.toml`
+    /// decorative and let two strings through into `SimpleSC::StartService`'s
+    /// two `int` positions with no diagnostic from here or from NSIS.
+    ///
+    /// `source` names where the type came from, since that is the only part of
+    /// the message that differs: an instruction's types are the table's, a
+    /// plugin's or a macro's are its declaration's, and neither is ever an
+    /// annotation the user wrote.
+    fn fits(&mut self, wanted: Ty, given: Ty, name: &str, source: &str, span: Span) -> bool {
+        // `Unknown` is the lattice's top, so it absorbs on the right and no
+        // guard is needed for `wanted`: `given.join(Unknown)` is `Unknown`,
+        // which is what `wanted` already is. On the *left* it has to be let
+        // through explicitly — a value of unknown type has not been shown not
+        // to fit, and refusing it would reject every interprocedural result.
+        if given == Ty::Unknown || given.join(wanted) == wanted {
+            return true;
+        }
+        let mut diagnostic = Diagnostic::error(
+            Code::TypeMismatch,
+            span,
+            format!("`{name}` wants a {wanted}, and this is a {given}"),
+        )
+        .note(format!(
+            "types come from {source}, never from an annotation"
+        ));
+        // `int` is what a user calls both signs, so the message above reads
+        // "wants a int, and this is a int" when the sign is the whole
+        // disagreement. Say what it will not say.
+        if wanted.is_int() && given.is_int() {
+            diagnostic = diagnostic.note(
+                "this position cannot be negative, and the value is not known to be non-negative",
+            );
+        }
+        self.diags.push(diagnostic);
+        false
+    }
+
+    /// Where a type in a diagnostic came from, for [`Self::fits`].
+    const FROM_TABLE: &'static str = "the instruction table";
+    const FROM_DECLARATION: &'static str = "the declaration";
+
     /// One argument, checked against the position it lands in and converted for
     /// it.
     fn coerce(&mut self, param: &table::Param, name: &str, argument: &Expr) -> Option<ir::Arg> {
         let value = self.value(argument)?;
-        // Assignable, not equal. The lattice already says which types subsume
-        // which — `a.join(b) == b` is exactly "a fits where b is wanted" — and
-        // equality got this wrong in one direction that matters: a literal `0`
-        // is `nonneg`, so every `Ty::int()` position rejected every integer
-        // literal.
-        if param.ty != Ty::Unknown && value.ty != Ty::Unknown && value.ty.join(param.ty) != param.ty
-        {
-            let mut diagnostic = Diagnostic::error(
-                Code::TypeMismatch,
-                argument.span(),
-                format!("`{name}` wants a {}, and this is a {}", param.ty, value.ty),
-            )
-            .note("types come from the instruction table, never from an annotation");
-            // `int` is what a user calls both signs, so the message above reads
-            // "wants a int, and this is a int" when the sign is the whole
-            // disagreement. Say what it will not say.
-            if param.ty.is_int() && value.ty.is_int() {
-                diagnostic = diagnostic.note(
-                    "this position cannot be negative, and the value is not known to be \
-                     non-negative",
-                );
-            }
-            self.diags.push(diagnostic);
+        if !self.fits(param.ty, value.ty, name, Self::FROM_TABLE, argument.span()) {
             return None;
         }
         // Pathness is decided at the parameter, so the expression lowerer never
@@ -1070,15 +1102,7 @@ impl BodyLowerer<'_, '_> {
         argument: &Expr,
     ) -> Option<ir::Arg> {
         let value = self.value(argument)?;
-        if value.ty != Ty::Unknown && value.ty.join(ty) != ty {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::TypeMismatch,
-                    argument.span(),
-                    format!("`{name}` wants a {ty}, and this is a {}", value.ty),
-                )
-                .note("types come from the instruction table, never from an annotation"),
-            );
+        if !self.fits(ty, value.ty, name, Self::FROM_TABLE, argument.span()) {
             return None;
         }
         Some(match kind {
@@ -1320,18 +1344,13 @@ impl BodyLowerer<'_, '_> {
         let mut lowered = Vec::with_capacity(entry.params.len() + entry.outputs.len());
         for (argument, param) in args.iter().zip(entry.params) {
             let value = self.value(argument)?;
-            if param.ty != Ty::Unknown && value.ty != param.ty && value.ty != Ty::Unknown {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::TypeMismatch,
-                        argument.span(),
-                        format!(
-                            "`{base}.{method}` wants a {}, and this is a {}",
-                            param.ty, value.ty
-                        ),
-                    )
-                    .note("types come from the declaration, never from an annotation"),
-                );
+            if !self.fits(
+                param.ty,
+                value.ty,
+                &format!("{base}.{method}"),
+                Self::FROM_DECLARATION,
+                argument.span(),
+            ) {
                 return None;
             }
             lowered.push(if param.path {
@@ -1697,6 +1716,20 @@ impl BodyLowerer<'_, '_> {
         let mut lowered = Vec::with_capacity(args.len());
         for (argument, param) in args.iter().zip(entry.params) {
             let value = self.value(argument)?;
+            // A plugin's parameter types were declared and never read until
+            // now. They are worth reading for the same reason the count is: a
+            // DLL cannot be asked what it expects, so `params` is the only
+            // statement of it, and NSIS hands a string to an `int` position
+            // without a word.
+            if !self.fits(
+                param.ty,
+                value.ty,
+                &format!("{plugin}.{method}"),
+                Self::FROM_DECLARATION,
+                argument.span(),
+            ) {
+                return None;
+            }
             lowered.push(if param.path {
                 value.arg.into_path()
             } else {

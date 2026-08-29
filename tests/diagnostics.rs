@@ -311,6 +311,62 @@ fn a_narrower_type_fits_a_wider_parameter() {
     );
 }
 
+/// A declaration's parameter types are checked, and checked the same way.
+///
+/// The rule above is the instruction table's, and the two declaration surfaces
+/// each disagreed with it in a different direction. `${LineRead}` takes an
+/// `int` line number and the macro path compared with `!=`, so the literal `3`
+/// — `nonneg`, like every integer literal — was rejected for being the type it
+/// wants. `SimpleSC::StartService` takes two, and the plugin path read
+/// `param.path` without ever reading `param.ty`, so two strings went into them
+/// and were emitted: `params` in `src/declarations/*.toml` had never been more
+/// than a length.
+///
+/// Both now go through the same `fits`, which is why this is one test.
+#[test]
+fn a_declaration_checks_its_parameter_types() {
+    let macro_literal = compile(
+        "local textFunc = import \"TextFunc\"\n\
+         attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local line = textFunc.lineRead(INSTDIR .. \"/a.txt\", 3)\n\
+         detailPrint(line)\n\
+         end), }",
+    );
+    assert!(
+        !macro_literal.contains(Code::TypeMismatch),
+        "an integer literal belongs in a macro's `int` position:\n{}",
+        macro_literal.render("<test>")
+    );
+
+    let plugin_string = compile(
+        "local simpleSC = plugin \"SimpleSC\"\n\
+         attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local code = simpleSC.startService(\"Spooler\", \"\", \"not an int\")\n\
+         if code == 0 then detailPrint(\"ok\") end\n\
+         end), }",
+    );
+    assert!(
+        plugin_string.contains(Code::TypeMismatch),
+        "a string does not belong in a plugin's `int` position"
+    );
+
+    let plugin_literal = compile(
+        "local simpleSC = plugin \"SimpleSC\"\n\
+         attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local code = simpleSC.startService(\"Spooler\", \"\", 0)\n\
+         if code == 0 then detailPrint(\"ok\") end\n\
+         end), }",
+    );
+    assert!(
+        !plugin_literal.contains(Code::TypeMismatch),
+        "the same call with the declared types is not a mismatch:\n{}",
+        plugin_literal.render("<test>")
+    );
+}
+
 #[test]
 fn every_code_has_a_case() {
     let missing: Vec<&str> = Code::ALL
