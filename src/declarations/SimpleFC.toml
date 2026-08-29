@@ -1,0 +1,232 @@
+# NSIS Simple Firewall, third-party:
+# <https://nsis.sourceforge.io/NSIS_Simple_Firewall_Plugin>.
+#
+# Per-method detail and the sourcing: docs/plugin-reference.md. All 33 exported
+# methods are declared.
+
+
+[[plugin]]
+name = "SimpleFC"
+method = "addPort"
+nsis = "SimpleFC::AddPort"
+params = ["int", "string", "int", "int", "int", "string", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "removePort"
+nsis = "SimpleFC::RemovePort"
+params = ["int", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "isPortAdded"
+nsis = "SimpleFC::IsPortAdded"
+params = ["int", "int"]
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "isPortEnabled"
+nsis = "SimpleFC::IsPortEnabled"
+params = ["int", "int"]
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "enableDisablePort"
+nsis = "SimpleFC::EnableDisablePort"
+params = ["int", "int", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "addApplication"
+nsis = "SimpleFC::AddApplication"
+params = ["string", "path", "int", "int", "string", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "removeApplication"
+nsis = "SimpleFC::RemoveApplication"
+params = ["path"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "isApplicationAdded"
+nsis = "SimpleFC::IsApplicationAdded"
+params = ["path"]
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "isApplicationEnabled"
+nsis = "SimpleFC::IsApplicationEnabled"
+params = ["path"]
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "enableDisableApplication"
+nsis = "SimpleFC::EnableDisableApplication"
+params = ["path", "int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "isFirewallEnabled"
+nsis = "SimpleFC::IsFirewallEnabled"
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "enableDisableFirewall"
+nsis = "SimpleFC::EnableDisableFirewall"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowExceptionsNotAllowed"
+nsis = "SimpleFC::AllowDisallowExceptionsNotAllowed"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "areExceptionsNotAllowed"
+nsis = "SimpleFC::AreExceptionsNotAllowed"
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "enableDisableNotifications"
+nsis = "SimpleFC::EnableDisableNotifications"
+params = ["int"]
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "areNotificationsEnabled"
+nsis = "SimpleFC::AreNotificationsEnabled"
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "startStopFirewallService"
+nsis = "SimpleFC::StartStopFirewallService"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "isFirewallServiceRunning"
+nsis = "SimpleFC::IsFirewallServiceRunning"
+outputs = ["int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "restoreDefaults"
+nsis = "SimpleFC::RestoreDefaults"
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpOutboundDestinationUnreachable"
+nsis = "SimpleFC::AllowDisallowIcmpOutboundDestinationUnreachable"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpRedirect"
+nsis = "SimpleFC::AllowDisallowIcmpRedirect"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpInboundEchoRequest"
+nsis = "SimpleFC::AllowDisallowIcmpInboundEchoRequest"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpOutboundTimeExceeded"
+nsis = "SimpleFC::AllowDisallowIcmpOutboundTimeExceeded"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpOutboundParameterProblem"
+nsis = "SimpleFC::AllowDisallowIcmpOutboundParameterProblem"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpOutboundSourceQuench"
+nsis = "SimpleFC::AllowDisallowIcmpOutboundSourceQuench"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpInboundRouterRequest"
+nsis = "SimpleFC::AllowDisallowIcmpInboundRouterRequest"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpInboundTimestampRequest"
+nsis = "SimpleFC::AllowDisallowIcmpInboundTimestampRequest"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpInboundMaskRequest"
+nsis = "SimpleFC::AllowDisallowIcmpInboundMaskRequest"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "allowDisallowIcmpOutboundPacketTooBig"
+nsis = "SimpleFC::AllowDisallowIcmpOutboundPacketTooBig"
+params = ["int"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "isIcmpTypeAllowed"
+nsis = "SimpleFC::IsIcmpTypeAllowed"
+params = ["int", "string", "int"]
+outputs = ["int", "int", "int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "advAddRule"
+nsis = "SimpleFC::AdvAddRule"
+params = ["string", "string", "int", "int", "int", "int", "int", "path", "string", "string", "string", "string", "string", "string", "string"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "advRemoveRule"
+nsis = "SimpleFC::AdvRemoveRule"
+params = ["string"]
+outputs = ["int"]
+
+[[plugin]]
+name = "SimpleFC"
+method = "advExistsRule"
+nsis = "SimpleFC::AdvExistsRule"
+params = ["string"]
+outputs = ["int", "int"]

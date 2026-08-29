@@ -36,7 +36,9 @@ have found.
 **Where the two still disagree, read the source.** That happened on
 [AccessControl](#accesscontrol), and it was worth the trouble: the readme, the
 wiki page and the corpus each imply a *different* set of declarable methods, and
-all three are wrong. Documentation describes the path its author was thinking
+all three are wrong. It has since happened three more times — on
+[`Inetc`](#inetc), [`Nsis7z`](#nsis7z) and [`SimpleFC`](#simplefc), the last of
+which has **three** documented arities its own DLL contradicts. Documentation describes the path its author was thinking
 about, and an arity is a claim about every path.
 
 ---
@@ -635,13 +637,85 @@ half first for exactly this case.
 **It is not a recommendation.** The plugin drives `INetFwAuthorizedApplications`,
 the pre-Vista firewall API, which Windows still honours through a compatibility
 shim but which cannot express per-profile rules, direction, or a port. The
-maintained alternative is NSIS Simple Firewall (`SimpleFC`, 24 corpus scripts),
-which is not declared here only because its methods have not been measured.
+maintained alternative is NSIS Simple Firewall ([`SimpleFC`](#simplefc), 24
+corpus scripts), which now ships declared at all 33 methods. A new script wants
+that one; this stays declared for the scripts that already call it.
 
 The rule name is a label rather than a key — removal goes by path, so two calls
 with one path and two names leave one rule, renamed. Removing an application
 that was never authorised is not an error, which makes the removal safe to call
 unconditionally from an uninstaller.
+
+## SimpleFC
+
+NSIS Simple Firewall, 24 corpus scripts. The maintained successor to
+[`nsisFirewall`](#nsisfirewall): it drives `INetFwPolicy2`, so it reaches
+per-profile rules, direction, ports and ICMP types that the older plugin cannot
+express. Source: `Source/SimpleFC.dpr`, and it is the first of these read from
+**Delphi** rather than C++ — the idiom is `PopString` / `PushString` from
+`nsis.pas`, but the counting is the same.
+
+All 33 exported methods are declared. Every one of them is straight-line: not a
+single `PushString` in the file sits inside a branch, which is why a plugin this
+wide needs no [`tagged`](#tagged-outputs) entry at all.
+
+### The status is `0`, and it comes off first
+
+The plugin's own `ResultToStr` is the whole vocabulary:
+
+```pascal
+function ResultToStr(Value: Boolean): String;
+begin
+  if Value then result := '0' else result := '1';
+end;
+```
+
+**`0` is success and `1` is failure** — the opposite of the C convention and the
+same as `SimpleSC`'s. The readers push their answer first and the status last,
+so the status pops first and the answers follow it:
+
+```pascal
+PushString(BoolToStr(Allowed));
+PushString(BoolToStr(Restricted));
+PushString(FirewallResult);      // popped first
+```
+
+That gives `isIcmpTypeAllowed` three outputs — status, allowed, restricted — and
+it is the widest fixed arity in any declaration here.
+
+### Three places the readme is wrong
+
+Measured by diffing every synopsis and every worked example in `Readme.txt`
+against the pops and pushes in `SimpleFC.dpr`. Three disagreements, all in the
+same direction — the prose under-counts:
+
+| Method | Readme says | The DLL does |
+| ------ | ----------- | ------------ |
+| `enableDisableNotifications` | one `Pop` in one example, **none** in the other | pushes **two**: the status, and an echo of the argument beneath it |
+| `enableDisablePort` | synopsis `[port] [protocol]` | pops **three** — the synopsis omits the `[status]` its own examples pass |
+| `enableDisableApplication` | synopsis `[path]` | pops **two**, same omission |
+
+The first is the costly one: both of the readme's own examples leak a value, so
+a script that follows them has a stack one item deep for the rest of the
+section. The second push looks like a copy-paste of the reader's — every other
+setter (`enableDisableFirewall`, `startStopFirewallService`,
+`allowDisallowExceptionsNotAllowed`) pushes one — but what the DLL does is the
+arity, whatever the author meant.
+
+This is the fourth plugin where the source and the documentation disagree, and
+the fourth time the source won. The rule stated under
+[`AccessControl`](#accesscontrol) needs no restating: **documentation describes
+the path its author was thinking about, and an arity is a claim about every
+path.**
+
+### Arguments are codes, not names
+
+Most parameters are `int` because the plugin takes Windows' own enumerations
+raw: protocol is `6` for TCP and `17` for UDP, scope is `0` for all networks,
+IP version, profile, direction and action likewise. The readme's *Parameters*
+list is the mapping and is correct there. `advAddRule` takes fifteen of them in
+one call — the longest `params` in any declaration, and the one place where
+reading the emitted line back is genuinely easier than reading the Lua.
 
 ## nsProcess
 
@@ -811,7 +885,6 @@ declared in five lines of your own `.toml`.
 | `Registry` | 40 | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, which needs a trailing `${registry::Unload}` — behaviour, not arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40. |
 | `nsJSON` | 3 | Its node path is a **variable number of positional strings** — one to four across the corpus — and `params` is a fixed list. [Below](#nsjsons-blocker-is-its-path-not-its-flags). |
 | `Inetc.post` | 2 | Its body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch. A `params` entry is emitted after the flags, and there is no spelling for one that comes first. |
-| `SimpleFC` | 24 | The maintained successor to `nsisFirewall`. Not measured yet — the one entry here that is a gap rather than a decision. |
 | `SimpleSC.getErrorMessage` | 61 | Takes its argument by `Push` — [above](#simplescgeterrormessage-is-not-declarable). |
 | `Nsis7z.extractWithCallback` | 5 | Its second argument is a **function address**, and no `params` type spells one — [below](#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
 | `LockedList` | 0 | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature. |

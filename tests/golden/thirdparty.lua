@@ -21,6 +21,7 @@ local enVar = plugin "EnVar"
 local inetc = plugin "Inetc"
 local nsis7z = plugin "Nsis7z"
 local nsisFirewall = plugin "nsisFirewall"
+local simpleFC = plugin "SimpleFC"
 local simpleSC = plugin "SimpleSC"
 local startMenu = plugin "StartMenu"
 
@@ -91,6 +92,31 @@ installer {
 		)
 		if allowed ~= 0 then
 			detailPrint("firewall rule not added")
+		end
+	end),
+
+	-- **Three outputs, and not one of the 33 is tagged.** SimpleFC pushes its
+	-- answers first and its status last, so the status pops first and the
+	-- answers follow it -- `simpleSC.serviceIsRunning` above, one value wider.
+	-- Nothing is conditional: every `PushString` in `SimpleFC.dpr` is
+	-- straight-line, which is why a 33-method plugin needed no `tagged` at all.
+	--
+	-- `0` is success here and `1` is failure, which is the plugin's own
+	-- `ResultToStr` and the opposite of the C convention.
+	section("Firewall Rules", function()
+		local queried, allowed, restricted = simpleFC.isIcmpTypeAllowed(2, "*", 8)
+		if queried == 0 and allowed == 1 then
+			detailPrint("echo allowed, restricted=" .. restricted)
+		end
+
+		-- The method whose readme is wrong in both directions: the synopsis
+		-- omits the argument its own examples pass, and both examples pop one
+		-- value where the DLL pushes two. The second is an echo of the argument,
+		-- and binding it is not optional -- leaving it would shift every later
+		-- `Pop` by one.
+		local set, now = simpleFC.enableDisableNotifications(1)
+		if set ~= 0 then
+			detailPrint("notifications unchanged: " .. now)
 		end
 	end),
 

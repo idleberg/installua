@@ -305,6 +305,7 @@ const SHIPPED: &[(&str, &str)] = &[
     ("Inetc.toml", include_str!("declarations/Inetc.toml")),
     ("NSISdl.toml", include_str!("declarations/NSISdl.toml")),
     ("Nsis7z.toml", include_str!("declarations/Nsis7z.toml")),
+    ("SimpleFC.toml", include_str!("declarations/SimpleFC.toml")),
     ("SimpleSC.toml", include_str!("declarations/SimpleSC.toml")),
     ("Splash.toml", include_str!("declarations/Splash.toml")),
     (

@@ -51,6 +51,23 @@ Section "Firewall"
 __GENERATED_endif_0:
 SectionEnd
 
+Section "Firewall Rules"
+  SimpleFC::IsIcmpTypeAllowed 2 "*" 8
+  Pop $0
+  Pop $1
+  Pop $2
+  IntCmp $0 0 0 __GENERATED_endif_0 __GENERATED_endif_0
+  IntCmp $1 1 0 __GENERATED_endif_0 __GENERATED_endif_0
+  DetailPrint "echo allowed, restricted=$2"
+__GENERATED_endif_0:
+  SimpleFC::EnableDisableNotifications 1
+  Pop $0
+  Pop $1
+  IntCmp $0 0 __GENERATED_endif_2 0 0
+  DetailPrint "notifications unchanged: $1"
+__GENERATED_endif_2:
+SectionEnd
+
 Section "Permissions"
   AccessControl::GrantOnFile $INSTDIR "(BU)" "FullAccess"
   Pop $0
