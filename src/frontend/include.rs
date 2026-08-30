@@ -21,6 +21,29 @@
 //!   * be an expression (`include prefix .. ".lua"`)
 //!   * sit inside a body, where only install time could decide it
 //!   * name a file that names it back, however long the way round
+//!
+//! **Two files that each declare `func("yolo", …)` collide, and that is the
+//! intended behaviour.** `resolve` reports it on the Lua line, naming the other
+//! file — a compile failure where NSIS would have given a build failure, which
+//! is the whole point of the merge being free.
+//!
+//! **Automatic namespacing is the rejected fix**, and stays rejected for three
+//! reasons. The names are *NSIS-visible*: `Function yolo` is a real symbol,
+//! called from `raw`, read in `makensis` output and diffed in hand-written
+//! goldens, so renaming it behind the author's back breaks the one promise
+//! `include` makes. Encapsulation needs values, and this language has none —
+//! Lua's own answer is `local s = require("strings")` returning a table, which
+//! needs first-class functions, which is ruled out because parameter types come
+//! from call sites; namespacing without values is mangling in a module's
+//! clothes. And the collision is already caught precisely, so a silent rename
+//! would replace a good diagnostic with none.
+//!
+//! If modularity is ever asked for, the shape to build is opt-in and
+//! author-chosen — `include("strings.lua", { prefix = "str" })`, emitting
+//! `Function str.yolo`. NSIS accepts `.` in a function name, the output stays
+//! readable, and nothing is renamed that the author did not name. Same
+//! principle as a plugin declaration's flags: a human decides, never the
+//! compiler.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
