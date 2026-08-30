@@ -447,11 +447,24 @@ fn top_level<'a>(resolved: &mut Resolved<'a>, diags: &mut Diagnostics) {
                     stmt.span(),
                     format!("`{}` is declared more than once", name.value),
                 )
-                .note(format!(
-                    "the first one is at line {}",
-                    previous.span.start_line
-                ))
+                .note_at("the first one is at", previous.span)
                 .note("resolution is order-free, so there is no later one that wins"),
+            );
+            continue;
+        }
+
+        if let Some(instead) = reserved(&name.value) {
+            diags.push(
+                Diagnostic::error(
+                    Code::DuplicateBlock,
+                    name.span,
+                    format!("`{}` is a name the compiler generates", name.value),
+                )
+                .note(instead)
+                .note(
+                    "NSIS holds one name once, so the collision would surface as its error on \
+                     the emitted script rather than as one on this line",
+                ),
             );
             continue;
         }
@@ -466,6 +479,38 @@ fn top_level<'a>(resolved: &mut Resolved<'a>, diags: &mut Diagnostics) {
             },
         );
     }
+}
+
+/// The names `lower` mints for itself, which a `func` may therefore not take —
+/// and the note saying where the author writes that code instead.
+///
+/// Checked here rather than against the module `lower` ends up building, because
+/// two `Function`s of one name is not a *lowering* fact: `.onInit` is invented
+/// from a global initialiser and `mui.welcome.pre` from a page's `pre`, so the
+/// collision depends on what else the program contains and the author's line
+/// does not change. Rejecting the name outright is the answer that reads the
+/// same either way — and every one of these has a spelling that works.
+///
+/// Deliberately **not** the whole of NSIS's `.`-led callback namespace:
+/// `func(".onVerifyInstDir", …)` is the only way to write that callback today,
+/// and this compiler generates nothing by that name.
+fn reserved(name: &str) -> Option<&'static str> {
+    if name == ".onInit" || name == "un.onInit" {
+        return Some(
+            "write `onInit(function() … end)` among the entries of `installer {}` or \
+             `uninstaller {}` — the `.` and the `un.` are the compiler's",
+        );
+    }
+    if name.starts_with("mui.") || name.starts_with("un.mui.") {
+        return Some(
+            "`mui.` is where the page callbacks and MUI2 hooks land: write the code on the page \
+             or the block that runs it, and the compiler names the function",
+        );
+    }
+    if name.starts_with(crate::cfg::LABEL_PREFIX) {
+        return Some("that prefix is the compiler's, for the labels and callbacks it invents");
+    }
+    None
 }
 
 /// Pass 1a: top-level `<const>`s, folded to a fixpoint so that one may refer to
@@ -745,10 +790,7 @@ fn declare<'a>(
                     *span,
                     format!("`{}` is declared more than once", name.text),
                 )
-                .note(format!(
-                    "the first one is at line {}",
-                    previous.span.start_line
-                ))
+                .note_at("the first one is at", previous.span)
                 .note("resolution is order-free, so there is no later one that wins"),
             );
             return;
@@ -812,10 +854,10 @@ fn declare<'a>(
                                 span,
                                 format!("`{param}` is declared as a parameter more than once"),
                             )
-                            .note(format!(
-                                "the first one is at line {}, bound to `{}`",
-                                previous.span.start_line, previous.bound
-                            ))
+                            .note_at(
+                                format!("the first one, bound to `{}`, is at", previous.bound),
+                                previous.span,
+                            )
                             .note("a parameter has one default, since `-D` sets it once"),
                         );
                         continue;

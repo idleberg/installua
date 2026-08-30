@@ -46,7 +46,7 @@ fn every_retired_row_produces_its_diagnostic() {
             retired[0]
                 .notes
                 .iter()
-                .any(|note| note.contains(row.instead)),
+                .any(|note| note.text.contains(row.instead)),
             "`{}` does not name its replacement:\n{rendered}",
             row.installua
         );

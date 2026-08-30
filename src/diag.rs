@@ -418,6 +418,23 @@ impl fmt::Display for Code {
     }
 }
 
+/// One line under a diagnostic.
+///
+/// The optional span is what makes a note that points *somewhere else* readable
+/// in a multi-file program. A note saying "the first one is at line 3" is a
+/// half-answer once `include` is in play: the header names one file and the note
+/// names a line, and a reader joins the two into a position that may not exist.
+/// So the note carries the other place as a span and [`Diagnostics::render`]
+/// spells it — the one place that knows how file `0` is spelled.
+#[derive(Clone, Debug)]
+pub struct Note {
+    /// Written to read as a sentence that a location finishes: `note_at` glues
+    /// the position on the end with a space and nothing else, so the text ends
+    /// with the preposition — "the first one is at".
+    pub text: String,
+    pub span: Option<Span>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Diagnostic {
     pub severity: Severity,
@@ -426,7 +443,7 @@ pub struct Diagnostic {
     pub message: String,
     /// Notes are a list because a rejection that names its replacement and a
     /// rejection that explains itself are two different notes.
-    pub notes: Vec<String>,
+    pub notes: Vec<Note>,
 }
 
 impl Diagnostic {
@@ -451,7 +468,24 @@ impl Diagnostic {
     }
 
     pub fn note(mut self, note: impl Into<String>) -> Self {
-        self.notes.push(note.into());
+        self.notes.push(Note {
+            text: note.into(),
+            span: None,
+        });
+        self
+    }
+
+    /// A note that points at a second place in the program — the other
+    /// declaration, the other assignment, the other `return`.
+    ///
+    /// The text ends where the location begins, so write it ending in the
+    /// preposition: `note_at("the first one is at", previous.span)` renders as
+    /// `the first one is at a.lua:3:1`.
+    pub fn note_at(mut self, note: impl Into<String>, span: Span) -> Self {
+        self.notes.push(Note {
+            text: note.into(),
+            span: Some(span),
+        });
         self
     }
 }
@@ -520,19 +554,40 @@ impl Diagnostics {
     pub fn render(&self, path: &str) -> String {
         let mut out = String::new();
         for d in &self.items {
-            let file = if d.span.file == 0 {
-                path
-            } else {
-                self.files.name(d.span.file).unwrap_or(path)
-            };
             out.push_str(&format!(
-                "{file}:{}: {}[{}]: {}\n",
-                d.span, d.severity, d.code, d.message
+                "{}:{}: {}[{}]: {}\n",
+                self.spell(d.span.file, path),
+                d.span,
+                d.severity,
+                d.code,
+                d.message
             ));
             for note in &d.notes {
-                out.push_str(&format!("  note: {note}\n"));
+                match note.span {
+                    // The file is named only when it is not the one the header
+                    // already named. A note that repeats the current file on
+                    // every line is noise in the common case — one file — and
+                    // the case this exists for is the other one.
+                    Some(span) if span.file != d.span.file => out.push_str(&format!(
+                        "  note: {} {}:{span}\n",
+                        note.text,
+                        self.spell(span.file, path)
+                    )),
+                    Some(span) => out.push_str(&format!("  note: {} {span}\n", note.text)),
+                    None => out.push_str(&format!("  note: {}\n", note.text)),
+                }
             }
         }
         out
+    }
+
+    /// How a file index is written: `path` for the root, because the caller
+    /// knows how it wants that one spelled, and the loader's name for the rest.
+    fn spell<'a>(&'a self, file: u32, path: &'a str) -> &'a str {
+        if file == 0 {
+            path
+        } else {
+            self.files.name(file).unwrap_or(path)
+        }
     }
 }

@@ -194,6 +194,41 @@ fn a_block_declared_twice_across_files_is_still_a_duplicate() {
     );
 }
 
+/// The other half of the same reason: a note that points at a *second* place
+/// has to name that place's file too.
+///
+/// Without it the two lines read as one file — the header says `install.lua:5`
+/// and the note says `line 1`, and the reader goes looking for a declaration on
+/// line 1 of a file that has an `include` there instead.
+#[test]
+fn a_note_pointing_into_another_file_names_it() {
+    let rendered = fails(
+        &format!("{ATTRIBUTES}include \"more.lua\"\nfunc(\"yolo\", function() end)"),
+        &[("more.lua", "func(\"yolo\", function() end)")],
+        Code::DuplicateBlock,
+    );
+    assert!(
+        rendered.contains("note: the first one is at more.lua:1:"),
+        "the note names the other file:\n{rendered}"
+    );
+}
+
+/// And a note pointing inside the *same* file does not repeat its name — the
+/// header already said it, and a note that says it again is noise on every
+/// single-file program, which is nearly all of them.
+#[test]
+fn a_note_pointing_into_the_same_file_gives_only_the_position() {
+    let rendered = fails(
+        &format!("{ATTRIBUTES}func(\"yolo\", function() end)\nfunc(\"yolo\", function() end)"),
+        &[],
+        Code::DuplicateBlock,
+    );
+    assert!(
+        rendered.contains("note: the first one is at 2:1"),
+        "position without a file:\n{rendered}"
+    );
+}
+
 /// A diagnostic in an included file names *that* file. This is the whole reason
 /// a span carries a file at all.
 #[test]

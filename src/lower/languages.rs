@@ -79,14 +79,13 @@ impl Lowerer<'_, '_> {
             return;
         };
         for (_, second) in blocks {
-            let first = span.start_line;
             self.diags.push(
                 Diagnostic::error(
                     Code::DuplicateBlock,
                     second,
                     "`languages {}` appears more than once",
                 )
-                .note(format!("the first one is at line {first}"))
+                .note_at("the first one is at", span)
                 .note("it is script-global, so there is exactly one"),
             );
         }
@@ -231,7 +230,7 @@ impl Lowerer<'_, '_> {
                 continue;
             }
             if let Some(previous) = out.iter().find(|other| other.name == name.text) {
-                let line = previous.span.start_line;
+                let first = previous.span;
                 let span = name.span;
                 let text = name.text.clone();
                 self.diags.push(
@@ -240,7 +239,7 @@ impl Lowerer<'_, '_> {
                         span,
                         format!("`{text}` is listed twice"),
                     )
-                    .note(format!("the first one is at line {line}")),
+                    .note_at("the first one is at", first),
                 );
                 continue;
             }
@@ -311,7 +310,7 @@ impl Lowerer<'_, '_> {
                 if locale.strings.contains_key(name) {
                     continue;
                 }
-                let line = first.strings[name].1.start_line;
+                let declared = first.strings[name].1;
                 let (from, span) = (first.name.clone(), locale.span);
                 let missing = locale.name.clone();
                 self.diags.push(
@@ -320,7 +319,7 @@ impl Lowerer<'_, '_> {
                         span,
                         format!("`{missing}` has no `{name}`"),
                     )
-                    .note(format!("`{from}` declares it, at line {line}"))
+                    .note_at(format!("`{from}` declares it, at"), declared)
                     .note(
                         "NSIS expands a language string with no entry for the running language \
                          to nothing at all, so the gap would be an empty label rather than an \

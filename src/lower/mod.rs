@@ -2517,14 +2517,13 @@ impl<'p> Lowerer<'_, 'p> {
             Field::Uninstaller => (&mut self.uninstaller_span, "uninstaller"),
         };
         if let Some(previous) = *slot {
-            let previous = previous.start_line;
             self.diags.push(
                 Diagnostic::error(
                     Code::DuplicateBlock,
                     span,
                     format!("`{name} {{}}` appears more than once"),
                 )
-                .note(format!("the first one is at line {previous}"))
+                .note_at("the first one is at", previous)
                 .note("it is script-global, so there is exactly one"),
             );
             return true;
@@ -5887,7 +5886,7 @@ impl<'p> Lowerer<'_, 'p> {
         // would emit it once with `un.` and once without — two sections sharing
         // a name, and a handle that means neither.
         if let Some(previous) = self.claims.get(&name.text) {
-            let previous_line = previous.span.start_line;
+            let previous_span = previous.span;
             let message = if previous.half != half {
                 format!(
                     "`{}` is listed in both `{}` and `{half}`",
@@ -5900,7 +5899,7 @@ impl<'p> Lowerer<'_, 'p> {
             };
             self.diags.push(
                 Diagnostic::error(Code::DuplicateBlock, name.span, message)
-                    .note(format!("the first one is at line {previous_line}"))
+                    .note_at("the first one is at", previous_span)
                     .note(
                         "a declaration is one thing, in one place: list it once and address it by \
                          its name from either half's code",
@@ -6634,10 +6633,7 @@ impl<'p> Lowerer<'_, 'p> {
                             first.len()
                         ),
                     )
-                    .note(format!(
-                        "the other one is at line {}",
-                        first_span.start_line
-                    ))
+                    .note_at("the other one is at", *first_span)
                     .note(
                         "`Call` has no arity — the callee pushes and the caller pops — so the \
                          two would unbalance the stack with no diagnostic from NSIS",
@@ -7216,8 +7212,7 @@ impl BodyLowerer<'_, '_> {
                     )
                     .note("a `Var` is one slot, so a global has one type for its lifetime");
                     for site in sites {
-                        diagnostic =
-                            diagnostic.note(format!("assigned at line {}", site.start_line));
+                        diagnostic = diagnostic.note_at("assigned at", site);
                     }
                     self.diags.push(diagnostic);
                 }

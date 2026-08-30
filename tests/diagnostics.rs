@@ -495,6 +495,47 @@ local c = nil
     );
 }
 
+/// A `func` may not take a name the compiler mints for itself.
+///
+/// The failure this replaces was NSIS's rather than the compiler's: two
+/// `Function .onInit` in the emitted script, rejected by `makensis` against a
+/// line the author never wrote. Every name below is generated somewhere in
+/// `lower` — `.onInit` from a global initialiser as readily as from an
+/// `onInit(…)` block, `mui.…` from a page's callbacks, and the label prefix from
+/// everything the CFG invents.
+#[test]
+fn a_func_may_not_take_a_generated_name() {
+    for name in [
+        ".onInit",
+        "un.onInit",
+        "mui.welcome.pre",
+        "un.mui.onGUIInit",
+        "__GENERATED_endif_0",
+    ] {
+        let diags = compile(&format!("func(\"{name}\", function() end)"));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == Code::DuplicateBlock && d.message.contains(name)),
+            "`{name}` should be refused:\n{}",
+            diags.render("install.lua")
+        );
+    }
+}
+
+/// And the `.`-led namespace is NSIS's, not this compiler's: the callbacks it
+/// generates nothing for stay writable, because `func` is the only way to write
+/// them at all.
+#[test]
+fn a_callback_the_compiler_does_not_generate_is_still_writable() {
+    let diags = compile("func(\".onVerifyInstDir\", function() end)");
+    assert!(
+        !diags.contains(Code::DuplicateBlock),
+        "{}",
+        diags.render("install.lua")
+    );
+}
+
 /// The two literal checks are warnings rather than errors: both describe output
 /// that is legal and probably not what was meant, and neither blocks lowering.
 #[test]
