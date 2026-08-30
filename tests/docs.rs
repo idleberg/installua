@@ -11,20 +11,33 @@
 //! This is the narrow gate for that class of rot, and only that class: a name
 //! shown to a reader as `import "X"` or `plugin "X"` must be one
 //! [`Declarations::builtin`] knows, and a method called on the local that
-//! binding produces must be one it declares. It deliberately does **not** check
-//! the other direction — that every declared method appears in the docs —
-//! because that is the larger claim, and it is only worth asserting once there
-//! is a body of declarations big enough for the absence to mean something.
+//! binding produces must be one it declares.
 //!
 //! The rule this leaves for whoever writes the next example: a spelling in the
 //! docs is a promise. Show a name that ships, or write the `.toml` in the same
 //! change.
+//!
+//! # The census direction
+//!
+//! The two tests at the bottom run the opposite way, against the **censuses**
+//! rather than the declarations: every command and MUI2 name classified as
+//! *writable* has to be spelled somewhere in `docs/`. That is the half
+//! `installua coverage` cannot see — it counts the tables, so `todo 0` reads the
+//! same whether the prose is current or was deleted this morning.
+//!
+//! Still **not** checked, and for the reason it always was: that every declared
+//! plugin method appears in the docs. A census entry is a promise the language
+//! makes and there are 531 of them; a declaration is one row in a `.toml`, and
+//! the absence of a row from the prose is only meaningful once the body of them
+//! is large enough for the gap to mean something rather than to mean *not yet*.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use installua::declarations::Declarations;
+use installua::mui;
+use installua::table::{self, Class};
 
 /// Which of the two namespaces a spelling reaches into.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -278,4 +291,139 @@ fn the_scanner_sees_the_defect_it_was_written_for() {
 
     // A declaration file's own `name = "…"` field names no spelling.
     assert!(spellings("name = \"TextFunc\"   # what `import \"…\"` is given").is_empty());
+}
+
+/// Every `docs/*.md` as one string, for the census tests below.
+///
+/// All of them rather than the two reference files, because a name is
+/// documented wherever a reader can find it: the file handle methods live in
+/// `reference-map.md` and the MUI2 hooks in `mui-reference.md`, but nothing
+/// promises that split holds for the next name added.
+fn prose() -> String {
+    documents()
+        .into_iter()
+        .map(|(_, text)| text)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Whether the docs spell `installua`, the surface name the census records.
+///
+/// **Two spellings count, and the looser one is the load-bearing one.** The
+/// census records a *path* — `page.license.file`, `handle:readUtf16Le` — and the
+/// docs write the same thing as a block: `page.license { file = …, topText = … }`.
+/// Neither form is wrong and neither should be forced on the other, so the last
+/// identifier in the path is what has to appear.
+///
+/// That is a loose match and it is meant to be. This test is a gate against a
+/// **deleted** section, not a proofreader: it catches the case where a name has
+/// no prose anywhere, which is the only failure `installua coverage` cannot
+/// already see. A name documented under the wrong heading still passes, and
+/// tightening that would mean teaching this test the shape of every group in
+/// two hand-written documents — a second copy of the docs, kept in Rust.
+fn documented(prose: &str, installua: &str) -> bool {
+    // Some entries record prose rather than a bare name:
+    // `page.*.subCaption in \`uninstaller {}\``. The name is the first word.
+    let name = installua.split(' ').next().unwrap_or(installua);
+    if prose.contains(name) {
+        return true;
+    }
+    // `:` as well as `.`: a file handle's methods are `handle:seek`, and the
+    // census spells the receiver `f`.
+    //
+    // As a whole identifier, which matters for exactly the short ones the loose
+    // match is weakest on: a plain `contains` puts `f:read` inside the word
+    // *already*, and then the gate is open for every name ending in a common
+    // English word.
+    let last = name.rsplit(['.', ':']).next().unwrap_or(name);
+    !last.is_empty() && whole_word(prose, last)
+}
+
+/// `needle` in `haystack` with an identifier character on neither side.
+fn whole_word(haystack: &str, needle: &str) -> bool {
+    let bytes = haystack.as_bytes();
+    haystack.match_indices(needle).any(|(at, _)| {
+        let before = at.checked_sub(1).is_none_or(|i| !is_ident(bytes[i]));
+        let after = bytes.get(at + needle.len()).is_none_or(|b| !is_ident(*b));
+        before && after
+    })
+}
+
+/// `reference-map.md` opens by claiming all 276 commands are accounted for.
+/// This is that sentence, as a test.
+///
+/// Only the two writable buckets: `exposed` is a call and `attribute` is a
+/// field, and both are things a reader looks up. The other five are not — a
+/// `directive` is out of the surface, a `lowering-target` is reachable only
+/// through `if`, and `rejected` and `language` carry their own replacement text,
+/// which [`crate::retired`] already tests is non-empty.
+#[test]
+fn every_writable_command_is_spelled_in_the_docs() {
+    let prose = prose();
+    let missing: Vec<String> = table::table()
+        .iter()
+        .filter(|entry| matches!(entry.class, Class::Exposed | Class::Attribute(_)))
+        .filter_map(|entry| entry.installua)
+        .filter(|installua| !documented(&prose, installua))
+        .map(|installua| format!("{installua} is in no document"))
+        .collect();
+
+    assert_eq!(
+        missing,
+        Vec::<String>::new(),
+        "reference-map.md says every one of the 276 commands is accounted for; \
+         these have a bucket in src/table/overlay.rs and no prose anywhere"
+    );
+}
+
+/// The same sentence in `mui-reference.md`, about the 255 MUI2 names.
+///
+/// `exposed` alone here: `internal` is MUI2's own state with nothing for a user
+/// to write, which is a fact about MUI2 rather than a gap in this documentation.
+#[test]
+fn every_writable_mui_name_is_spelled_in_the_docs() {
+    let prose = prose();
+    let missing: Vec<String> = mui::inventory()
+        .iter()
+        .filter_map(|setting| match setting.class {
+            mui::Class::Exposed(installua) => Some((setting.name(), installua)),
+            _ => None,
+        })
+        .filter(|(_, installua)| !documented(&prose, installua))
+        .map(|(name, installua)| format!("{name} -> {installua} is in no document"))
+        .collect();
+
+    assert_eq!(
+        missing,
+        Vec::<String>::new(),
+        "mui-reference.md says all 255 MUI2 names are accounted for; these are \
+         classified writable and have no prose anywhere"
+    );
+}
+
+/// And the gate has to be able to fail, or the two above pass on an empty
+/// `table()` as readily as on a complete one.
+#[test]
+fn the_census_gate_sees_a_deleted_section() {
+    let prose = "**Usage** `page.license { file = …, topText = … }`";
+
+    // The block spelling, which is why `documented` matches on the last
+    // identifier rather than on the recorded path.
+    assert!(documented(prose, "page.license.file"));
+    assert!(documented(prose, "page.license.topText"));
+    // Prose after the name, as `UninstallSubCaption` records it.
+    assert!(documented(prose, "page.license.file in `uninstaller {}`"));
+
+    // And the case the test exists for: the section is gone.
+    assert!(!documented(prose, "page.components.instTypeText"));
+
+    // The fallback is a whole identifier, not a substring: `f:read` is not
+    // documented by the word *already*, and `page.x.file` is not documented by
+    // `fileExists`.
+    assert!(!documented("the page has already been shown", "f:read"));
+    assert!(!documented("`fileExists(path)`", "page.license.file"));
+    assert!(documented(
+        "`page.license { file = … }`",
+        "page.license.file"
+    ));
 }
