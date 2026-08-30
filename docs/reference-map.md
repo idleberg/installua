@@ -1232,7 +1232,7 @@ wiki page:
 | `AdvSplash` | `.show` — Splash plus fades and a transparent colour                                        |
 | `StartMenu` | `.select`, `.init`, `.show` — the folder follows `"success"`, and only then                 |
 
-And eight third-party plugins, on the evidence of a scan of 984 real-world
+And seven third-party plugins, on the evidence of a scan of 984 real-world
 scripts. These are **declarations, not bundled DLLs** — the plugin is still
 yours to install, and the file here only supplies the count:
 
@@ -1244,15 +1244,12 @@ yours to install, and the file here only supplies the count:
 | `Inetc`          | 46      | `.get`, `.head`, `.put` — eighteen flags and a mandatory `/END`; `.post` stays out          |
 | `AccessControl`  | 111     | all 25 — every mutator and reader on files and registry keys, plus the three SID helpers    |
 | `Nsis7z`         | 5       | `.extract`, `.extractWithDetails` — neither pushes anything at all                          |
-| `nsisFirewall`   | 1       | `.addAuthorizedApplication`, `.removeAuthorizedApplication` — the pre-Vista firewall API     |
 | `SimpleFC`       | 24      | all 33 — ports, applications, ICMP types and advanced rules; `0` is success and `1` is failure |
 
-`nsisFirewall`'s count of 1 is not a typo. It ships on **arity** rather than
-popularity — two methods, fixed positions, one code each — because the rule that
-governs this list puts the undiscoverable half first. `SimpleFC` is its
-maintained successor and reaches the same API on Vista and later; a new script
-wants that one, and `nsisFirewall` stays declared for the scripts that already
-call it.
+`Nsis7z`'s count of 5 is not a typo. It ships on **arity** rather than
+popularity — two methods that push *nothing at all*, which is the one count no
+reader guesses — because the rule that governs this list puts the undiscoverable
+half first. Popularity only breaks the tie.
 
 `AccessControl` is the other end of the same rule. Twenty-three of its
 twenty-five methods push a number of values that depends on the outcome, which
@@ -1808,8 +1805,8 @@ second is what `page.custom` emits.
 
 The same decision, made against a scan of 984 real-world scripts. Each of these
 is common enough to have been considered and turned down for a stated reason —
-and every one of those reasons is about the **declaration format** rather than
-about the plugin, which is what makes the list worth keeping. All remain
+and all but the last are about the **declaration format** rather than about the
+plugin, which is what makes the list worth keeping. All remain
 callable through [`raw`](#raw), and any of them can be declared by a project
 in five lines of [its own `.toml`](#declaring-a-third-party-plugin-or-header).
 
@@ -1822,6 +1819,7 @@ in five lines of [its own `.toml`](#declaring-a-third-party-plugin-or-header).
 | `Nsis7z.extractWithCallback` | 5   | Not the register protocol the six `FileFunc`/`TextFunc` macros use — it pushes its two values on the stack. It stays out a step earlier than that: its second argument is the **address** of a function, `params` has no type for one, and `GetFunctionAddress` has no Lua spelling. See [plugin-reference.md](plugin-reference.md#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
 | `nsJSON`                 | 3       | Its node path is a **variable number of positional strings** — one to four across 25 call sites — and `params` is a fixed list, so a declaration would have to pick a depth and miscount the `Pop`s at every other one. The repeated `/index` run its readme advertises turns out to appear in no script at all. See [plugin-reference.md](plugin-reference.md#nsjsons-blocker-is-its-path-not-its-flags). |
 | `Inetc.post`             | 2       | Its POST body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch — and a `params` entry is emitted after the flags. `get`, `head` and `put` ship declared; only this entry point has an argument in front. |
+| `nsisFirewall`           | 1       | The only entry turned down over the plugin rather than the format: its Unicode build is a differently *named* DLL. Version 1.2 (2009, the last) added Unicode as **`nsisFirewallW`**, and NSIS resolves `nsisFirewall::…` to `nsisFirewall.dll` — so a declaration spelling the ANSI token cannot load in an Installua installer, which is always `Unicode`. Use [`SimpleFC`](plugin-reference.md#simplefc), which ships an ANSI and a Unicode build under one name and reaches `INetFwPolicy2` besides. |
 
 ### Rejected NSIS commands
 

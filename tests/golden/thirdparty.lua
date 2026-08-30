@@ -20,7 +20,6 @@ local accessControl = plugin "AccessControl"
 local enVar = plugin "EnVar"
 local inetc = plugin "Inetc"
 local nsis7z = plugin "Nsis7z"
-local nsisFirewall = plugin "nsisFirewall"
 local simpleFC = plugin "SimpleFC"
 local simpleSC = plugin "SimpleSC"
 local startMenu = plugin "StartMenu"
@@ -81,18 +80,6 @@ installer {
 		setOutPath(INSTDIR)
 		nsis7z.extract(PLUGINSDIR .. "/payload.7z")
 		nsis7z.extractWithDetails(PLUGINSDIR .. "/extras.7z", "Extracting %s...")
-	end),
-
-	section("Firewall", function()
-		-- Path first, then the name the rule shows under. Removing goes by the
-		-- path, so the name is a label rather than a key.
-		local allowed = nsisFirewall.addAuthorizedApplication(
-			INSTDIR .. "/bin/app.exe",
-			"Example"
-		)
-		if allowed ~= 0 then
-			detailPrint("firewall rule not added")
-		end
 	end),
 
 	-- **Three outputs, and not one of the 33 is tagged.** SimpleFC pushes its

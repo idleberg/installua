@@ -43,14 +43,6 @@ Section "Archive"
   Nsis7z::ExtractWithDetails "$PLUGINSDIR\extras.7z" "Extracting %s..."
 SectionEnd
 
-Section "Firewall"
-  nsisFirewall::AddAuthorizedApplication "$INSTDIR\bin\app.exe" "Example"
-  Pop $0
-  IntCmp $0 0 __GENERATED_endif_0 0 0
-  DetailPrint "firewall rule not added"
-__GENERATED_endif_0:
-SectionEnd
-
 Section "Firewall Rules"
   SimpleFC::IsIcmpTypeAllowed 2 "*" 8
   Pop $0

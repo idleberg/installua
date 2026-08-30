@@ -323,10 +323,6 @@ const SHIPPED: &[(&str, &str)] = &[
         "nsProcess.toml",
         include_str!("declarations/nsProcess.toml"),
     ),
-    (
-        "nsisFirewall.toml",
-        include_str!("declarations/nsisFirewall.toml"),
-    ),
 ];
 
 /// Where a project's own declarations live, relative to its root.

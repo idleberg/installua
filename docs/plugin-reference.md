@@ -619,39 +619,14 @@ be changing `outputs`, and `outputs` is the one thing a declaration is for.
 
 `post` is [not declarable](#what-stays-out).
 
-## nsisFirewall
-
-Firewall exceptions, 1 corpus script.
-Source: <https://nsis.sourceforge.io/NsisFirewall_plug-in>.
-
-| Method | Arguments | Returns |
-| ------ | --------- | ------- |
-| `.addAuthorizedApplication(path, name)` | `path`, `string` | code (`int`) |
-| `.removeAuthorizedApplication(path)` | `path` | code (`int`) |
-
-**One corpus script is not "common", and this ships anyway.** It ships on
-arity: two methods, fixed positions, one code each, and a wrong count unbalances
-the stack with no diagnostic from anywhere. The rule puts the undiscoverable
-half first for exactly this case.
-
-**It is not a recommendation.** The plugin drives `INetFwAuthorizedApplications`,
-the pre-Vista firewall API, which Windows still honours through a compatibility
-shim but which cannot express per-profile rules, direction, or a port. The
-maintained alternative is NSIS Simple Firewall ([`SimpleFC`](#simplefc), 24
-corpus scripts), which now ships declared at all 33 methods. A new script wants
-that one; this stays declared for the scripts that already call it.
-
-The rule name is a label rather than a key — removal goes by path, so two calls
-with one path and two names leave one rule, renamed. Removing an application
-that was never authorised is not an error, which makes the removal safe to call
-unconditionally from an uninstaller.
-
 ## SimpleFC
 
-NSIS Simple Firewall, 24 corpus scripts. The maintained successor to
-[`nsisFirewall`](#nsisfirewall): it drives `INetFwPolicy2`, so it reaches
+NSIS Simple Firewall, 24 corpus scripts, and the **only** firewall plugin
+declared here — see [`nsisFirewall`](reference-map.md#third-party-plugins-that-stay-out)
+for the one that was dropped and why. It drives `INetFwPolicy2`, so it reaches
 per-profile rules, direction, ports and ICMP types that the older plugin cannot
-express. Source: `Source/SimpleFC.dpr`, and it is the first of these read from
+express, and it ships an ANSI **and** a Unicode build, both at 1.21, both named
+`SimpleFC.dll`. Source: `Source/SimpleFC.dpr`, and it is the first of these read from
 **Delphi** rather than C++ — the idiom is `PopString` / `PushString` from
 `nsis.pas`, but the counting is the same.
 
