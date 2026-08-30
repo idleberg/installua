@@ -878,7 +878,9 @@ and caught only by reading `AccessControl.cpp`.
 
 Turned down on evidence, and each for a reason about the **format** rather than
 about the plugin. All remain callable through `raw`, and any of them can be
-declared in five lines of your own `.toml`.
+declared in five lines of your own `.toml` — where a shape the format cannot
+spell can often be handed to a `raw` **argument** instead, keeping the rest of
+the declaration.
 
 | Plugin | Scripts | Why |
 | ------ | ------- | --- |
@@ -1006,7 +1008,21 @@ stack it would corrupt.
 
 A repetition spelling would not unlock this plugin. A variadic `params` tail
 would unlock 23 of the 25 sites, and is the thing to design if nsJSON is ever
-wanted. Until then it is `raw`.
+wanted.
+
+Until then it is `raw` — and this is the plugin the **raw argument** form was
+built for. Declare `get` with one `string` parameter in your own `.toml` and
+spell the whole path through it:
+
+```lua
+local node = nsJSON.get(raw "/index 0 /index 1 /index 3", "$Doc")
+```
+
+The path becomes text nothing checks, which is the part a variadic `params`
+would fix. What it buys in the meantime is the rest of the declaration: the call
+is still one line the compiler writes, `outputs` still says how many `Pop`s
+follow, and `local node` still binds one — none of which survives writing the
+same call as a `raw` block.
 
 ### `Nsis7z.extractWithCallback` takes an address, not a callback
 

@@ -172,6 +172,11 @@ and it costs exactly what you would expect:
 - a long string is required, not merely preferred: a `"…"` literal would be lexed as Lua
   and mangle your `\` and `$\n`.
 
+`raw` has one other position, where it costs less: an argument of a declared plugin
+method, `plugin.method(raw "/index 0 /index 1", "$Doc")`. There the text is spliced into
+that call's line and everything else stays declared — one argument however many words it
+holds, and the outputs still bind to `local`s.
+
 Third-party headers and plugins are declared in `.installua/declarations/*.toml`, which the
 compiler, the editor stubs and the linter all read — five lines per method, and the call
 is then as ordinary as `detailPrint`. Declaring one is not ceremony:

@@ -102,6 +102,42 @@ fn a_declared_plugin_call_emits_the_line_the_declaration_names() {
     );
 }
 
+/// `raw` in argument position, which is the only position where `raw` is not a
+/// statement. The text lands in the line untouched — no quoting, and none of
+/// the backslash conversion the `path` position above applies — and the call is
+/// still a declared call, so the declared output still binds.
+#[test]
+fn a_raw_argument_splices_into_the_line_and_leaves_the_arity_alone() {
+    let output = build(&program(
+        "local out = nsisunz.unzipToLog(raw \"/noextractpath data/archive.zip\", \"out/here\")\n\
+         detailPrint(out)",
+    ));
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    assert!(
+        lines.contains(&"nsisunz::UnzipToLog /noextractpath data/archive.zip \"out\\here\""),
+        "{output}"
+    );
+    assert_eq!(
+        lines.iter().filter(|line| line.starts_with("Pop ")).count(),
+        1,
+        "{output}"
+    );
+}
+
+/// However many tokens it spells, a spliced argument is one argument. That is
+/// what separates the hatch from a variadic tail: the position count stays the
+/// declaration's, and so does the count of `Pop`s that follow it.
+#[test]
+fn a_raw_argument_is_one_position_however_many_words_it_holds() {
+    let errors = errors(&program(
+        "nsisunz.unzipToLog(raw \"/noextractpath a.zip out\")",
+    ));
+    assert!(
+        errors.contains("takes 2 argument(s), and 1 were given"),
+        "{errors}"
+    );
+}
+
 /// The same for a header macro, whose convention is the other one: outputs are
 /// trailing register arguments, because `!insertmacro` cannot return anything.
 #[test]

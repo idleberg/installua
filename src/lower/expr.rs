@@ -1650,10 +1650,16 @@ impl BodyLowerer<'_, '_> {
     fn raw(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
         if dest.is_some() {
             self.diags.push(
-                Diagnostic::error(Code::TypeMismatch, span, "`raw` produces no value").note(
-                    "it is text handed to `makensis`, so there is nothing here that knows what it \
-                     left in a register — write to a global instead",
-                ),
+                Diagnostic::error(Code::TypeMismatch, span, "`raw` produces no value")
+                    .note(
+                        "it is text handed to `makensis`, so there is nothing here that knows \
+                         what it left in a register — write to a global instead",
+                    )
+                    .note(
+                        "the one place `raw` is not a statement is an argument of a declared \
+                         plugin method, where it splices into that call's line and the call's own \
+                         outputs still bind",
+                    ),
             );
             return None;
         }
@@ -1861,6 +1867,25 @@ impl BodyLowerer<'_, '_> {
         let mut lowered = leading;
         lowered.reserve(args.len());
         for (argument, param) in args.iter().zip(entry.params) {
+            // The escape hatch, in argument position: text spliced into this
+            // line and read by nothing here. It exists because a plugin's
+            // argument shape is sometimes not a shape at all — `nsJSON::Get`
+            // takes a node path whose *length* the caller picks, and no fixed
+            // `params` list describes that. The alternative is a `raw` block,
+            // which reaches the same line and gives back nothing: no local
+            // survives a block, so the call's outputs would cross into the rest
+            // of the section through a global with the `Pop`s hand-written —
+            // which is exactly the arity a declaration exists to carry. Here the
+            // call stays a declared call.
+            //
+            // What it costs is this position's `param.ty` and `param.path`, both
+            // of which describe a value and there is no value here. That is the
+            // trade: one argument untyped, so the count stays the
+            // declaration's.
+            if let Some(text) = spliced(argument) {
+                lowered.push(ir::Arg::raw(text));
+                continue;
+            }
             let value = self.value(argument)?;
             // A plugin's parameter types were declared and never read until
             // now. They are worth reading for the same reason the count is: a
@@ -2972,6 +2997,28 @@ fn callee_path(callee: &Expr) -> Option<String> {
             Expr::Name(base) => Some(format!("{}.{}", base.text, name.text)),
             _ => None,
         },
+        _ => None,
+    }
+}
+
+/// `raw "…"` in argument position: the text to splice, or `None` for anything
+/// else.
+///
+/// Matched by shape rather than by an AST node of its own, because `raw` is a
+/// call everywhere else too and the frontend already gives its literal the one
+/// property that matters — [`crate::frontend::strings`] leaves `$` alone in a
+/// verbatim string, so `raw "/index $0"` reaches NSIS as written rather than as
+/// an escaped `$$0`.
+///
+/// Only the exact `raw "literal"` shape splices. `raw(f())` and `raw()` fall
+/// through to the ordinary lowering, which reports them where `raw` is reported
+/// everywhere else — one message for the hatch, not two that differ by position.
+fn spliced(argument: &Expr) -> Option<&str> {
+    let Expr::Call { callee, args, .. } = argument else {
+        return None;
+    };
+    match (callee_path(callee).as_deref(), args.as_slice()) {
+        (Some(super::RAW), [Expr::Str(text)]) => Some(&text.value),
         _ => None,
     }
 }

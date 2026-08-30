@@ -1408,9 +1408,10 @@ needs it and is willing to write `$R9` themselves.
 
 ### raw
 
-Text handed to `makensis` unread. It produces no value, no `local` survives it,
-and a failure inside one is reported as _yours_ rather than the compiler's
-.
+Text handed to `makensis` unread. As a statement it produces no value, no
+`local` survives it, and a failure inside one is reported as _yours_ rather than
+the compiler's. (There is one other position — see
+[raw in an argument](#raw-in-an-argument) below.)
 
 **Usage** `raw [[ … ]]` → nothing
 
@@ -1419,6 +1420,31 @@ raw [[
   SetRegView 64
 ]]
 ```
+
+#### raw in an argument
+
+The one position where `raw` is not a statement. As an argument of a
+[declared plugin method](#declaring-a-third-party-plugin-or-header) it splices
+its text into that call's line — unquoted, with no path conversion and no type
+check — and everything else about the call stays declared:
+
+```lua
+local node = nsJSON.get(raw "/index 0 /index 1 /index 3", "$Doc")
+```
+
+**Usage** `plugin.method(…, raw "…", …)` → the method's own outputs
+
+It is for the argument shape a `params` list cannot describe — most often a
+count the caller picks per call. However many words it spells, a spliced
+argument is **one** argument, so the position count and the number of `Pop`s
+after the line both remain the declaration's. That is the whole difference from
+writing the call in a `raw` block, where no `local` survives and the outputs
+have to cross into the rest of the section through a global with the `Pop`s
+written by hand.
+
+The cost is that one position: its declared type and its `path` flag both
+describe a value, and there is no value there — what you write is what
+`makensis` sees.
 
 #### raw.head and raw.tail
 

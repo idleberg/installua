@@ -656,8 +656,15 @@ fn declarations() -> String {
          -- plus two more: `raw` is called *and* has fields, and injecting a\n\
          -- field into a function is `inject-field`, which LuaLS reports against\n\
          -- this file. The overload is what keeps the body form callable.\n\
+         -- The overload returns a string although the statement form returns\n\
+         -- nothing, because `raw` has a second position the editor cannot tell\n\
+         -- apart from the first: an argument of a declared plugin method. A\n\
+         -- `fun(text: string)` would underline every one of those as a value\n\
+         -- used where there is none. The compiler still rejects `local x = raw\n\
+         -- [[ … ]]`, so the looser stub costs a false negative in one place to\n\
+         -- avoid a false positive in the other.\n\
          ---@class installua.Raw\n\
-         ---@overload fun(text: string)\n\
+         ---@overload fun(text: string): string\n\
          raw = {}\n\n\
          ---@param text string Above every line the compiler writes: `!system`, `!tempfile`.\n\
          function raw.head(text) end\n\n\

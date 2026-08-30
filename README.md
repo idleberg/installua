@@ -233,6 +233,15 @@ raw.head [[ !system 'git rev-parse --short HEAD > rev.txt' ]]
 raw.tail [[ !packhdr "tmp.dat" '"upx.exe" "tmp.dat"' ]]
 ```
 
+`raw` also works as an *argument* of a declared plugin method, for the argument
+shape a `params` list cannot describe — a path whose length the caller picks,
+say. The text is spliced into that call's line, and the call stays declared, so
+its outputs still bind:
+
+```lua
+local node = nsJSON.get(raw "/index 0 /index 1 /index 3", "$Doc")
+```
+
 ## Documentation
 
 | | |
