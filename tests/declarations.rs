@@ -22,12 +22,17 @@ use installua::{Options, stubs};
 /// one a project would actually have to write. The example used to be `Nsis7z`,
 /// which now ships declared — and a test whose "undeclared" plugin is declared
 /// proves the opposite of what it says.
+///
+/// `unzipToLog` rather than `unzip`, which is the same rule one level down: the
+/// two differ only in whether each extracted name reaches the details log, and
+/// the corpus writes `UnzipToLog` in eighteen files against `Unzip`'s one. An
+/// example is copied whole, so it names the method a reader will actually want.
 const DECLARED: &str = r#"
 # A plugin someone shipped: two inputs, one value pushed.
 [[plugin]]
 name = "nsisunz"
-method = "unzip"
-nsis = "nsisunz::Unzip"
+method = "unzipToLog"
+nsis = "nsisunz::UnzipToLog"
 params = ["path", "path"]
 outputs = ["string"]
 
@@ -88,11 +93,11 @@ fn program(body: &str) -> String {
 #[test]
 fn a_declared_plugin_call_emits_the_line_the_declaration_names() {
     let output = build(&program(
-        "local out = nsisunz.unzip(\"data/archive.zip\", \"out/here\")\ndetailPrint(out)",
+        "local out = nsisunz.unzipToLog(\"data/archive.zip\", \"out/here\")\ndetailPrint(out)",
     ));
     let lines: Vec<&str> = output.lines().map(str::trim).collect();
     assert!(
-        lines.contains(&"nsisunz::Unzip \"data\\archive.zip\" \"out\\here\""),
+        lines.contains(&"nsisunz::UnzipToLog \"data\\archive.zip\" \"out\\here\""),
         "{output}"
     );
 }
@@ -127,7 +132,7 @@ fn a_declared_macro_takes_its_output_as_a_trailing_register() {
 #[test]
 fn binding_more_values_than_the_declaration_pushes_is_an_error() {
     let rendered = errors(&program(
-        "local a, b = nsisunz.unzip(\"data/x.zip\", \"out\")",
+        "local a, b = nsisunz.unzipToLog(\"data/x.zip\", \"out\")",
     ));
     assert!(
         rendered.contains("pushes 1 value(s), and 2 are being bound"),
@@ -135,14 +140,18 @@ fn binding_more_values_than_the_declaration_pushes_is_an_error() {
     );
 }
 
+/// The undeclared method is `unzipToStack` on purpose: it is the one method of
+/// this plugin that *cannot* be declared in this format at all — it pushes one
+/// value per file in the archive — so the diagnostic below is the honest end of
+/// the road rather than a declaration somebody forgot to write.
 #[test]
 fn a_method_nobody_declared_names_the_directory_that_would_declare_it() {
-    let rendered = errors(&program("nsisunz.unzipToLog(\"data/x.zip\", \"out\")"));
+    let rendered = errors(&program("nsisunz.unzipToStack(\"data/x.zip\", \"out\")"));
     assert!(
-        rendered.contains("`nsisunz` declares no `unzipToLog`"),
+        rendered.contains("`nsisunz` declares no `unzipToStack`"),
         "{rendered}"
     );
-    assert!(rendered.contains("it declares `unzip`"), "{rendered}");
+    assert!(rendered.contains("it declares `unzipToLog`"), "{rendered}");
 
     // And a plugin nobody has declared at all names the file that would fix it,
     // which is the whole discoverability of the format.
@@ -258,7 +267,7 @@ fn a_declared_plugin_is_typed_in_the_stub() {
         "{meta}"
     );
     assert!(
-        meta.contains("function installua_Plugin_nsisunz.unzip(a1, a2) end"),
+        meta.contains("function installua_Plugin_nsisunz.unzipToLog(a1, a2) end"),
         "{meta}"
     );
     // The literal-typed overload is what makes `plugin "nsisunz"` return that
@@ -276,7 +285,7 @@ fn a_declared_plugin_is_typed_in_the_stub() {
     // `local a, b = …` is checked by the editor and the compiler with one count
     // between them.
     let method = meta
-        .split("-- `nsisunz::Unzip`\n")
+        .split("-- `nsisunz::UnzipToLog`\n")
         .nth(1)
         .and_then(|rest| rest.split("function ").next())
         .unwrap_or_default();

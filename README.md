@@ -164,10 +164,10 @@ Installua nor NSIS has one.
 
 Installua ships declarations for the plugin methods and header macros a real
 installer reaches for first — `nsExec::ExecToStack`, `UserInfo::GetAccountType`,
-`System::Call`, `${GetSize}`, `${DriveSpace}`, `${VersionCompare}`, and six
+`System::Call`, `${GetSize}`, `${DriveSpace}`, `${VersionCompare}`, and eight
 third-party plugins picked on a scan of 984 real-world scripts: `EnVar`,
-`SimpleSC`, `nsProcess`, `Nsis7z`, `nsisFirewall` and two methods of
-`AccessControl` ([the full list](docs/plugin-reference.md)). A declaration is
+`SimpleSC`, `AccessControl`, `Inetc`, `nsProcess`, `Nsis7z`, `nsisFirewall` and
+`SimpleFC` ([the full list](docs/plugin-reference.md)). A declaration is
 not a bundled DLL — installing the plugin is still yours — and your installer
 will reach past the set almost immediately. Anything else is **declared by your
 project**, in one small file per plugin or header:
@@ -176,8 +176,8 @@ project**, in one small file per plugin or header:
 # .installua/declarations/nsisunz.toml
 [[plugin]]
 name = "nsisunz"                      # what `plugin "…"` is given
-method = "unzip"                      # what you call it
-nsis = "nsisunz::Unzip"               # what NSIS is given
+method = "unzipToLog"                 # what you call it
+nsis = "nsisunz::UnzipToLog"          # what NSIS is given
 params = ["path", "path"]
 outputs = ["string"]                  # values pushed, in `Pop` order
 dir = "vendor/plugins"                # only if the DLL is not in NSISDIR
@@ -187,8 +187,10 @@ dir = "vendor/plugins"                # only if the DLL is not in NSISDIR
 local nsisunz = plugin "nsisunz"
 
 section("Core", function()
-	local result = nsisunz.unzip("data/payload.zip", INSTDIR)
-	detailPrint(result)
+	local result = nsisunz.unzipToLog("data/payload.zip", INSTDIR)
+	if result ~= "success" then
+		detailPrint(result)
+	end
 end)
 ```
 

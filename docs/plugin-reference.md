@@ -888,12 +888,82 @@ declared in five lines of your own `.toml`.
 | `SimpleSC.getErrorMessage` | 61 | Takes its argument by `Push` — [above](#simplescgeterrormessage-is-not-declarable). |
 | `Nsis7z.extractWithCallback` | 5 | Its second argument is a **function address**, and no `params` type spells one — [below](#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
 | `LockedList` | 0 | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature. |
+| `nsisunz.unzipToStack` | 2 | Pushes **one value per file in the archive**, so the arity is `1 + n` for an `n` nobody knows at compile time. [Below](#nsisunz-is-the-worked-example-and-its-third-method-could-not-have-shipped). |
 | `Crypto` | 0 | Fails the *common* half of the rule outright. |
 
-`nsisunz` is not in this table and is not declared either: it is the worked
-example of a plugin you declare yourself, in
+`nsisunz`'s other two methods are declarable and stay undeclared anyway: the
+plugin is the worked example of one you declare yourself, in
 [README.md](../README.md#third-party-plugins-and-headers) and in
-`tests/declarations.rs`. It stays undeclared so that example stays copy-pasteable.
+`tests/declarations.rs`. [Below](#nsisunz-is-the-worked-example-and-its-third-method-could-not-have-shipped).
+
+### nsisunz is the worked example, and its third method could not have shipped
+
+ZIP extraction, 21 corpus scripts. Source:
+`nsisunz.cpp`, in the plugin's own distribution.
+
+Three exports over one function, and the count is what decides which:
+
+```cpp
+void Unzip(…)        { internal_unzip(0); }
+void UnzipToLog(…)   { internal_unzip(1); }
+void UnzipToStack(…) { internal_unzip(2); }
+```
+
+| Method | Corpus files | Arguments | Returns |
+| ------ | ------------ | --------- | ------- |
+| `.unzip(zip, dest)` | 1 | `path`, `path` | `string` |
+| `.unzipToLog(zip, dest)` | 18 | `path`, `path` | `string` |
+| `.unzipToStack(zip, dest)` | 2 | `path`, `path` | **`1 + n`** |
+
+The first two differ only in whether each extracted name is written to the
+details log, and both push exactly one value: `"success"` (`szSuccess`,
+`nsisunz.cpp:27`) or one of eight error *sentences* — `"Error opening ZIP file"`,
+`"File not found in archive"`, `"aborted"` and five more. A sentence rather than
+a code, so the comparison is `~= "success"` and the value is worth printing as
+it stands, exactly as with [`Inetc`](#inetc).
+
+**`unzipToStack` is the one that cannot be declared.** Mode 2 pushes the names
+as it walks the archive (`nsisunz.cpp:418`):
+
+```cpp
+} else if (uselog == 2) {
+    if (!first) {
+        pushstring("");   // push list terminator (empty string)
+        first++;
+    }
+    pushstring(pfn);
+}
+```
+
+An empty string first, then one push per file, then the status last — so the
+Lua arity is `1 + n` for an `n` that is a property of the *archive*, not of the
+program. That is neither a number nor a `tagged`/`more` fork: `tagged` says
+*which* of two fixed shapes, and this has no fixed shape. It is
+[`nsJSON`'s problem](#nsjsons-blocker-is-its-path-not-its-flags) on the output
+side, and the format has no spelling for either.
+
+**The flags are otherwise a textbook case** — a leading loop, order-free, one
+bare switch and two valued ones (`nsisunz.cpp:300`):
+
+```cpp
+popstring(buf);
+while (buf[0] == '/') {
+    if (!lstrcmpi(buf+1, "text"))          popstring(g_extract_text), hastext++;
+    if (!lstrcmpi(buf+1, "noextractpath")) noextractpath++;
+    if (!lstrcmpi(buf+1, "file"))          popstring(filetoextract), usefile++;
+    if (popstring(buf)) *buf = 0;
+}
+```
+
+So `unzipToLog` would declare in a dozen lines and work. It stays out to keep
+the worked example honest, which is a decision about the documentation rather
+than about the plugin — and the only entry in this file that is.
+
+**Why `unzipToLog` and not `unzip`.** The example named `unzip` for two
+releases, and a per-method count was never run: `unzip` appears in **one** of
+the 984 scripts, `unzipToLog` in eighteen. A worked example is a page a reader
+copies whole, so the method it names is the method they get, and pointing it at
+the rare one taught the format correctly and the plugin wrongly.
 
 ### nsJSON's blocker is its path, not its flags
 

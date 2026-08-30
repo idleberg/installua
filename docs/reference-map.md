@@ -1465,8 +1465,8 @@ the editor stubs and the linter alike. The file name is yours; the extension is
 # .installua/declarations/nsisunz.toml
 [[plugin]]
 name = "nsisunz"                      # what `plugin "…"` is given
-method = "unzip"                      # what you call it
-nsis = "nsisunz::Unzip"               # what NSIS is given
+method = "unzipToLog"                 # what you call it
+nsis = "nsisunz::UnzipToLog"          # what NSIS is given
 params = ["path", "path"]             # positions, in order
 outputs = ["string"]                  # values pushed, in `Pop` order
 dir = "vendor/plugins"                # only if the DLL is not in NSISDIR

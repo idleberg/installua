@@ -69,7 +69,7 @@ pub struct Param {
 /// How a flag carries its value.
 ///
 /// Three spellings because the corpus has three, and no plugin lets you pick:
-/// `NSISdl::download /TIMEOUT=5000` glues, `nsisunz::Unzip /text "Extracting"`
+/// `NSISdl::download /TIMEOUT=5000` glues, `nsisunz::UnzipToLog /text "…"`
 /// does not, and `AccessControl::GrantOnFile /noinherit` has nothing to carry.
 /// Which one a flag uses is the plugin's, so it is written down beside it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
