@@ -37,21 +37,9 @@ const fn rejected(name: &'static str, why: &'static str) -> Row {
     }
 }
 
-/// Unused, and kept: this census has no `Todo` left in it, which is a state to
-/// be able to *lose* rather than one to bake in. The next MUI carries names
-/// nobody has read yet, and the first of them wants a bucket to land in that is
-/// neither "exposed" nor "we decided against it".
-#[allow(dead_code)]
-const fn todo(name: &'static str, why: &'static str) -> Row {
-    Row {
-        name,
-        class: Class::Todo(why),
-    }
-}
-
 /// Every name in `tables/mui-3.12.txt`, in that file's order.
 ///
-/// A `todo` reason is written per *group* rather than per row, because these
+/// A reason is written per *group* rather than per row, because these
 /// settings arrive in groups: `MUI_FINISHPAGE_RUN` without `…_RUN_TEXT` is a
 /// checkbox with no label. Phase 6 spent five batches learning that a reason
 /// written once and never re-read is how a row stays blocked after its blocker

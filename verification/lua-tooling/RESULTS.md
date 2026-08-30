@@ -6,6 +6,13 @@ no evidence behind it.
 
 Run `./run.sh` to reproduce. Versions under test:
 
+> **Archived evidence, not the current tooling.** `gen_selene_std.py`, `meta/installua.lua`,
+> `selene.toml` and `.luarc.json` here are the Phase-0 prototypes of what
+> `src/stubs.rs` now generates — `selene_std`, `meta` and `luarc`, exercised by
+> `tests/stubs.rs`. Read them as the record of what was probed, never as the
+> source of truth: the generator is the compiler's.
+
+
 | Tool | Version | Source |
 | --- | --- | --- |
 | `lua-language-server` | 3.19.1 | Homebrew |

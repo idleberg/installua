@@ -88,18 +88,6 @@ impl Files {
     pub fn name(&self, file: u32) -> Option<&str> {
         self.names.get(file as usize).map(String::as_str)
     }
-
-    pub fn len(&self) -> usize {
-        self.names.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.names.is_empty()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &str> {
-        self.names.iter().map(String::as_str)
-    }
 }
 
 impl fmt::Display for Span {

@@ -166,10 +166,6 @@ impl Body {
         &self.blocks[id.0]
     }
 
-    pub fn block_mut(&mut self, id: BlockId) -> &mut BasicBlock {
-        &mut self.blocks[id.0]
-    }
-
     pub fn push(&mut self, id: BlockId, instruction: ir::Instruction) {
         self.blocks[id.0]
             .steps
@@ -373,19 +369,6 @@ impl CmpOp {
             CmpOp::Le => [Then, Then, Else],
             CmpOp::Gt => [Else, Else, Then],
             CmpOp::Ge => [Then, Else, Then],
-        }
-    }
-
-    /// The operator with its operands swapped, for the one place that is
-    /// cheaper than negating.
-    pub fn flip(self) -> CmpOp {
-        match self {
-            CmpOp::Eq => CmpOp::Eq,
-            CmpOp::Ne => CmpOp::Ne,
-            CmpOp::Lt => CmpOp::Gt,
-            CmpOp::Le => CmpOp::Ge,
-            CmpOp::Gt => CmpOp::Lt,
-            CmpOp::Ge => CmpOp::Le,
         }
     }
 }

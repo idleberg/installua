@@ -48,15 +48,13 @@ impl LineMap {
         self.lines.get(line.checked_sub(1)?)
     }
 
+    /// Output lines mapped — one per emitted line, so this is the emitted
+    /// line count.
     pub fn len(&self) -> usize {
         self.lines.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Origin> {
-        self.lines.iter()
     }
 }

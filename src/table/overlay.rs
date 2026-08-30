@@ -343,18 +343,6 @@ const fn directive(nsis: &'static str) -> Row {
     row(nsis, None, Class::Directive)
 }
 
-/// Not yet done, with a one-line reason. The only honest backlog.
-///
-/// Unused as of Phase 6, and kept for the reason the MUI census's twin is: an
-/// empty backlog is a state to be able to *lose*. `-CMDHELP` grows with every
-/// NSIS, and the first command nobody has read yet needs a bucket that is neither
-/// "exposed" nor "we decided against it" — which is why the join already files a
-/// skeleton with no row here on its own.
-#[allow(dead_code)]
-const fn todo(nsis: &'static str, why: &'static str) -> Row {
-    row(nsis, None, Class::Todo(why))
-}
-
 pub fn lookup(nsis: &str) -> Option<&'static Row> {
     ROWS.iter().find(|row| row.nsis == nsis)
 }
