@@ -1421,6 +1421,25 @@ raw [[
 ]]
 ```
 
+A value crosses the boundary in a [global](#var), whose NSIS name is the one
+you wrote — so the raw text names it directly and the Lua on either side reads
+and writes it as an ordinary variable:
+
+```lua
+outVar = ""
+
+raw [[
+  nsExec::ExecToStack '"cmd.exe" /c ver'
+  Pop $outVar
+]]
+detailPrint("got " .. outVar)
+```
+
+A `local` is not that: registers belong to the allocator, which colours them
+and computes each call site's save list, so a name pinned to `$R0` is a promise
+it has no way to keep and the failure is wrong data rather than a diagnostic.
+The global costs one `Var` line and one zero-init in `.onInit`.
+
 #### raw in an argument
 
 The one position where `raw` is not a statement. As an argument of a
