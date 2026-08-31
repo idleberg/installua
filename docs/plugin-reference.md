@@ -28,6 +28,11 @@ Two sources, and where they disagree the method is excluded rather than guessed:
 2. A scan of **984 real-world scripts** (`nsis-corpus`), counting the `Pop`s
    that actually follow each call site.
 
+[NScurl](#nscurl) has neither — it postdates the corpus and its readme is a
+tour rather than a signature list — so every one of its counts was read out of
+`main.c` directly. That is the fallback the rest of this file treats as a last
+resort, and it is the only entry that starts there.
+
 The second is what turns a documented count into a measured one, and it caught
 [`SimpleSC.getErrorMessage`](#simplescgeterrormessage-is-not-declarable), whose
 argument arrives by `Push` — something no reading of the documentation would
@@ -618,6 +623,118 @@ new one — they push the downloaded body *underneath* the status, so a flag wou
 be changing `outputs`, and `outputs` is the one thing a declaration is for.
 
 `post` is [not declarable](#what-stays-out).
+
+## NScurl
+
+libcurl in a plugin — HTTP/HTTPS/FTP with TLS, HTTP/2 and HTTP/3, a background
+queue, and three hash helpers.
+Source: <https://github.com/negrutiu/nsis-nscurl>, `src/nscurl/main.c` for the
+exports and `curl.c` / `gui.c` for the parameter loops.
+
+Not in the corpus — it postdates it — and declared on the first half of the
+rule: eleven exports, each with its own push count, and no two alike.
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.http(method, url, file)` | `string`, `string`, `path` | status (`string`) |
+| `.wait()` | — | — |
+| `.query(keywords)` | `string` | expansion (`string`) |
+| `.cancel()` | — | — |
+| `.md5(file)` `.sha1(file)` `.sha256(file)` | `path` | hex digest (`string`) |
+| `.escape(s)` `.unescape(s)` | `string` | percent-coded (`string`) |
+
+`http` pushes exactly one value on every path — `GuiWait`'s result when the
+request was queued, a formatted Win32 message when a parameter was rejected
+(`main.c:290`). By default that value is `"OK"` or an error sentence, and the
+`returns` flag replaces it with any `@KEYWORD@` expansion, so the comparison a
+call site writes depends on the flag it set.
+
+`wait` and `cancel` push **nothing**. `wait` computes the same string `http`
+would push and drops it (`main.c:388`), which is why `/RETURN` is not declared
+there — it shapes a value nobody can read.
+
+The third argument to `http` is the output file, or the literal `"Memory"` to
+keep the body in the queue for `query` to read back.
+
+### The flags come *after* the arguments here
+
+`CurlParseRequestParam` (`curl.c:369`) takes parameter 0 for the HTTP method, 1
+for the URL and 2 for the output path — **by index, not by shape** — and only
+starts matching `/SWITCH` tokens from the fourth. A leading `/SILENT` is
+therefore not a flag: it is the verb, and the request goes out asking a server
+for `SILENT`.
+
+That is the whole of `trailing = true` in
+[`NScurl.toml`](reference-map.md#declaring-a-third-party-plugin-or-header). The
+call site is unchanged — the table is still written last and still unordered —
+and only the run of flags lands on the other side of the arguments.
+
+`/END` is [not optional](#end-is-not-optional-here) for the same reason it is
+not optional on `inetc`: `main.c:238` reads parameters in a loop until it pops
+it, and what lies under the last argument is `layout`'s caller-saves.
+
+### Thirty-four flags on `http`, twelve on `wait`
+
+The first block below is the request (`curl.c`), the second the progress UI
+(`gui.c`) — `http` takes both, `wait` and `cancel` only what their own loops
+match.
+
+| Flag | Value | What it does |
+| ---- | ----- | ------------ |
+| `resume` `insist` `noredirect` `encoding` `markoftheweb` | — | continue a partial file; retry on failure; don't follow 3xx; accept compression; write the Zone.Identifier stream |
+| `http11` `http3` | — | pin the protocol version; the last one written wins |
+| `header` `useragent` `referer` `data` | `string` | request headers (`\r\n` separates several), agent, referrer, request body |
+| `connecttimeout` `completetimeout` | `string` | a duration with a unit — `"30s"`, `"2m"` — or bare milliseconds |
+| `speedcap` `depend` | `uint` | bytes/second ceiling; queue id this one waits on |
+| `security` `castore` | `string` | `"weak"`/`"strong"`; `"true"`/`"false"` for the Windows CA store |
+| `cacert` | `path` | a bundle, or `"builtin"` or `"none"` |
+| `cert` | `string` | a pinned SHA-1 fingerprint or a PEM blob |
+| `proxy` `doh` | `string` | proxy URL; DNS-over-HTTPS resolver |
+| `cookiejar` `debug` | `path` | cookie file; trace log |
+| `tag` | `string` | names this request, for `wait`, `query` and `cancel` |
+| `returns` | `string` | the `@KEYWORD@` string `http` pushes instead of the status |
+| `background` `page` `popup` `silent` `cancel` | — | return immediately; and the four presentations |
+| `titlewnd` `textwnd` `progresswnd` `cancelwnd` | `handle` | drive controls of your own — the handles a `page.custom` hands back |
+| `id` (`wait`, `query`, `cancel`) | `uint` | select one queued request |
+| `remove` (`cancel`) | — | abort *and* drop it from the queue |
+
+```lua
+local status = nscurl.http("GET", url, PLUGINSDIR .. "/tool.zip", {
+	connecttimeout = "30s",
+	tag = "toolchain",
+	silent = true,
+})
+-- NScurl::http "GET" "…" "$PLUGINSDIR\tool.zip" /CONNECTTIMEOUT "30s" /TAG "toolchain" /SILENT /END
+```
+
+### What stays out, and why it is the same reason twice
+
+`/POST`, `/AUTH`, `/PROXYAUTH`, `/TLSAUTH`, `/LOWSPEEDLIMIT` and `/STRING` all
+pop **two or more** values after the switch — `/TLSAUTH user pass`,
+`/LOWSPEEDLIMIT bps duration`, `/POST [filename=…] [type=…] name data` — and a
+`separate` flag carries exactly one. Declaring one would emit the switch and a
+single token, and the plugin would take the *next* argument as its second value.
+There is no encoding for a multi-value flag, so there is no half-right version
+of these to ship.
+
+`echo` is out for the shape it is: a debugging export that pops however many
+strings you pushed. `enumerate` is out for the arity — it pushes one queue id
+per matching request under an empty-string sentinel, and `tagged` decides
+between two fixed counts, not between *n* of them.
+
+Two single-value flags carry a hazard worth naming, because the plugin resolves
+it at runtime and the compiler cannot. `/DATA` and `/DEBUG` each peek at the
+token they pop and pop **again** if it was a keyword — `-file`, `-string`,
+`-memory`, `nodata`. A call site passing one of those words as the value would
+unbalance the stack. The keyword forms are not reachable from here, and passing
+a keyword by accident is the one way to reach them.
+
+The hash helpers take `path` rather than `string` for the same class of reason.
+`IDataParseParam` (`utils.c:1008`) guesses between a file and a literal by
+asking whether the path *exists*, and a `$PLUGINSDIR/tool.zip` written the way
+every other path in a source is written does not exist under that spelling — it
+would silently hash the text. Declaring the position a `path` normalises the
+separators first. Hashing a literal string with a `/` in it is what that costs.
 
 ## SimpleFC
 

@@ -757,6 +757,54 @@ fn a_terminator_is_emitted_after_the_arguments() {
     );
 }
 
+/// `trailing = true` moves the whole run of flags behind the fixed arguments,
+/// and changes nothing else.
+///
+/// `NScurl::http` is why it exists: `CurlParseRequestParam` takes stack values
+/// 0, 1 and 2 for the method, URL and output path **by index**, and only starts
+/// matching `/SWITCH` from the fourth — so a leading `/SILENT` there is the HTTP
+/// verb. The declaration below is the same one as above with the field added, so
+/// the emitted line is the only difference, and the call site is character for
+/// character the one that emits leading flags.
+#[test]
+fn trailing_flags_follow_the_arguments() {
+    let mut declarations = Declarations::builtin();
+    let mut problems = Vec::new();
+    declarations.parse(
+        "test.toml",
+        "[[plugin]]\nname = \"Looper\"\nmethod = \"fetch\"\nnsis = \"Looper::Fetch\"\n\
+         params = [\"string\", \"path\"]\noutputs = [\"string\"]\nterminator = \"/END\"\n\
+         trailing = true\n\
+         flags = [{ name = \"silent\", nsis = \"/SILENT\" }]\n",
+        &mut problems,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+
+    let mut diags = Diagnostics::new();
+    let output = installua::build_with(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local looper = plugin \"Looper\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             local out = looper.fetch(\"http://example.com/x\", \"out/x\", { silent = true })\n\
+             detailPrint(out)\n\
+           end),\n\
+         }\n",
+        &Options {
+            declarations,
+            ..Options::default()
+        },
+        &mut diags,
+    );
+    assert!(diags.is_empty(), "{}", diags.render("<test>"));
+    let output = output.expect("compiles");
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    assert!(
+        lines.contains(&"Looper::Fetch \"http://example.com/x\" \"out\\x\" /SILENT /END"),
+        "{output}"
+    );
+}
+
 /// A terminator has to be a switch, and has to be a plugin's.
 ///
 /// Both refusals are about the same confusion: a token with no `/` is one the

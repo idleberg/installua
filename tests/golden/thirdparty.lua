@@ -22,6 +22,7 @@ local inetc = plugin "Inetc"
 local nsis7z = plugin "Nsis7z"
 local simpleFC = plugin "SimpleFC"
 local simpleSC = plugin "SimpleSC"
+local nscurl = plugin "NScurl"
 local startMenu = plugin "StartMenu"
 
 attributes {
@@ -193,6 +194,40 @@ installer {
 		if status ~= "OK" then
 			detailPrint(status)
 		end
+	end),
+
+	-- **`trailing`, the fifth thing a declaration carries.** Everything above
+	-- emits its flags *ahead* of the fixed arguments, because that is where
+	-- every one of those plugins looks for them. `NScurl::http` does not look:
+	-- `CurlParseRequestParam` takes parameter 0 for the method, 1 for the URL
+	-- and 2 for the output path by index, and only starts matching `/SWITCH`
+	-- from the fourth. A leading `/SILENT` would be the HTTP verb.
+	--
+	-- Nothing at the call site says so -- the table is still last and still
+	-- unordered. Only the emitted line differs, and this file is where that
+	-- difference is recorded.
+	section("Download over curl", function()
+		local status = nscurl.http("GET", "https://example.com/tool.zip", PLUGINSDIR .. "/tool.zip", {
+			tag = "tool",
+			silent = true,
+			connecttimeout = "30s",
+		})
+		if status ~= "OK" then
+			detailPrint(status)
+		end
+
+		-- Two methods that push *nothing*: `wait` computes the string `http`
+		-- would push and drops it, and `cancel` only ever pushes back a token
+		-- it took by mistake. Both still end in `/END`, because both read
+		-- their parameters in a loop and what lies underneath is a saved
+		-- register.
+		nscurl.wait({ tag = "tool", silent = true })
+		nscurl.cancel({ tag = "tool", remove = true })
+
+		-- `path` on the hash helpers, so the separators are normalised before
+		-- the plugin decides whether this names a file: it decides by asking
+		-- whether the path exists, and `$PLUGINSDIR/tool.zip` does not.
+		detailPrint(nscurl.sha256(PLUGINSDIR .. "/tool.zip"))
 	end),
 
 	section("Start Menu", function()

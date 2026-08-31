@@ -1232,9 +1232,9 @@ wiki page:
 | `AdvSplash` | `.show` — Splash plus fades and a transparent colour                                        |
 | `StartMenu` | `.select`, `.init`, `.show` — the folder follows `"success"`, and only then                 |
 
-And seven third-party plugins, on the evidence of a scan of 984 real-world
-scripts. These are **declarations, not bundled DLLs** — the plugin is still
-yours to install, and the file here only supplies the count:
+And eight third-party plugins, seven of them on the evidence of a scan of 984
+real-world scripts. These are **declarations, not bundled DLLs** — the plugin is
+still yours to install, and the file here only supplies the count:
 
 | Plugin           | Scripts | Methods                                                                                    |
 | ---------------- | ------- | ------------------------------------------------------------------------------------------ |
@@ -1245,6 +1245,12 @@ yours to install, and the file here only supplies the count:
 | `AccessControl`  | 111     | all 25 — every mutator and reader on files and registry keys, plus the three SID helpers    |
 | `Nsis7z`         | 5       | `.extract`, `.extractWithDetails` — neither pushes anything at all                          |
 | `SimpleFC`       | 24      | all 33 — ports, applications, ICMP types and advanced rules; `0` is success and `1` is failure |
+| `NScurl`         | —       | `.http`, `.wait`, `.query`, `.cancel`, `.md5`, `.sha1`, `.sha256`, `.escape`, `.unescape` — libcurl, and the one method whose flags trail |
+
+`NScurl` has no script count because it postdates the corpus. It ships on the
+same half of the rule `Nsis7z` does: eleven exports and no two push the same
+number of values, two of them pushing none at all. Its counts were read out of
+`main.c`.
 
 `Nsis7z`'s count of 5 is not a typo. It ships on **arity** rather than
 popularity — two methods that push *nothing at all*, which is the one count no
@@ -1570,9 +1576,10 @@ one value for `tagged` to be about. See
 [plugin-reference.md](plugin-reference.md#tagged-outputs) for the lines this
 emits and for the one failure it cannot cover.
 
-**`flags` is for the `/SWITCH` tokens a plugin takes ahead of its arguments.**
+**`flags` is for the `/SWITCH` tokens a plugin takes alongside its arguments.**
 They are named at the call site, in a table written **last**, and emitted
-**first** — position is the declaration's, not yours:
+**first** — position is the declaration's, not yours, which is also what lets
+`trailing` below move the whole run behind the arguments instead:
 
 ```toml
 [[plugin]]
@@ -1613,6 +1620,32 @@ The order flags are emitted in is the order they are **declared**, never the
 order the table names them: a table has no order, and two calls naming the same
 flags have to emit the same line. They are plugin-only — `!insertmacro` takes
 its arguments by position, so a macro's option string is one of its `params`.
+
+**`trailing = true` moves the whole run of flags behind the fixed arguments.**
+One plugin needs it. `NScurl::http` reads its first three stack values by
+*index* — method, URL, output path — and only starts testing for a leading `/`
+from the fourth, so a leading `/SILENT` there is not a flag, it is the HTTP verb
+and the request goes out asking for `SILENT`:
+
+```toml
+[[plugin]]
+name = "NScurl"
+method = "http"
+nsis = "NScurl::http"
+params = ["string", "string", "path"]
+outputs = ["string"]
+trailing = true
+terminator = "/END"
+```
+
+```lua
+nscurl.http("GET", url, PLUGINSDIR .. "/tool.zip", { silent = true })
+-- NScurl::http "GET" "…" "$PLUGINSDIR\tool.zip" /SILENT /END
+```
+
+Nothing else changes: the table is still written last, still unordered, and the
+flags still come out in declaration order. It is plugin-only, and `false` — a
+leading run — is the default every other declaration takes.
 
 A table has unique keys and no order, so a flag written **more than once** —
 `nsJSON::Get /index 0 /index 1` — has no encoding here and is not declarable.

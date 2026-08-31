@@ -1,0 +1,137 @@
+# NScurl, third-party: <https://github.com/negrutiu/nsis-nscurl>.
+#
+# See docs/plugin-reference.md.
+#
+# Absent: `echo`, whose parameter list is however many strings you push; and
+# `enumerate`, which pushes one id per queued transfer under an empty-string
+# sentinel — a count no `outputs` list can state and `tagged` cannot reach.
+#
+# Absent flags, all for the same reason — they pop two or more values, and
+# `Carry::Separate` carries one: `/POST`, `/AUTH`, `/PROXYAUTH`, `/TLSAUTH`,
+# `/LOWSPEEDLIMIT` and `/STRING`. And `/RETURN` on `wait`, which shapes a value
+# `wait` never pushes.
+
+[[plugin]]
+name = "NScurl"
+method = "http"
+nsis = "NScurl::http"
+params = ["string", "string", "path"]
+outputs = ["string"]
+trailing = true
+terminator = "/END"
+flags = [
+  { name = "header", nsis = "/HEADER", ty = "string", value = "separate" },
+  { name = "data", nsis = "/DATA", ty = "string", value = "separate" },
+  { name = "proxy", nsis = "/PROXY", ty = "string", value = "separate" },
+  { name = "resume", nsis = "/RESUME" },
+  { name = "insist", nsis = "/INSIST" },
+  { name = "connecttimeout", nsis = "/CONNECTTIMEOUT", ty = "string", value = "separate" },
+  { name = "completetimeout", nsis = "/COMPLETETIMEOUT", ty = "string", value = "separate" },
+  { name = "speedcap", nsis = "/SPEEDCAP", ty = "uint", value = "separate" },
+  { name = "depend", nsis = "/DEPEND", ty = "uint", value = "separate" },
+  { name = "referer", nsis = "/REFERER", ty = "string", value = "separate" },
+  { name = "http11", nsis = "/HTTP1.1" },
+  { name = "http3", nsis = "/HTTP3" },
+  { name = "useragent", nsis = "/USERAGENT", ty = "string", value = "separate" },
+  { name = "noredirect", nsis = "/NOREDIRECT" },
+  { name = "security", nsis = "/SECURITY", ty = "string", value = "separate" },
+  { name = "cacert", nsis = "/CACERT", ty = "path", value = "separate" },
+  { name = "castore", nsis = "/CASTORE", ty = "string", value = "separate" },
+  { name = "cert", nsis = "/CERT", ty = "string", value = "separate" },
+  { name = "debug", nsis = "/DEBUG", ty = "path", value = "separate" },
+  { name = "tag", nsis = "/TAG", ty = "string", value = "separate" },
+  { name = "markoftheweb", nsis = "/MARKOFTHEWEB" },
+  { name = "doh", nsis = "/DOH", ty = "string", value = "separate" },
+  { name = "cookiejar", nsis = "/COOKIEJAR", ty = "path", value = "separate" },
+  { name = "encoding", nsis = "/ENCODING" },
+  { name = "returns", nsis = "/RETURN", ty = "string", value = "separate" },
+  { name = "background", nsis = "/BACKGROUND" },
+  { name = "page", nsis = "/PAGE" },
+  { name = "popup", nsis = "/POPUP" },
+  { name = "silent", nsis = "/SILENT" },
+  { name = "cancel", nsis = "/CANCEL" },
+  { name = "titlewnd", nsis = "/TITLEWND", ty = "handle", value = "separate" },
+  { name = "textwnd", nsis = "/TEXTWND", ty = "handle", value = "separate" },
+  { name = "progresswnd", nsis = "/PROGRESSWND", ty = "handle", value = "separate" },
+  { name = "cancelwnd", nsis = "/CANCELWND", ty = "handle", value = "separate" },
+]
+
+[[plugin]]
+name = "NScurl"
+method = "wait"
+nsis = "NScurl::wait"
+params = []
+outputs = []
+terminator = "/END"
+flags = [
+  { name = "id", nsis = "/ID", ty = "uint", value = "separate" },
+  { name = "tag", nsis = "/TAG", ty = "string", value = "separate" },
+  { name = "background", nsis = "/BACKGROUND" },
+  { name = "page", nsis = "/PAGE" },
+  { name = "popup", nsis = "/POPUP" },
+  { name = "silent", nsis = "/SILENT" },
+  { name = "cancel", nsis = "/CANCEL" },
+  { name = "titlewnd", nsis = "/TITLEWND", ty = "handle", value = "separate" },
+  { name = "textwnd", nsis = "/TEXTWND", ty = "handle", value = "separate" },
+  { name = "progresswnd", nsis = "/PROGRESSWND", ty = "handle", value = "separate" },
+  { name = "cancelwnd", nsis = "/CANCELWND", ty = "handle", value = "separate" },
+]
+
+[[plugin]]
+name = "NScurl"
+method = "query"
+nsis = "NScurl::query"
+params = ["string"]
+outputs = ["string"]
+flags = [
+  { name = "id", nsis = "/ID", ty = "uint", value = "separate" },
+  { name = "tag", nsis = "/TAG", ty = "string", value = "separate" },
+]
+
+[[plugin]]
+name = "NScurl"
+method = "cancel"
+nsis = "NScurl::cancel"
+params = []
+outputs = []
+terminator = "/END"
+flags = [
+  { name = "id", nsis = "/ID", ty = "uint", value = "separate" },
+  { name = "tag", nsis = "/TAG", ty = "string", value = "separate" },
+  { name = "remove", nsis = "/REMOVE" },
+]
+
+[[plugin]]
+name = "NScurl"
+method = "md5"
+nsis = "NScurl::md5"
+params = ["path"]
+outputs = ["string"]
+
+[[plugin]]
+name = "NScurl"
+method = "sha1"
+nsis = "NScurl::sha1"
+params = ["path"]
+outputs = ["string"]
+
+[[plugin]]
+name = "NScurl"
+method = "sha256"
+nsis = "NScurl::sha256"
+params = ["path"]
+outputs = ["string"]
+
+[[plugin]]
+name = "NScurl"
+method = "escape"
+nsis = "NScurl::escape"
+params = ["string"]
+outputs = ["string"]
+
+[[plugin]]
+name = "NScurl"
+method = "unescape"
+nsis = "NScurl::unescape"
+params = ["string"]
+outputs = ["string"]

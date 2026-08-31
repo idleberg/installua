@@ -1130,8 +1130,9 @@ impl BodyLowerer<'_, '_> {
         })
     }
 
-    /// A declared plugin method's leading flags, from the options table the
-    /// call site wrote last.
+    /// A declared plugin method's flags, from the options table the call site
+    /// wrote last. Where the run of them lands is the caller's to decide, from
+    /// [`declarations::PluginMethod::trailing`].
     ///
     /// Not the builtin path above, and the difference is worth naming. An
     /// instruction's options table holds two kinds of key — an optional
@@ -1860,11 +1861,18 @@ impl BodyLowerer<'_, '_> {
         let current = self.current;
         self.body.push_step(current, ir::Step::Saves(site));
 
-        // Flags first, and the fixed arguments after them: every flag in the
-        // corpus is leading, and the table that named them was written last.
-        // That inversion is the whole reason position is the declaration's
-        // rather than the call site's.
-        let mut lowered = leading;
+        // Flags first, and the fixed arguments after them: almost every flag in
+        // the corpus is leading, and the table that named them was written
+        // last. That inversion is the whole reason position is the
+        // declaration's rather than the call site's — and it is also what lets
+        // `NScurl::http` put its run of flags *after* the three arguments it
+        // reads by index, with nothing about the call site changing. See
+        // [`declarations::PluginMethod::trailing`].
+        let (mut lowered, trailing) = if entry.trailing {
+            (Vec::new(), leading)
+        } else {
+            (leading, Vec::new())
+        };
         lowered.reserve(args.len());
         for (argument, param) in args.iter().zip(entry.params) {
             // The escape hatch, in argument position: text spliced into this
@@ -1907,6 +1915,8 @@ impl BodyLowerer<'_, '_> {
                 value.arg
             });
         }
+
+        lowered.extend(trailing);
 
         // And the terminator after them, on every call that declares one. Not
         // optional and not a flag: the plugins that read one read their

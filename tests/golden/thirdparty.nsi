@@ -124,6 +124,20 @@ Section "Download"
 __GENERATED_endif_0:
 SectionEnd
 
+Section "Download over curl"
+  InitPluginsDir
+  NScurl::http "GET" "https://example.com/tool.zip" "$PLUGINSDIR\tool.zip" /CONNECTTIMEOUT "30s" /TAG "tool" /SILENT /END
+  Pop $0
+  StrCmpS $0 "OK" __GENERATED_endif_0 0
+  DetailPrint $0
+__GENERATED_endif_0:
+  NScurl::wait /TAG "tool" /SILENT /END
+  NScurl::cancel /TAG "tool" /REMOVE /END
+  NScurl::sha256 "$PLUGINSDIR\tool.zip"
+  Pop $0
+  DetailPrint $0
+SectionEnd
+
 Section "Start Menu"
   StartMenu::Select "Example"
   Pop $0

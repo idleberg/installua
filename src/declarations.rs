@@ -83,15 +83,17 @@ pub enum Carry {
     Separate,
 }
 
-/// One leading flag a plugin method accepts.
+/// One flag a plugin method accepts.
 ///
-/// **Flags are leading and unordered, and that is why they are a table rather
-/// than parameters.** Every flag on every plugin declared here comes ahead of
-/// the fixed arguments — `AccessControl::GrantOnFile /noinherit "$INSTDIR" …` —
-/// and no plugin gives two of them a meaningful order. So the call site names
-/// them and this list places them: what the user writes last is emitted first,
-/// in the order declared here, and a call that names none is character for
-/// character the call it was before flags existed.
+/// **Flags are positional as a run and unordered within it, and that is why
+/// they are a table rather than parameters.** A method's flags land together,
+/// ahead of the fixed arguments — `AccessControl::GrantOnFile /noinherit
+/// "$INSTDIR" …` — or behind them where the plugin reads its arguments by
+/// index, which is [`PluginMethod::trailing`]. Inside the run no plugin gives
+/// two of them a meaningful order. So the call site names them and this list
+/// places them: what the user writes last is emitted as one run, in the order
+/// declared here, and a call that names none is character for character the
+/// call it was before flags existed.
 ///
 /// A `Vec<Flag>` rather than a map for the reason [`PluginMethod::tagged`] is a
 /// list: nothing name-keyed reaches the lowerer, and a declaration's order is
@@ -151,9 +153,24 @@ pub struct PluginMethod {
     /// One per value the plugin leaves on the stack **on every path**, in `Pop`
     /// order.
     pub outputs: Vec<Ty>,
-    /// The leading flags this method accepts, in the order they are emitted.
-    /// Empty for most methods; see [`Flag`].
+    /// The flags this method accepts, in the order they are emitted. Empty for
+    /// most methods; see [`Flag`].
     pub flags: Vec<Flag>,
+    /// Whether the flags follow the fixed arguments instead of leading them.
+    ///
+    /// [`Flag`] says flags are leading, and for every plugin but one they are.
+    /// `NScurl::http` reads its first three stack values **by index** —
+    /// `CurlParseRequestParam` takes parameter 0 for the method, 1 for the URL
+    /// and 2 for the output path, and only tests for a `/` from the fourth on
+    /// (`curl.c:369`). So a leading `/SILENT` is not a flag there, it is the
+    /// HTTP method, and the request goes out asking a server for `SILENT`.
+    ///
+    /// A `bool` on the method rather than a second `flags` spelling, because
+    /// nothing about a flag changes — only where the run of them lands. The
+    /// call site is unaffected either way: the options table is still written
+    /// last and still unordered, which is the point of position being the
+    /// declaration's.
+    pub trailing: bool,
     /// First-popped values that mean [`more`](Self::more) follows.
     ///
     /// A great many plugins push a *variable* number of values, and the first
@@ -304,6 +321,7 @@ const SHIPPED: &[(&str, &str)] = &[
     ("FileFunc.toml", include_str!("declarations/FileFunc.toml")),
     ("Inetc.toml", include_str!("declarations/Inetc.toml")),
     ("NSISdl.toml", include_str!("declarations/NSISdl.toml")),
+    ("NScurl.toml", include_str!("declarations/NScurl.toml")),
     ("Nsis7z.toml", include_str!("declarations/Nsis7z.toml")),
     ("SimpleFC.toml", include_str!("declarations/SimpleFC.toml")),
     ("SimpleSC.toml", include_str!("declarations/SimpleSC.toml")),
@@ -439,6 +457,7 @@ impl Declarations {
             params,
             outputs,
             flags,
+            trailing,
             tagged,
             more,
             terminator,
@@ -472,6 +491,7 @@ impl Declarations {
                 params,
                 outputs,
                 flags,
+                trailing,
                 tagged,
                 more,
                 terminator,
@@ -623,6 +643,7 @@ mod parse {
         pub params: Vec<Param>,
         pub outputs: Vec<Ty>,
         pub flags: Vec<Flag>,
+        pub trailing: bool,
         pub tagged: Vec<String>,
         pub more: Vec<Ty>,
         pub terminator: Option<String>,
@@ -644,6 +665,7 @@ mod parse {
         params: Option<Vec<Param>>,
         outputs: Option<Vec<Ty>>,
         flags: Option<Vec<Flag>>,
+        trailing: bool,
         tagged: Option<Vec<String>>,
         more: Option<Vec<Ty>>,
         terminator: Option<String>,
@@ -802,6 +824,22 @@ mod parse {
                             .to_string(),
                     ),
                 },
+                // `trailing` is a plugin's alone for the same reason `flags`
+                // is: it moves the run of flags, and a macro has none to move.
+                "trailing" if !block.plugin => complain(
+                    line,
+                    "`trailing` is a plugin field: it says where a method's `flags` go, and a \
+                     macro has none"
+                        .to_string(),
+                ),
+                "trailing" => match value.trim() {
+                    "true" => block.trailing = true,
+                    "false" => block.trailing = false,
+                    other => complain(
+                        line,
+                        format!("`trailing` wants `true` or `false`, not `{other}`"),
+                    ),
+                },
                 // `terminator` is a plugin's alone, for the same reason `flags`
                 // is: it is a token on a call line, and `!insertmacro` has no
                 // line to put one on.
@@ -845,7 +883,7 @@ mod parse {
                     format!(
                         "`{other}` is not a declaration field; the fields are `name`, `method`, \
                          `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `flags`, \
-                         `tagged`, `more`, `terminator` and `dir`"
+                         `trailing`, `tagged`, `more`, `terminator` and `dir`"
                     ),
                 ),
             }
@@ -1147,6 +1185,7 @@ mod parse {
             params: block.params.unwrap_or_default(),
             outputs,
             flags: block.flags.unwrap_or_default(),
+            trailing: block.trailing,
             tagged,
             more,
             terminator: block.terminator,
