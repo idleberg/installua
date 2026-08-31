@@ -142,7 +142,11 @@ page {
 }
 ```
 
-Custom pages and nsDialogs have no design yet. `raw`, for now.
+Custom pages are `page.custom`, and the controls on one are declarations listed in
+its `controls`. nsDialogs is compiled, not `!include`d: the compiler writes the
+style constants `nsDialogs.nsh`'s `${NSD_Create*}` macros would have written, so a
+program with a dialog has the same include list as one without. See
+`tests/golden/dialog.lua`.
 
 ---
 
