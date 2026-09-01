@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # mise's postinstall hook runs `pnpm install`; the runner has corepack but
+      # no pnpm on PATH until this.
+      - run: corepack enable
+
+      - uses: jdx/mise-action@v2
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Tier 3 skips cleanly here: no makensis on the runner.
+      - run: mise run check
