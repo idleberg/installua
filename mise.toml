@@ -1,5 +1,6 @@
 [tools]
 hk = "latest"
+bun = "latest"
 pkl = "latest"
 python = "latest"
 
@@ -14,7 +15,7 @@ HK_MISE = 1
 NSISDIR = '''{{ exec(command="makensis -HDRINFO 2>/dev/null | tr ',' '\n' | grep '^NSISDIR=' | cut -d= -f2 || true") }}'''
 
 [hooks]
-postinstall = "hk install --mise && mise run install:toolchain"
+postinstall = "hk install --mise && mise run install:toolchain && pnpm install"
 
 # Setup, in dependency order: rustup first — `cargo` is a component of the
 # toolchain it installs, so `cargo install` before it is a chicken-and-egg.
@@ -85,3 +86,7 @@ run = [
   # task look like it rewrote 4,500 lines every time it ran.
   "cargo fmt",
 ]
+
+[tasks.web]
+description = "Launches web dev-server"
+run = "bun run --filter web dev --open"

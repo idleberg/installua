@@ -60,3 +60,8 @@ tests/fixtures/emit-*.nsi
 
 # lua-language-server scratch (--logpath, --check_out_path)
 verification/**/.out*
+
+# package manager
+node_modules/
+package-lock.json
+pnpm-lock.yaml
