@@ -90,7 +90,7 @@ jobs:
             BIN=installua
           fi
           7z a "installua-${{ steps.version.outputs.VERSION }}-${{ matrix.artifact-name }}.zip" \
-            "./target/${{ matrix.target }}/release/${BIN}" LICENSE
+            "./target/${{ matrix.target }}/release/${BIN}" LICENSE-APACHE LICENSE-MIT
 
       - uses: nsis-dev/setup-nsis@v1
         if: matrix.installer
@@ -139,7 +139,7 @@ jobs:
 
       - name: Create release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
+F        with:
           files: |
             installua-*.zip
             installua-*-setup.exe
