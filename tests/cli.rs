@@ -226,3 +226,109 @@ installer { page.instFiles {}, section(\"Core\", function() detailPrint(VERSION)
         assert!(output.contains("has no value"), "{output}");
     }
 }
+
+/// `init`, which is about a *directory* rather than a program — so unlike
+/// everything above it works in a scratch one of its own rather than beside the
+/// fixtures.
+///
+/// Only the non-interactive half is covered. `--interactive` is a terminal in
+/// raw mode asking questions, and a test that drove it would be testing
+/// `clark`; what is testable here is the rule it shares with the bare command,
+/// which is what a collision does.
+mod init {
+    use super::*;
+
+    /// An empty directory, and the binary run in it. Removed and remade each
+    /// time, so a run left over from a failed test cannot make the next one
+    /// pass.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("installua-init-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create the scratch directory");
+        dir
+    }
+
+    fn init(dir: &Path, flags: &[&str]) -> (bool, String) {
+        let output = Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))
+            .arg("init")
+            .arg(dir)
+            .args(flags)
+            .output()
+            .expect("run installua");
+        (
+            output.status.success(),
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        )
+    }
+
+    const CONFIGS: [&str; 3] = ["installua.toml", ".luarc.json", "selene.toml"];
+
+    #[test]
+    fn it_writes_the_three_config_files() {
+        let dir = scratch("writes");
+        let (passed, output) = init(&dir, &[]);
+        assert!(passed, "{output}");
+        for name in CONFIGS {
+            assert!(dir.join(name).exists(), "`init` wrote no {name}:\n{output}");
+        }
+    }
+
+    /// The change this is here for: a re-run used to print "left alone" and
+    /// exit 0, which made an upgrade that should have refreshed a stale
+    /// `.luarc.json` look exactly like one that did.
+    #[test]
+    fn a_second_run_is_refused() {
+        let dir = scratch("refused");
+        assert!(init(&dir, &[]).0);
+
+        let (passed, output) = init(&dir, &[]);
+        assert!(
+            !passed,
+            "`init` overwrote an initialised directory:\n{output}"
+        );
+        assert!(output.contains("installua.toml"), "{output}");
+        assert!(output.contains("nothing written"), "{output}");
+    }
+
+    /// And "nothing written" is the whole of it: not one of the three moves,
+    /// including the two that are not the file it stopped on.
+    #[test]
+    fn a_refusal_writes_nothing_at_all() {
+        let dir = scratch("nothing");
+        // Only the marker, so the other two are absent and would be written by
+        // anything that got past the check.
+        std::fs::write(dir.join("installua.toml"), "mine\n").expect("plant a file");
+
+        let (passed, _) = init(&dir, &[]);
+        assert!(!passed);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("installua.toml")).unwrap(),
+            "mine\n",
+            "the file in the way was rewritten"
+        );
+        assert!(
+            !dir.join(".luarc.json").exists() && !dir.join("selene.toml").exists(),
+            "a refused `init` half-initialised the directory"
+        );
+    }
+
+    /// `--force` is the flag the refusal names, so it had better be the one
+    /// that gets past it.
+    #[test]
+    fn force_overwrites() {
+        let dir = scratch("force");
+        std::fs::write(dir.join("installua.toml"), "mine\n").expect("plant a file");
+
+        let (passed, output) = init(&dir, &["--force"]);
+        assert!(passed, "{output}");
+        assert_ne!(
+            std::fs::read_to_string(dir.join("installua.toml")).unwrap(),
+            "mine\n",
+            "`--force` left the file alone"
+        );
+    }
+}

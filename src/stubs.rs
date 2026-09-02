@@ -1469,3 +1469,190 @@ pub fn selene_toml() -> String {
          mixed_table = \"allow\"\n",
     )
 }
+
+/// The one recommendation, and the marker that says it is already there.
+///
+/// There is one editor extension this project's generated files are *for*:
+/// `.luarc.json` and `.installua/meta` are read by `lua-language-server`, and
+/// `sumneko.lua` is how it gets installed.
+const RECOMMENDATION: &str = "\"sumneko.lua\"";
+
+/// The two tasks, at the indent they sit at inside `"tasks": [`.
+///
+/// A constant rather than part of [`vscode_tasks`] because it is also what
+/// [`merge_tasks`] inserts into a file someone else wrote: the template and the
+/// insertion have to be the same text, or a merged `tasks.json` and a generated
+/// one disagree about what `installua: build` does.
+///
+/// Leading newline, no trailing one — it is spliced directly after a `[`.
+///
+/// **The `regexp` is coupled to `Diagnostics::render`.** It matches
+/// `file:line:column: severity[code]: message`, which is that function's format
+/// string — `"{}:{}: {}[{}]: {}"` over a `Span` that displays as
+/// `start_line:start_column`. A change to either moves this regex with it, or
+/// every diagnostic stops landing on a line in the editor and nothing fails to
+/// say so.
+///
+/// `${relativeFile}` and not `${file}`, to match `fileLocation: relative`: an
+/// absolute path there resolves against the workspace root a second time.
+///
+/// Two tasks rather than one, because `check` and `build` answer different
+/// questions and only one of them runs `makensis`. No `launch.json` anywhere:
+/// launching needs a debug adapter, and neither Installua nor NSIS has one.
+const TASKS: &str = r#"
+    {
+      // Compile, then run `makensis -WX` on the result.
+      "label": "installua: build",
+      "type": "shell",
+      "command": "installua",
+      "args": ["build", "${relativeFile}"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": {
+        "owner": "installua",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+): (warning|error)\\[([\\w-]+)\\]: (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        }
+      }
+    },
+    {
+      // Everything `build` would say, writing nothing and running no
+      // `makensis`.
+      "label": "installua: check",
+      "type": "shell",
+      "command": "installua",
+      "args": ["check", "${relativeFile}"],
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": {
+        "owner": "installua",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+): (warning|error)\\[([\\w-]+)\\]: (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        }
+      }
+    }"#;
+
+/// The label that says [`TASKS`] is already in a file.
+const TASKS_MARKER: &str = "\"installua: build\"";
+
+/// `.vscode/extensions.json`, offered by `installua init --interactive`.
+///
+/// Written as JSON**C**, comment and all — which is what VS Code reads these
+/// two files as, and what [`merge`] is careful not to destroy.
+pub fn vscode_extensions() -> String {
+    format!(
+        "{{\n  \
+         // `lua-language-server`: what reads `.luarc.json` and `.installua/meta`.\n  \
+         \"recommendations\": [{RECOMMENDATION}]\n\
+         }}\n"
+    )
+}
+
+/// `.vscode/tasks.json`: ⇧⌘B on the file in front of you.
+pub fn vscode_tasks() -> String {
+    format!("{{\n  \"version\": \"2.0.0\",\n  \"tasks\": [{TASKS}\n  ]\n}}\n")
+}
+
+/// What became of a file that was already there.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Merge {
+    /// It already has what we would have added. Nothing to do, and — the point
+    /// — nothing to ask the user about either.
+    Present,
+    /// The file, with our block spliced in and everything else, comments
+    /// included, exactly where it was.
+    Merged(String),
+    /// The anchor is not in there. Whatever this file is, it is not one we can
+    /// edit without guessing, so the caller asks before replacing it.
+    Unrecognised,
+}
+
+/// Splice `insert` into `existing` just after `anchor`, or say why not.
+///
+/// A *textual* merge, not a parse and a re-serialise. Both VS Code files are
+/// JSONC — the templates above have comments in them and so do the ones users
+/// write — and every JSON serialiser in existence drops a comment on the way
+/// out. Keeping the bytes and inserting between them is the only edit that
+/// leaves a hand-written file recognisable to the hand that wrote it.
+///
+/// `separator` is appended after the insertion unless the array turns out to be
+/// empty — VS Code tolerates a trailing comma in JSONC either way, but a file
+/// this rewrites should still read as something a person would have typed.
+//
+// ponytail: the anchor is a plain substring match, so a file that writes
+// `"tasks" : [` or splits the key across lines reads as Unrecognised and the
+// user is asked rather than mangled. Upgrade path is a JSONC CST
+// (`jsonc-parser`) if that ever turns out to be common.
+pub fn merge(existing: &str, marker: &str, anchor: &str, insert: &str, separator: &str) -> Merge {
+    if existing.contains(marker) {
+        return Merge::Present;
+    }
+    let Some(at) = existing.find(anchor) else {
+        return Merge::Unrecognised;
+    };
+
+    let (before, after) = existing.split_at(at + anchor.len());
+    let mut merged = String::with_capacity(existing.len() + insert.len() + separator.len());
+    merged.push_str(before);
+    merged.push_str(insert);
+    if !after.trim_start().starts_with(']') {
+        merged.push_str(separator);
+    }
+    merged.push_str(after);
+    Merge::Merged(merged)
+}
+
+/// [`merge`] against an existing `.vscode/extensions.json`.
+pub fn merge_extensions(existing: &str) -> Merge {
+    merge(
+        existing,
+        RECOMMENDATION,
+        "\"recommendations\": [",
+        RECOMMENDATION,
+        ", ",
+    )
+}
+
+/// [`merge`] against an existing `.vscode/tasks.json`.
+pub fn merge_tasks(existing: &str) -> Merge {
+    merge(existing, TASKS_MARKER, "\"tasks\": [", TASKS, ",")
+}
+
+/// What says [`gitignore`] has already been appended to a file.
+///
+/// The comment rather than any of the patterns: a project that ignores `*.exe`
+/// through some other rule has still never been told about `.installua/meta/`.
+pub const GITIGNORE_MARKER: &str = "# installua:";
+
+/// The `.gitignore` block, appended by `installua init --interactive`.
+///
+/// Named individually rather than as a blanket `.installua/`, for the reason
+/// this repository's own `.gitignore` gives: `.installua/declarations/*.toml`
+/// is hand-written, it is what makes a third-party plugin compile, and a
+/// project that ignores it is a project that does not build for anyone else.
+///
+/// [`GITIGNORE_MARKER`] is what makes appending it twice a no-op.
+pub fn gitignore() -> String {
+    String::from(
+        "# installua: generated by `installua stubs`, rewritten on every run.\n\
+         # `.installua/declarations/*.toml` is deliberately *not* here: it is\n\
+         # hand-written, and a plugin declaration belongs in a project's history.\n\
+         .installua/meta/\n\
+         .installua/installua.yml\n\n\
+         # installua: compiled scripts and the installers they assemble to.\n\
+         *.nsi\n\
+         *.exe\n",
+    )
+}

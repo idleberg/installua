@@ -647,3 +647,122 @@ fn the_selene_std_and_the_stub_agree_about_what_exists() {
         "{std}"
     );
 }
+
+/// The JSONC merge, which is the one piece of `installua init --interactive`
+/// that is neither a template nor a prompt — and so the one piece a test can
+/// hold onto.
+///
+/// What it must never do is what every JSON serialiser does: read a user's
+/// `tasks.json`, forget the comments in it, and write back something they did
+/// not recognise. Every case here is about the bytes that were already there.
+mod merge {
+    use installua::stubs::{Merge, merge_extensions, merge_tasks};
+
+    /// A `tasks.json` someone wrote by hand: comments, a task of their own, and
+    /// a key order nothing generated.
+    const THEIRS: &str = r#"{
+  // Ours, please leave it.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "make",
+      "type": "shell",
+      "command": "make" // the real build
+    }
+  ]
+}
+"#;
+
+    #[test]
+    fn a_comment_survives_the_merge() {
+        let Merge::Merged(merged) = merge_tasks(THEIRS) else {
+            panic!("a hand-written tasks.json was not recognised");
+        };
+        assert!(
+            merged.contains("// Ours, please leave it."),
+            "the merge dropped a comment:\n{merged}"
+        );
+        assert!(
+            merged.contains("// the real build"),
+            "the merge dropped a trailing comment:\n{merged}"
+        );
+        assert!(
+            merged.contains("\"label\": \"make\""),
+            "the merge dropped their task:\n{merged}"
+        );
+        assert!(
+            merged.contains("\"label\": \"installua: build\""),
+            "the merge added nothing:\n{merged}"
+        );
+    }
+
+    /// Their array was not empty, so ours is separated from it.
+    #[test]
+    fn the_existing_entries_keep_their_separator() {
+        let Merge::Merged(merged) = merge_tasks(THEIRS) else {
+            panic!("not recognised");
+        };
+        assert!(
+            merged.contains("\"tasks\": [\n    {\n      // Compile"),
+            "ours was not spliced in after the bracket:\n{merged}"
+        );
+        assert!(
+            merged.contains("    },\n    {\n      \"label\": \"make\""),
+            "ours ran into theirs without a comma:\n{merged}"
+        );
+    }
+
+    /// An empty array takes no separator — there is nothing to separate it
+    /// from, and a trailing comma there reads as a mistake even where JSONC
+    /// forgives it.
+    #[test]
+    fn an_empty_array_gets_no_separator() {
+        let Merge::Merged(merged) = merge_extensions("{ \"recommendations\": [] }") else {
+            panic!("not recognised");
+        };
+        assert_eq!(merged, "{ \"recommendations\": [\"sumneko.lua\"] }");
+    }
+
+    #[test]
+    fn a_populated_array_does() {
+        let Merge::Merged(merged) =
+            merge_extensions("{ \"recommendations\": [\"rust-lang.rust\"] }")
+        else {
+            panic!("not recognised");
+        };
+        assert_eq!(
+            merged,
+            "{ \"recommendations\": [\"sumneko.lua\", \"rust-lang.rust\"] }"
+        );
+    }
+
+    /// Running it twice is running it once. This is what keeps
+    /// `installua init --interactive` from stacking a second copy of both tasks
+    /// onto the file it wrote last time.
+    #[test]
+    fn merging_twice_changes_nothing() {
+        let Merge::Merged(once) = merge_tasks(THEIRS) else {
+            panic!("not recognised");
+        };
+        assert_eq!(merge_tasks(&once), Merge::Present);
+        assert_eq!(
+            merge_extensions(&installua::stubs::vscode_extensions()),
+            Merge::Present
+        );
+        assert_eq!(
+            merge_tasks(&installua::stubs::vscode_tasks()),
+            Merge::Present
+        );
+    }
+
+    /// And a file it cannot find its anchor in is reported rather than guessed
+    /// at — the caller asks before replacing it.
+    #[test]
+    fn a_file_with_no_anchor_is_unrecognised() {
+        assert_eq!(
+            merge_tasks("{ \"version\": \"2.0.0\" }"),
+            Merge::Unrecognised
+        );
+        assert_eq!(merge_extensions("[]"), Merge::Unrecognised);
+    }
+}
