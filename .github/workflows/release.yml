@@ -56,28 +56,28 @@ jobs:
         if: matrix.use-cross
         run: cargo install cross
 
-      - name: Install cargo-xwin
-        if: matrix.use-cargo-xwin
-        run: cargo install cargo-xwin
+      # - name: Install cargo-xwin
+      #   if: matrix.use-cargo-xwin
+      #   run: cargo install cargo-xwin
 
-      - name: Cache xwin MSVC CRT
-        if: matrix.use-cargo-xwin
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/cargo-xwin
-          key: cargo-xwin-msvc
+      # - name: Cache xwin MSVC CRT
+      #   if: matrix.use-cargo-xwin
+      #   uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      #   with:
+      #     path: ~/.cache/cargo-xwin
+      #     key: cargo-xwin-msvc
 
       - name: Build (cross)
         if: matrix.use-cross
         run: cross build --release --target ${{ matrix.target }}
 
-      - name: Build (cargo-xwin)
-        if: matrix.use-cargo-xwin
-        run: cargo xwin build --release --target ${{ matrix.target }}
+      # - name: Build (cargo-xwin)
+      #   if: matrix.use-cargo-xwin
+      #   run: cargo xwin build --release --target ${{ matrix.target }}
 
-      - name: Build (native)
-        if: ${{ !matrix.use-cross && !matrix.use-cargo-xwin }}
-        run: cargo build --release --target ${{ matrix.target }}
+      # - name: Build (native)
+      #   if: ${{ !matrix.use-cross && !matrix.use-cargo-xwin }}
+      #   run: cargo build --release --target ${{ matrix.target }}
 
       - name: Get version
         id: version
