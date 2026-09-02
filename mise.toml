@@ -12,7 +12,6 @@ python = "latest"
 
 [env]
 HK_MISE = 1
-NSISDIR = '''{{ exec(command="makensis -HDRINFO 2>/dev/null | tr ',' '\n' | grep '^NSISDIR=' | cut -d= -f2 || true") }}'''
 
 [hooks]
 postinstall = "hk install --mise && mise run install:toolchain && pnpm install"
