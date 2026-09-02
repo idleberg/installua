@@ -15,6 +15,7 @@ attributes {
 installer {
   installDir = LOCALAPPDATA .. "/Programs/" .. APP,
 
+  page.license { file = "../LICENSE" },
   page.directory {},
   page.instFiles {},
 
