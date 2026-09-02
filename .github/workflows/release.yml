@@ -1,0 +1,146 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact-name: linux-x64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact-name: linux-arm64
+            use-cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact-name: darwin-x64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact-name: darwin-arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact-name: windows-x64
+            installer: true
+          - target: aarch64-pc-windows-msvc
+            os: ubuntu-latest
+            artifact-name: windows-arm64
+            use-cargo-xwin: true
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+
+      - name: Install Rust toolchain
+        if: ${{ !matrix.use-cross }}
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        if: matrix.use-cross
+        run: cargo install cross
+
+      - name: Install cargo-xwin
+        if: matrix.use-cargo-xwin
+        run: cargo install cargo-xwin
+
+      - name: Cache xwin MSVC CRT
+        if: matrix.use-cargo-xwin
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cargo-xwin
+          key: cargo-xwin-msvc
+
+      - name: Build (cross)
+        if: matrix.use-cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build (cargo-xwin)
+        if: matrix.use-cargo-xwin
+        run: cargo xwin build --release --target ${{ matrix.target }}
+
+      - name: Build (native)
+        if: ${{ !matrix.use-cross && !matrix.use-cargo-xwin }}
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Create zip
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            BIN=installua.exe
+          else
+            BIN=installua
+          fi
+          7z a "installua-${{ steps.version.outputs.VERSION }}-${{ matrix.artifact-name }}.zip" \
+            "./target/${{ matrix.target }}/release/${BIN}" LICENSE
+
+      - uses: nsis-dev/setup-nsis@v1
+        if: matrix.installer
+
+      # Stock NSIS ships no EnVar; setup/install.lua uses it to put INSTDIR on
+      # the user's PATH.
+      - name: Install EnVar plugin
+        if: matrix.installer
+        shell: bash
+        run: |
+          NSISDIR=$(makensis -HDRINFO | tr ',' '\n' | grep '^NSISDIR=' | cut -d= -f2 | tr '\\' '/')
+          curl -sSLo EnVar.zip https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip
+          7z x EnVar.zip -oEnVar
+          cp EnVar/Plugins/x86-unicode/EnVar.dll "$NSISDIR/Plugins/x86-unicode/"
+
+      - name: Build installer
+        if: matrix.installer
+        shell: bash
+        working-directory: setup
+        run: |
+          INSTALLUA="$GITHUB_WORKSPACE/target/${{ matrix.target }}/release/installua.exe"
+          "$INSTALLUA" init
+          "$INSTALLUA" stubs
+          "$INSTALLUA" build install.lua \
+            -D VERSION=${{ steps.version.outputs.VERSION }} \
+            -D BINARY=../target/${{ matrix.target }}/release/installua.exe
+          mv installua-*-setup.exe "$GITHUB_WORKSPACE/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installua-${{ matrix.artifact-name }}
+          path: installua-*
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: sha256sum installua-*.zip installua-*-setup.exe > SHA256SUMS
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            installua-*.zip
+            installua-*-setup.exe
+            SHA256SUMS
