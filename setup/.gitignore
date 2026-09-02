@@ -1,0 +1,6 @@
+# generated
+.installua/
+
+# artifacts
+*.nsi
+*.exe
