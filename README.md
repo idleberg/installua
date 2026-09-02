@@ -2,6 +2,8 @@
 
 A Lua-shaped language that compiles to NSIS.
 
+**Example**
+
 ```lua
 attributes {
 	name = "Example",
@@ -31,6 +33,26 @@ that to `makensis`. The parts of NSIS that are famously easy to get wrong are
 not yours to get wrong: MUI2's include order, `un.` prefixes, label
 arithmetic, the register stack, `$PLUGINSDIR`. The compiler has you covered!
 
+## Features
+
+- **Real variables, real scope.** Locals are locals; the compiler allocates
+  `$0`–`$9`/`$R0`–`$R9` and spills to the stack when it runs out. You never name
+  a register or count a `Push`/`Pop` pair again.
+- **Order-free.** Every name resolves before any body is lowered, so a function
+  can call one declared later in the file.
+- **MUI2 without the footguns.** Page order, include order, `un.` prefixes and
+  the `!define`s that must precede `MUI2.nsh` are the compiler's problem.
+  All eight pages and 255 MUI2 names are classified.
+- **Typed plugin calls.** Plugin and header macros ship declared with their real
+  output counts, taken from plugin sources rather than readmes; add your own
+  with a `.toml` file.
+- **Build-time parameters and `if`.** The values CI sets live outside the source
+  and fold away at compile time.
+- **Editor support out of the box.** Generated LuaCATS stubs plus a selene
+  config give completion, hover, go-to-definition and arity checks — on your own
+  plugin declarations too.
+- **`makensis -WX` by default.** A warning from NSIS fails the build.
+
 ## Requirements
 
 - **NSIS 3.x** on your `PATH` (`makensis -VERSION`). Installua targets 3.12.
@@ -40,33 +62,38 @@ arithmetic, the register stack, `$PLUGINSDIR`. The compiler has you covered!
 
 ## Install
 
-Not published yet — build it from this repository:
+### Cargo
 
 ```sh
-git clone <this repo> && cd installua
-mise run install        # pinned toolchain, then `cargo install --path .`
+cargo install installua
+```
+
+### Homebrew
+
+```sh
+brew install idleberg/asahi/installua
 ```
 
 ## Getting started
 
 ```sh
-mkdir my-installer && cd my-installer
+mkdir my-app && cd my-app
 installua init .        # installua.toml, .luarc.json, selene.toml
 installua stubs         # .installua/meta/*.lua — the editor's half
 ```
 
-Write `install.lua` (the block above is a complete one), then:
+Write `setup.lua` (the block above is a complete one), then:
 
 ```sh
-installua build install.lua
+installua build setup.lua
 ```
 
-That compiles to `install.nsi` and runs `makensis -WX` on it, so a warning from
+That compiles to `setup.nsi` and runs `makensis -WX` on it, so a warning from
 NSIS is a failed build. When something is wrong you get the Lua line, not the
 generated one:
 
 ```
-install.lua:3:15: warning[dollar-in-literal]: `$INSTDIR` is emitted as literal text here
+setup.lua:3:15: warning[dollar-in-literal]: `$INSTDIR` is emitted as literal text here
   note: did you mean `.. INSTDIR ..`? a string literal is data, never a template:
         every `$` is emitted as `$$`
 ```
