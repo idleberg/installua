@@ -53,12 +53,9 @@ arithmetic, the register stack, `$PLUGINSDIR`. The compiler has you covered!
   plugin declarations too.
 - **`makensis -WX` by default.** A warning from NSIS fails the build.
 
-## Requirements
+## Prerequisites
 
-- **NSIS 3.x** on your `PATH` (`makensis -VERSION`). Installua targets 3.12.
-- **[mise](https://mise.jdx.dev)** and **[rustup](https://rustup.rs)**. The Rust
-  version is pinned in `rust-toolchain.toml` (1.98) and `mise run install`
-  installs it; you never name it yourself.
+**NSIS 3.x** is installed and on your `PATH` (`makensis -VERSION`). Installua targets 3.12.
 
 ## Install
 
@@ -82,30 +79,23 @@ installua init .        # installua.toml, .luarc.json, selene.toml
 installua stubs         # .installua/meta/*.lua — the editor's half
 ```
 
-Write `setup.lua` (the block above is a complete one), then:
+Write `setup.lua`, then build the installer:
 
 ```sh
 installua build setup.lua
 ```
 
 That compiles to `setup.nsi` and runs `makensis -WX` on it, so a warning from
-NSIS is a failed build. When something is wrong you get the Lua line, not the
-generated one:
-
-```
-setup.lua:3:15: warning[dollar-in-literal]: `$INSTDIR` is emitted as literal text here
-  note: did you mean `.. INSTDIR ..`? a string literal is data, never a template:
-        every `$` is emitted as `$$`
-```
+NSIS is a failed build.
 
 ### The commands you will use
 
-| Command | What it does |
-| --- | --- |
-| `installua build <file.lua>` | compile, then run `makensis -WX`. Exits non-zero on any error. |
+| Command                         | What it does                                                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `installua build <file.lua>`    | compile, then run `makensis -WX`. Exits non-zero on any error.                                             |
 | `installua check <file.lua>...` | everything `build` would say, writing nothing and running no `makensis` — the fast gate for CI and editors |
-| `installua emit <file.lua>` | compile to `.nsi` and stop — for wiring into an existing build |
-| `installua stubs` | regenerate the editor meta files. Run it after adding a `func` or a global. |
+| `installua emit <file.lua>`     | compile to `.nsi` and stop — for wiring into an existing build                                             |
+| `installua stubs`               | regenerate the editor meta files. Run it after adding a `func` or a global.                                |
 
 `installua --help` lists the rest.
 
@@ -134,7 +124,7 @@ files, as a checklist:
 - **VS Code settings** — `.vscode/extensions.json` (recommending
   [sumneko.lua][sumneko]) and `.vscode/tasks.json`, which binds ⇧⌘B /
   Ctrl+Shift+B to `installua build` on the current file with a problem matcher,
-  so an error lands on the Lua line. Both are *merged* into what is already
+  so an error lands on the Lua line. Both are _merged_ into what is already
   there, comments and all. There is no `launch.json`: launching needs a debug
   adapter, and neither Installua nor NSIS has one.
 - **Update .gitignore** — the generated files, and the `.nsi` and `.exe` a build
@@ -148,15 +138,15 @@ file, and `--interactive --force` asks nothing.
 
 ## Documentation
 
-| | |
-| --- | --- |
-| [docs/reference-map.md](docs/reference-map.md) | **Start here.** Every NSIS command and what to write instead, grouped by what you are trying to do. |
-| [docs/mui-reference.md](docs/mui-reference.md) | The eight MUI2 pages and every setting on them. |
-| [docs/plugin-reference.md](docs/plugin-reference.md) | Every plugin method that ships declared, where its output count came from, and what is deliberately absent. |
-| [docs/header-reference.md](docs/header-reference.md) | The same for `FileFunc`, `TextFunc` and `WordFunc` macros. |
-| [docs/nsis-shaped-not-nsis.md](docs/nsis-shaped-not-nsis.md) | If you know NSIS: the habits that do not carry over. |
-| [docs/lua-shaped-not-lua.md](docs/lua-shaped-not-lua.md) | If you know Lua: what this language does not have, and why. |
-| [examples/](examples/) | Five complete programs, each with the `.nsi` it must produce. |
+|                                                              |                                                                                                             |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| [docs/reference-map.md](docs/reference-map.md)               | **Start here.** Every NSIS command and what to write instead, grouped by what you are trying to do.         |
+| [docs/mui-reference.md](docs/mui-reference.md)               | The eight MUI2 pages and every setting on them.                                                             |
+| [docs/plugin-reference.md](docs/plugin-reference.md)         | Every plugin method that ships declared, where its output count came from, and what is deliberately absent. |
+| [docs/header-reference.md](docs/header-reference.md)         | The same for `FileFunc`, `TextFunc` and `WordFunc` macros.                                                  |
+| [docs/nsis-shaped-not-nsis.md](docs/nsis-shaped-not-nsis.md) | If you know NSIS: the habits that do not carry over.                                                        |
+| [docs/lua-shaped-not-lua.md](docs/lua-shaped-not-lua.md)     | If you know Lua: what this language does not have, and why.                                                 |
+| [examples/](examples/)                                       | Five complete programs, each with the `.nsi` it must produce.                                               |
 
 Some starting points in the reference: [build parameters and build-time
 `if`](docs/reference-map.md#param) for the values CI sets rather than the
@@ -165,8 +155,8 @@ header](docs/reference-map.md#declaring-a-third-party-plugin-or-header) for the
 plugins beyond the ones that ship declared — a `.toml` file per plugin, since
 NSIS offers no way to ask a DLL how many values it pushes.
 
-The reference answers *how do I write this*; `installua coverage` answers *is
-this done yet*, one line per bucket over all 276 NSIS commands.
+The reference answers _how do I write this_; `installua coverage` answers _is
+this done yet_, one line per bucket over all 276 NSIS commands.
 
 ## Status
 
