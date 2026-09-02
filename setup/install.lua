@@ -6,7 +6,7 @@ local BINARY <const> = param("BINARY", "../target/release/installua.exe")
 
 attributes {
   name = APP,
-  outFile = APP .. "-" .. VERSION .. "-setup.exe",
+  outFile = APP .. "-" .. VERSION .. "-windows-setup.exe",
   unicode = true,
   compressor = "lzma",
   requestExecutionLevel = "user",
