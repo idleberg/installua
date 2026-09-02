@@ -93,7 +93,7 @@ jobs:
             BIN=installua
           fi
           7z a "installua-${{ steps.version.outputs.VERSION }}-${{ matrix.artifact-name }}.zip" \
-            "./target/${{ matrix.target }}/release/${BIN}" LICENSE-APACHE LICENSE-MIT
+            "./target/${{ matrix.target }}/release/${BIN}" LICENSE
 
       - name: Set up NSIS
         if: matrix.installer
