@@ -31,10 +31,10 @@ jobs:
             os: windows-latest
             artifact-name: windows-x64
             installer: true
-          - target: aarch64-pc-windows-msvc
-            os: ubuntu-latest
-            artifact-name: windows-arm64
-            use-cargo-xwin: true
+          # - target: aarch64-pc-windows-msvc
+          #   os: ubuntu-latest
+          #   artifact-name: windows-arm64
+          #   use-cargo-xwin: true
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
