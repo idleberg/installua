@@ -37,15 +37,18 @@ jobs:
             use-cargo-xwin: true
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
 
       - name: Install Rust toolchain
         if: ${{ !matrix.use-cross }}
         run: rustup target add ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.target }}
 
@@ -92,8 +95,9 @@ jobs:
           7z a "installua-${{ steps.version.outputs.VERSION }}-${{ matrix.artifact-name }}.zip" \
             "./target/${{ matrix.target }}/release/${BIN}" LICENSE-APACHE LICENSE-MIT
 
-      - uses: nsis-dev/setup-nsis@v1
+      - name: Set up NSIS
         if: matrix.installer
+        uses: nsis-dev/setup-nsis@v1
 
       # Stock NSIS ships no EnVar; setup/install.lua uses it to put INSTDIR on
       # the user's PATH.
