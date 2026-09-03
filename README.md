@@ -34,8 +34,7 @@ Write an installer as an ordinary Lua program, and Installua compiles it to a
 
 - **Real variables, real scope.** Locals are locals. You never name a register
   or count a `Push`/`Pop` pair again.
-- **Order-free.** Call a function declared later, or in another file. Nothing
-  runs at build time, so nothing has to come first.
+- **No ordering rules.** Declare anything anywhere, in any file.
 - **MUI2 without the footguns.** Page order, include order, `un.` prefixes and
   the `!define`s that must precede `MUI2.nsh` are the compiler's problem.
 - **Typed plugin calls.** Output counts come from the plugin's source, not its
