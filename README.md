@@ -46,7 +46,7 @@ Write an installer as an ordinary Lua program, and Installua compiles it to a
 
 ## Prerequisites
 
-**NSIS 3.x** is installed and on your `PATH` (`makensis -VERSION`). Installua targets 3.12.
+**NSIS 3.x** is installed and on your `PATH` – Installua targets version 3.12.
 
 ## Install
 
@@ -106,26 +106,6 @@ build-time constant is declared with — the published binary is not:
 ```sh
 mise run install:selene
 ```
-
-`installua init --interactive` offers three more things on top of those two
-files, as a checklist:
-
-- **Create stubs** — `installua stubs`, run here rather than printed as an
-  instruction.
-- **VS Code settings** — `.vscode/extensions.json` (recommending
-  [sumneko.lua][sumneko]) and `.vscode/tasks.json`, which binds ⇧⌘B /
-  Ctrl+Shift+B to `installua build` on the current file with a problem matcher,
-  so an error lands on the Lua line. Both are _merged_ into what is already
-  there, comments and all. There is no `launch.json`: launching needs a debug
-  adapter, and neither Installua nor NSIS has one.
-- **Update .gitignore** — the generated files, and the `.nsi` and `.exe` a build
-  leaves behind.
-
-`init` refuses a directory it has already been run in, naming every file in the
-way and writing none of them. `--force` overwrites; `--interactive` asks per
-file, and `--interactive --force` asks nothing.
-
-[sumneko]: https://marketplace.visualstudio.com/items?itemName=sumneko.lua
 
 ## Documentation
 
