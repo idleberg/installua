@@ -390,7 +390,7 @@ fn init(root: &Path, interactive: bool, force: bool) -> ExitCode {
     let root = &match interactive {
         false => root.to_path_buf(),
         true => {
-            clark::intro("installua init");
+            clark::intro("Initialize a new project");
             match where_to(root) {
                 Ok(chosen) => chosen,
                 Err(code) => return code,
