@@ -35,7 +35,7 @@ Write an installer as an ordinary Lua program, and Installua compiles it to a
 - Write functions without managing a stack
 - No ordering rules
 - MUI2 without the footguns
-- Fully typed, including plugins
+- Fully typed API, including plugins
 - Build-time parameters and `if`
 - Editor support out of the box
 - `makensis -WX` by default
