@@ -4,7 +4,19 @@ version = "0.1.0"
 description = "A Lua-shaped language that compiles to NSIS."
 edition = "2024"
 license = "Apache-2.0"
-exclude = ["examples", "verification", "docs"]
+include = [
+	"src/**/*.rs",
+	"src/declarations/*.toml",
+	# `include_str!`d by src/locale.rs and src/mui/mod.rs — the crate does not
+	# build without them. cmdhelp-3.12.txt is not here: only tests/census.rs
+	# reads it, and it is the largest of the three.
+	"tables/locales-3.12.txt",
+	"tables/mui-3.12.txt",
+	# Leading slash: unanchored, these also match every `README.md` under
+	# `node_modules/`, which `include` does not exempt from.
+	"/README.md",
+	"/LICENSE",
+]
 
 [lib]
 name = "installua"
