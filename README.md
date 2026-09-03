@@ -27,30 +27,23 @@ installer {
 }
 ```
 
-Write an installer as an ordinary Lua program — real syntax, real scoping,
-real editor support — and Installua compiles it to a `.nsi` script and hands
-that to `makensis`. The parts of NSIS that are famously easy to get wrong are
-not yours to get wrong: MUI2's include order, `un.` prefixes, label
-arithmetic, the register stack, `$PLUGINSDIR`. The compiler has you covered!
+Write an installer as an ordinary Lua program, and Installua compiles it to a
+`.nsi` script and hands that to `makensis`.
 
 ## Features
 
-- **Real variables, real scope.** Locals are locals; the compiler allocates
-  `$0`–`$9`/`$R0`–`$R9` and spills to the stack when it runs out. You never name
-  a register or count a `Push`/`Pop` pair again.
-- **Order-free.** Every name resolves before any body is lowered, so a function
-  can call one declared later in the file.
+- **Real variables, real scope.** Locals are locals. You never name a register
+  or count a `Push`/`Pop` pair again.
+- **Order-free.** Call a function declared later, or in another file. Nothing
+  runs at build time, so nothing has to come first.
 - **MUI2 without the footguns.** Page order, include order, `un.` prefixes and
   the `!define`s that must precede `MUI2.nsh` are the compiler's problem.
-  All eight pages and 255 MUI2 names are classified.
-- **Typed plugin calls.** Plugin and header macros ship declared with their real
-  output counts, taken from plugin sources rather than readmes; add your own
-  with a `.toml` file.
-- **Build-time parameters and `if`.** The values CI sets live outside the source
-  and fold away at compile time.
-- **Editor support out of the box.** Generated LuaCATS stubs plus a selene
-  config give completion, hover, go-to-definition and arity checks — on your own
-  plugin declarations too.
+- **Typed plugin calls.** Output counts come from the plugin's source, not its
+  readme. Add your own in a `.toml` file.
+- **Build-time parameters and `if`.** The values CI sets live outside the
+  source and fold away at compile time.
+- **Editor support out of the box.** Completion, hover, go-to-definition and
+  arity checks — on your own plugin declarations too.
 - **`makensis -WX` by default.** A warning from NSIS fails the build.
 
 ## Prerequisites
