@@ -32,18 +32,13 @@ Write an installer as an ordinary Lua program, and Installua compiles it to a
 
 ## Features
 
-- **Real variables, real scope.** Locals are locals. You never name a register
-  or count a `Push`/`Pop` pair again.
-- **No ordering rules.** Declare anything anywhere, in any file.
-- **MUI2 without the footguns.** Page order, include order, `un.` prefixes and
-  the `!define`s that must precede `MUI2.nsh` are the compiler's problem.
-- **Typed plugin calls.** Output counts come from the plugin's source, not its
-  readme. Add your own in a `.toml` file.
-- **Build-time parameters and `if`.** The values CI sets live outside the
-  source and fold away at compile time.
-- **Editor support out of the box.** Completion, hover, go-to-definition and
-  arity checks — on your own plugin declarations too.
-- **`makensis -WX` by default.** A warning from NSIS fails the build.
+- Write functions without managing a stack
+- No ordering rules
+- MUI2 without the footguns
+- Fully typed, including plugins
+- Build-time parameters and `if`
+- Editor support out of the box
+- `makensis -WX` by default
 
 ## Prerequisites
 
