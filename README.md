@@ -1,5 +1,9 @@
 # Installua
 
+![Crates.io License](https://img.shields.io/crates/l/installua?style=for-the-badge)
+[![Crates.io Version](https://img.shields.io/crates/v/installua?style=for-the-badge)](https://crates.io/crates/installua)
+[![CI](https://img.shields.io/github/actions/workflow/status/idleberg/installua/ci.yml?style=for-the-badge)](https://github.com/idleberg/installua/actions)
+
 A Lua-shaped language that compiles to NSIS.
 
 **Example**
