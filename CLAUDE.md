@@ -23,10 +23,14 @@ source ─frontend─▶ AST ─resolve─▶ symbols ─lower─▶ CFG ─allo
 - **Re-entrant by requirement**: no `static mut`, no thread-local diagnostic
   sink, no `getCurrent()`. Two sources must compile concurrently in one process
   against in-memory strings, or this can never back an LSP.
-- `resolve` completes before any body lowers — that is what makes the language
-  order-free.
+- `resolve` completes before any body lowers, so every top-level *name* exists
+  before anything reads one.
 - `lower` and `alloc` are whole-program fixpoints: parameter types come from
   call sites, clobber sets propagate over the call graph's SCC condensation.
+- Those two together are what makes the language order-free. Resolve alone is
+  not enough for a `func`: it records params, block and span but no types, so a
+  call above a declaration only knows the callee's *signature* once the `lower`
+  fixpoint has met in the middle.
 
 ## Conventions
 

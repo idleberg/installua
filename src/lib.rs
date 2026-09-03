@@ -13,10 +13,14 @@
 //! source ─frontend─▶ AST ─resolve─▶ symbols ─lower─▶ CFG ─alloc─▶ registers ─layout─▶ IR ─emit─▶ .nsi
 //! ```
 //!
-//! `resolve` runs to completion before any body is lowered, which is what makes
-//! the language order-free — and it can be, because Installua compiles rather
+//! The language is order-free — it can be, because Installua compiles rather
 //! than executing Lua at build time, so there is no evaluation order for a
-//! declaration to have to precede.
+//! declaration to have to precede. `resolve` running to completion before any
+//! body is lowered is half of what buys that: it makes every top-level *name*
+//! exist before anything reads one. It is only half, because a `func` is more
+//! than a name. Resolve records its params, block and span and no types at all,
+//! so a call written above the declaration is order-free only once the `lower`
+//! fixpoint below has supplied the signature.
 //!
 //! Two of those arrows are **whole-program** rather than per-body, and both are
 //! fixpoints. `lower` runs repeatedly against a signature table until types
