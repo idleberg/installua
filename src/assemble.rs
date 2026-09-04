@@ -6,19 +6,28 @@
 //! reassigning what it reports, so the map cannot travel inside the artifact
 //! and something has to sit between `makensis` and the user.
 //!
-//! Two message syntaxes exist, verified against NSIS 3.12, and a third class
-//! with no line at all:
+//! Three message syntaxes exist, verified against NSIS 3.12:
 //!
 //! ```text
-//! Error in script "w1.nsi" on line 4 -- aborting creation process
-//!   6000: unknown variable/constant "UNKNOWNVAR" detected (w3.nsi:3)
+//! !define: "X" already defined!
+//! Error in script "w1.nsi" on line 2 -- aborting creation process
+//! warning 6000: unknown variable/constant "UNKNOWNVAR" detected (w3.nsi:3)
 //! Error: could not resolve label "nowhere" in unnamed install section (0)
 //! ```
 //!
+//! The first pair is one diagnostic and not two. **The `Error in script` line
+//! is a cursor, not a cause**: it says where `makensis` stopped, and what is
+//! actually wrong is on the line before it — a line in no fixed syntax at all
+//! (`Invalid command: "Foobar"`, `Error while loading icon from …`). Reading
+//! the cursor alone leaves *"aborting creation process"* as the whole report,
+//! and, when the cursor lands on a line this compiler generated, blames the
+//! compiler for the user's missing file. So [`parse`] carries the preceding
+//! line along as [`Message::cause`] and [`translate`] reports that instead.
+//!
 //! Warnings are failures — a `$`-sigil mistake, a mis-ordered `!define` and an
 //! unknown `${FOO}` are all warning 6000 plus a silently wrong installer — so
-//! `-WX` is passed here rather than left to the caller, and both syntaxes are
-//! on the mapped path.
+//! `-WX` is passed here rather than left to the caller, and every syntax is on
+//! the mapped path.
 
 use std::path::Path;
 use std::process::Command;
@@ -34,6 +43,10 @@ pub struct Message {
     /// property of the diagnostic rather than a parsing failure here.
     pub line: Option<usize>,
     pub text: String,
+    /// What `makensis` said immediately before an *aborting creation process*
+    /// cursor — the actual complaint, which the cursor line does not repeat.
+    /// `None` for every message that is its own diagnostic.
+    pub cause: Option<String>,
 }
 
 /// Every diagnostic in a `makensis` log, in order.
@@ -42,6 +55,14 @@ pub struct Message {
 /// size table and a compression summary, and none of it is a message.
 pub fn parse(log: &str) -> Vec<Message> {
     let mut out = Vec::new();
+    // The last line that was *not* itself a diagnostic, which is where the
+    // cursor's cause lives. Held back rather than pushed, because on its own
+    // it names no line and duplicating it would report one fault twice.
+    //
+    // ponytail: the previous line, not a recognised syntax — there is none to
+    // recognise. `makensis` prints the complaint and the cursor from the same
+    // error path, so adjacency is the only thing that holds for all of them.
+    let mut previous: Option<&str> = None;
     for raw in log.lines() {
         let text = raw.trim();
         // Syntax 1: parse-time. `Error in script "x.nsi" on line 4 -- …`
@@ -52,7 +73,9 @@ pub fn parse(log: &str) -> Vec<Message> {
             out.push(Message {
                 line: digits.parse().ok(),
                 text: text.to_string(),
+                cause: previous.map(str::to_string),
             });
+            previous = None;
             continue;
         }
 
@@ -62,7 +85,9 @@ pub fn parse(log: &str) -> Vec<Message> {
             out.push(Message {
                 line: position,
                 text: text.to_string(),
+                cause: None,
             });
+            previous = None;
             continue;
         }
 
@@ -70,17 +95,32 @@ pub fn parse(log: &str) -> Vec<Message> {
             out.push(Message {
                 line: None,
                 text: text.to_string(),
+                cause: None,
             });
+            previous = None;
+            continue;
         }
+
+        // Everything else is either the banner or a cause waiting for its
+        // cursor. `Processing …` is the banner; it is also the only thing
+        // printed before the first script line, so without this guard a
+        // failure on line 1 would be reported as *"Processing script file"*.
+        previous = (!text.is_empty() && !text.starts_with("Processing ")).then_some(text);
     }
     out
 }
 
-/// `6000: … (script.nsi:3)` — the warning syntax. Returns the line when the
-/// message carries one, and `Some(None)` when it is a warning without a
+/// `warning 6000: … (script.nsi:3)` — the warning syntax. Returns the line when
+/// the message carries one, and `Some(None)` when it is a warning without a
 /// position, which is a real class (`6020` names no line at all).
+///
+/// The `warning ` prefix is what NSIS 3.12 actually prints and is optional
+/// here: without it this arm matched nothing, every 6000 was dropped, and
+/// `-WX` reported only its own *"warning treated as error"* summary — which
+/// names neither the warning nor a line.
 fn numbered_warning(text: &str) -> Option<Option<usize>> {
     let (code, _) = text.split_once(": ")?;
+    let code = code.strip_prefix("warning ").unwrap_or(code);
     if code.is_empty() || !code.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
@@ -100,10 +140,13 @@ fn numbered_warning(text: &str) -> Option<Option<usize>> {
 
 /// One `makensis` message, as the user should see it.
 ///
-/// Three shapes, one per [`Origin`], and the third is the important one: a
-/// generated line failing is by definition a compiler bug, so the report says
-/// so and names the retained script rather than pointing at code that is not
-/// responsible.
+/// Three shapes, one per [`Origin`], and the third is the delicate one. A
+/// generated line failing is a compiler bug *only when the generated line is
+/// what `makensis` objected to*. A cursor carries a [`Message::cause`], and a
+/// cause is the complaint about something else — a missing icon, a name
+/// already defined — that merely stopped the build at a generated line. The
+/// distinction is the whole of it: without it, `icon = "nope.ico"` pointing at
+/// a file that is not there tells the user to file a compiler bug.
 pub fn translate(
     message: &Message,
     map: &LineMap,
@@ -112,33 +155,37 @@ pub fn translate(
     script: &Path,
 ) -> String {
     let script = script.display();
+    // The cursor's text is *"aborting creation process"* and says nothing;
+    // where there is a cause, the cause is the message.
+    let text = message.cause.as_deref().unwrap_or(&message.text);
     let origin = message.line.and_then(|line| map.origin(line));
     match (origin, message.line) {
         (Some(Origin::User(span)), _) => {
             format!(
-                "{}:{span}: error[makensis]: {}",
-                name(span, source, files),
-                message.text
+                "{}:{span}: error[makensis]: {text}",
+                name(span, source, files)
             )
         }
         (Some(Origin::Raw(span)), _) => format!(
-            "{}:{span}: error[makensis]: {}\n  note: this line is inside a `raw` block, \
+            "{}:{span}: error[makensis]: {text}\n  note: this line is inside a `raw` block, \
              which nothing in this compiler checked",
             name(span, source, files),
-            message.text
+        ),
+        (Some(Origin::Emitted(what)), Some(line)) if message.cause.is_some() => format!(
+            "error[makensis]: {text}\n  note: makensis stopped at {what}, a line Installua \
+             generated ({script}:{line}), so the fix is in what that line was generated from"
         ),
         (Some(Origin::Emitted(what)), Some(line)) => format!(
             "error: makensis rejected a line Installua generated ({what}, {script}:{line})\n  \
-             note: {}\n  note: this is a compiler bug; the generated script was kept at {script}",
-            message.text
+             note: {text}\n  note: this is a compiler bug; the generated script was kept at \
+             {script}"
         ),
         // No line, or a line past the end of the map: link-time errors name a
         // section rather than a position, and inventing one is worse than
         // saying there is none.
         _ => format!(
-            "error[makensis]: {}\n  note: this message names no line; the generated script was \
-             kept at {script}",
-            message.text
+            "error[makensis]: {text}\n  note: this message names no line; the generated script \
+             was kept at {script}"
         ),
     }
 }

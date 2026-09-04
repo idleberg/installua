@@ -84,6 +84,7 @@ fn a_raw_line_maps_to_its_block_and_says_it_is_unchecked() {
     let message = Message {
         line: Some(line),
         text: "Error in script \"a.nsi\" on line 12 -- aborting creation process".to_string(),
+        cause: None,
     };
     let rendered = assemble::translate(
         &message,
@@ -109,6 +110,7 @@ fn a_generated_line_is_reported_as_a_compiler_bug() {
     let message = Message {
         line: Some(line),
         text: "Error in script \"a.nsi\" on line 6 -- aborting creation process".to_string(),
+        cause: None,
     };
     let rendered = assemble::translate(
         &message,
@@ -148,13 +150,13 @@ fn the_compilers_own_lines_are_labelled_as_its_own() {
     }
 }
 
-/// Both syntaxes verified against NSIS 3.12, and the line-less class.
+/// Every syntax verified against NSIS 3.12, and the line-less class.
 #[test]
-fn both_makensis_syntaxes_are_recognised() {
+fn every_makensis_syntax_is_recognised() {
     let log = concat!(
         "Processing script file: \"a.nsi\"\n",
         "Error in script \"a.nsi\" on line 4 -- aborting creation process\n",
-        "  6000: unknown variable/constant \"NOPE\" detected (a.nsi:3)\n",
+        "warning 6000: unknown variable/constant \"NOPE\" detected (a.nsi:3)\n",
         "Error: could not resolve label \"nowhere\" in unnamed install section (0)\n",
         "Total size: 1 byte\n",
     );
@@ -162,6 +164,107 @@ fn both_makensis_syntaxes_are_recognised() {
     assert_eq!(
         parsed.iter().map(|m| m.line).collect::<Vec<_>>(),
         vec![Some(4), Some(3), None]
+    );
+    // The banner is not a cause: the cursor above it is the first thing in the
+    // log, which is what a failure on line 1 looks like.
+    assert_eq!(parsed[0].cause, None);
+}
+
+/// The two shapes that were hit while porting, verbatim from `makensis -WX`
+/// 3.12.
+///
+/// Both are the user's own mistake and both used to arrive as *"aborting
+/// creation process"* — the complaint sits on the line before the cursor, in
+/// no syntax at all, and was dropped. The `Error in script` line is where
+/// `makensis` stopped, never what it objected to.
+#[test]
+fn a_cursor_carries_the_line_before_it_as_its_cause() {
+    for (log, cause) in [
+        (
+            concat!(
+                "Processing script file: \"i.nsi\" (UTF8)\n",
+                "Error while loading icon from \"nope.ico\": can't open file\n",
+                "Error in script \"i.nsi\" on line 2 -- aborting creation process\n",
+            ),
+            "Error while loading icon from \"nope.ico\": can't open file",
+        ),
+        (
+            concat!(
+                "Processing script file: \"l.nsi\" (UTF8)\n",
+                "!define: \"X\" already defined!\n",
+                "Error in script \"l.nsi\" on line 2 -- aborting creation process\n",
+            ),
+            "!define: \"X\" already defined!",
+        ),
+    ] {
+        let parsed = assemble::parse(log);
+        // One diagnostic, not two: the cause is folded in rather than reported
+        // as a second unpositioned failure.
+        assert_eq!(parsed.len(), 1, "{log}");
+        assert_eq!(parsed[0].cause.as_deref(), Some(cause));
+    }
+}
+
+/// A generated line is only a compiler bug when it is what `makensis`
+/// objected to.
+///
+/// This is the one that sent the user to file an issue over their own missing
+/// file. The cursor lands on a line nobody wrote, so the old report blamed the
+/// compiler — with the cause dropped, there was nothing in it to say
+/// otherwise.
+#[test]
+fn a_cause_on_a_generated_line_is_not_a_compiler_bug() {
+    let (text, map) = build();
+    let line = line_of(&text, "!include");
+    let message = Message {
+        line: Some(line),
+        text: "Error in script \"a.nsi\" on line 6 -- aborting creation process".to_string(),
+        cause: Some("Error while loading icon from \"nope.ico\": can't open file".to_string()),
+    };
+    let rendered = assemble::translate(
+        &message,
+        &map,
+        "install.lua",
+        &Files::default(),
+        Path::new("out/a.nsi"),
+    );
+    assert!(
+        rendered.starts_with(
+            "error[makensis]: Error while loading icon from \"nope.ico\": can't open file"
+        ),
+        "the cause is the message, got:\n{rendered}"
+    );
+    assert!(
+        !rendered.contains("compiler bug"),
+        "the user's missing file is not one, got:\n{rendered}"
+    );
+    assert!(
+        rendered.contains("stopped at !include, a line Installua generated (out/a.nsi:"),
+        "the generated line is still named, as where and not as what: {rendered}"
+    );
+}
+
+/// The same for a line the user wrote: the useless cursor text is replaced,
+/// and the position is still theirs.
+#[test]
+fn a_cause_replaces_the_cursor_text_on_a_user_line() {
+    let (text, map) = build();
+    let line = line_of(&text, r#"DetailPrint "ordinary""#);
+    let message = Message {
+        line: Some(line),
+        text: "Error in script \"a.nsi\" on line 12 -- aborting creation process".to_string(),
+        cause: Some("Invalid command: \"Foobar\"".to_string()),
+    };
+    let rendered = assemble::translate(
+        &message,
+        &map,
+        "install.lua",
+        &Files::default(),
+        Path::new("a.nsi"),
+    );
+    assert_eq!(
+        rendered,
+        "install.lua:10:3: error[makensis]: Invalid command: \"Foobar\""
     );
 }
 
@@ -175,6 +278,7 @@ fn a_message_with_no_line_keeps_the_script() {
         line: None,
         text: "Error: could not resolve label \"nowhere\" in unnamed install section (0)"
             .to_string(),
+        cause: None,
     };
     let rendered = assemble::translate(
         &message,
