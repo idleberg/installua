@@ -15,6 +15,8 @@ use clap::{Args, Parser, Subcommand};
 
 use installua::diag::Diagnostics;
 
+mod log;
+
 #[derive(Parser)]
 #[command(
     name = "installua",
@@ -184,7 +186,7 @@ fn options(input: &Path, define: &[String]) -> Option<installua::Options> {
     let (mut options, problems) = installua::Options::for_project(input);
     if !problems.is_empty() {
         for problem in &problems {
-            eprintln!("installua: {problem}");
+            log::error(problem.to_string());
         }
         return None;
     }
@@ -211,11 +213,13 @@ fn defines(define: &[String]) -> Option<std::collections::BTreeMap<String, Strin
     let mut params = std::collections::BTreeMap::new();
     for entry in define {
         let Some((name, value)) = entry.split_once('=') else {
-            eprintln!("installua: `-D {entry}` has no value; write `-D {entry}=…`");
+            log::error(format!("`-D {entry}` has no value; write `-D {entry}=…`"));
             return None;
         };
         if let Some(previous) = params.insert(name.to_string(), value.to_string()) {
-            eprintln!("installua: `-D {name}` was given twice, as `{previous}` and `{value}`");
+            log::error(format!(
+                "`-D {name}` was given twice, as `{previous}` and `{value}`"
+            ));
             return None;
         }
     }
@@ -300,7 +304,7 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
         .clone()
         .unwrap_or_else(|| input.with_extension("nsi"));
     if let Err(error) = std::fs::write(&output, nsi) {
-        eprintln!("installua: cannot write {}: {error}", output.display());
+        log::error(format!("cannot write {}: {error}", output.display()));
         return ExitCode::from(2);
     }
     if !assemble {
@@ -313,14 +317,14 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
     let source_name = input.display().to_string();
     match installua::assemble::assemble(&output, &map, &source_name, diags.files(), &makensis) {
         Err(error) => {
-            eprintln!("installua: cannot run `{makensis}`: {error}");
-            eprintln!("installua: the script was written to {}", output.display());
+            log::error(format!("cannot run `{makensis}`: {error}"));
+            log::log(format!("the script was written to {}", output.display()));
             ExitCode::from(2)
         }
         Ok(assembly) if assembly.ok && assembly.problems.is_empty() => ExitCode::SUCCESS,
         Ok(assembly) => {
             for problem in &assembly.problems {
-                eprintln!("{problem}");
+                log::error(problem);
             }
             // Nothing was recognised, so the log is the only thing there is to
             // show: a message shape this compiler has not seen is still the
@@ -426,11 +430,9 @@ fn init(root: &Path, interactive: bool, force: bool) -> ExitCode {
             .collect();
         if !existing.is_empty() {
             for path in &existing {
-                eprintln!("installua: {} exists", path.display());
+                log::error(format!("{} exists", path.display()));
             }
-            eprintln!(
-                "installua: nothing written; `--force` overwrites, `--interactive` asks per file"
-            );
+            log::log("nothing written; `--force` overwrites, `--interactive` asks per file");
             return ExitCode::from(2);
         }
     }
@@ -443,8 +445,8 @@ fn init(root: &Path, interactive: bool, force: bool) -> ExitCode {
                 return code;
             }
         }
-        println!("installua: now run `installua stubs` to generate the editor's meta files");
-        println!("installua: or `installua init --interactive` to be offered it, and more");
+        log::info("now run `installua stubs` to generate the editor's meta files");
+        log::log("or `installua init --interactive` to be offered it, and more");
         Ok(())
     };
 
@@ -469,7 +471,7 @@ fn where_to(root: &Path) -> Result<PathBuf, ExitCode> {
 
     let chosen = PathBuf::from(chosen);
     if let Err(error) = std::fs::create_dir_all(&chosen) {
-        eprintln!("installua: cannot create {}: {error}", chosen.display());
+        log::error(format!("cannot create {}: {error}", chosen.display()));
         return Err(ExitCode::from(2));
     }
     Ok(chosen)
@@ -537,7 +539,7 @@ fn cancelled(message: &'static str) -> impl Fn(clark::ClackError) -> ExitCode {
             ExitCode::SUCCESS
         }
         error => {
-            eprintln!("installua: {error}");
+            log::error(error.to_string());
             ExitCode::from(2)
         }
     }
@@ -555,16 +557,16 @@ fn write_or_ask(path: &Path, contents: &str, on: OnCollision) -> Stop {
                 .map_err(cancelled("stopped"))?,
         };
         if !overwrite {
-            println!("installua: {} exists, left alone", path.display());
+            log::warn(format!("{} exists, left alone", path.display()));
             return Ok(());
         }
     }
 
     if let Err(error) = std::fs::write(path, contents) {
-        eprintln!("installua: cannot write {}: {error}", path.display());
+        log::error(format!("cannot write {}: {error}", path.display()));
         return Err(ExitCode::from(2));
     }
-    println!("installua: wrote {}", path.display());
+    log::success(format!("wrote {}", path.display()));
     Ok(())
 }
 
@@ -577,7 +579,7 @@ fn write_or_ask(path: &Path, contents: &str, on: OnCollision) -> Stop {
 fn vscode(root: &Path, on: OnCollision) -> Stop {
     let dir = root.join(".vscode");
     if let Err(error) = std::fs::create_dir_all(&dir) {
-        eprintln!("installua: cannot create {}: {error}", dir.display());
+        log::error(format!("cannot create {}: {error}", dir.display()));
         return Err(ExitCode::from(2));
     }
 
@@ -604,14 +606,14 @@ fn vscode(root: &Path, on: OnCollision) -> Stop {
 
         match merge(&existing) {
             installua::stubs::Merge::Present => {
-                println!("installua: {} already has it, left alone", path.display());
+                log::warn(format!("{} already has it, left alone", path.display()));
             }
             installua::stubs::Merge::Merged(merged) => {
                 if let Err(error) = std::fs::write(&path, merged) {
-                    eprintln!("installua: cannot write {}: {error}", path.display());
+                    log::error(format!("cannot write {}: {error}", path.display()));
                     return Err(ExitCode::from(2));
                 }
-                println!("installua: merged into {}", path.display());
+                log::success(format!("merged into {}", path.display()));
             }
             // Not a shape this can edit. Replacing it would throw away whatever
             // is in there, so that is the user's call and nobody else's.
@@ -629,11 +631,13 @@ fn vscode(root: &Path, on: OnCollision) -> Stop {
                 if replace {
                     write_or_ask(&path, &template(), OnCollision::Force)?;
                 } else {
-                    println!(
-                        "installua: cannot merge {}, add this by hand:\n{}",
-                        path.display(),
-                        template()
-                    );
+                    log::warn(format!(
+                        "cannot merge {}, add this by hand:",
+                        path.display()
+                    ));
+                    // Under no symbol and at no indent: this is a block meant
+                    // to be copied out of the terminal and pasted into a file.
+                    log::log(template());
                 }
             }
         }
@@ -652,7 +656,7 @@ fn gitignore(root: &Path) -> Stop {
 
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
     if existing.contains(installua::stubs::GITIGNORE_MARKER) {
-        println!("installua: {} already has it, left alone", path.display());
+        log::warn(format!("{} already has it, left alone", path.display()));
         return Ok(());
     }
 
@@ -665,10 +669,10 @@ fn gitignore(root: &Path) -> Stop {
     updated.push_str(&block);
 
     if let Err(error) = std::fs::write(&path, updated) {
-        eprintln!("installua: cannot write {}: {error}", path.display());
+        log::error(format!("cannot write {}: {error}", path.display()));
         return Err(ExitCode::from(2));
     }
-    println!("installua: updated {}", path.display());
+    log::success(format!("updated {}", path.display()));
     Ok(())
 }
 
@@ -686,7 +690,7 @@ fn gitignore(root: &Path) -> Stop {
 fn stubs(root: &Path) -> Stop {
     let meta = root.join(".installua/meta");
     if let Err(error) = std::fs::create_dir_all(&meta) {
-        eprintln!("installua: cannot create {}: {error}", meta.display());
+        log::error(format!("cannot create {}: {error}", meta.display()));
         return Err(ExitCode::from(2));
     }
 
@@ -713,7 +717,7 @@ fn stubs(root: &Path) -> Stop {
             }
         }
         Err(error) => {
-            eprintln!("installua: cannot read {}: {error}", root.display());
+            log::error(format!("cannot read {}: {error}", root.display()));
             return Err(ExitCode::from(2));
         }
     }
@@ -726,7 +730,7 @@ fn stubs(root: &Path) -> Stop {
         installua::declarations::Declarations::load(&root.join(installua::declarations::DIRECTORY));
     if !problems.is_empty() {
         for problem in &problems {
-            eprintln!("installua: {problem}");
+            log::error(problem.to_string());
         }
         return Err(ExitCode::from(2));
     }
@@ -748,10 +752,10 @@ fn stubs(root: &Path) -> Stop {
 
     for (path, contents) in files {
         if let Err(error) = std::fs::write(&path, contents) {
-            eprintln!("installua: cannot write {}: {error}", path.display());
+            log::error(format!("cannot write {}: {error}", path.display()));
             return Err(ExitCode::from(2));
         }
-        println!("installua: wrote {}", path.display());
+        log::success(format!("wrote {}", path.display()));
     }
 
     Ok(())
@@ -774,7 +778,7 @@ fn read(path: &Path) -> Option<String> {
     match std::fs::read_to_string(path) {
         Ok(source) => Some(source),
         Err(error) => {
-            eprintln!("installua: cannot read {}: {error}", path.display());
+            log::error(format!("cannot read {}: {error}", path.display()));
             None
         }
     }
@@ -790,6 +794,6 @@ fn report(diags: &Diagnostics, path: &Path) {
 /// The one invocation error clap cannot raise, because it is about which
 /// subcommand a legal flag was given to.
 fn usage_error(message: &str) -> ExitCode {
-    eprintln!("installua: {message}");
+    log::error(message);
     ExitCode::from(2)
 }
