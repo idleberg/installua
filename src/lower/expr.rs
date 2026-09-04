@@ -2282,7 +2282,8 @@ impl BodyLowerer<'_, '_> {
                         .join(", ")
                 ))
                 .note(
-                    "NSIS accepts the line and writes the wrong string rather than refusing, \
+                    "NSIS accepts the line and then writes the wrong string — or, for `%s` \
+                     and `%S`, faults on the number as a pointer — rather than refusing, \
                      which is why this is the compiler's to catch",
                 ),
             );
