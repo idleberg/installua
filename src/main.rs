@@ -478,23 +478,17 @@ fn where_to(root: &Path) -> Result<PathBuf, ExitCode> {
 /// The menu, and then the writes it settled.
 ///
 /// Asked first and written afterwards, so the whole shape of the run is decided
-/// before anything lands. The three required files are in the list too, as
-/// disabled options — `--interactive` writes *more* than a bare `init`, never
-/// less, and a menu that showed only the extras would leave that to be guessed.
+/// before anything lands. Only the extras are on the menu: the three files a
+/// bare `init` writes are written here too, but as rows they were three
+/// unselectable lines above every real choice, and `else` in the question
+/// carries the same fact in one word. Each is named by `write_or_ask` as it
+/// lands, so what happened is still on screen afterwards.
 fn interactively(root: &Path, files: &[(&'static str, String)], on: OnCollision) -> Stop {
     const STUBS: &str = "stubs";
     const VSCODE: &str = "vscode";
     const GITIGNORE: &str = "gitignore";
 
-    let mut menu = clark::multiselect("What should it write?");
-    for (name, _) in files {
-        menu = menu.choice(
-            clark::SelectOption::labelled(*name, *name)
-                .with_hint("required")
-                .with_disabled(true),
-        );
-    }
-    let picked = menu
+    let picked = clark::multiselect("What else should it write?")
         .choice(
             clark::SelectOption::labelled(STUBS, "Create stubs")
                 .with_hint("`installua stubs`, run here"),
