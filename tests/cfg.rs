@@ -364,3 +364,56 @@ fn a_mixed_comparison_names_both_operands() {
         "the message names neither operand: {message}"
     );
 }
+
+/// A `messageBox` answer compared against a string that dialog cannot give.
+///
+/// This is the one that would have shipped. `answer ~= "yes"` against a
+/// `YESNO` box builds clean everywhere below here — the compiler emits
+/// `StrCpy $0 "YES"` and NSIS compares two literals it has no opinion about —
+/// and the branch is dead for the life of the installer. The set is known at
+/// this point and nowhere later, so the check is here or it is nowhere.
+#[test]
+fn an_answer_outside_the_button_set_is_a_dead_branch() {
+    let box_ = |buttons: &str, comparison: &str| {
+        errors(&program(&format!(
+            "local answer = messageBox {{ text = \"Go?\", buttons = \"{buttons}\" }}\n\
+             if {comparison} then detailPrint(\"x\") end"
+        )))
+    };
+
+    // The case the port produced: the right answer in the wrong case.
+    let wrong_case = box_("YESNO", "answer ~= \"yes\"");
+    let message = wrong_case
+        .iter()
+        .find(|d| d.code == Code::ConstantAnswer)
+        .map(|d| d.message.clone())
+        .expect("the answer is checked against the set");
+    assert_eq!(message, "`YESNO` cannot answer `yes`");
+
+    // An answer from a different dialog's set, which is the same mistake
+    // without the case tell.
+    assert!(box_("YESNO", "answer == \"CANCEL\"").contains(Code::ConstantAnswer));
+
+    // Either operand may be the answer.
+    assert!(box_("OKCANCEL", "\"YES\" == answer").contains(Code::ConstantAnswer));
+
+    // What must stay silent: an answer the set has, and the case-insensitive
+    // escape, which lowers to a plain `StrCmp` and so genuinely matches.
+    for quiet in [
+        "answer == \"NO\"",
+        "answer ~= \"YES\"",
+        "string.lower(answer) == \"yes\"",
+    ] {
+        let diags = box_("YESNO", quiet);
+        assert!(diags.is_empty(), "{quiet}: {}", diags.render("<test>"));
+    }
+
+    // A slot something else has written since is not an answer any more. The
+    // map is only sound while the `messageBox` is the one write to it.
+    let reassigned = errors(&program(
+        "local answer = messageBox { text = \"Go?\", buttons = \"YESNO\" }\n\
+         answer = \"later\"\n\
+         if answer == \"later\" then detailPrint(\"x\") end",
+    ));
+    assert!(reassigned.is_empty(), "{}", reassigned.render("<test>"));
+}

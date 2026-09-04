@@ -1158,6 +1158,11 @@ if answer == "NO" then
 end
 ```
 
+The answers are the button names in capitals — `OK`, `CANCEL`, `YES`, `NO`,
+`RETRY`, `ABORT`, `IGNORE` — and comparing one against a string the dialog
+cannot give is a warning, not a dead branch that builds. `answer ~= "yes"` is
+the one to watch: `==` is `StrCmpS`, so the case is part of the value.
+
 ### SetAutoClose
 
 **Usage** `setAutoClose(true)` → nothing

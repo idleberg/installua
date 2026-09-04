@@ -212,9 +212,12 @@ pub enum Code {
     /// placeholder, this is the real limit: values whose live ranges do not
     /// overlap already share a register.
     RegisterExhaustion,
-    /// A value bound from a dialog that has one button. A **warning**: the
-    /// program is well-formed, and the comparison underneath it is simply
-    /// already decided.
+    /// A `messageBox` answer whose comparison is already decided — either
+    /// because the dialog has one button, so every comparison under it is, or
+    /// because the literal it is compared against is not one of the answers
+    /// that dialog can give. A **warning** in both cases: the program is
+    /// well-formed and NSIS builds it without a word, since by the time it sees
+    /// the comparison both sides are ordinary strings.
     ConstantAnswer,
     /// Unbounded recursion. A **warning**, because it is legal and sometimes
     /// intended — and one worth having, since the failure was measured as a

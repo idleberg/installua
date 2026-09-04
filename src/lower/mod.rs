@@ -6798,6 +6798,7 @@ impl<'p> Lowerer<'_, 'p> {
             loops: Vec::new(),
             callback: None,
             returns: Vec::new(),
+            answers: BTreeMap::new(),
             span,
             current: Body::ENTRY,
         };
@@ -7023,6 +7024,18 @@ struct BodyLowerer<'a, 'p> {
     callback: Option<CallbackExits>,
     /// What each `return` in this body leaves on the stack.
     returns: Vec<(Vec<Ty>, Span)>,
+    /// Which slots hold a `messageBox` answer, and which dialog's.
+    ///
+    /// The set is closed and known here — lowering writes `StrCpy $0 "YES"`
+    /// itself — so a comparison against a string outside it is decided before
+    /// the installer runs, and `answer ~= "yes"` against a `YESNO` box is an
+    /// uninstaller that always aborts. NSIS cannot object: it never sees a
+    /// dialog, only two literals it is asked to compare.
+    ///
+    /// Per body, and dropped the moment anything else assigns the slot
+    /// ([`Self::assign`]) — the map is only sound while the only write to a
+    /// slot is the one that recorded it.
+    answers: BTreeMap<Slot, &'static expr::ButtonSet>,
     /// The statement being lowered, stamped onto every instruction it produces.
     span: Span,
     current: BlockId,
@@ -7392,6 +7405,11 @@ impl BodyLowerer<'_, '_> {
                     }
                 },
             };
+
+            // Whatever this slot used to hold, it does not hold it now. Before
+            // the value is lowered and not after, because the value may itself
+            // be the `messageBox` that records the slot again.
+            self.answers.remove(&slot);
 
             let Some(ty) = self.value_into(value, &slot) else {
                 continue;
@@ -8298,6 +8316,7 @@ impl BodyLowerer<'_, '_> {
             loops: Vec::new(),
             callback: None,
             returns: Vec::new(),
+            answers: BTreeMap::new(),
             span,
             current: Body::ENTRY,
         };

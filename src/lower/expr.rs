@@ -2359,14 +2359,7 @@ impl BodyLowerer<'_, '_> {
                         where_,
                         format!("`{}` cannot answer `{answer}`", set.installua),
                     )
-                    .note(format!(
-                        "its answers are {}",
-                        set.answers
-                            .iter()
-                            .map(|answer| format!("`{answer}`"))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )),
+                    .note(format!("its answers are {}", set.listed())),
                 );
                 return None;
             }
@@ -2403,6 +2396,11 @@ impl BodyLowerer<'_, '_> {
             return None;
         }
         let dest = dest?;
+
+        // What this slot can hold, for [`Self::unanswerable`]. Recorded only on
+        // the path that binds an answer worth comparing: a one-button dialog
+        // returned above, already having said so.
+        self.answers.insert(dest.clone(), set);
 
         let n = self.body.construct();
         let first = self.fresh(format!("mb_{n}_{}", set.answers[0].to_lowercase()));
@@ -2787,6 +2785,11 @@ impl BodyLowerer<'_, '_> {
             return;
         };
 
+        // Either side may be the answer, and either may be the literal, so both
+        // orders are tried. Only one can match: a slot is not a literal.
+        self.unanswerable(&lhs, &rhs, case_sensitive, span);
+        self.unanswerable(&rhs, &lhs, case_sensitive, span);
+
         let cmp = match op {
             BinOp::Eq => CmpOp::Eq,
             BinOp::Ne => CmpOp::Ne,
@@ -2861,6 +2864,58 @@ impl BodyLowerer<'_, '_> {
             },
         );
     }
+
+    /// A comparison whose outcome the button set already decides.
+    ///
+    /// `answer` is one side of a comparison and `against` the other. When the
+    /// first is a slot holding a `messageBox` answer and the second a literal
+    /// that dialog cannot give, the branch is dead before the installer is
+    /// built — and nothing downstream will say so, because by then both sides
+    /// are just strings. Case matters here for the same reason it matters in
+    /// the comparison itself: `==` is `StrCmpS`, so `"yes"` is not `"YES"`,
+    /// and that is the shape a port produces.
+    ///
+    /// ponytail: one slot against one literal, no dataflow. A comparison
+    /// against a concatenation, a second local, or an answer that crossed a
+    /// function boundary is not looked at — the map is per body and holds only
+    /// what a `messageBox` wrote directly into a slot.
+    fn unanswerable(&mut self, answer: &Typed, against: &Typed, case_sensitive: bool, span: Span) {
+        let (ir::Arg::Data { pieces, .. }, ir::Arg::Data { pieces: other, .. }) =
+            (&answer.arg, &against.arg)
+        else {
+            return;
+        };
+        let ([ir::Piece::Slot(slot)], [ir::Piece::Text(text)]) = (&pieces[..], &other[..]) else {
+            return;
+        };
+        let Some(set) = self.answers.get(slot) else {
+            return;
+        };
+        if set.answers.iter().any(|answer| {
+            if case_sensitive {
+                answer == text
+            } else {
+                answer.eq_ignore_ascii_case(text)
+            }
+        }) {
+            return;
+        }
+
+        let listed = set.listed();
+        let installua = set.installua;
+        self.diags.push(
+            Diagnostic::warning(
+                Code::ConstantAnswer,
+                span,
+                format!("`{installua}` cannot answer `{text}`"),
+            )
+            .note(format!("its answers are {listed}"))
+            .note(
+                "so this comparison is decided here rather than by the user — `==` is `StrCmpS`, \
+                 which is case-sensitive",
+            ),
+        );
+    }
 }
 
 /// What `IntFmt` can convert an integer into.
@@ -2930,9 +2985,20 @@ fn case_folded(expr: &Expr) -> Option<&Expr> {
 /// A `messageBox` button set, and the answers it can give. The answer names are
 /// the NSIS return keywords without their `ID` — `IDYES` is the jump-table
 /// token and `"YES"` is the value the user compares against.
-struct ButtonSet {
-    installua: &'static str,
-    answers: &'static [&'static str],
+pub(super) struct ButtonSet {
+    pub(super) installua: &'static str,
+    pub(super) answers: &'static [&'static str],
+}
+
+impl ButtonSet {
+    /// The answers, spelled for a note.
+    fn listed(&self) -> String {
+        self.answers
+            .iter()
+            .map(|answer| format!("`{answer}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 const BUTTONS: &[ButtonSet] = &[
