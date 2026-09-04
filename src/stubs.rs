@@ -109,7 +109,15 @@ fn alias_table() -> Vec<(String, Vec<&'static str>, bool)> {
             // `on|off` is a Lua `true|false` here, and an alias of the NSIS
             // spellings would complete the two words this language does not
             // accept.
-            Class::Attribute(table::Setting::Enum) => entry.installua,
+            // Flags do not change what the value *is*, so the wrapper is
+            // unwrapped rather than matched. Written out because this match ends
+            // in `_ => continue` and not in an exhaustive arm: a wrapped enum
+            // that fell through would stop generating `installua.compressor` and
+            // lose completion on `zlib|bzip2|lzma`, with nothing failing to say
+            // so.
+            Class::Attribute(
+                table::Setting::Enum | table::Setting::Flags(&table::Setting::Enum),
+            ) => entry.installua,
             // A table's enum parts are named after the *parameter* instead:
             // `installDirRegKey.root` is a registry root, which the `Reg*`
             // instructions already have an alias for, and a second alias with
@@ -512,6 +520,21 @@ fn bare_type(entry: &table::Instruction, field: &str, holds: table::Setting) -> 
         // withheld the type instead would lose completion on the case that
         // works, to describe the case that does not.
         table::Setting::Only { of, .. } => bare_type(entry, field, *of),
+        // Both branches, the way `Or` writes both of its: the bare value, or a
+        // table holding it at `[1]` beside the row's flags. The flag names come
+        // from `entry.flags()` rather than from this variant, which is the same
+        // reason the lowering reads them there — one list, and it is the
+        // snapshot's.
+        table::Setting::Flags(of) => {
+            let inner = bare_type(entry, field, *of);
+            let flags: Vec<String> = entry
+                .flags()
+                // Every flag is optional — a flag NSIS requires is
+                // `Offer::Always` and is never reached by name at all.
+                .map(|(name, _)| format!("{name}?: boolean"))
+                .collect();
+            format!("{inner}|{{ [1]: {inner}, {} }}", flags.join(", "))
+        }
     }
 }
 

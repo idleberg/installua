@@ -287,6 +287,12 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
             format!("\"{word}\"")
         }
         table::Setting::Only { of, .. } => derived(entry, index, field, *of),
+        // The bare value, and the flags are [`REAL`]'s. Which of a row's flags
+        // may stand together is a fact about the row — NSIS has fused and
+        // exclusive ones — and a generator that turned every flag on would be
+        // guessing at it. So the shape derives what a shape knows, and the one
+        // row with flags names its own.
+        table::Setting::Flags(of) => derived(entry, index, field, *of),
         table::Setting::Handled(_) => unreachable!("filtered above"),
     }
 }
@@ -333,6 +339,13 @@ const REAL: &[(&str, &str, &str)] = &[
     // compressor its own dictionary size implies. It is no longer only
     // `makensis` that says so: `Setting::Only` is that dependency in the table,
     // so this line is now what keeps the derived program compiling at all.
+    //
+    // Bare, and `solid = true` deliberately not here. `/SOLID` is not a flag on
+    // one line — it puts NSIS in whole-compression mode, where `SetCompress
+    // off` becomes warning 8021 and a `SetCompressorDictSize` written after any
+    // attribute that adds data becomes 8026. A program carrying every attribute
+    // at once is the one program that cannot hold it. It gets its own script
+    // instead: [`a_solid_compressor_assembles`].
     ("SetCompressor", "compressor", "\"lzma\""),
 ];
 
@@ -512,6 +525,166 @@ fn a_setting_the_compressor_would_have_nsis_ignore_is_refused() {
         // The note is the half a user acts on: the message says what is needed
         // and this says what is there instead.
         assert!(rendered.contains(expected), "`{what}`: {rendered}");
+    }
+}
+
+/// `Setting::Flags`: the value, or the value with the row's `/FLAG`s in front.
+///
+/// Tier 2 and exact, because the whole failure this closes is a *missing* token
+/// on a line NSIS accepts either way. A port of `Examples/makensis.nsi` read
+/// `SetCompressor /SOLID lzma` and wrote `compressor = "lzma"`, and nothing
+/// anywhere said the installer had just got bigger.
+///
+/// The order case is the one worth reading twice: a Lua table has no order, so
+/// `/FINAL /SOLID` has to come from the snapshot. An implementation that walked
+/// the written fields instead would pass this half the time.
+#[test]
+fn the_compressor_carries_its_flags() {
+    for (written, line) in [
+        ("\"lzma\"", "SetCompressor lzma"),
+        // The compatibility case. Every program written before this row had
+        // flags is in this branch, and it must still be the same line.
+        ("{ \"lzma\" }", "SetCompressor lzma"),
+        ("{ \"lzma\", solid = true }", "SetCompressor /SOLID lzma"),
+        ("{ \"lzma\", final = true }", "SetCompressor /FINAL lzma"),
+        (
+            "{ \"lzma\", solid = true, final = true }",
+            "SetCompressor /FINAL /SOLID lzma",
+        ),
+        // `false` is the flag left out and not a third state: NSIS clears
+        // `build_compress_whole` at the top of `TOK_SETCOMPRESSOR` rather than
+        // remembering it, so writing the word off and not writing it are one
+        // line.
+        ("{ \"lzma\", solid = false }", "SetCompressor lzma"),
+        // `/SOLID` is not LZMA's. `Source/script.cpp` passes
+        // `build_compress_whole` to `set_compressor` for every compressor, and
+        // there is a solid stub for each — so this is the constraint the source
+        // says is *not* there, and `Setting::Only` two rows down is exactly what
+        // would tempt someone to add it.
+        ("{ \"zlib\", solid = true }", "SetCompressor /SOLID zlib"),
+    ] {
+        let source =
+            format!("attributes {{ outFile = \"a.exe\", name = \"a\", compressor = {written} }}\n");
+        let mut diags = Diagnostics::new();
+        let built = installua::build(&source, &mut diags).unwrap_or_default();
+        assert!(!diags.has_errors(), "{}", diags.render("flags.lua"));
+        assert!(
+            built.lines().any(|each| each.trim() == line),
+            "`compressor = {written}` should be `{line}`:\n{built}"
+        );
+    }
+}
+
+/// And the ways to write the table wrong, each answered by name.
+#[test]
+fn a_flag_table_written_wrong_says_which_half_is_wrong() {
+    for (written, code, note) in [
+        (
+            "{ \"lzma\", squish = true }",
+            Code::UnknownField,
+            "the flags are `final`, `solid`",
+        ),
+        (
+            "{ \"lzma\", solid = 1 }",
+            Code::BadFieldValue,
+            "it writes `/SOLID` on the `SetCompressor` line",
+        ),
+        (
+            "{ solid = true }",
+            Code::BadFieldValue,
+            "the flags say how, not what",
+        ),
+        (
+            "{ \"lzma\", \"bzip2\" }",
+            Code::BadFieldValue,
+            "`SetCompressor` takes one",
+        ),
+    ] {
+        let source =
+            format!("attributes {{ outFile = \"a.exe\", name = \"a\", compressor = {written} }}\n");
+        let mut diags = Diagnostics::new();
+        let _ = installua::build(&source, &mut diags);
+
+        let rendered = diags.render("flags.lua");
+        assert!(
+            diags.iter().any(|diagnostic| diagnostic.code == code),
+            "`{written}` should be {code:?}: {rendered}"
+        );
+        assert!(rendered.contains(note), "`{written}`: {rendered}");
+    }
+}
+
+/// The cross-field check reads *through* the flag table.
+///
+/// `compressorDictSize` is read only under LZMA, and the value that decides it
+/// is the positional entry rather than the table around it. A check that asked
+/// the table for a constant would find none, skip silently, and emit the pair
+/// NSIS answers with warning 8026 — which under `-WX` is the build failure this
+/// whole constraint exists so that nobody meets.
+#[test]
+fn a_flagged_compressor_is_still_the_sibling_the_constraint_reads() {
+    for (written, refused) in [
+        ("{ \"zlib\", solid = true }, compressorDictSize = 64", true),
+        ("{ \"lzma\", solid = true }, compressorDictSize = 64", false),
+    ] {
+        let source =
+            format!("attributes {{ outFile = \"a.exe\", name = \"a\", compressor = {written} }}\n");
+        let mut diags = Diagnostics::new();
+        let _ = installua::build(&source, &mut diags);
+        assert_eq!(
+            diags
+                .iter()
+                .any(|diagnostic| diagnostic.code == Code::IgnoredSetting),
+            refused,
+            "`{written}`: {}",
+            diags.render("flags.lua")
+        );
+    }
+}
+
+/// The pair `/SOLID` made reachable, refused before `makensis` fails on it.
+///
+/// Found by putting `solid = true` through real `makensis -WX` and reading what
+/// came back: *warning 8021: 'SetCompress off' encountered, and in whole
+/// compression mode.* While `/SOLID` had no spelling this was unreachable, so
+/// the constraint and the flag belong to the same change.
+///
+/// Only `off` collides — `script.cpp` compares `build_compress==0`, and `auto`
+/// and `force` are 1 and 2 — so the two accepted rows are as much of the test
+/// as the refused one.
+#[test]
+fn compression_turned_off_beside_a_solid_compressor_is_refused() {
+    for (written, refused) in [
+        (
+            "compress = \"off\", compressor = { \"lzma\", solid = true }",
+            true,
+        ),
+        (
+            "compress = \"auto\", compressor = { \"lzma\", solid = true }",
+            false,
+        ),
+        (
+            "compress = \"force\", compressor = { \"lzma\", solid = true }",
+            false,
+        ),
+        // Not solid, so `off` is read and means what it says.
+        ("compress = \"off\", compressor = \"lzma\"", false),
+        (
+            "compress = \"off\", compressor = { \"lzma\", solid = false }",
+            false,
+        ),
+    ] {
+        let source = format!("attributes {{ outFile = \"a.exe\", name = \"a\", {written} }}\n");
+        let mut diags = Diagnostics::new();
+        let _ = installua::build(&source, &mut diags);
+        assert_eq!(
+            diags
+                .iter()
+                .any(|diagnostic| diagnostic.code == Code::IgnoredSetting),
+            refused,
+            "`{written}`: {}",
+            diags.render("solid.lua")
+        );
     }
 }
 
@@ -1523,6 +1696,69 @@ fn compression_level_assembles_against_a_compressor_that_reads_it() {
     assert!(
         output.status.success(),
         "makensis -WX rejected `compressionLevel`:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Tier 3 for the flags, which the derived program cannot carry.
+///
+/// [`the_compressor_carries_its_flags`] proves the compiler writes
+/// `SetCompressor /FINAL /SOLID lzma`; only `makensis` proves NSIS reads it.
+/// The two flags are the only ones `TOK_SETCOMPRESSOR` accepts, so this also
+/// pins that they may be written together and in this order.
+///
+/// Its own script rather than a row in [`REAL`] because `/SOLID` is a *mode*:
+/// `compress` and `compressorDictSize` both change meaning under it, and the
+/// program that writes every attribute writes both. The pairing this refuses
+/// itself is [`compression_turned_off_beside_a_solid_compressor_is_refused`];
+/// the other, 8026, depends on what data precedes the line and so is nobody's
+/// static rule — a `compressorDictSize` beside a solid compressor is a `-WX`
+/// failure `makensis` names and this compiler does not.
+#[test]
+fn a_solid_compressor_assembles() {
+    let Some(makensis) = makensis() else {
+        eprintln!("skipping: `makensis` is not installed");
+        return;
+    };
+
+    let source = "attributes {\n\
+         \tname = \"Solid\",\n\
+         \toutFile = \"solid.out\",\n\
+         \tcompressor = { \"lzma\", solid = true, final = true },\n\
+         }\n\n\
+         installer {\n\
+         \tsection(\"Core\", function()\n\
+         \t\tdetailPrint(\"installing\")\n\
+         \tend),\n\
+         }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags)
+        .unwrap_or_else(|| panic!("{}", diags.render("solid.lua")));
+    assert!(
+        built.contains("SetCompressor /FINAL /SOLID lzma\n"),
+        "{built}"
+    );
+
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures");
+    let script = fixtures.join("solid.nsi");
+    std::fs::write(&script, &built).expect("write the script");
+
+    let output = Command::new(&makensis)
+        .arg("-WX")
+        .arg(&script)
+        .output()
+        .expect("run makensis");
+
+    let _ = std::fs::remove_file(&script);
+    let _ = std::fs::remove_file(fixtures.join("solid.out"));
+
+    assert!(
+        output.status.success(),
+        "makensis -WX rejected `/FINAL /SOLID`:\n{}{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );

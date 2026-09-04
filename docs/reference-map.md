@@ -296,10 +296,10 @@ attributes {
 | ----------------------- | -------------------- | ---------------------------------------------------------- |
 | `Unicode`               | `unicode`            | boolean — defaults `true`, always emitted first            |
 | `CPU`                   | `cpu`                | `"x86"` \| `"amd64"`                                       |
-| `SetCompressor`         | `compressor`         | `"zlib"` \| `"bzip2"` \| `"lzma"`                          |
+| `SetCompressor`         | `compressor`         | `"zlib"` \| `"bzip2"` \| `"lzma"` — or that keyword in a table beside its flags, `{ "lzma", solid = true, final = true }` |
 | `SetCompressionLevel`   | `compressionLevel`   | int — read only when `compressor` is `"zlib"` or `"bzip2"` |
 | `SetCompressorDictSize` | `compressorDictSize` | int (MB) — read only when `compressor` is `"lzma"`         |
-| `SetCompress`           | `compress`           | `"off"` \| `"auto"` \| `"force"`                           |
+| `SetCompress`           | `compress`           | `"off"` \| `"auto"` \| `"force"` — `"off"` is refused beside a solid `compressor`, which NSIS answers with warning 8021 |
 | `SetDatablockOptimize`  | `datablockOptimize`  | boolean                                                    |
 | `SetDateSave`           | `dateSave`           | boolean                                                    |
 | `CRCCheck`              | `crcCheck`           | boolean                                                    |

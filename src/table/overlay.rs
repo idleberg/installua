@@ -401,8 +401,13 @@ pub const ROWS: &[Row] = &[
     // and unaffected by which page UI is in front of it. MUI2 never mentions
     // either row, so neither was ever a classic-UI question.
     //
-    // `/ITALIC`, `/UNDERLINE` and `/STRIKE` are unreachable: an attribute has no
-    // options table, and giving it one is a shape rather than a row.
+    // `/ITALIC`, `/UNDERLINE` and `/STRIKE` are unadopted rather than
+    // unreachable: the shape an attribute needed to hold its own flags is
+    // [`Setting::Flags`], and `SetCompressor` has it. What stops this row taking
+    // it is that the three flags would share one Lua table with the three named
+    // parts below, and `italic` beside `weight` is a namespace nobody has
+    // decided on. No port has lost anything to that yet, which is the only
+    // reason it is still a question rather than an answer.
     attribute(
         "BGFont",
         "bgFont",
@@ -1587,7 +1592,23 @@ pub const ROWS: &[Row] = &[
     // has no `overwrite = …` yet. Withholding the installer-wide default until
     // that exists would be withholding the common case for the rare one.
     attribute("SetCompress", "compress", Setting::Enum),
-    attribute("SetCompressor", "compressor", Setting::Enum),
+    // The first attribute to reach its own flags, and the row [`Setting::Flags`]
+    // was written for: `compressor = { "lzma", solid = true }`. It had been the
+    // one flagged attribute with no comment saying its flags were out of reach,
+    // which is why a port lost `/SOLID` rather than being told it could not have
+    // it.
+    //
+    // `handled` and not `named`: an attribute has no trailing options table for
+    // [`Instruction::flags`] to write from, so the lowering writes these itself.
+    // Snapshot order, which is `/FINAL` then `/SOLID`.
+    flagged(
+        attribute(
+            "SetCompressor",
+            "compressor",
+            Setting::Flags(&Setting::Enum),
+        ),
+        &[handled("final"), handled("solid")],
+    ),
     // `dict_size_mb`, so an `Int` in megabytes — and LZMA's alone. The comment
     // that stood here called that "a fact about the value and not a shape", and
     // measuring is what overturned it: `makensis` emits *warning 8026:

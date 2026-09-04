@@ -2545,6 +2545,7 @@ impl<'p> Lowerer<'_, 'p> {
         // these two: `SetCompressorDictSize` beside `SetCompressor zlib` is
         // ignored in whichever order the two lines are written.
         self.ignored_settings(&fields);
+        self.solid_ignores_compress(&fields);
 
         for field in fields {
             let TableField::Named { name, value } = field else {
@@ -2651,10 +2652,20 @@ impl<'p> Lowerer<'_, 'p> {
                 continue;
             };
 
-            let written = fields.iter().find_map(|field| match field {
-                TableField::Named { name, value } if name.text == sibling => Some(value),
-                _ => None,
-            });
+            let written = fields
+                .iter()
+                .find_map(|field| match field {
+                    TableField::Named { name, value } if name.text == sibling => Some(value),
+                    _ => None,
+                })
+                // The sibling may be a [`table::Setting::Flags`] table, and the
+                // value this constraint is about is the positional entry inside
+                // it. Reading the table itself would find no constant, skip the
+                // check, and let `compressorDictSize` through beside
+                // `compressor = { "zlib", solid = true }` — which is warning
+                // 8026 and, under `-WX`, the failure a user is never supposed to
+                // meet.
+                .map(|value| flagged_value(value).unwrap_or(value));
             // The sibling's value, or NSIS's default for it. An absent
             // `compressor` is `zlib` and not "no compressor", which is why the
             // field that wants LZMA is as wrong on its own as it is beside
@@ -2765,6 +2776,7 @@ impl<'p> Lowerer<'_, 'p> {
             table::Setting::Each(_) => {
                 self.todo(value.span(), &format!("`{field}` nested in itself"));
             }
+            table::Setting::Flags(of) => self.flagged_setting(entry, field, value, *of),
             // A position the snapshot marks `Rep::Many` takes as many values as
             // the caller has, all on the one line.
             one if entry.params.first().is_some_and(table::Param::repeats) => {
@@ -2782,6 +2794,189 @@ impl<'p> Lowerer<'_, 'p> {
                         .push(ir::Instruction::new(entry.nsis, vec![arg]));
                 }
             }
+        }
+    }
+
+    /// `compress = "off"` beside a solid compressor, refused before `makensis`
+    /// turns it into a build failure.
+    ///
+    /// `script.cpp`'s `TOK_SETCOMPRESS` is `if (build_compress==0 &&
+    /// build_compress_whole)` ⇒ *warning 8021: 'SetCompress off' encountered,
+    /// and in whole compression mode. Effectively ignored.* — which under this
+    /// compiler's own `-WX` is an error naming `SetCompress` rather than the
+    /// field. The same argument [`table::Setting::Only`] was written for, and
+    /// the pair is exact: only `off` collides, because `auto` and `force` are
+    /// enum values 1 and 2.
+    ///
+    /// Hand-shaped rather than a `Setting` because what decides it is a
+    /// *sibling's flag* and not a sibling's value, and `Only` reads values.
+    /// One constraint of that shape is a function; a second would be a variant.
+    ///
+    /// It became reachable with [`table::Setting::Flags`] and not before —
+    /// while `/SOLID` had no spelling, no program could get here — which is why
+    /// the check arrives in the same change as the flag.
+    fn solid_ignores_compress(&mut self, fields: &[&TableField]) {
+        let named = |want: &str| {
+            let field = table::by_nsis(want).and_then(|entry| entry.installua)?;
+            fields.iter().find_map(|each| match each {
+                TableField::Named { name, value } if name.text == field => Some((field, value)),
+                _ => None,
+            })
+        };
+
+        let (Some((compress, off)), Some((compressor, whole))) =
+            (named("SetCompress"), named("SetCompressor"))
+        else {
+            return;
+        };
+        if !self
+            .constant(off)
+            .is_some_and(|value| value.text() == "off")
+        {
+            return;
+        }
+        let solid = matches!(whole, Expr::Table { fields, .. } if fields.iter().any(|each| {
+            matches!(each, TableField::Named { name, value }
+                if name.text == "solid"
+                    && matches!(self.constant(value), Some(ConstValue::Bool(true))))
+        }));
+        if !solid {
+            return;
+        }
+
+        self.diags.push(
+            Diagnostic::error(
+                Code::IgnoredSetting,
+                off.span(),
+                format!("`{compress}` is not read when `{compressor}` is solid"),
+            )
+            .note(
+                "solid compression is one stream over the whole installer, so there is no \
+                 per-file compression left to turn off — NSIS says so as warning 8021, which \
+                 is an error under `-WX`",
+            ),
+        );
+    }
+
+    /// `compressor = "lzma"` or `compressor = { "lzma", solid = true }`: the
+    /// value, or the value with this row's `/FLAG`s in front of it.
+    ///
+    /// The two branches are one line of NSIS with a different number of leading
+    /// raw tokens, so the *value* goes through [`Self::value_arg`] either way —
+    /// the same function a part of a [`table::Setting::Table`] goes through, and
+    /// the reason a flagged field cannot come to disagree with an unflagged one
+    /// about what its value is.
+    ///
+    /// The one thing the table branch does not ask is whether the position
+    /// repeats, which [`Self::setting_line`] does. No flagged row has a
+    /// repeating position — `Rep::Many` and a leading `/FLAG` would be a line
+    /// whose flags and values are told apart only by the `/`, which is a shape
+    /// nobody has needed.
+    fn flagged_setting(
+        &mut self,
+        entry: &'static table::Instruction,
+        field: &str,
+        value: &Expr,
+        of: table::Setting,
+    ) {
+        let Expr::Table { fields, .. } = value else {
+            // Not a table, so no flags: the shape behind the wrapper, through
+            // the path it took before this row had flags at all. Every existing
+            // program is in this branch.
+            self.setting_line(entry, field, of, value);
+            return;
+        };
+
+        let mut flags: Vec<ir::Arg> = Vec::new();
+        let mut written: Option<&Expr> = None;
+        // The row's own order, which is the snapshot's — a Lua table has none,
+        // and NSIS echoes `/FINAL` before `/SOLID` in its own trace.
+        let mut on: Vec<&'static str> = Vec::new();
+
+        for given in fields {
+            match given {
+                TableField::Positional { value: inner } => {
+                    if written.is_some() {
+                        self.bad_value(
+                            inner.span(),
+                            field,
+                            "one value",
+                            &format!(
+                                "`{}` takes one, and the other entries are its flags",
+                                entry.nsis
+                            ),
+                        );
+                        return;
+                    }
+                    written = Some(inner);
+                }
+                TableField::Named { name, value: held } => {
+                    let Some(flag) = entry.flag(&name.text) else {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::UnknownField,
+                                name.span,
+                                format!("`{}` is not a flag of `{field}`", name.text),
+                            )
+                            .note(format!(
+                                "the flags are {}",
+                                list(&entry.flags().map(|(name, _)| name).collect::<Vec<_>>())
+                            )),
+                        );
+                        return;
+                    };
+                    match self.constant(held) {
+                        // `false` is the flag left out, and not a third state:
+                        // NSIS starts each of these cleared rather than
+                        // remembered, so writing the word and writing nothing
+                        // are the same line.
+                        Some(ConstValue::Bool(true)) => on.push(flag.opt.nsis),
+                        Some(ConstValue::Bool(false)) => {}
+                        _ => {
+                            self.bad_value(
+                                held.span(),
+                                &name.text,
+                                "a `bool`",
+                                &format!(
+                                    "it writes `{}` on the `{}` line, or leaves it off",
+                                    flag.opt.nsis, entry.nsis
+                                ),
+                            );
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        for (_, flag) in entry.flags() {
+            if on.contains(&flag.opt.nsis) {
+                flags.push(ir::Arg::raw(flag.opt.nsis));
+            }
+        }
+
+        let Some(inner) = written else {
+            self.bad_value(
+                value.span(),
+                field,
+                "a value beside its flags",
+                &format!(
+                    "write `{field} = {{ …, {} }}` — the flags say how, not what",
+                    entry
+                        .flags()
+                        .map(|(name, _)| format!("{name} = true"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            );
+            return;
+        };
+
+        if let Some(arg) = self.value_arg(of, entry.params.first(), field, entry.nsis, inner) {
+            flags.push(arg);
+            self.module
+                .attributes
+                .push(ir::Instruction::new(entry.nsis, flags));
         }
     }
 
@@ -2880,12 +3075,16 @@ impl<'p> Lowerer<'_, 'p> {
             // constraint is about which fields are written together and not
             // about what any one of them holds.
             table::Setting::Only { of, .. } => self.value_arg(*of, param, field, line, value),
-            // All four are shapes rather than values: a table, an `Off` and an
-            // `Each` are more than one of these, and `Handled` is not lowered
-            // here at all.
+            // All five are shapes rather than values: a table, an `Off` and an
+            // `Each` are more than one of these, `Handled` is not lowered here
+            // at all, and a `Flags` is a whole line's worth — a *position* has
+            // nowhere to put a `/FLAG`, so unwrapping it here would emit the
+            // value and drop the flags, which is the silence this row exists to
+            // end.
             table::Setting::Table(_)
             | table::Setting::Off { .. }
             | table::Setting::Each(_)
+            | table::Setting::Flags(_)
             | table::Setting::Handled(_) => {
                 self.todo(value.span(), &format!("`{field}` in this position"));
                 None
@@ -8316,6 +8515,26 @@ fn shape(parts: &[table::Part]) -> String {
         .map(|part| format!("{} = …", part.field))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The value inside a [`table::Setting::Flags`] table, for a reader that wants
+/// what the field *holds* rather than how the line is written.
+///
+/// Shape-based rather than row-based on purpose: the caller already knows which
+/// field it is looking at, and the only table with a positional entry an
+/// attribute can hold is this one. `None` for anything else, including a flag
+/// table written wrong — the row's own lowering says so, and a second
+/// diagnostic about a value nobody could read is noise on top of it.
+fn flagged_value(value: &Expr) -> Option<&Expr> {
+    let Expr::Table { fields, .. } = value else {
+        return None;
+    };
+    let mut positional = fields.iter().filter_map(|field| match field {
+        TableField::Positional { value } => Some(value),
+        TableField::Named { .. } => None,
+    });
+    let only = positional.next()?;
+    positional.next().is_none().then_some(only)
 }
 
 /// The parts a caller may leave out, which is the snapshot's answer about their

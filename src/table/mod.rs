@@ -369,6 +369,39 @@ pub enum Setting {
         words: &'static [&'static str],
         of: &'static Setting,
     },
+    /// The value, **or** a table whose array part is that value and whose named
+    /// part is this row's `/FLAG`s: `compressor = { "lzma", solid = true }`
+    /// writes `SetCompressor /SOLID lzma`.
+    ///
+    /// The attribute's answer to a call's trailing options table, and the shape
+    /// three overlay comments had recorded as missing — an attribute that could
+    /// not reach its flags at all, which is how a port of
+    /// `Examples/makensis.nsi` lost `/SOLID` with nothing said.
+    ///
+    /// Array part for the value, hash part for the flags, which is not a new
+    /// idea to learn: it is what `section { "Core", … }` and `file { "docs/",
+    /// recursive = true }` already are, one level up.
+    ///
+    /// It names **no flags of its own**: they are the row's `options`, already
+    /// joined into [`Flag`], so the `/FLAG` spelling stays the snapshot's and
+    /// the surface name stays [`Offer::Handled`]'s. A variant carrying its own
+    /// `("solid", "/SOLID")` pairs would be a second place for the table to
+    /// drift from `-CMDHELP`, and the first place is the one that is generated.
+    ///
+    /// What `Source/script.cpp`'s `TOK_SETCOMPRESSOR` settles, and all three
+    /// matter here:
+    ///
+    /// - `while (line.gettoken_str(a)[0] == '/')` runs **before** the keyword
+    ///   is read, so the flags lead the value. Any order among themselves; this
+    ///   emits them in snapshot order, which is the order NSIS's own
+    ///   `SCRIPT_MSG` echoes them back in.
+    /// - `set_compressor(name, build_compress_whole)` is called for every
+    ///   compressor, so `/SOLID` is **not** LZMA's the way
+    ///   `SetCompressorDictSize` is. There is no [`Setting::Only`] here and
+    ///   adding one would refuse a line NSIS honours.
+    /// - a flag left out is the flag written `false`, because NSIS's state
+    ///   starts cleared (`build_compress_whole = false`) rather than remembered.
+    Flags(&'static Setting),
     /// Shaped by the block's own lowering instead: `unicode` sets a field of
     /// the module rather than emitting a line, and `versionInfo` is a nested
     /// table. The analogue of [`Offer::Handled`] one level up, and it carries
