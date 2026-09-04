@@ -59,8 +59,7 @@ then undefined, so hand-written MUI2 can attach a header to the wrong page
 silently. Grouping them into `page { … }` is what makes that unexpressible:
 
 ```lua
-page {
-  "Directory",
+page.directory {
   headerText        = "Choose a location",
   directoryVariable = INSTDIR,
   pre = function() … end,
@@ -84,14 +83,15 @@ carries a marker has marked nothing.
 
 ## Known doc drift, and limits to plan around
 
-Verified against the compiler while porting `Examples/bigtest.nsi`:
+The drift found while porting `Examples/bigtest.nsi` has been corrected in
+`docs/`, but the *shape* of it recurs, so check for it rather than trusting a
+usage line:
 
-| The docs say | The compiler wants |
-| ------------ | ------------------ |
-| `installer { pages = { … } }` (nsis-shaped-not-nsis.md) | pages listed **inline** among the block's entries: `installer { page.license {}, … }` |
-| `uninstaller { text = … }` for `UninstallText` | `page.confirm { topText = … }` — `text` is not a block field |
-| `createShortcut(link, target[, parameters[, iconFile[, …]]])` | two positional arguments, then a **named options table** |
-| `execShell(flags, verb, file[, parameters[, …]])` | `execShell(verb, file[, { … }])` |
+**A row with more than one optional position names all of them.** Exactly one
+trailing optional can still be passed positionally (`copyFiles(a, b, 10)`,
+`f:seek(0, "END")`); two or more and every one moves into a table written last.
+A `**Usage**` line showing nested `[, x[, y]]` past the first optional is stale,
+and `error[wrong-arity]` says so with the names.
 
 Structural limits that force a restructure rather than a spelling:
 
