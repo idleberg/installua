@@ -1590,6 +1590,36 @@ pub fn vscode_tasks() -> String {
     format!("{{\n  \"version\": \"2.0.0\",\n  \"tasks\": [{TASKS}\n  ]\n}}\n")
 }
 
+/// The same two tasks in Zed's spelling, at the indent of a top-level array.
+///
+/// Zed's `tasks.json` *is* the array — no `version`, no `tasks` key — and it has
+/// no problem matcher of any kind, so the regex that makes VS Code's diagnostics
+/// clickable has no counterpart here and the output lands in the terminal as
+/// text. `$ZED_RELATIVE_FILE` is Zed's `${relativeFile}`.
+///
+/// Leading newline, no trailing one, spliced after a `[`, exactly like [`TASKS`].
+const ZED_TASKS: &str = r#"
+  {
+    // Compile, then run `makensis -WX` on the result.
+    "label": "installua: build",
+    "command": "installua",
+    "args": ["build", "$ZED_RELATIVE_FILE"]
+  },
+  {
+    // Everything `build` would say, writing nothing and running no `makensis`.
+    "label": "installua: check",
+    "command": "installua",
+    "args": ["check", "$ZED_RELATIVE_FILE"],
+    "reveal": "on_error"
+  }"#;
+
+/// `.zed/tasks.json`. No `extensions.json` beside it: Zed has no per-project
+/// recommendation file, and its Lua support is an extension the user installs
+/// once for every project rather than one this can suggest.
+pub fn zed_tasks() -> String {
+    format!("[{ZED_TASKS}\n]\n")
+}
+
 /// What became of a file that was already there.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Merge {
@@ -1653,6 +1683,14 @@ pub fn merge_extensions(existing: &str) -> Merge {
 /// [`merge`] against an existing `.vscode/tasks.json`.
 pub fn merge_tasks(existing: &str) -> Merge {
     merge(existing, TASKS_MARKER, "\"tasks\": [", TASKS, ",")
+}
+
+/// [`merge`] against an existing `.zed/tasks.json`.
+///
+/// The anchor is the opening bracket itself, because in Zed's file that is the
+/// whole structure — there is no key in front of it to match on.
+pub fn merge_zed_tasks(existing: &str) -> Merge {
+    merge(existing, TASKS_MARKER, "[", ZED_TASKS, ",")
 }
 
 /// What says [`gitignore`] has already been appended to a file.

@@ -477,35 +477,40 @@ fn where_to(root: &Path) -> Result<PathBuf, ExitCode> {
     Ok(chosen)
 }
 
-/// The menu, and then the writes it settled.
+/// The questions, and then the writes they settled.
 ///
 /// Asked first and written afterwards, so the whole shape of the run is decided
-/// before anything lands. Only the extras are on the menu: the three files a
+/// before anything lands. Only the extras are asked about: the three files a
 /// bare `init` writes are written here too, but as rows they were three
-/// unselectable lines above every real choice, and `else` in the question
-/// carries the same fact in one word. Each is named by `write_or_ask` as it
-/// lands, so what happened is still on screen afterwards.
+/// unselectable lines above every real choice. Each is named by `write_or_ask`
+/// as it lands, so what happened is still on screen afterwards.
+///
+/// One question per answer, rather than one multiselect for all three. The
+/// editor is genuinely exclusive — a project has one `tasks.json` shape, not a
+/// set — and a multiselect cannot say that, while a yes/no that defaults to yes
+/// is a shorter answer than finding a row and pressing space.
 fn interactively(root: &Path, files: &[(&'static str, String)], on: OnCollision) -> Stop {
-    const STUBS: &str = "stubs";
+    const NONE: &str = "none";
     const VSCODE: &str = "vscode";
-    const GITIGNORE: &str = "gitignore";
+    const ZED: &str = "zed";
 
-    let picked = clark::multiselect("What else should it write?")
+    let stubs_too = clark::confirm("Create stubs? (`installua stubs`, run here)")
+        .initial_value(true)
+        .interact()
+        .map_err(cancelled("nothing written"))?;
+
+    let editor = clark::select("Which editor should it configure?")
+        .choice(clark::SelectOption::labelled(NONE, "(none)"))
         .choice(
-            clark::SelectOption::labelled(STUBS, "Create stubs")
-                .with_hint("`installua stubs`, run here"),
-        )
-        .choice(
-            clark::SelectOption::labelled(VSCODE, "VS Code settings")
+            clark::SelectOption::labelled(VSCODE, "VS Code")
                 .with_hint(".vscode/extensions.json and tasks.json"),
         )
-        .choice(
-            clark::SelectOption::labelled(GITIGNORE, "Update .gitignore")
-                .with_hint("what the generators write"),
-        )
-        // An empty answer is a legitimate one: the three required files are
-        // written either way, and this asks only about the extras.
-        .required(false)
+        .choice(clark::SelectOption::labelled(ZED, "Zed").with_hint(".zed/tasks.json"))
+        .interact()
+        .map_err(cancelled("nothing written"))?;
+
+    let gitignore_too = clark::confirm("Update .gitignore? (what the generators write)")
+        .initial_value(true)
         .interact()
         .map_err(cancelled("nothing written"))?;
 
@@ -513,13 +518,15 @@ fn interactively(root: &Path, files: &[(&'static str, String)], on: OnCollision)
         write_or_ask(&root.join(name), contents, on)?;
     }
 
-    if picked.contains(&STUBS) {
+    if stubs_too {
         stubs(root)?;
     }
-    if picked.contains(&VSCODE) {
-        vscode(root, on)?;
+    match editor {
+        VSCODE => vscode(root, on)?,
+        ZED => zed(root, on)?,
+        _ => {}
     }
-    if picked.contains(&GITIGNORE) {
+    if gitignore_too {
         gitignore(root)?;
     }
 
@@ -570,31 +577,62 @@ fn write_or_ask(path: &Path, contents: &str, on: OnCollision) -> Stop {
     Ok(())
 }
 
-/// `.vscode/extensions.json` and `.vscode/tasks.json`, merged rather than
-/// replaced.
+/// One file an editor reads: what to write if it is not there, and how to add
+/// ourselves to it if it is.
+type EditorFile = (
+    &'static str,
+    fn() -> String,
+    fn(&str) -> installua::stubs::Merge,
+);
+
+/// `.vscode/extensions.json` and `.vscode/tasks.json`.
+fn vscode(root: &Path, on: OnCollision) -> Stop {
+    editor_config(
+        root,
+        on,
+        ".vscode",
+        &[
+            (
+                "extensions.json",
+                installua::stubs::vscode_extensions,
+                installua::stubs::merge_extensions,
+            ),
+            (
+                "tasks.json",
+                installua::stubs::vscode_tasks,
+                installua::stubs::merge_tasks,
+            ),
+        ],
+    )
+}
+
+/// `.zed/tasks.json`, which is the whole of what Zed takes per project.
+fn zed(root: &Path, on: OnCollision) -> Stop {
+    editor_config(
+        root,
+        on,
+        ".zed",
+        &[(
+            "tasks.json",
+            installua::stubs::zed_tasks,
+            installua::stubs::merge_zed_tasks,
+        )],
+    )
+}
+
+/// The editor's files, merged rather than replaced.
 ///
 /// A user's `tasks.json` is theirs — it has their tasks in it, and quite
 /// possibly their comments. Adding two tasks to it is an insertion, and
 /// [`installua::stubs::merge`] does it without touching a byte of the rest.
-fn vscode(root: &Path, on: OnCollision) -> Stop {
-    let dir = root.join(".vscode");
+fn editor_config(root: &Path, on: OnCollision, in_dir: &str, files: &[EditorFile]) -> Stop {
+    let dir = root.join(in_dir);
     if let Err(error) = std::fs::create_dir_all(&dir) {
         log::error(format!("cannot create {}: {error}", dir.display()));
         return Err(ExitCode::from(2));
     }
 
-    for (name, template, merge) in [
-        (
-            "extensions.json",
-            installua::stubs::vscode_extensions as fn() -> String,
-            installua::stubs::merge_extensions as fn(&str) -> installua::stubs::Merge,
-        ),
-        (
-            "tasks.json",
-            installua::stubs::vscode_tasks,
-            installua::stubs::merge_tasks,
-        ),
-    ] {
+    for (name, template, merge) in files {
         let path = dir.join(name);
         let Ok(existing) = std::fs::read_to_string(&path) else {
             // Unreadable is treated as absent, and `write_or_ask` will find out

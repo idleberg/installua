@@ -818,6 +818,29 @@ mod merge {
         );
     }
 
+    /// Zed's file is a bare array, so the anchor is the bracket — and the same
+    /// two properties have to hold over it: their tasks and comments survive,
+    /// and a second run adds nothing.
+    #[test]
+    fn a_zed_tasks_file_merges_the_same_way() {
+        use installua::stubs::{merge_zed_tasks, zed_tasks};
+
+        const THEIRS: &str =
+            "[\n  // Ours, please leave it.\n  { \"label\": \"make\", \"command\": \"make\" }\n]\n";
+
+        let Merge::Merged(merged) = merge_zed_tasks(THEIRS) else {
+            panic!("a hand-written .zed/tasks.json was not recognised");
+        };
+        assert!(
+            merged.contains("// Ours, please leave it.")
+                && merged.contains("\"label\": \"make\"")
+                && merged.contains("\"label\": \"installua: build\""),
+            "{merged}"
+        );
+        assert_eq!(merge_zed_tasks(&merged), Merge::Present);
+        assert_eq!(merge_zed_tasks(&zed_tasks()), Merge::Present);
+    }
+
     /// And a file it cannot find its anchor in is reported rather than guessed
     /// at — the caller asks before replacing it.
     #[test]
