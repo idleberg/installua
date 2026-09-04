@@ -109,8 +109,12 @@ build time, and they are **two different names** on purpose.
 |                                              | `io.open` → a typed handle                                 |                                                            |
 |                                              | `table.*` folds at compile time                            |                                                            |
 
-`string.format`'s `%o` is rejected specifically: `IntFmt` emits a literal `o` for it, which
-is a wrong answer rather than an error.
+`string.format` takes **one** conversion, and one of `%c %d %i %u %x %X` — `IntFmt` is
+`wsprintf` with a single integer argument, and that is `wsprintf`'s set. Flags, width and
+precision are yours (`%04d`, `%#x`, `0x%X`), and `%%` is a literal per cent. Everything
+else is a compile error, because NSIS is not: `IntFmt $0 "%o" 255` builds clean under
+`-WX` and prints a literal `o`, and `%s` reads the number as a pointer. `%I64d` is
+rejected too — that is `Int64Fmt`, a different instruction.
 
 Anything not in the table is an unknown global, and the generated `selene` std says so.
 

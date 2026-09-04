@@ -237,6 +237,13 @@ pub enum Code {
     /// warns rather than refusing, which is a diagnostic naming the NSIS command
     /// and arriving only under `-WX`.
     IgnoredSetting,
+    /// A `string.format` whose format string is not one `IntFmt` can perform.
+    /// `IntFmt` is `wsprintf` with exactly one argument, and `wsprintf` knows
+    /// `c d i s u x X` and nothing else — so `%o` is not an octal conversion
+    /// but a literal `o`, and `%s` reads an integer as a pointer. `makensis`
+    /// objects to neither, which is what makes this a code rather than a
+    /// warning nobody would see.
+    FormatString,
 
     // -- loading
     /// An `include` whose file is missing, unreadable, or has no directory to
@@ -337,6 +344,7 @@ impl Code {
         Code::DuplicateBlock,
         Code::MissingAttribute,
         Code::IgnoredSetting,
+        Code::FormatString,
         Code::IncludeNotFound,
         Code::IncludeCycle,
         Code::IncludeForm,
@@ -387,6 +395,7 @@ impl Code {
             Code::DuplicateBlock => "duplicate-block",
             Code::MissingAttribute => "missing-attribute",
             Code::IgnoredSetting => "ignored-setting",
+            Code::FormatString => "format-string",
             Code::IncludeNotFound => "include-not-found",
             Code::IncludeCycle => "include-cycle",
             Code::IncludeForm => "include-form",

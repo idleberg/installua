@@ -144,6 +144,16 @@ const CASES: &[(Code, &str)] = &[
         Code::IgnoredSetting,
         r#"attributes { outFile = "a.exe", compressorDictSize = 64 }"#,
     ),
+    // `%o` specifically, because it is the one the docs promise is rejected and
+    // the one NSIS is happiest to accept: `IntFmt $0 "%o" 255` builds clean
+    // under `-WX` and prints a literal `o`.
+    (
+        Code::FormatString,
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         detailPrint(string.format(\"%o\", 255))\n\
+         end), }",
+    ),
     (
         Code::IncludeNotFound,
         "attributes { outFile = \"a.exe\" }\ninclude(\"missing.lua\")",

@@ -1036,7 +1036,7 @@ Hand-written lowerings onto NSIS instructions and `StrFunc` macros — the
 | `string.sub(s, i[, j])` → `string`               | negative indices follow Lua, not NSIS |
 | `string.find(s, needle)` → `int`                 |                                       |
 | `string.lower(s)` / `string.upper(s)` → `string` |                                       |
-| `string.format(fmt, value)` → `string`           | `IntFmt`, so one integer              |
+| `string.format(fmt, value)` → `string`           | `IntFmt`, so one integer and one of `%c %d %i %u %x %X` |
 
 ```lua
 func("majorOf", function(version)

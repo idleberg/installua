@@ -2095,12 +2095,27 @@ impl BodyLowerer<'_, '_> {
                 let [format, value] = args else {
                     return self.wrong_arity(name, 2, args.len(), span);
                 };
+                let format_span = format.span();
+                let format_text = self.constant(format);
                 let format = self.value(format)?;
                 let value = self.value(value)?;
                 self.require_int(&value, span)?;
                 // `IntFmt` is the whole of `string.format` that NSIS has: one
-                // integer, one specifier. `%s` and several arguments are
-                // `Class::Todo` rather than a lowering nobody can write.
+                // integer, one conversion. Which conversions is not a fact
+                // `makensis` will tell anyone — `IntFmt $0 "%o" 255` and
+                // `IntFmt $0 "%s" 255` both build clean under `-WX` on 3.12 and
+                // both produce a wrong string — so the set is checked here or
+                // nowhere, and the format has to be readable to check it.
+                match format_text {
+                    Some(ConstValue::Str(text)) => self.format_string(&text, format_span)?,
+                    _ => {
+                        self.todo(
+                            format_span,
+                            "a `string.format` format that is not a literal",
+                        );
+                        return None;
+                    }
+                }
                 self.emit(ir::Instruction::new(
                     "IntFmt",
                     vec![ir::Arg::dest(dest.clone()), format.arg, value.arg],
@@ -2210,6 +2225,70 @@ impl BodyLowerer<'_, '_> {
             .note("the adapter is hand-written, so the count is what NSIS can express"),
         );
         None
+    }
+
+    /// A `string.format` format string, against what `IntFmt` can perform.
+    ///
+    /// Three ways to be wrong, and none of them is a thing `makensis` reports:
+    /// no conversion at all drops the value silently, more than one reads
+    /// arguments that were never pushed, and a conversion outside `wsprintf`'s
+    /// set is either printed literally (`%o`) or read as a pointer (`%s`).
+    ///
+    /// `Some(())` means the format is one line of `IntFmt`. Nothing is emitted
+    /// here either way — the caller owns the instruction.
+    fn format_string(&mut self, text: &str, span: Span) -> Option<()> {
+        let found = conversions(text);
+        let [conversion] = found.as_slice() else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::FormatString,
+                    span,
+                    format!(
+                        "`string.format` takes one conversion, and this has {}",
+                        found.len()
+                    ),
+                )
+                .note(
+                    "it becomes `IntFmt`, which passes exactly one integer; split the string \
+                     and join the parts with `..`",
+                ),
+            );
+            return None;
+        };
+        let Some(conversion) = conversion else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::FormatString,
+                    span,
+                    "this format ends in a `%` that converts nothing",
+                )
+                .note("write `%%` for a literal per cent"),
+            );
+            return None;
+        };
+        if !CONVERSIONS.contains(conversion) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::FormatString,
+                    span,
+                    format!("`IntFmt` has no `%{conversion}` conversion"),
+                )
+                .note(format!(
+                    "it takes {}",
+                    CONVERSIONS
+                        .iter()
+                        .map(|c| format!("`%{c}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .note(
+                    "NSIS accepts the line and writes the wrong string rather than refusing, \
+                     which is why this is the compiler's to catch",
+                ),
+            );
+            return None;
+        }
+        Some(())
     }
 
     /// `messageBox`: an expression whose value is a branch.
@@ -2781,6 +2860,53 @@ impl BodyLowerer<'_, '_> {
             },
         );
     }
+}
+
+/// What `IntFmt` can convert an integer into.
+///
+/// `Source/exehead/exec.c` is `wsprintf(var0, buf0, val)` — Windows `wsprintf`,
+/// one argument — so the set is `wsprintf`'s, which is `c C d i s S u x X` and
+/// nothing more. `%s` and `%S` are the two struck out: they read the argument
+/// as a pointer, and the argument here is always a number.
+///
+/// `%o` is absent because `wsprintf` has no octal conversion at all. That is
+/// the whole reason this list exists rather than a shorter check — NSIS prints
+/// the `o` literally and reports nothing.
+const CONVERSIONS: &[char] = &['c', 'C', 'd', 'i', 'u', 'x', 'X'];
+
+/// Every conversion in a format string, in order.
+///
+/// `None` is a `%` that names none — a trailing one, which `wsprintf` reads
+/// past the end of the string for. `%%` is a literal per cent and is not a
+/// conversion, so it is skipped rather than counted.
+///
+/// The flags, width and precision between the `%` and the letter are skipped
+/// without being read: none of them changes *which* argument is taken, which is
+/// the only thing this is counting. The size prefixes are the exception —
+/// `h`, `l` and `w` are skipped because `wsprintf` honours them, and `I64` is
+/// deliberately not, so `%I64d` surfaces as an unknown `%I` rather than passing
+/// as a `%d`. `IntFmt` passes a `UINT`; reading it as 64 bits is `Int64Fmt`'s
+/// job and this is not that instruction.
+fn conversions(text: &str) -> Vec<Option<char>> {
+    let mut found = Vec::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            continue;
+        }
+        if chars.peek() == Some(&'%') {
+            chars.next();
+            continue;
+        }
+        while chars
+            .peek()
+            .is_some_and(|c| "-+ #0123456789.hlw".contains(*c))
+        {
+            chars.next();
+        }
+        found.push(chars.next());
+    }
+    found
 }
 
 /// The subject of a `string.lower`/`string.upper` call, when that is what this
