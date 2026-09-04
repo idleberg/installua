@@ -1090,6 +1090,36 @@ impl BodyLowerer<'_, '_> {
         if !self.fits(param.ty, value.ty, name, Self::FROM_TABLE, argument.span()) {
             return None;
         }
+        // A closed member list was the stub's completion set and nothing else:
+        // `Kind::Enum` reached no check here, so `showMode = "SW_NONSENSE"`
+        // compiled and NSIS ignored the word at assembly time. That gap is what
+        // let the `hotkey` row's members be wrong for as long as they were — a
+        // set the compiler never reads cannot be caught by compiling anything.
+        //
+        // An empty list is `execShell`'s verb, which is `Kind::Enum` for its
+        // completions and has no members in the snapshot to close it with. And
+        // only a literal is checked: a register holds its text until install
+        // time, which is the same reason [`Self::fits`] stops at `Ty`.
+        let closed = matches!(param.kind, table::Kind::Enum | table::Kind::Flags)
+            && !param.open()
+            && !param.members().is_empty();
+        if closed && let Some(ConstValue::Str(text)) = self.constant(argument) {
+            // The *position*, not the call: `name` is the instruction, which is
+            // what [`Self::fits`] wants because a type mismatch is about the
+            // argument it was handed. A keyword is about the field it was
+            // written in, and `createShortcut` has two enums.
+            let position = param.field.map_or(param.shape.name, |field| field.name);
+            // A `Kind::Flags` value is however many members joined with `|`, so
+            // each piece is checked as the one member a `Kind::Enum` is — which
+            // the split gives for free, a value with no `|` in it being one
+            // piece.
+            for piece in text.split('|') {
+                let span = argument.span();
+                if !super::enumerated(self.diags, position, piece, param.members(), span) {
+                    return None;
+                }
+            }
+        }
         // Pathness is decided at the parameter, so the expression lowerer never
         // has to know where its result is going.
         Some(if param.kind == table::Kind::Path {

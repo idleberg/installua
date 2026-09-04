@@ -464,6 +464,69 @@ fn nothing_the_compiler_would_reject_is_completed() {
 }
 
 #[test]
+fn no_alias_closes_a_set_the_compiler_leaves_open() {
+    // An alias of string literals is a *closed* set to the editor: a value
+    // outside it is marked wrong before anything is compiled. So the compiler
+    // has to mark it wrong too, or the two disagree about a correct program —
+    // which is how `createShortcut`'s `hotkey` came to be reported. Its member
+    // list was scraped from a grammar and had ranges in it, and nothing could
+    // catch that by compiling Installua, because the members were generated
+    // into an alias and then read by no check at all.
+    //
+    // `Kind` is the join. `lower::expr::coerce` reads a closed set on an
+    // `Enum` or a `Flags` position; an attribute's `Setting::Enum` reads the
+    // same members, and is `Kind::Enum` as well since the kind is the members
+    // being there. Any other kind on a closed set is one the stub closes and
+    // nothing enforces.
+    for entry in table::table() {
+        for param in &entry.params {
+            if param.members().is_empty() || param.open() {
+                continue;
+            }
+            assert!(
+                matches!(param.kind, table::Kind::Enum | table::Kind::Flags),
+                "{}: `{}` has members and is not open, so the stub makes it an \
+                 alias — and `{:?}` is a kind no check reads",
+                entry.nsis,
+                param.shape.name,
+                param.kind
+            );
+        }
+    }
+}
+
+#[test]
+fn a_keyword_outside_its_alias_is_an_error() {
+    // The claim above needs one compile behind it: the kinds are what the
+    // check keys on, so a `coerce` that stopped calling `enumerated` would
+    // leave every kind exactly where it is and this file still passing.
+    //
+    // Both shapes, because they are checked by one loop over a `|` split and a
+    // regression could take either: `showMode` is a position holding one word,
+    // and `setFileAttributes` holds however many joined together.
+    for statement in [
+        r#"createShortcut(SMPROGRAMS .. "/a.lnk", INSTDIR .. "/a.exe", { showMode = "SW_NONSENSE" })"#,
+        r#"setFileAttributes(INSTDIR .. "/a.txt", "READONLY|NONSENSE")"#,
+    ] {
+        let source = format!(
+            "attributes {{ name = \"t\", outFile = \"t.exe\" }}\n\
+             installer {{ section {{ \"s\", body = function() {statement} end }} }}"
+        );
+        let mut diags = Diagnostics::new();
+        installua::compile(&source, &mut diags);
+
+        assert!(
+            diags
+                .iter()
+                .any(|diagnostic| diagnostic.code == Code::BadFieldValue),
+            "`{statement}` names a keyword outside the position's members and \
+             compiled clean:\n{}",
+            diags.render("stub.lua")
+        );
+    }
+}
+
+#[test]
 fn every_exposed_row_reaches_the_stub() {
     // The other direction: a row classified `exposed` that the generator drops
     // is a name the compiler accepts and the editor calls undefined, which is

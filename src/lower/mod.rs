@@ -2582,23 +2582,8 @@ impl<'p> Lowerer<'_, 'p> {
     }
 
     /// Whether a keyword is one of the closed set the position accepts.
-    ///
-    /// NSIS accepts an unknown keyword here and *ignores* it — `SetCompressor
-    /// lmza` is not an error — so the closed set is checked here or not at all.
     fn enumerated(&mut self, field: &str, text: &str, allowed: &[&str], span: Span) -> bool {
-        if !allowed.contains(&text) {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::BadFieldValue,
-                    span,
-                    format!("`{text}` is not a `{field}`"),
-                )
-                .note(format!("the values are {}", list(allowed)))
-                .note("NSIS ignores a keyword it does not know here rather than objecting"),
-            );
-            return false;
-        }
-        true
+        enumerated(self.diags, field, text, allowed, span)
     }
 
     // There is no `flag_attribute` helper any more, nor an `int_` or `enum_`
@@ -7727,6 +7712,37 @@ fn noun(holds: table::Setting) -> &'static str {
         table::Setting::Bool { .. } => "a `bool`",
         _ => "a value",
     }
+}
+
+/// Whether a keyword is one of the closed set a position accepts.
+///
+/// NSIS accepts an unknown keyword and *ignores* it — `SetCompressor lmza` is
+/// not an error — so the closed set is checked here or not at all.
+///
+/// Free rather than a method because both lowerers ask it: an attribute's
+/// `Setting::Enum` and an instruction argument's [`table::Kind::Enum`] are the
+/// same question about the same member lists, and answering it twice is how the
+/// two would come to disagree about what a bad keyword reads like.
+pub(super) fn enumerated(
+    diags: &mut Diagnostics,
+    field: &str,
+    text: &str,
+    allowed: &[&str],
+    span: Span,
+) -> bool {
+    if !allowed.contains(&text) {
+        diags.push(
+            Diagnostic::error(
+                Code::BadFieldValue,
+                span,
+                format!("`{text}` is not a `{field}`"),
+            )
+            .note(format!("the values are {}", list(allowed)))
+            .note("NSIS ignores a keyword it does not know here rather than objecting"),
+        );
+        return false;
+    }
+    true
 }
 
 fn list(names: &[&str]) -> String {
