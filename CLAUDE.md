@@ -63,9 +63,18 @@ When a golden fails, read the diff first: that diff is the finding.
 - anything else → `docs/reference-map.md`
 
 Both are hand-written and both claim exhaustive coverage (276 NSIS commands, 255
-MUI2 names). **No test enforces that claim**, so `installua coverage` reads
-`todo 0` whether or not the docs are current — the census counts the tables, not
-the prose.
+MUI2 names). `installua coverage` cannot check that claim — it counts the tables,
+so `todo 0` reads the same whether the prose is current or was deleted this
+morning. `tests/docs.rs` is what checks it, three gates over every writable row:
+its Installua spelling is in `docs/`, its **NSIS** name is in `docs/`, and every
+writable MUI2 name is. So a new construct without its entry fails the build.
+
+Two things those gates still do not cover. They match a name anywhere in `docs/`,
+not under the right heading — teaching them the shape of both documents would be
+a second copy of the docs kept in Rust. And a **declared plugin method** is not
+required to appear at all: a census entry is a promise the language makes and
+there are 531 of them, while a declaration is one row in a `.toml`, and its
+absence from the prose means *not yet* rather than *rotted*.
 
 **Tests are tiered.** Tier 2 compares emitted `.nsi` by exact equality
 (`assert!(out.contains(…))` is banned). Tier 3 hands it to real `makensis -WX`
