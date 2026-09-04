@@ -34,12 +34,13 @@ installer with wrong behaviour.
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `Name`, `OutFile`, `SetCompressor`, … at top level   | fields of `attributes {}` — a set, reordered into a canonical order on output                        |
 | `InstallDir`, `Caption`, `Icon`                      | fields of `installer {}`; the uninstaller's twins are the **same field names** in `uninstaller {}`   |
-| `UninstallCaption`, `UninstallIcon`, `UninstallText` | `uninstaller { caption = …, icon = …, text = … }` — the `Uninstall` prefix is emitted, never written |
+| `UninstallCaption`, `UninstallIcon`                   | `uninstallCaption` in `attributes {}`; `icon` in `uninstaller {}` — the `Uninstall` prefix is emitted, never written |
+| `UninstallText`                                      | `page.confirm { topText = … }` — it is that page's text, not a block field                           |
 | `ManifestDPIAwareness`, `ManifestSupportedOS`, …     | `manifest = { dpiAwareness = …, supportedOS = … }`                                                   |
 | `VIProductVersion`, `VIAddVersionKey`                | `versionInfo = { product = …, keys = { … } }`                                                        |
 | `Section` / `SectionEnd`                             | `section("Name", function() … end)`                                                                  |
 | `Section /o`                                         | `section("Name", { optional = true }, function() … end)`                                             |
-| `SectionGroup`                                       | `sectionGroup("Name", function() … end)`                                                             |
+| `SectionGroup`                                       | `group("Name", { … })` — a list of sections, not a body; nesting one is not yet implemented          |
 | `Function` / `FunctionEnd`                           | `func("name", function() … end)`                                                                     |
 | `Function .onInit`                                   | `onInit(function() … end)` — the leading `.` is emitted, never written                               |
 | `Section un.Main`, `Function un.Foo`                 | declare them inside `uninstaller {}`; `un.` has no spelling at all                                   |
@@ -47,8 +48,8 @@ installer with wrong behaviour.
 | `!include "WinVer.nsh"`                              | nothing — `getWinVer("MAJOR")` is a real instruction since NSIS 3, and returns a number              |
 | `!include "FileFunc.nsh"`                            | `local fileFunc = import "FileFunc"`, then `fileFunc.driveSpace("C:/", "/D=F /S=M")`                 |
 | `!define X 5`                                        | `local X <const> = 5`, used as `X`, emitted as `${X}`                                                |
-| `!insertmacro MUI_PAGE_DIRECTORY`                    | `installer { pages = { "Directory" } }`                                                              |
-| `!define MUI_PAGE_HEADER_TEXT` before a page macro   | a field of that page's `page { … }` table                                                            |
+| `!insertmacro MUI_PAGE_DIRECTORY`                    | `page.directory {}`, listed inline among `installer {}`'s entries — there is no `pages` field        |
+| `!define MUI_PAGE_HEADER_TEXT` before a page macro   | a field of that page's `page.<name> { … }` table                                                     |
 | `nsExec::ExecToStack`                                | `local nsExec = plugin "nsExec"`, then `local rc, out = nsExec.execToStack(cmd)`                     |
 | `${If}` / `${While}` (LogicLib)                      | ordinary `if` and `while`; LogicLib is reachable through `raw` if you insist                         |
 | `Push` / `Pop` / `Exch`                              | nothing — the compiler owns the stack. A plugin's output count comes from its declaration            |

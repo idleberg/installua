@@ -641,7 +641,7 @@ process's.
 | NSIS         | Installua                                                                |
 | ------------ | ------------------------------------------------------------------------ |
 | `GetDlgItem` | `getDlgItem(dialog, itemId)` → `handle`                                  |
-| `FindWindow` | `findWindow(class[, title[, parent[, childAfter[, { … }]]]])` → `handle` |
+| `FindWindow` | `findWindow(class[, { title, parent, childAfter }])` → `handle` |
 | `IsWindow`   | `isWindow(hwnd)` → `boolean`                                             |
 
 ```lua
@@ -966,8 +966,8 @@ flushIni(INSTDIR .. "/app.ini")
 | --------------- | --------------------------------------------------------------------- |
 | `Exec`          | `exec(commandLine)`                                                   |
 | `ExecWait`      | `execWait(commandLine)` → `int` (the exit code)                       |
-| `ExecShell`     | `execShell(flags, verb, file[, parameters[, showmode[, { … }]]])`     |
-| `ExecShellWait` | `execShellWait(flags, verb, file[, parameters[, showmode[, { … }]]])` |
+| `ExecShell`     | `execShell(verb, file[, { parameters, showMode, invokeIdList }])`      |
+| `ExecShellWait` | `execShellWait(verb, file[, { parameters, showMode, invokeIdList }])` |
 
 ```lua
 local code = execWait('"' .. INSTDIR .. '/setup-driver.exe" /S')
@@ -976,7 +976,7 @@ if code ~= 0 then abort("driver setup failed") end
 
 ### CreateShortcut
 
-**Usage** `createShortcut(linkPath, target[, parameters[, iconFile[, iconIndex[, showMode[, hotkey[, comment[, { … }]]]]]]])` → nothing
+**Usage** `createShortcut(linkPath, target[, { parameters, iconFile, iconIndex, showMode, hotkey, comment, noWorkingDir }])` → nothing
 
 ```lua
 createShortcut(SMPROGRAMS .. "/Example/Example.lnk", INSTDIR .. "/Example.exe")

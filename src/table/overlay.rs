@@ -1410,12 +1410,12 @@ pub const ROWS: &[Row] = &[
     ),
     rejected(
         "SubSection",
-        "deprecated by NSIS itself; `sectionGroup` is the spelling",
+        "deprecated by NSIS itself, which replaced it with `SectionGroup`; `group` is the spelling",
     ),
     language("SectionGroup", "`group`"),
     rejected(
         "SubSectionEnd",
-        "deprecated by NSIS itself; `sectionGroup` is the spelling",
+        "deprecated by NSIS itself, which replaced it with `SectionGroup`; `group` is the spelling",
     ),
     language("SectionGroupEnd", "the end of a `group`'s section list"),
     // The input is a bare file name rather than a path — `SearchPath` is what
