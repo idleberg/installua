@@ -6,14 +6,29 @@ import starlight from '@astrojs/starlight';
 export default defineConfig({
 	integrations: [
 		starlight({
-			title: 'My Docs',
+			title: 'Installua',
+			logo: {
+				src: './public/installua.svg',
+			},
+			customCss: ['./src/styles/custom.css'],
+			// One theme, so neither the toggle nor the provider that honours it
+			// has anything to do. See `src/components/NoTheme.astro`.
+			components: {
+				ThemeProvider: './src/components/NoTheme.astro',
+				ThemeSelect: './src/components/NoTheme.astro',
+			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
+       expressiveCode: {
+    themes: ['github-dark'],
+  },
 			sidebar: [
 				{
-					label: 'Guides',
+					label: 'Getting started',
 					items: [
 						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', slug: 'guides/example' },
+						{ label: 'Why Installua?', slug: 'getting-started/introduction' },
+						{ label: 'Installation', slug: 'getting-started/installation' },
+						{ label: 'Editor Setup', slug: 'getting-started/editor-setup' },
 					],
 				},
 				{
