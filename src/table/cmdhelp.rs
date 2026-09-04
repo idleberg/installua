@@ -448,6 +448,26 @@ fn split_members(text: &str) -> Alternation {
         return empty();
     }
 
+    // A bracket surviving the trim above means the annotation was a *grammar*
+    // and not a list. `hotkey=(ALT|CONTROL|EXT|SHIFT)|(F1-F24|A-Z)` says pick
+    // modifiers, join them to one key with `|` — so no whole value it describes
+    // is a member of it. Flattened, it recorded six: four legal alone, and two
+    // that are ranges written as words and cannot compile at all. `makensis`
+    // took `"CONTROL|SHIFT|Z"` while the alias generated from those six marked
+    // it wrong, which is the direction that matters — a stub narrower than the
+    // compiler reports errors in correct programs.
+    //
+    // Open rather than [`empty`], and the difference is a claim about NSIS
+    // rather than about this parser: the values are not unknown here, they are
+    // uncountable, so nothing downstream should ever check against a list.
+    if text.contains('(') || text.contains(')') {
+        return Alternation {
+            members: Vec::new(),
+            open: true,
+            named: Vec::new(),
+        };
+    }
+
     let text = expand_families(text);
     let raw: Vec<String> = if text.contains(char::is_whitespace) {
         text.split_whitespace().map(str::to_string).collect()

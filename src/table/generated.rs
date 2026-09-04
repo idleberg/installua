@@ -649,8 +649,8 @@ pub const SKELETONS: &[Skeleton] = &[
                 var: false,
                 req: false,
                 rep: Rep::One,
-                members: &["ALT", "CONTROL", "EXT", "SHIFT", "F1-F24", "A-Z"],
-                open: false,
+                members: &[],
+                open: true,
             },
             Shape {
                 name: "comment",
