@@ -40,7 +40,7 @@ installer with wrong behaviour.
 | `VIProductVersion`, `VIAddVersionKey`                | `versionInfo = { product = …, keys = { … } }`                                                        |
 | `Section` / `SectionEnd`                             | `section("Name", function() … end)`                                                                  |
 | `SetCompressor /SOLID lzma`                          | `compressor = { "lzma", solid = true }` — an attribute's flags go in a table with it, the way a call's do |
-| `Section /o`                                         | `section("Name", { optional = true }, function() … end)`                                             |
+| `Section /o`                                         | `section { "Name", optional = true, body = function() … end }` — options move the whole call into one table |
 | `SectionGroup`                                       | `group("Name", { … })` — a list of sections, not a body; nesting one is not yet implemented          |
 | `Function` / `FunctionEnd`                           | `func("name", function() … end)`                                                                     |
 | `Function .onInit`                                   | `onInit(function() … end)` — the leading `.` is emitted, never written                               |
