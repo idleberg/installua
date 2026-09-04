@@ -1,10 +1,18 @@
 //! The call graph — built once, read three times.
 //!
 //! The three consumers are what makes a whole-program traversal worth its cost:
-//! clobber sets for caller-saves, uninstaller reachability and return-type
-//! inference. Two of them are here; the third is not, because `uninstaller {}`
-//! has no lowering yet, and building the consumer before the block it consumes
-//! would be inventing the answer to a question nobody has asked.
+//! [`CallGraph::clobbers`], the caller-saves fixpoint;
+//! [`CallGraph::lint_recursion`], the depth-cliff warning below; and
+//! [`crate::lower::reserved`], which walks [`CallGraph::edges`] from `.onInit`
+//! and `un.onInit` to decide which plugin DLLs earn a `ReserveFile`. That third
+//! one is why the nodes are named rather than numbered outside this file: it
+//! finds its roots by name, and `un.onInit` is how the uninstaller half enters
+//! the same graph as the installer's.
+//!
+//! Return types are *not* a consumer, though they are whole-program too. They
+//! are inferred by the `lower` fixpoint, which has to run before this file can
+//! be built at all — a call site's arguments decide a callee's parameter types,
+//! and the graph is built from the IR that fixpoint produces.
 //!
 //! **Recursion needs no special case.** It is an SCC whose fixpoint saturates
 //! in one extra round, which is what the condensation buys: process strongly
