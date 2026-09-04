@@ -39,7 +39,9 @@ live now" — read it once at the start of a port. The entries that catch people
 | ---- | --------- |
 | `Name`, `OutFile`, `SetCompressor`, … at top level | fields of `attributes {}`, reordered canonically on output |
 | `InstallDir`, `Caption`, `Icon` | fields of `installer {}` |
-| `UninstallCaption`, `UninstallIcon`, `UninstallText` | `caption`, `icon`, `text` under `uninstaller {}` |
+| `UninstallIcon`, `UninstallSubCaption` | `icon`, `page.*.subCaption` under `uninstaller {}` |
+| `UninstallCaption` | `uninstallCaption` in `attributes {}` — not a twin |
+| `UninstallText` | `page.confirm { topText = … }` — not a twin |
 | `ManifestDPIAwareness`, … | `manifest = { dpiAwareness = … }` |
 | `VIProductVersion`, `VIAddVersionKey` | `versionInfo = { product = …, keys = { … } }` |
 | `LangString` | the `languages {}` block, keyed locale-first |

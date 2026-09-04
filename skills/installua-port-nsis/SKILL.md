@@ -44,9 +44,11 @@ always takes a **named options table** instead. Known drift:
    what each becomes before writing any Lua — a macro-heavy script is a
    restructure, not a transcription.
 2. **Shell.** `attributes {}` (name, outFile, compressor, manifest,
-   versionInfo), then `installer {}` and `uninstaller {}`. `Uninstall*` twins
-   are the *same field names* under `uninstaller {}`; the prefix is emitted,
-   never written.
+   versionInfo), then `installer {}` and `uninstaller {}`. Most `Uninstall*`
+   twins are the *same field names* under `uninstaller {}` (`icon`,
+   `subCaption`) — the prefix is emitted, never written. Two are not:
+   `uninstallCaption` is an `attributes {}` field, and `UninstallText` is
+   `page.confirm { topText = … }`.
 3. **Pages.** Every `!insertmacro MUI_PAGE_*` becomes a `page.<name> { … }`
    listed **inline among the block's entries** — there is no `pages = { … }`
    field. Each preceding `!define MUI_PAGE_*` becomes a field of that page's
