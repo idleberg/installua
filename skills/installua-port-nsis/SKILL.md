@@ -92,7 +92,6 @@ greps in context. Label the loud ones `BEHAVIOUR CHANGE` / `INVOCATION CHANGE`:
 
 What earns one, and what does not:
 [REFERENCE.md](REFERENCE.md#what-earns-a-port-marker).
-`EXAMPLE-bigtest.lua` beside this file is a full worked port.
 
 **`PORT:` notes are the only comments a port ships by default.** The reasoning
 that belongs beside the *compiler's* source does not belong beside a user's

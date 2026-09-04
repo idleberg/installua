@@ -38,7 +38,8 @@ live now" — read it once at the start of a port. The entries that catch people
 | NSIS | Installua |
 | ---- | --------- |
 | `Name`, `OutFile`, `SetCompressor`, … at top level | fields of `attributes {}`, reordered canonically on output |
-| `InstallDir`, `Caption`, `Icon` | fields of `installer {}` |
+| `InstallDir`, `Caption`, `Icon` | `attributes {}`, and also `installer {}` entries when scoped to that half |
+| `InstallDirRegKey` | `attributes {}` only — it has no `installer {}` spelling |
 | `UninstallIcon`, `UninstallSubCaption` | `icon`, `page.*.subCaption` under `uninstaller {}` |
 | `UninstallCaption` | `uninstallCaption` in `attributes {}` — not a twin |
 | `UninstallText` | `page.confirm { topText = … }` — not a twin |
@@ -109,6 +110,10 @@ Structural limits that force a restructure rather than a spelling:
 - **`installTypes` on a block wants a literal list**, so an `!ifdef` that
   removed the `InstType` lines has nothing to become; every section naming a
   type would break with it gone.
+- **A section's `description` wants a compile-time value**, so the common
+  `MUI_DESCRIPTION_TEXT ${Sec} $(DESC_Sec)` pairing cannot carry its
+  `LangString` across — the string has to be inlined, and a multi-language
+  installer loses that one translation. Always a `PORT:` marker.
 - **Whole-program attributes cannot be toggled mid-body.** `SetOverwrite`,
   `SetCompress` and friends are `attributes {}` fields; a script that flips one
   around a single `File` loses that window. Always a `PORT:` marker.
