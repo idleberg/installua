@@ -22,10 +22,6 @@
 --   5. `File /a` (`keepAttributes`) makes makensis warn 5050 on a non-Win32
 --      build machine. The upstream .nsi warns identically; not a port defect.
 
--- `${NSISDIR}` is a makensis-time define with no Installua spelling, so the
--- graphics tree it addresses becomes a build-time parameter instead. It cannot
--- be *called* NSISDIR: a top-level `<const>` is emitted as a `!define` of the
--- same name, and makensis predefines that one.
 local NSIS_TREE <const> = param("NSIS_TREE", "/opt/homebrew/Cellar/makensis@3.12/3.12/share/nsis")
 
 -- PORT: (4) `!ifdef NOCOMPRESS` was a build-time switch, which is what `param` replaces
@@ -114,7 +110,7 @@ local hidden = section("", function()
 		"UninstallString", '"' .. INSTDIR .. '/bt-uninst.exe"')
 
 	setOutPath(INSTDIR)
-	-- PORT: (5) `File /a`. makensis warns 5050 on a non-Win32 build machine,
+	-- PORT: (5) `File /a` warns 5050 off Win32; the original does too.
 	file("silent.nsi", { keepAttributes = true })
 	createDirectory(INSTDIR .. "/MyProjectFamily/MyProject")
 	writeUninstaller(INSTDIR .. "/bt-uninst.exe")
@@ -323,7 +319,7 @@ installer {
 
 	hidden,
 	tempTest,
-	-- PORT: (2) The original nests `Group2` inside `SectionGroup1`. A group
+	-- PORT: (2) `Group2` was nested here; nesting is unimplemented, so it is flattened.
 	group("SectionGroup1", {
 		registryIni,
 		shortcuts,
