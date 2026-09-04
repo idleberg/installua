@@ -358,7 +358,7 @@ attributes {
 ### Version info
 
 `VIProductVersion` is the four-part version Explorer shows on the Properties
-tab; `keys` are the free-form pairs beside it.
+tab, `file` is `VIFileVersion` beside it, and `keys` are the free-form pairs.
 
 **Usage** `versionInfo = { product = <string>, file = <string>, keys = { … } }`
 
@@ -860,6 +860,7 @@ instructions are all reached that way.
 
 | NSIS               | Installua                                 |
 | ------------------ | ----------------------------------------- |
+| `FileOpen`         | `fileOpen(path, mode)` → `handle`         |
 | `FileRead`         | `handle:read([maxlen])` → `string`        |
 | `FileWrite`        | `handle:write(text)`                      |
 | `FileReadByte`     | `handle:readByte()` → `int`               |

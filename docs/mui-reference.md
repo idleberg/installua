@@ -72,6 +72,11 @@ page.welcome {
 
 **Usage** `page.license { file = …, topText = …, bottomText = …, button = …, checkbox = …, radioButtons = { … } }`
 
+`file` is `LicenseData`, `bottomText` is `LicenseText`, and `checkbox` is
+`LicenseForceSelection` — page fields here, because MUI2 takes the file as the
+page macro's own argument and a block-level license would be dropped in silence
+by a script that lists no license page.
+
 `file` takes either one path, or a table keyed by locale — which is
 `LicenseLangString`, and needs a `languages {}` block declaring exactly those
 locales.
@@ -90,8 +95,8 @@ page.license { file = { English = "en.txt", German = "de.txt" } }
 
 **Usage** `page.components { topText = …, instTypeText = …, listText = …, descriptionTitle = …, descriptionText = … }`
 
-The hover text for each entry is the section's own `description` option
-(`MUI_DESCRIPTION_TEXT`).
+`topText` is `ComponentText`. The hover text for each entry is the section's own
+`description` option (`MUI_DESCRIPTION_TEXT`).
 
 ```lua
 page.components {
@@ -103,6 +108,11 @@ page.components {
 ### MUI_PAGE_DIRECTORY
 
 **Usage** `page.directory { topText = …, destinationText = …, variable = …, verifyOnLeave = …, colors = { text = …, background = … } }`
+
+`topText` is `DirText` and `variable` is `DirVar` — a global by name, which the
+page stores the chosen directory into. `verifyOnLeave` is `DirVerify`, and it is
+a page field for the reason `makensis` gives when you write the command outside
+a `PageEx`: it is not valid there.
 
 ```lua
 page.directory {
@@ -210,6 +220,13 @@ uninstaller {
 
 Written on `installer {}` or `uninstaller {}`, because their scope is the whole
 half rather than one page.
+
+Four of them are NSIS commands rather than MUI2 inventions — `checkBitmap` is
+`CheckBitmap`, `installColors` is `InstallColors`, `progressBar` is
+`InstProgressFlags`, `licenseBkColor` is `LicenseBkColor` — and they look
+page-scoped and are not: MUI2 writes each one inside an `!ifndef` that runs on
+the first page of its kind and never again, so putting them on a page would be a
+lie a second page tells silently.
 
 | MUI2                                     | Installua                                                                                                   |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |

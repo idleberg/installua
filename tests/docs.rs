@@ -19,11 +19,16 @@
 //!
 //! # The census direction
 //!
-//! The two tests at the bottom run the opposite way, against the **censuses**
+//! The three census tests below run the opposite way, against the **censuses**
 //! rather than the declarations: every command and MUI2 name classified as
 //! *writable* has to be spelled somewhere in `docs/`. That is the half
 //! `installua coverage` cannot see — it counts the tables, so `todo 0` reads the
 //! same whether the prose is current or was deleted this morning.
+//!
+//! Commands are checked in **both directions**, and the second is not a
+//! duplicate of the first: the Installua one proves the field has prose, the
+//! NSIS one proves the reader holding a `.nsi` can find it. A row renamed into
+//! the surface and documented only there passes the first and fails the second.
 //!
 //! Still **not** checked, and for the reason it always was: that every declared
 //! plugin method appears in the docs. A census entry is a promise the language
@@ -373,6 +378,32 @@ fn every_writable_command_is_spelled_in_the_docs() {
         Vec::<String>::new(),
         "reference-map.md says every one of the 276 commands is accounted for; \
          these have a bucket in src/table/overlay.rs and no prose anywhere"
+    );
+}
+
+/// The same sentence, read the way a reader arriving from `.nsi` reads it.
+///
+/// [`every_writable_command_is_spelled_in_the_docs`] runs in the Installua
+/// direction: it proves `page.directory.topText` has prose. But the sentence
+/// says *"every one of the 276 commands `makensis -CMDHELP` prints"*, and what
+/// someone porting a script has in hand is `DirText`. A row can be implemented,
+/// documented under its new name, and still leave that reader with nothing to
+/// search for — which is how nine of them got here.
+#[test]
+fn every_writable_command_is_findable_by_its_nsis_name() {
+    let prose = prose();
+    let missing: Vec<String> = table::table()
+        .iter()
+        .filter(|entry| matches!(entry.class, Class::Exposed | Class::Attribute(_)))
+        .filter(|entry| !whole_word(&prose, entry.nsis))
+        .map(|entry| format!("{} is in no document", entry.nsis))
+        .collect();
+
+    assert_eq!(
+        missing,
+        Vec::<String>::new(),
+        "the reader porting a script searches for the NSIS name; these rows are \
+         implemented and documented only under their Installua spelling"
     );
 }
 
