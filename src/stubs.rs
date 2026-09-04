@@ -333,15 +333,17 @@ const PAGES: &str = "\
 \n\
 -- `run` and `readme` are each a program to start or a function to call, and\n\
 -- they are two shapes rather than one with optional members: MUI2 expands the\n\
--- parameters only where there is no function to call.\n\
+-- parameters only where there is no function to call. The bare `string` is the\n\
+-- short spelling of the first shape — `run = \"…\"` is `run = { path = \"…\" }`,\n\
+-- which the lowering accepts because that shape needs nothing but `path`.\n\
 ---@class (exact) installua.Page.Finish : installua.Page\n\
 ---@field title? string|{ text: string, lines: integer }\n\
 ---@field text? string|{ text: string, large: boolean }\n\
 ---@field button? string\n\
 ---@field cancelEnabled? boolean\n\
 ---@field reboot? boolean|{ text?: string, now?: string, later?: string, default?: string }\n\
----@field run? { path: string, parameters?: string, text?: string, checked?: boolean }|{ call: fun(), text?: string, checked?: boolean }\n\
----@field readme? { path: string, text?: string, checked?: boolean }|{ call: fun(), text?: string, checked?: boolean }\n\
+---@field run? string|{ path: string, parameters?: string, text?: string, checked?: boolean }|{ call: fun(), text?: string, checked?: boolean }\n\
+---@field readme? string|{ path: string, text?: string, checked?: boolean }|{ call: fun(), text?: string, checked?: boolean }\n\
 ---@field link? { text: string, url: string, color?: string }\n\
 ---@field destroyed? fun()\n\
 \n\
