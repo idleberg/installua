@@ -1066,11 +1066,34 @@ ordinary `if`, and the compiler writes the labels.
 
 ### Goto / Return / Quit
 
-| NSIS     | Installua                           |
-| -------- | ----------------------------------- |
-| `Goto`   | `if`, `while`, `break` and `return` |
-| `Return` | `return`                            |
-| `Quit`   | `os.exit()`                         |
+| NSIS     | Installua                                               |
+| -------- | ------------------------------------------------------- |
+| `Goto`   | `if`, `while`, `for`, `break`, `continue()` and `return` |
+| `Return` | `return`                                                |
+| `Quit`   | `os.exit()`                                             |
+
+### continue
+
+Skips to the next iteration of the innermost loop — the one jump you do spell,
+because Lua has no `continue` and what 5.4 added to write the idiom is `goto`,
+which is [rejected](lua-shaped-not-lua.md). It wears a call's syntax and takes
+no arguments; it is a jump, so anything after it in the same block is dead.
+
+**Usage** `continue()` → nothing
+
+```lua
+for line in lines(handle) do
+	if line == "" then
+		continue()
+	end
+	detailPrint(line)
+end
+```
+
+Every run-time loop carries a target: `while`, the numeric `for`, `for … in
+lines(…)` and a [walker](#walkers)'s `for`. A `for … in glob(…)` does not — that
+loop is unrolled at build time, so it is not a loop `continue()` can see. With
+no target at all it is an error.
 
 ### Abort
 
@@ -1800,27 +1823,27 @@ and a header you only reach through `raw` needs no declaration at all.
 These are real NSIS lines in the output — you just do not spell them. Listed
 here so a search for the NSIS name lands somewhere.
 
-| NSIS                                                                         | What writes it                    |
-| ---------------------------------------------------------------------------- | --------------------------------- |
-| `!define`                                                                    | `local X <const> = …`, `param`    |
-| `Goto`                                                                       | `if`, `while`, `break`            |
-| `Call`                                                                       | a call: `f(x)`                    |
-| `Push` / `Pop` / `Exch`                                                      | the calling convention            |
-| `StrCpy`                                                                     | assignment                        |
-| `StrCmp` / `StrCmpS`                                                         | `==`                              |
-| `IntOp` / `IntPtrOp`                                                         | the arithmetic operators          |
-| `IntCmp` / `IntCmpU` / `Int64Cmp` / `Int64CmpU` / `IntPtrCmp` / `IntPtrCmpU` | comparison                        |
-| `IntFmt` / `Int64Fmt`                                                        | `string.format`                   |
-| `LangString`                                                                 | `languages { locales = { … } }`   |
-| `LicenseLangString`                                                          | `page.license { file = { … } }`   |
-| `InitPluginsDir`                                                             | a body that names `PLUGINSDIR`    |
-| `ReserveFile /plugin`                                                        | a plugin `.onInit` can reach      |
-| `!addplugindir`                                                              | a plugin declared with a `dir`    |
-| `SendMessage`                                                                | a control's `value` / `checked`   |
-| `EnableWindow` / `ShowWindow`                                                | a control's `enabled` / `visible` |
-| `SetCtlColors` / `CreateFont`                                                | a control's `colors` / `font`     |
-| `LoadAndSetImage`                                                            | a `bitmap`'s `image`              |
-| `GetFunctionAddress`                                                         | `onClick` / `onChange`            |
+| NSIS                                                                         | What writes it                                        |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `!define`                                                                    | `local X <const> = …`, `param`                        |
+| `Goto`                                                                       | `if`, `while`, `for`, `break`, `continue()`, `return` |
+| `Call`                                                                       | a call: `f(x)`                                        |
+| `Push` / `Pop` / `Exch`                                                      | the calling convention                                |
+| `StrCpy`                                                                     | assignment                                            |
+| `StrCmp` / `StrCmpS`                                                         | `==`                                                  |
+| `IntOp` / `IntPtrOp`                                                         | the arithmetic operators                              |
+| `IntCmp` / `IntCmpU` / `Int64Cmp` / `Int64CmpU` / `IntPtrCmp` / `IntPtrCmpU` | comparison                                            |
+| `IntFmt` / `Int64Fmt`                                                        | `string.format`                                       |
+| `LangString`                                                                 | `languages { locales = { … } }`                       |
+| `LicenseLangString`                                                          | `page.license { file = { … } }`                       |
+| `InitPluginsDir`                                                             | a body that names `PLUGINSDIR`                        |
+| `ReserveFile /plugin`                                                        | a plugin `.onInit` can reach                          |
+| `!addplugindir`                                                              | a plugin declared with a `dir`                        |
+| `SendMessage`                                                                | a control's `value` / `checked`                       |
+| `EnableWindow` / `ShowWindow`                                                | a control's `enabled` / `visible`                     |
+| `SetCtlColors` / `CreateFont`                                                | a control's `colors` / `font`                         |
+| `LoadAndSetImage`                                                            | a `bitmap`'s `image`                                  |
+| `GetFunctionAddress`                                                         | `onClick` / `onChange`                                |
 
 ### Plugins with no declaration
 
