@@ -10,13 +10,13 @@ A Lua-shaped language that compiles to NSIS.
 
 ```lua
 attributes {
-	name = "Example",
-	outFile = "Example-setup.exe",
+	name = "MyApp",
+	outFile = "MyApp-setup.exe",
 	compressor = "lzma",
 }
 
 installer {
-	installDir = PROGRAMFILES64 .. "/Example",
+	installDir = PROGRAMFILES64 .. "/MyApp",
 
 	page.welcome {},
 	page.directory {},
@@ -25,7 +25,7 @@ installer {
 
 	section("Core", function()
 		setOutPath(INSTDIR)
-		file("README.txt")
+		file("myapp.exe")
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
 	end),
 }
