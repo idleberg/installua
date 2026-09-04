@@ -117,6 +117,15 @@ Structural limits that force a restructure rather than a spelling:
 - **Whole-program attributes cannot be toggled mid-body.** `SetOverwrite`,
   `SetCompress` and friends are `attributes {}` fields; a script that flips one
   around a single `File` loses that window. Always a `PORT:` marker.
+- **`SetCompressor`'s `/SOLID` and `/FINAL` have no spelling.** `compressor`
+  carries the algorithm only, so `SetCompressor /SOLID lzma` ports as plain
+  `compressor = "lzma"` and the installer gets bigger with no diagnostic.
+  Always a `PORT:` marker.
+- **`Memento.nsh` is not declared**, so `${MementoSection}` — a component
+  selection remembered in the registry across installs — has no equivalent.
+  The sections port as ordinary ones and the memory is gone. Same for
+  `Sections.nsh`, `Util.nsh` and `Integration.nsh`: undeclared, because their
+  value is control flow rather than a signature.
 
 ## When there is no spelling
 

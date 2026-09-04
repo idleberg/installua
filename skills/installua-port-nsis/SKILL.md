@@ -114,8 +114,13 @@ genuinely useful for a first port and noise for a tenth. Default to lean.
 - **`"C:\Program Files"` is an error** — `\` is Lua's escape. Write `C:/…`,
   `[[C:\…]]` or `\\`.
 - **A top-level `<const>` is emitted as a `!define` of the same name**, so one
-  named after a makensis predefine (`NSISDIR`, `__FILE__`, …) collides and the
-  build dies in the header. Rename it.
+  named after a makensis predefine (`NSISDIR`, `NSIS_CPU`, `NSIS_PTR_SIZE`,
+  `__FILE__`, …) collides and the build dies in the header. `makensis -HDRINFO`
+  lists them. The failure is reported as a compiler bug — it is a rename.
+- **A value returned "by name" is returned in NSIS's case.** `messageBox`
+  gives `"YES"`, not `"yes"`, and `==` is case-sensitive, so comparing against
+  the lower-case spelling compiles clean and is always false. Copy the case
+  from the reference map's example.
 
 More at [REFERENCE.md](REFERENCE.md#construct-by-construct).
 
