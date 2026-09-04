@@ -401,6 +401,181 @@ fn every_writable_mui_name_is_spelled_in_the_docs() {
     );
 }
 
+/// Every documented signature, as `(name, span, line)`.
+///
+/// A signature is a call spelling inside a code span, wherever it is printed: a
+/// `**Usage**` line, a table cell, a fenced example. All three mislead a reader
+/// identically, which is the same reason [`spellings`] does not read fences only.
+fn signatures(text: &str) -> Vec<(String, &str, usize)> {
+    let mut found = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        // Backtick-delimited spans. `split('`')` puts the spans at the odd
+        // indices, which holds for the doubled fences too because a fence line
+        // has no signature on it.
+        for span in line.split('`').skip(1).step_by(2) {
+            let Some(open) = span.find('(') else { continue };
+            let Some(name) = ident_before(span, open) else {
+                continue;
+            };
+            // The receiver, for the methods the census records as `f:seek` and
+            // the docs write as `handle:seek`.
+            let start = open - name.len();
+            let qualified = span[..start]
+                .rfind(|c: char| !is_ident(c as u8) && c != '.' && c != ':')
+                .map_or(0, |at| at + 1);
+            found.push((span[qualified..open].to_owned(), span, index + 1));
+        }
+    }
+    found
+}
+
+/// How many optional positions a signature shows as counted rather than named:
+/// each `[, name`, and not `[, { … }]`, which is the options table itself.
+fn positional_optionals(signature: &str) -> usize {
+    signature
+        .match_indices("[,")
+        .filter(|(at, _)| {
+            signature[at + 2..]
+                .trim_start()
+                .starts_with(|c: char| c.is_ascii_alphabetic())
+        })
+        .count()
+}
+
+/// Exposed rows by the name a document would print, dropping any last segment
+/// two rows share — an ambiguous match would test the wrong row's arity.
+fn callable() -> BTreeMap<&'static str, &'static table::Instruction> {
+    let mut found: BTreeMap<&'static str, Option<&'static table::Instruction>> = BTreeMap::new();
+    for entry in table::table() {
+        if entry.class != Class::Exposed || entry.bound() {
+            continue;
+        }
+        let Some(installua) = entry.installua else {
+            continue;
+        };
+        found.insert(installua, Some(entry));
+        // `f:seek` is also `handle:seek` and `file:seek` to a reader, so the
+        // segment after the receiver is what a document can be matched on.
+        if let Some(method) = installua.rsplit([':', '.']).next()
+            && method != installua
+        {
+            found
+                .entry(method)
+                .and_modify(|slot| *slot = None)
+                .or_insert(Some(entry));
+        }
+    }
+    found
+        .into_iter()
+        .filter_map(|(name, entry)| Some((name, entry?)))
+        .collect()
+}
+
+/// The row a documented name calls, by the whole spelling or by its method.
+///
+/// The receiver is the reader's to choose — the census records `f:seek` and
+/// `reference-map.md` writes `handle:seek` — so a qualified name that matches
+/// nothing whole is tried again as its last segment, which [`callable`] holds
+/// only where one row owns it.
+fn called_row<'a>(
+    callable: &BTreeMap<&'static str, &'a table::Instruction>,
+    name: &str,
+) -> Option<&'a table::Instruction> {
+    callable
+        .get(name)
+        .or_else(|| callable.get(name.rsplit([':', '.']).next()?))
+        .copied()
+}
+
+/// A signature may show at most the optional position the compiler still counts.
+///
+/// The rule is [`Instruction::tail_optional`]'s, printed: one trailing optional
+/// stays positional because an extra argument can only mean that position, and
+/// two or more move wholesale into the options table because counting no longer
+/// decides which is which. So a documented `[, x[, y]]` past the first optional
+/// is not a stale detail — it is a spelling that raises `wrong-arity` on the
+/// reader who copies it.
+///
+/// This caught `createShortcut`, `execShell`, `execShellWait` and `findWindow`
+/// showing between two and six counted optionals, all four of which the
+/// compiler had only ever taken by name.
+#[test]
+fn no_documented_signature_counts_an_optional_the_compiler_names() {
+    let callable = callable();
+    let mut wrong: Vec<String> = Vec::new();
+
+    for (name, text) in documents() {
+        for (called, signature, line) in signatures(&text) {
+            let Some(entry) = called_row(&callable, &called) else {
+                continue;
+            };
+            let allowed = usize::from(entry.tail_optional().is_some());
+            let shown = positional_optionals(signature);
+            if shown > allowed {
+                wrong.push(format!(
+                    "docs/{name}:{line}: {called} shows {shown} counted optional(s) and takes \
+                     {allowed}: {}",
+                    entry.option_names().join(", ")
+                ));
+            }
+        }
+    }
+
+    assert_eq!(
+        wrong,
+        Vec::<String>::new(),
+        "a row with more than one optional position names all of them in a \
+         table written last; these signatures spell them as arguments, so \
+         copying one raises `wrong-arity`"
+    );
+}
+
+/// The arity gate, against the four defects it was written for and the four
+/// rows that look like them and are correct.
+#[test]
+fn the_arity_gate_tells_a_named_optional_from_a_counted_one() {
+    let callable = callable();
+    let shape = |signature: &str| {
+        let (name, span, _) = signatures(signature).pop().expect("a signature");
+        let entry = called_row(&callable, &name).expect("a row");
+        (
+            positional_optionals(span),
+            usize::from(entry.tail_optional().is_some()),
+        )
+    };
+
+    // The four as they were written, each showing more than it takes.
+    for stale in [
+        "`createShortcut(linkPath, target[, parameters[, iconFile[, iconIndex[, { … }]]]])`",
+        "`execShell(flags, verb, file[, parameters[, showmode[, { … }]]])`",
+        "`execShellWait(flags, verb, file[, parameters[, showmode[, { … }]]])`",
+        "`findWindow(class[, title[, parent[, childAfter[, { … }]]]])`",
+    ] {
+        let (shown, allowed) = shape(stale);
+        assert_eq!(allowed, 0, "{stale} takes no counted optional");
+        assert!(shown > allowed, "{stale} should fail the gate");
+    }
+
+    // And the rows with exactly one trailing optional, which keep it: the gate
+    // has to leave these alone or it is a rule against the notation itself.
+    for correct in [
+        "`copyFiles(sourcePath, destinationPath[, sizeInKb[, { … }]])`",
+        "`handle:seek(offset[, mode])`",
+        "`writeRegNone(root, subKey, name[, hexData])`",
+        "`regDll(path[, entryPoint])`",
+    ] {
+        assert_eq!(shape(correct), (1, 1), "{correct} should pass the gate");
+    }
+
+    // The corrected spellings, which show the table and nothing counted.
+    for fixed in [
+        "`createShortcut(linkPath, target[, { parameters, iconFile, comment }])`",
+        "`findWindow(class[, { title, parent, childAfter }])`",
+    ] {
+        assert_eq!(shape(fixed), (0, 0), "{fixed} should pass the gate");
+    }
+}
+
 /// And the gate has to be able to fail, or the two above pass on an empty
 /// `table()` as readily as on a complete one.
 #[test]
