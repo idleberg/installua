@@ -336,11 +336,74 @@ const fn rejected(nsis: &'static str, why: &'static str) -> Row {
     row(nsis, None, Class::Rejected(why))
 }
 
-/// A preprocessor command. Staging rules the whole preprocessor out of the
-/// surface, so these carry no parameter model and no reason of their own: the
-/// staging rule is the reason.
+/// A `!` command, out of the surface. None of them carries a parameter model,
+/// because none of them is callable — what differs is *why*, and that is what
+/// the four constructors below say.
+///
+/// One reason for all 36 was the previous claim here, and it was only true of
+/// [`staging`]. The rest are not preprocessing at all: they run programs,
+/// register post-build commands, or configure `makensis` itself, and "the
+/// script is a program" answers none of that.
 const fn directive(nsis: &'static str) -> Row {
     row(nsis, None, Class::Directive)
+}
+
+/// Text substitution, conditional compilation, macros, inclusion.
+///
+/// The staging rule, and here it is the whole reason: a `<const>` *is* a
+/// `!define`, `param` is the `!ifndef`/`!define`/`!endif` sandwich, a top-level
+/// `if` is `!if`, `include`/`import` are `!include`, and a `func` is a `!macro`
+/// that cannot paste half a line. `!ifdef` as an existence test is the one with
+/// no answer, because every name here is declared.
+const fn staging(nsis: &'static str) -> Row {
+    directive(nsis)
+}
+
+/// Runs something while building and hands the answer back as a `!define`.
+///
+/// Out for a reason of its own: nothing in this language can *catch* that
+/// answer. A `raw.head` block runs the command, but the value it produces has
+/// no way to become a name a program reads — and inventing one would be
+/// build-time execution, which is the thing order-free resolution costs.
+///
+/// So the work moves to whatever runs the build, and the value arrives as
+/// `-D NAME=…`. A `param` with no default is what makes that complete rather
+/// than hopeful: a wrapper that forgets to pass it fails the build instead of
+/// shipping a default nobody chose.
+const fn computed(nsis: &'static str) -> Row {
+    directive(nsis)
+}
+
+/// Registers a command `makensis` runs when the build ends.
+///
+/// No value flows anywhere and position is the whole of it, which is exactly
+/// what an anchor is for: these go in `raw.tail` verbatim. Out of the surface
+/// because a spelling would add nothing — the NSIS line is already the
+/// clearest statement of what it does.
+const fn hook(nsis: &'static str) -> Row {
+    directive(nsis)
+}
+
+/// Turns `makensis`'s own messages up, down, or off.
+///
+/// `build` runs `makensis -WX` with an empty warning allowlist and rewrites
+/// every message back onto the Lua line it came from. A script quieting a
+/// warning would be switching off the check that mapping exists to serve, so
+/// this one is a decision about who owns the invocation rather than a staging
+/// question at all.
+const fn verbosity(nsis: &'static str) -> Row {
+    directive(nsis)
+}
+
+/// A message or an assertion at build time.
+///
+/// `!ifndef X` / `!error` — the common one by a distance — is a `param` with no
+/// default, which refuses the build from the declaration so there is no guard
+/// to forget. The general form, "this combination makes no sense, stop", has no
+/// spelling yet and would be a top-level `error(…)`; it waits for a real script
+/// that wants one.
+const fn message(nsis: &'static str) -> Row {
+    directive(nsis)
 }
 
 pub fn lookup(nsis: &str) -> Option<&'static Row> {
@@ -2064,42 +2127,42 @@ pub const ROWS: &[Row] = &[
         NOTSET,
     ),
     attribute("ManifestGdiScaling", "manifest.gdiScaling", NOTSET),
-    directive("!packhdr"),
-    directive("!finalize"),
-    directive("!uninstfinalize"),
-    directive("!system"),
-    directive("!execute"),
-    directive("!makensis"),
-    directive("!addincludedir"),
-    directive("!include"),
-    directive("!cd"),
-    directive("!if"),
-    directive("!ifdef"),
-    directive("!ifndef"),
-    directive("!endif"),
-    directive("!define"),
-    directive("!undef"),
-    directive("!else"),
-    directive("!echo"),
-    directive("!warning"),
-    directive("!error"),
-    directive("!assert"),
-    directive("!verbose"),
-    directive("!pragma"),
-    directive("!macro"),
-    directive("!macroend"),
-    directive("!macroundef"),
-    directive("!insertmacro"),
-    directive("!ifmacrodef"),
-    directive("!ifmacrondef"),
-    directive("!tempfile"),
-    directive("!delfile"),
-    directive("!appendfile"),
-    directive("!appendmemfile"),
-    directive("!getdllversion"),
-    directive("!gettlbversion"),
-    directive("!searchparse"),
-    directive("!searchreplace"),
+    hook("!packhdr"),
+    hook("!finalize"),
+    hook("!uninstfinalize"),
+    computed("!system"),
+    computed("!execute"),
+    computed("!makensis"),
+    staging("!addincludedir"),
+    staging("!include"),
+    staging("!cd"),
+    staging("!if"),
+    staging("!ifdef"),
+    staging("!ifndef"),
+    staging("!endif"),
+    staging("!define"),
+    staging("!undef"),
+    staging("!else"),
+    message("!echo"),
+    message("!warning"),
+    message("!error"),
+    message("!assert"),
+    verbosity("!verbose"),
+    verbosity("!pragma"),
+    staging("!macro"),
+    staging("!macroend"),
+    staging("!macroundef"),
+    staging("!insertmacro"),
+    staging("!ifmacrodef"),
+    staging("!ifmacrondef"),
+    computed("!tempfile"),
+    computed("!delfile"),
+    computed("!appendfile"),
+    computed("!appendmemfile"),
+    computed("!getdllversion"),
+    computed("!gettlbversion"),
+    computed("!searchparse"),
+    computed("!searchreplace"),
     // The six button and status labels. MUI2 supplies no define for any of
     // them, so they are ordinary attributes — but they are a `languages {}`
     // interaction rather than a UI one: the default text comes from the NLF of
