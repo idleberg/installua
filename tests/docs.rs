@@ -1,10 +1,10 @@
 //! The docs' `import "X"` and `plugin "X"` spellings resolve against what
 //! actually ships declared.
 //!
-//! `docs/reference-map.md` and `docs/mui-reference.md` both claim exhaustive
+//! `reference/commands.md` and `reference/mui2.md` both claim exhaustive
 //! coverage and nothing enforced the claim, so a spelling could rot in place:
-//! `docs/nsis-shaped-not-nsis.md` offered `local winver = import "WinVer"` long
-//! after `WinVer.nsh` had been superseded by the `getWinVer` instruction, and
+//! `concepts/nsis-shaped-not-nsis.md` offered `local winver = import "WinVer"`
+//! long after `WinVer.nsh` had been superseded by `getWinVer`, and
 //! no `WinVer.toml` ever existed. A reader copying that line got the compiler's
 //! "no method declared" diagnostic and no hint that the document was wrong.
 //!
@@ -21,7 +21,7 @@
 //!
 //! The three census tests below run the opposite way, against the **censuses**
 //! rather than the declarations: every command and MUI2 name classified as
-//! *writable* has to be spelled somewhere in `docs/`. That is the half
+//! *writable* has to be spelled somewhere in the site's pages. That is the half
 //! `installua coverage` cannot see — it counts the tables, so `todo 0` reads the
 //! same whether the prose is current or was deleted this morning.
 //!
@@ -75,22 +75,27 @@ struct Spelling {
     line: usize,
 }
 
+/// The documentation is the website, so the gate reads the website's sources.
 fn docs() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("docs")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("web/src/content/docs")
 }
 
-/// Every `docs/*.md`, read at test time rather than `include_str!`-ed, so a new
-/// document is covered by existing here rather than by somebody remembering to
-/// add a line.
+/// Every page under [`docs`], read at test time rather than `include_str!`-ed,
+/// so a new document is covered by existing here rather than by somebody
+/// remembering to add a line.
+///
+/// Recursive, because the site's pages are grouped into a directory per sidebar
+/// section; and `.mdx` counts, because a page written as one is a page a reader
+/// reads. The name each is reported under is its path below that root, so a
+/// failing assertion still names one file.
 fn documents() -> Vec<(String, String)> {
-    let mut found: Vec<(String, String)> = fs::read_dir(docs())
-        .expect("docs/ exists")
-        .map(|entry| entry.expect("readable").path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
+    let root = docs();
+    let mut found: Vec<(String, String)> = pages(&root)
+        .into_iter()
         .map(|path| {
             let name = path
-                .file_name()
-                .expect("a file")
+                .strip_prefix(&root)
+                .expect("under the root")
                 .to_string_lossy()
                 .into_owned();
             (name, fs::read_to_string(&path).expect("readable"))
@@ -99,7 +104,28 @@ fn documents() -> Vec<(String, String)> {
     // `read_dir` order is the filesystem's; a failing assertion should name the
     // same document every run.
     found.sort_by(|a, b| a.0.cmp(&b.0));
-    assert!(!found.is_empty(), "docs/ has no markdown in it");
+    assert!(
+        !found.is_empty(),
+        "{} has no markdown in it",
+        root.display()
+    );
+    found
+}
+
+/// Every `.md` and `.mdx` under `dir`, at any depth.
+fn pages(dir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for entry in fs::read_dir(dir).expect("the docs directory exists") {
+        let path = entry.expect("readable").path();
+        if path.is_dir() {
+            found.extend(pages(&path));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext == "md" || ext == "mdx")
+        {
+            found.push(path);
+        }
+    }
     found
 }
 
@@ -215,7 +241,7 @@ fn every_documented_header_and_plugin_ships_declared() {
             };
             if !known {
                 missing.push(format!(
-                    "docs/{name}:{}: {} \"{}\" is not declared",
+                    "{name}:{}: {} \"{}\" is not declared",
                     spelling.line,
                     spelling.namespace.keyword(),
                     spelling.target
@@ -255,9 +281,7 @@ fn every_method_called_on_a_documented_binding_is_declared() {
                     Namespace::Plugin => declarations.plugin(&target, method).is_some(),
                 };
                 if !declared {
-                    undeclared.push(format!(
-                        "docs/{name}:{line}: {target}.{method} is not declared"
-                    ));
+                    undeclared.push(format!("{name}:{line}: {target}.{method} is not declared"));
                 }
             }
         }
@@ -298,7 +322,7 @@ fn the_scanner_sees_the_defect_it_was_written_for() {
     assert!(spellings("name = \"TextFunc\"   # what `import \"…\"` is given").is_empty());
 }
 
-/// Every `docs/*.md` as one string, for the census tests below.
+/// Every page as one string, for the census tests below.
 ///
 /// All of them rather than the two reference files, because a name is
 /// documented wherever a reader can find it: the file handle methods live in
@@ -544,7 +568,7 @@ fn no_documented_signature_counts_an_optional_the_compiler_names() {
             let shown = positional_optionals(signature);
             if shown > allowed {
                 wrong.push(format!(
-                    "docs/{name}:{line}: {called} shows {shown} counted optional(s) and takes \
+                    "{name}:{line}: {called} shows {shown} counted optional(s) and takes \
                      {allowed}: {}",
                     entry.option_names().join(", ")
                 ));
@@ -632,4 +656,25 @@ fn the_census_gate_sees_a_deleted_section() {
         "`page.license { file = … }`",
         "page.license.file"
     ));
+}
+
+/// The CLI page is generated from `clap`, so the checked-in file and the
+/// generator have to agree.
+///
+/// The binary rather than a library call, because the `clap` declarations are
+/// `main.rs`'s and nothing else can see them — which is also the reason the
+/// generator is a hidden subcommand rather than a function this test calls.
+#[test]
+fn the_cli_page_matches_the_clap_declarations() {
+    let generated = std::process::Command::new(env!("CARGO_BIN_EXE_installua"))
+        .args(["generate", "cli"])
+        .output()
+        .expect("the binary runs");
+    let generated = String::from_utf8(generated.stdout).expect("utf-8");
+    let checked_in = fs::read_to_string(docs().join("reference/cli.md")).expect("the page exists");
+
+    assert_eq!(
+        checked_in, generated,
+        "reference/cli.md is stale: regenerate it with `mise run docs:cli`"
+    );
 }
