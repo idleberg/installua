@@ -273,6 +273,12 @@ pub enum Code {
     /// failure mode parameters exist to retire: the build succeeds, the value
     /// is the default, and nothing says so.
     UnknownParam,
+    /// A parameter declared without a default — `param("NAME")` — and no `-D`
+    /// giving it one. The declaration is the script saying the build cannot be
+    /// done without this value, which is `!ifndef NAME` / `!error` written as a
+    /// declaration instead of as a guard, and checked the same way for every
+    /// build rather than wherever the guard was pasted.
+    MissingParam,
 
     // -- anchored `raw`
     /// A top-level `raw` whose anchor is missing, is not one of the anchors, or
@@ -353,6 +359,7 @@ impl Code {
         Code::IncludeForm,
         Code::ParamForm,
         Code::UnknownParam,
+        Code::MissingParam,
         Code::RawAnchor,
         Code::ConstIf,
         Code::NsisRetired,
@@ -404,6 +411,7 @@ impl Code {
             Code::IncludeForm => "include-form",
             Code::ParamForm => "param-form",
             Code::UnknownParam => "unknown-param",
+            Code::MissingParam => "missing-param",
             Code::RawAnchor => "raw-anchor",
             Code::ConstIf => "const-if",
             Code::NsisRetired => "nsis-retired",

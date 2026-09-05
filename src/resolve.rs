@@ -304,6 +304,14 @@ enum Initialiser<'a> {
         span: Span,
         default: &'a Expr,
     },
+    /// `param(name)`: no default, so `-D name` is the only value there is and a
+    /// build without it stops.
+    ///
+    /// This is `!ifndef NAME` / `!error` as a declaration. The guard form is a
+    /// line somebody has to remember to paste; the declaration is checked for
+    /// every build because it *is* the parameter, and it says so in the one
+    /// place a reader looks for what the build takes.
+    Required { name: String, span: Span },
     /// A `param(…)` that does not hold together, already reported.
     Broken,
 }
@@ -324,28 +332,38 @@ fn initialiser<'a>(value: &'a Expr, diags: &mut Diagnostics) -> Initialiser<'a> 
         return buried(value, diags);
     }
 
-    let [Expr::Str(name), default] = args.as_slice() else {
-        diags.push(
-            Diagnostic::error(
-                Code::ParamForm,
-                *span,
-                format!("`{PARAM}` takes a name and a default"),
-            )
-            .note(format!(
-                "write `local X <const> = {PARAM}(\"X\", \"1.4.2\")`"
-            ))
-            .note(
-                "the name has to be a literal, since it is what `-D` is checked against before \
-                 anything is folded",
-            ),
-        );
-        return Initialiser::Broken;
-    };
-
-    Initialiser::Param {
-        name: name.value.clone(),
-        span: *span,
-        default,
+    match args.as_slice() {
+        [Expr::Str(name), default] => Initialiser::Param {
+            name: name.value.clone(),
+            span: *span,
+            default,
+        },
+        // No default: the parameter is required, and its type is `string`. The
+        // default is what declares a type — `param("PORT", 8080)` is why `-D
+        // PORT=abc` is an error — so a parameter without one has nothing to
+        // read the flag's text as but text.
+        [Expr::Str(name)] => Initialiser::Required {
+            name: name.value.clone(),
+            span: *span,
+        },
+        _ => {
+            diags.push(
+                Diagnostic::error(
+                    Code::ParamForm,
+                    *span,
+                    format!("`{PARAM}` takes a name, and a default unless the build requires one"),
+                )
+                .note(format!(
+                    "write `local X <const> = {PARAM}(\"X\", \"1.4.2\")`, or \
+                     `{PARAM}(\"X\")` to make `-D X=…` required"
+                ))
+                .note(
+                    "the name has to be a literal, since it is what `-D` is checked against \
+                     before anything is folded",
+                ),
+            );
+            Initialiser::Broken
+        }
     }
 }
 
@@ -540,7 +558,7 @@ fn consts<'a>(
                 continue;
             }
             *declared = true;
-            declare(stmt, resolved, &mut pending, diags);
+            declare(stmt, resolved, &mut pending, options, diags);
         }
 
         fold_pending(&mut pending, resolved, options, diags);
@@ -753,6 +771,7 @@ fn declare<'a>(
     stmt: &'a Stmt,
     resolved: &mut Resolved<'a>,
     pending: &mut Vec<Pending<'a>>,
+    options: &crate::Options,
     diags: &mut Diagnostics,
 ) {
     let Stmt::Local {
@@ -843,23 +862,7 @@ fn declare<'a>(
                     span,
                     default,
                 } => {
-                    // Declared twice is a genuine ambiguity rather than a
-                    // tidiness rule: two defaults for one `-D` name have no
-                    // answer, and resolution being order-free means there
-                    // is no later one to let win.
-                    if let Some(previous) = resolved.params.get(&param) {
-                        diags.push(
-                            Diagnostic::error(
-                                Code::DuplicateBlock,
-                                span,
-                                format!("`{param}` is declared as a parameter more than once"),
-                            )
-                            .note_at(
-                                format!("the first one, bound to `{}`, is at", previous.bound),
-                                previous.span,
-                            )
-                            .note("a parameter has one default, since `-D` sets it once"),
-                        );
+                    if declared_twice(resolved, &param, span, diags) {
                         continue;
                     }
                     resolved.params.insert(
@@ -880,6 +883,41 @@ fn declare<'a>(
                         param: Some(param),
                     });
                 }
+                // Nothing to fold and nothing to wait for: the value is the
+                // flag's text or there is no build. So this settles here rather
+                // than going on the worklist, and the missing flag is reported
+                // at the declaration, which is the line that says it is needed.
+                Initialiser::Required { name: param, span } => {
+                    if declared_twice(resolved, &param, span, diags) {
+                        continue;
+                    }
+                    let value = match options.params.get(&param) {
+                        Some(text) => ConstValue::Str(text.clone()),
+                        None => {
+                            missing_param(&param, name, span, diags);
+                            // Bound anyway, to the empty string. The build is
+                            // already failing; every use of the name reporting
+                            // "not a build-time constant" on top of it would
+                            // bury the one diagnostic that says what to do.
+                            ConstValue::Str(String::new())
+                        }
+                    };
+                    resolved.params.insert(
+                        param.clone(),
+                        Param {
+                            bound: name.text.clone(),
+                            span,
+                            value: value.clone(),
+                        },
+                    );
+                    resolved.consts.insert(
+                        name.text.clone(),
+                        Const {
+                            value,
+                            span: name.span,
+                        },
+                    );
+                }
                 Initialiser::Broken => {}
             },
             None => diags.push(
@@ -892,6 +930,54 @@ fn declare<'a>(
             ),
         }
     }
+}
+
+/// Whether this `-D` name is already a parameter, reported if it is.
+///
+/// Declared twice is a genuine ambiguity rather than a tidiness rule: two
+/// declarations of one `-D` name have no answer, and resolution being order-free
+/// means there is no later one to let win.
+fn declared_twice(resolved: &Resolved, param: &str, span: Span, diags: &mut Diagnostics) -> bool {
+    let Some(previous) = resolved.params.get(param) else {
+        return false;
+    };
+    diags.push(
+        Diagnostic::error(
+            Code::DuplicateBlock,
+            span,
+            format!("`{param}` is declared as a parameter more than once"),
+        )
+        .note_at(
+            format!("the first one, bound to `{}`, is at", previous.bound),
+            previous.span,
+        )
+        .note("a parameter is declared once, since `-D` sets it once"),
+    );
+    true
+}
+
+/// A required parameter the invocation did not set.
+///
+/// Reported at the declaration and not at a use: the declaration is what says
+/// the build cannot be done without the value, and every use of it is a
+/// consequence.
+fn missing_param(param: &str, bound: &Name, span: Span, diags: &mut Diagnostics) {
+    diags.push(
+        Diagnostic::error(
+            Code::MissingParam,
+            span,
+            format!("`{param}` has no default, so the build needs `-D {param}=…`"),
+        )
+        .note(format!(
+            "`{PARAM}(\"{param}\")` declares a value the invocation has to supply; write \
+             `{PARAM}(\"{param}\", …)` to give it a default instead"
+        ))
+        .note(format!(
+            "`{}` is a `string` here: with no default there is nothing to say what type the \
+             flag's text should be read as",
+            bound.text
+        )),
+    );
 }
 
 /// Folds every `<const>` that can fold, to a fixpoint, applying `-D` as it goes.

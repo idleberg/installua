@@ -168,6 +168,12 @@ const CASES: &[(Code, &str)] = &[
     ),
     (
         Code::ParamForm,
+        "attributes { outFile = \"a.exe\" }\nlocal V <const> = param()",
+    ),
+    // No `-D` in `compile_case`, which is the whole trigger: the declaration
+    // says the invocation has to supply this one.
+    (
+        Code::MissingParam,
         "attributes { outFile = \"a.exe\" }\nlocal V <const> = param(\"V\")",
     ),
     // The one case whose trigger is the *invocation* rather than the source:

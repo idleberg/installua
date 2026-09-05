@@ -231,13 +231,12 @@ mod form {
         assert!(diags.contains(Code::ParamForm), "{diags:?}");
     }
 
-    /// A default is not optional. There is no `nil` here for a missing one to
-    /// be, and a parameter with no default would make every build that forgot
-    /// the flag a different kind of failure.
+    /// A name and nothing else is the *required* form, so the shapes left over
+    /// for `param-form` are the ones with no readable name in them at all.
     #[test]
-    fn a_default_is_required() {
+    fn no_name_at_all_is_the_form_error() {
         let diags = errors(
-            "local V <const> = param(\"V\")\n\
+            "local V <const> = param()\n\
              attributes { name = \"a\", outFile = \"a.exe\" }\n\
              installer { section(\"Core\", function() end) }\n",
             &[],
@@ -258,5 +257,70 @@ mod form {
         );
         let rendered = diags.render("<test>");
         assert!(rendered.contains("the default for `V`"), "{rendered}");
+    }
+}
+
+/// `param("NAME")` — no default, so the invocation has to supply the value.
+///
+/// This is the one NSIS idiom `param` did not replace until now: `!ifndef NAME`
+/// / `!error` is a guard somebody has to remember to paste, and this is the same
+/// refusal written as the declaration itself, checked for every build.
+mod required {
+    use super::*;
+
+    const REQUIRED: &str = "local VERSION <const> = param(\"VERSION\")\n\
+                            attributes { name = \"a\", outFile = \"a.exe\" }\n\
+                            installer { section(\"Core\", function() detailPrint(VERSION) end) }\n";
+
+    /// The flag's text is the value, and the parameter is the same ordinary
+    /// `!define` a defaulted one becomes.
+    #[test]
+    fn the_flag_is_the_value() {
+        let output = build(REQUIRED, &[("VERSION", "2.0.0")]);
+        assert!(output.contains("!define VERSION \"2.0.0\""), "{output}");
+    }
+
+    /// Without it the build stops, at the declaration rather than at a use:
+    /// the declaration is what says the value is needed.
+    #[test]
+    fn without_the_flag_the_build_stops() {
+        let diags = errors(REQUIRED, &[]);
+        assert!(diags.contains(Code::MissingParam), "{diags:?}");
+        let rendered = diags.render("<test>");
+        assert!(rendered.contains("needs `-D VERSION=…`"), "{rendered}");
+    }
+
+    /// One diagnostic, not one per use. The name is bound to `""` so that the
+    /// uses fold like any other constant instead of each reporting a `<const>`
+    /// that never folded.
+    #[test]
+    fn the_missing_flag_is_reported_once() {
+        let diags = errors(
+            "local V <const> = param(\"V\")\n\
+             local W <const> = V .. \"!\"\n\
+             attributes { name = W, outFile = \"a.exe\" }\n\
+             installer { section(\"Core\", function() detailPrint(V) end) }\n",
+            &[],
+        );
+        assert_eq!(diags.len(), 1, "{diags:?}");
+    }
+
+    /// With no default there is no type to read the text as, so it is a
+    /// string: text a defaulted `param("PORT", 8080)` would reject as not an
+    /// integer is accepted here, because nothing declared an integer.
+    #[test]
+    fn any_text_is_accepted_because_the_type_is_string() {
+        let source = "local PORT <const> = param(\"PORT\")\n\
+                      attributes { name = PORT, outFile = \"a.exe\" }\n\
+                      installer { section(\"Core\", function() end) }\n";
+        build(source, &[("PORT", "abc")]);
+
+        let typed = errors(
+            "local PORT <const> = param(\"PORT\", 8080)\n\
+             attributes { name = \"a\", outFile = \"a.exe\" }\n\
+             installer { section(\"Core\", function() end) }\n",
+            &[("PORT", "abc")],
+        );
+        assert!(!typed.is_empty(), "a typed default still rejects it");
     }
 }

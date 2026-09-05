@@ -656,11 +656,14 @@ fn declarations() -> String {
          -- an error rather than a silent default.\n\
          --\n\
          -- The default is also the type declaration: `param(\"PORT\", 8080)`\n\
-         -- makes `-D PORT=abc` a diagnostic.\n\
+         -- makes `-D PORT=abc` a diagnostic. Written without one —\n\
+         -- `param(\"VERSION\")` — the flag is required and its value is a\n\
+         -- string, and a build that omits it stops.\n\
          ---@generic T: string|integer|boolean\n\
          ---@param name string\n\
          ---@param default T\n\
          ---@return T\n\
+         ---@overload fun(name: string): string\n\
          function param(name, default) end\n\n\
          -- The two iterators, and the halves they run in. `glob` is expanded on\n\
          -- the build machine and its loop is unrolled, so the pattern has to be\n\
@@ -1371,7 +1374,10 @@ const LANGUAGE: &[(&str, &str)] = &[
     ("include", "      - type: string\n"),
     // The default is typed by the declaration and not by selene: `any` is as
     // much as a positional model can say about a value whose type is the point.
-    ("param", "      - type: string\n      - type: any\n"),
+    (
+        "param",
+        "      - type: string\n      - type: any\n        required: false\n",
+    ),
     ("glob", "      - type: string\n"),
     ("lines", "      - type: any\n"),
     ("import", "      - type: string\n"),
