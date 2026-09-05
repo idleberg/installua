@@ -1717,8 +1717,34 @@ break every `unicode = false` build. Only a plugin the program actually calls
 emits a line.
 
 Redeclaring one of the builtins is allowed and replaces it, so a count that
-ships wrong here is not a wall. Declaring the same method twice from two of your
-own files is a mistake, and says so.
+ships wrong here is not a wall. Declaring the same method twice from two files
+in the *same* `.installua/declarations/` is a mistake, and says so.
+
+### Sharing declarations across a monorepo
+
+Several installers in one checkout can read one declaration instead of a copy
+each. Write `installua.toml` at the top — `installua init --workspace .` is the
+whole of it — and a compile walks up from the source's own directory reading
+every `.installua/declarations/` it passes:
+
+```text
+myapp/
+  installua.toml              # root = true — the walk stops here
+  .installua/declarations/
+    acme.toml                 # shared by both installers below
+  installers/
+    pro/install.lua
+    lite/install.lua
+```
+
+The nearer directory wins where two declare the same method, by the same rule a
+project's own file wins over a builtin — so the shared one is a default, not a
+wall. The walk also stops at a directory holding `.git`, marker or no marker,
+and the file holds nothing but `root`: it says where the search ends and
+nothing about what the compiler does.
+
+Projects with no `installua.toml` anywhere are unaffected, which is most of
+them: a single installer reads its own `.installua/declarations/` and no other.
 
 Run `installua stubs` after adding a declaration: the compiler reads the `.toml`
 on every build, but the editor reads the generated stub.

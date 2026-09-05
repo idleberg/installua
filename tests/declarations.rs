@@ -206,7 +206,11 @@ fn a_method_nobody_declared_names_the_directory_that_would_declare_it() {
 fn a_project_declaration_replaces_a_builtin_without_complaint() {
     let mut declarations = Declarations::builtin();
     let mut problems = Vec::new();
-    declarations.parse(
+    // One scope across both files, which is what a directory is: the second
+    // declaration below is a *sibling* of the first, not a nearer one
+    // overriding it.
+    let mut scope = installua::declarations::Scope::default();
+    declarations.parse_within(
         "test.toml",
         "[[plugin]]\n\
          name = \"UserInfo\"\n\
@@ -214,6 +218,7 @@ fn a_project_declaration_replaces_a_builtin_without_complaint() {
          nsis = \"UserInfo::GetOriginalAccountType\"\n\
          params = []\n\
          outputs = [\"string\"]\n",
+        &mut scope,
         &mut problems,
     );
     assert!(problems.is_empty(), "{problems:?}");
@@ -227,13 +232,14 @@ fn a_project_declaration_replaces_a_builtin_without_complaint() {
     // A second *project* declaration of the same method is a mistake rather
     // than a correction, and says so — while still taking the later one, since
     // refusing would leave the compiler holding whichever file sorted first.
-    declarations.parse(
+    declarations.parse_within(
         "other.toml",
         "[[plugin]]\n\
          name = \"UserInfo\"\n\
          method = \"getAccountType\"\n\
          nsis = \"UserInfo::GetAccountType\"\n\
          outputs = [\"string\"]\n",
+        &mut scope,
         &mut problems,
     );
     assert_eq!(problems.len(), 1, "{problems:?}");

@@ -1461,16 +1461,21 @@ pub fn luarc() -> String {
     )
 }
 
-/// `installua.toml`: the project marker, and the one file a user has to know
-/// about.
-pub fn project_toml(name: &str) -> String {
-    format!(
-        "# The project marker. Its *presence* is what makes this directory an\n\
-         # Installua project: `installua init` writes the editor configuration beside\n\
-         # it, and the generated stubs apply to this directory and no other.\n\
+/// `installua.toml` for a monorepo's top directory — the one shape of this
+/// file whose contents matter and whose spelling nobody would guess.
+///
+/// A single installer needs no marker at all, which is why `init` stopped
+/// writing one: a file that changes nothing does not belong among the three
+/// every project gets. `init --workspace` writes this instead, and it is the
+/// whole of what the file may say.
+pub fn workspace_toml() -> String {
+    String::from(
+        "# The workspace marker: `root = true` is where a compile stops walking up.\n\
+         # Every `.installua/declarations` from a source's own directory to this one is\n\
+         # read, outermost first, so several installers under here share one\n\
+         # declaration of a plugin instead of a copy each. It holds no settings.\n\
          [project]\n\
-         name = \"{name}\"\n\
-         entry = \"install.lua\"\n"
+         root = true\n",
     )
 }
 

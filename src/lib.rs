@@ -47,6 +47,7 @@ pub mod locale;
 pub mod lower;
 pub mod map;
 pub mod mui;
+pub mod project;
 pub mod regs;
 pub mod resolve;
 pub mod retired;
@@ -103,8 +104,13 @@ impl Options {
         }
     }
 
-    /// [`Options::for_file`], plus the declarations in
-    /// `<base>/.installua/declarations`.
+    /// [`Options::for_file`], plus the declarations every
+    /// `.installua/declarations` from `<base>` up to the project root holds —
+    /// see [`project::declaration_dirs`].
+    ///
+    /// `base` itself is unchanged by the cascade: a marker says where the
+    /// *search* stops, and nothing about where a `glob` or an `include`
+    /// resolves from. Relative paths still mean "beside the source".
     ///
     /// The problems come back rather than being folded into a [`Diagnostics`]:
     /// a malformed declaration file has no span in any Lua source, and a caller
@@ -113,12 +119,10 @@ impl Options {
     /// stops.
     pub fn for_project(input: &std::path::Path) -> (Options, Vec<declarations::Problem>) {
         let options = Options::for_file(input);
-        let dir = options
-            .base
-            .clone()
-            .unwrap_or_default()
-            .join(declarations::DIRECTORY);
-        let (declarations, problems) = declarations::Declarations::load(&dir);
+        let base = options.base.clone().unwrap_or_default();
+        let (dirs, mut problems) = project::declaration_dirs(&base);
+        let (declarations, mut found) = declarations::Declarations::load_all(&dirs);
+        problems.append(&mut found);
         (
             Options {
                 declarations,

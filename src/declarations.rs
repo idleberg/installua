@@ -117,13 +117,6 @@ pub struct Flag {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Macro {
-    /// Whether a project declared this, as opposed to it shipping here.
-    ///
-    /// Provenance rather than decoration: replacing a builtin is the point, and
-    /// replacing a declaration the same project already made is a mistake, so
-    /// the two are told apart by where an entry came from and not by what it is
-    /// called.
-    pub project: bool,
     /// The header it comes from, without the `.nsh`.
     pub header: String,
     /// The method name as written after the namespace: `fileFunc.getSize`.
@@ -143,8 +136,6 @@ pub struct Macro {
 /// rc, out = nsExec.execToStack(…)` is legal at all: the two come from here.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginMethod {
-    /// Whether a project declared this. See [`Macro::project`].
-    pub project: bool,
     pub plugin: String,
     pub installua: String,
     /// The full `Plugin::Method` spelling.
@@ -343,6 +334,17 @@ const SHIPPED: &[(&str, &str)] = &[
     ),
 ];
 
+/// What one set of declaration files has already declared, so that a second
+/// declaration of a method inside the set can be told from a nearer set
+/// overriding a farther one.
+///
+/// A *set* rather than a file, because two files in one
+/// `.installua/declarations` disagreeing is the mistake worth reporting, and
+/// [`crate::project`]'s cascade is the case where the same override is the
+/// feature working.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Scope(Vec<(bool, String, String)>);
+
 /// Where a project's own declarations live, relative to its root.
 pub const DIRECTORY: &str = ".installua/declarations";
 
@@ -372,46 +374,59 @@ impl Declarations {
             plugins: Vec::new(),
         };
         let mut problems = Vec::new();
-        for (name, text) in SHIPPED {
-            declarations.parse(name, text, &mut problems);
-        }
 
-        // Parsed as a project's files are — which is what catches two shipped
-        // files declaring one method, since the second reports — and then
-        // marked as ours. Provenance is what decides whether a *project*
-        // redeclaring this is a correction or a mistake, and everything up to
-        // here was read out of a file that could equally have been a project's.
-        for entry in &mut declarations.macros {
-            entry.project = false;
-        }
-        for entry in &mut declarations.plugins {
-            entry.project = false;
+        // One scope across all of them, exactly as a project's directory is:
+        // what ships here ships together, so two shipped files declaring one
+        // method is the same mistake two of a project's are, and the test that
+        // reads these problems is what turns it into a build failure.
+        let mut scope = Scope::default();
+        for (name, text) in SHIPPED {
+            declarations.parse_within(name, text, &mut scope, &mut problems);
         }
         (declarations, problems)
     }
 
     /// The builtins plus every `*.toml` in `dir`, in file-name order.
+    pub fn load(dir: &Path) -> (Declarations, Vec<Problem>) {
+        Declarations::load_all(std::slice::from_ref(&dir))
+    }
+
+    /// The same over several directories, **outermost first**.
+    ///
+    /// Order is the whole of what a caller has to get right, and it is the
+    /// rule two files in one directory already follow: later wins. So a
+    /// project's own declaration of a plugin overrides the workspace's for the
+    /// same reason its second file overrides its first, and
+    /// [`crate::project::declaration_dirs`] is what puts the list in that
+    /// order.
+    pub fn load_all(dirs: &[impl AsRef<Path>]) -> (Declarations, Vec<Problem>) {
+        let mut declarations = Declarations::builtin();
+        let mut problems = Vec::new();
+        for dir in dirs {
+            declarations.absorb(dir.as_ref(), &mut problems);
+        }
+        (declarations, problems)
+    }
+
+    /// Every `*.toml` in one directory, in file-name order.
     ///
     /// A missing directory is not a problem: a project that declares nothing is
     /// the common case, and an error there would make `.installua/declarations/`
     /// mandatory ceremony. A directory that cannot be *read* is a problem,
     /// because that is a permission or a typo rather than an absence.
-    pub fn load(dir: &Path) -> (Declarations, Vec<Problem>) {
-        let mut declarations = Declarations::builtin();
-        let mut problems = Vec::new();
-
+    fn absorb(&mut self, dir: &Path, problems: &mut Vec<Problem>) {
+        // One scope per directory: see [`parse_within`](Declarations::parse_within).
+        let mut scope = Scope::default();
         let entries = match std::fs::read_dir(dir) {
             Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return (declarations, problems);
-            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
             Err(error) => {
                 problems.push(Problem {
                     file: dir.display().to_string(),
                     line: 0,
                     message: format!("cannot read: {error}"),
                 });
-                return (declarations, problems);
+                return;
             }
         };
 
@@ -427,7 +442,7 @@ impl Declarations {
         for path in paths {
             let name = path.display().to_string();
             match std::fs::read_to_string(&path) {
-                Ok(text) => declarations.parse(&name, &text, &mut problems),
+                Ok(text) => self.parse_within(&name, &text, &mut scope, problems),
                 Err(error) => problems.push(Problem {
                     file: name,
                     line: 0,
@@ -435,20 +450,34 @@ impl Declarations {
                 }),
             }
         }
-
-        (declarations, problems)
     }
 
     /// Adds everything one declaration file declares. Public so that a caller
     /// with the text already in hand — an editor, a test — never has to touch
     /// the file system to get the answer the CLI gets.
     pub fn parse(&mut self, file: &str, text: &str, problems: &mut Vec<Problem>) {
+        self.parse_within(file, text, &mut Scope::default(), problems);
+    }
+
+    /// The same, told what the rest of the [`Scope`] has already declared.
+    ///
+    /// Public because the scope is what decides whether a redeclaration is a
+    /// mistake, and only the caller knows where one ends: the CLI passes one
+    /// per directory, a test passes one per case, and an editor holding a
+    /// project's files in memory passes one for the lot.
+    pub fn parse_within(
+        &mut self,
+        file: &str,
+        text: &str,
+        scope: &mut Scope,
+        problems: &mut Vec<Problem>,
+    ) {
         for record in parse::records(file, text, problems) {
-            self.insert(record, problems);
+            self.insert(record, scope, problems);
         }
     }
 
-    fn insert(&mut self, record: parse::Record, problems: &mut Vec<Problem>) {
+    fn insert(&mut self, record: parse::Record, scope: &mut Scope, problems: &mut Vec<Problem>) {
         let parse::Record {
             plugin,
             name,
@@ -466,25 +495,27 @@ impl Declarations {
             line,
         } = record;
 
-        // A project file replacing a *builtin* is the point; two project files
+        // A file replacing a *builtin* is the point, and so is a project's
+        // directory replacing the workspace's — both are a nearer answer to a
+        // question that already had one. Two files in the **same** scope
         // disagreeing is a mistake nobody makes on purpose, so the second says
-        // so and still wins — refusing would leave the compiler holding
+        // so and still wins: refusing would leave the compiler holding
         // whichever file happened to sort first.
+        let key = (plugin, name.clone(), method.clone());
+        if scope.0.contains(&key) {
+            problems.push(Problem {
+                file,
+                line,
+                message: format!("`{name}.{method}` is already declared; this one replaces it"),
+            });
+        } else {
+            scope.0.push(key);
+        }
+
         if plugin {
-            if self
-                .plugin(&name, &method)
-                .is_some_and(|existing| existing.project)
-            {
-                problems.push(Problem {
-                    file,
-                    line,
-                    message: format!("`{name}.{method}` is already declared; this one replaces it"),
-                });
-            }
             self.plugins
                 .retain(|entry| entry.plugin != name || entry.installua != method);
             self.plugins.push(PluginMethod {
-                project: true,
                 plugin: name,
                 installua: method,
                 nsis,
@@ -498,20 +529,9 @@ impl Declarations {
                 dir,
             });
         } else {
-            if self
-                .lookup(&name, &method)
-                .is_some_and(|existing| existing.project)
-            {
-                problems.push(Problem {
-                    file,
-                    line,
-                    message: format!("`{name}.{method}` is already declared; this one replaces it"),
-                });
-            }
             self.macros
                 .retain(|entry| entry.header != name || entry.installua != method);
             self.macros.push(Macro {
-                project: true,
                 header: name,
                 installua: method,
                 nsis,

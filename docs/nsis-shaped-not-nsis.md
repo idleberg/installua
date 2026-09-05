@@ -161,7 +161,7 @@ program with a dialog has the same include list as one without. See
 | `Int64Op`                                                  | **it does not exist in NSIS.** `Int64Cmp` and `Int64Fmt` do              | arithmetic on an `int64` is a hard error naming the reason, never a truncation                    |
 | `StrCmp`, `IntCmp`, `IfErrors`, `IfFileExists` as commands | they take labels; the language owns labels                               | `==`, `<`, `errors()`, `fileExists(p)` — all ordinary expressions                                 |
 | `MessageBox` with a jump table                             | it is a statement, a flag set and a branch at once                       | `local answer = messageBox { … }`; the jump table comes back for free when you compare the answer |
-| a config file for `Name`, `OutFile`, …                     | anything NSIS expresses as a script attribute belongs in `attributes {}` | `installua.toml` holds lint policy and search paths, and nothing NSIS has a command for           |
+| a config file for `Name`, `OutFile`, …                     | anything NSIS expresses as a script attribute belongs in `attributes {}` | `installua.toml` is a marker, not a settings file: `root = true` bounds the declaration search and nothing else |
 
 ---
 

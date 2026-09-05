@@ -227,6 +227,91 @@ installer { page.instFiles {}, section(\"Core\", function() detailPrint(VERSION)
     }
 }
 
+/// The declaration cascade, from the outside: a plugin declared once at the
+/// top of a checkout is one an installer under it may call.
+///
+/// A library test can build the `Declarations` directly — `tests/project.rs`
+/// does — but not answer the question this asks, which is whether the *command*
+/// walks up before it compiles. That is `Options::for_project`'s doing and the
+/// CLI is the only caller of it.
+mod monorepo {
+    use super::*;
+
+    /// A plugin nothing ships declared, so the compile can only accept the
+    /// call below because the workspace's file was read.
+    const DECLARED: &str = "\
+[[plugin]]
+name = \"acme\"
+method = \"install\"
+nsis = \"acme::Install\"
+params = [\"path\"]
+outputs = []
+";
+
+    const CALLER: &str = "\
+attributes { name = \"A\", outFile = \"a.exe\" }
+local acme = plugin \"acme\"
+installer { page.instFiles {}, section(\"Core\", function() acme.install(\"$INSTDIR\") end) }
+";
+
+    /// A checkout with the workspace marker at the top and one installer three
+    /// directories down. `shared` says whether the workspace declares the
+    /// plugin at all — the control, since a test whose compile passes either
+    /// way proves nothing.
+    fn checkout(name: &str, shared: bool) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("installua-monorepo-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+
+        let project = root.join("installers/pro");
+        std::fs::create_dir_all(&project).expect("create the project");
+        std::fs::write(root.join("installua.toml"), "[project]\nroot = true\n")
+            .expect("write the marker");
+        std::fs::write(project.join("install.lua"), CALLER).expect("write the program");
+        if shared {
+            let dir = root.join(".installua/declarations");
+            std::fs::create_dir_all(&dir).expect("create the declarations directory");
+            std::fs::write(dir.join("acme.toml"), DECLARED).expect("write the declaration");
+        }
+        root
+    }
+
+    fn check(root: &Path) -> (bool, String) {
+        let output = Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))
+            .arg("check")
+            .arg(root.join("installers/pro/install.lua"))
+            .output()
+            .expect("run installua");
+        (
+            output.status.success(),
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        )
+    }
+
+    /// The feature, in one assertion.
+    #[test]
+    fn a_workspace_declaration_is_read_from_a_project_under_it() {
+        let root = checkout("shared", true);
+        let (passed, output) = check(&root);
+        assert!(
+            passed,
+            "the workspace's declaration did not reach the project:\n{output}"
+        );
+    }
+
+    /// And the same checkout without the shared file is rejected, which is what
+    /// says the file above did the work.
+    #[test]
+    fn without_it_the_same_program_is_rejected() {
+        let root = checkout("bare", false);
+        let (passed, output) = check(&root);
+        assert!(!passed, "an undeclared plugin call compiled:\n{output}");
+    }
+}
+
 /// `init`, which is about a *directory* rather than a program — so unlike
 /// everything above it works in a scratch one of its own rather than beside the
 /// fixtures.
@@ -265,15 +350,42 @@ mod init {
         )
     }
 
-    const CONFIGS: [&str; 3] = ["installua.toml", ".luarc.json", "selene.toml"];
+    const CONFIGS: [&str; 2] = [".luarc.json", "selene.toml"];
 
     #[test]
-    fn it_writes_the_three_config_files() {
+    fn it_writes_the_config_files() {
         let dir = scratch("writes");
         let (passed, output) = init(&dir, &[]);
         assert!(passed, "{output}");
         for name in CONFIGS {
             assert!(dir.join(name).exists(), "`init` wrote no {name}:\n{output}");
+        }
+        // The marker is a power feature and a plain project needs none, so a
+        // bare `init` writing one would be a file that does nothing.
+        assert!(
+            !dir.join("installua.toml").exists(),
+            "`init` wrote a project marker:\n{output}"
+        );
+    }
+
+    /// And the flag that does write one writes the *workspace* marker, which is
+    /// the only shape of the file that changes anything.
+    #[test]
+    fn workspace_writes_the_marker_and_nothing_else() {
+        let dir = scratch("workspace");
+        let (passed, output) = init(&dir, &["--workspace"]);
+        assert!(passed, "{output}");
+        assert!(
+            std::fs::read_to_string(dir.join("installua.toml"))
+                .expect("no installua.toml")
+                .contains("root = true"),
+            "{output}"
+        );
+        for name in CONFIGS {
+            assert!(
+                !dir.join(name).exists(),
+                "`--workspace` wrote {name} into a directory with no sources:\n{output}"
+            );
         }
     }
 
@@ -290,28 +402,28 @@ mod init {
             !passed,
             "`init` overwrote an initialised directory:\n{output}"
         );
-        assert!(output.contains("installua.toml"), "{output}");
+        assert!(output.contains("selene.toml"), "{output}");
         assert!(output.contains("nothing written"), "{output}");
     }
 
-    /// And "nothing written" is the whole of it: not one of the three moves,
-    /// including the two that are not the file it stopped on.
+    /// And "nothing written" is the whole of it: not one of them moves,
+    /// including the one that is not the file it stopped on.
     #[test]
     fn a_refusal_writes_nothing_at_all() {
         let dir = scratch("nothing");
-        // Only the marker, so the other two are absent and would be written by
+        // Only one of them, so the other is absent and would be written by
         // anything that got past the check.
-        std::fs::write(dir.join("installua.toml"), "mine\n").expect("plant a file");
+        std::fs::write(dir.join("selene.toml"), "mine\n").expect("plant a file");
 
         let (passed, _) = init(&dir, &[]);
         assert!(!passed);
         assert_eq!(
-            std::fs::read_to_string(dir.join("installua.toml")).unwrap(),
+            std::fs::read_to_string(dir.join("selene.toml")).unwrap(),
             "mine\n",
             "the file in the way was rewritten"
         );
         assert!(
-            !dir.join(".luarc.json").exists() && !dir.join("selene.toml").exists(),
+            !dir.join(".luarc.json").exists(),
             "a refused `init` half-initialised the directory"
         );
     }
@@ -321,12 +433,12 @@ mod init {
     #[test]
     fn force_overwrites() {
         let dir = scratch("force");
-        std::fs::write(dir.join("installua.toml"), "mine\n").expect("plant a file");
+        std::fs::write(dir.join("selene.toml"), "mine\n").expect("plant a file");
 
         let (passed, output) = init(&dir, &["--force"]);
         assert!(passed, "{output}");
         assert_ne!(
-            std::fs::read_to_string(dir.join("installua.toml")).unwrap(),
+            std::fs::read_to_string(dir.join("selene.toml")).unwrap(),
             "mine\n",
             "`--force` left the file alone"
         );

@@ -75,19 +75,24 @@ enum Command {
     /// `-CMDHELP` bucket counts
     Coverage,
 
-    /// installua.toml, .luarc.json, selene.toml
+    /// .luarc.json, selene.toml
     Init {
         /// Where to write them
         #[arg(value_name = "DIR", default_value = ".")]
         dir: PathBuf,
 
-        /// Also offer the stubs, the VS Code tasks and the .gitignore entries
+        /// Also offer the stubs, the editor's tasks and the .gitignore entries
         #[arg(short = 'i', long)]
         interactive: bool,
 
         /// Overwrite what is already there, without asking
         #[arg(short = 'f', long)]
         force: bool,
+
+        /// Write installua.toml instead: the marker that says the declarations
+        /// under this directory are shared by every installer below it
+        #[arg(short = 'w', long)]
+        workspace: bool,
     },
 
     /// .installua/meta/*.lua and the selene std
@@ -168,7 +173,8 @@ fn main() -> ExitCode {
             dir,
             interactive,
             force,
-        } => init(&dir, interactive, force),
+            workspace,
+        } => init(&dir, interactive, force, workspace),
         Command::Stubs { dir } => stubs(&dir).err().unwrap_or(ExitCode::SUCCESS),
         Command::Generate(Generate::Table { snapshot }) => table(&snapshot),
     }
@@ -372,7 +378,12 @@ enum OnCollision {
     Force,
 }
 
-/// `installua init [dir]`: the three config files.
+/// `installua init [dir]`: the two config files.
+///
+/// `--workspace` writes one file instead, and a different one: the
+/// `root = true` marker that bounds a monorepo's declaration search. It is not
+/// a variant of the same command — a workspace directory holds no `.lua` file
+/// of its own, so an editor configuration there would be about nothing.
 ///
 /// **A directory that has them already is refused**, listing every file in the
 /// way and writing none of them — checked before the first write, so a refusal
@@ -380,7 +391,14 @@ enum OnCollision {
 /// printed "left alone" and exited 0, which meant an upgrade that should have
 /// refreshed a stale `.luarc.json` was indistinguishable from one that did.
 /// `--force` overwrites; `--interactive` asks per file.
-fn init(root: &Path, interactive: bool, force: bool) -> ExitCode {
+fn init(root: &Path, interactive: bool, force: bool, workspace: bool) -> ExitCode {
+    // One file with one line in it has nothing to ask about, and every question
+    // `--interactive` asks — stubs, the editor's tasks, the `.gitignore` — is
+    // about a directory holding sources, which a workspace root is not.
+    if workspace && interactive {
+        return usage_error("`--workspace` writes one file and asks nothing about it");
+    }
+
     let on = match (interactive, force) {
         (_, true) => OnCollision::Force,
         (true, false) => OnCollision::Ask,
@@ -402,22 +420,14 @@ fn init(root: &Path, interactive: bool, force: bool) -> ExitCode {
         }
     };
 
-    // The project's name is the directory's, so it is read *after* the prompt
-    // or a changed answer would leave the old one in `installua.toml`.
-    let name = root
-        .canonicalize()
-        .ok()
-        .and_then(|path| {
-            path.file_name()
-                .map(|name| name.to_string_lossy().to_string())
-        })
-        .unwrap_or_else(|| "installer".to_string());
-
-    let files = [
-        ("installua.toml", installua::stubs::project_toml(&name)),
-        (".luarc.json", installua::stubs::luarc()),
-        ("selene.toml", installua::stubs::selene_toml()),
-    ];
+    let files: Vec<(&'static str, String)> = if workspace {
+        vec![("installua.toml", installua::stubs::workspace_toml())]
+    } else {
+        vec![
+            (".luarc.json", installua::stubs::luarc()),
+            ("selene.toml", installua::stubs::selene_toml()),
+        ]
+    };
 
     // Every collision at once, before any write. One at a time would leave a
     // directory half initialised and a user re-running the command to find the
@@ -445,8 +455,13 @@ fn init(root: &Path, interactive: bool, force: bool) -> ExitCode {
                 return code;
             }
         }
-        log::info("now run `installua stubs` to generate the editor's meta files");
-        log::log("or `installua init --interactive` to be offered it, and more");
+        if workspace {
+            log::info("shared declarations go in .installua/declarations here");
+            log::log("every installer below this directory reads them");
+        } else {
+            log::info("now run `installua stubs` to generate the editor's meta files");
+            log::log("or `installua init --interactive` to be offered it, and more");
+        }
         Ok(())
     };
 
@@ -480,9 +495,9 @@ fn where_to(root: &Path) -> Result<PathBuf, ExitCode> {
 /// The questions, and then the writes they settled.
 ///
 /// Asked first and written afterwards, so the whole shape of the run is decided
-/// before anything lands. Only the extras are asked about: the three files a
-/// bare `init` writes are written here too, but as rows they were three
-/// unselectable lines above every real choice. Each is named by `write_or_ask`
+/// before anything lands. Only the extras are asked about: the config files a
+/// bare `init` writes are written here too, but as rows they were unselectable
+/// lines above every real choice. Each is named by `write_or_ask`
 /// as it lands, so what happened is still on screen afterwards.
 ///
 /// One question per answer, rather than one multiselect for all three. The
@@ -500,7 +515,7 @@ fn interactively(root: &Path, files: &[(&'static str, String)], on: OnCollision)
         .map_err(cancelled("nothing written"))?;
 
     let editor = clark::select("Which editor should it configure?")
-        .choice(clark::SelectOption::labelled(NONE, "(none)"))
+        .choice(clark::SelectOption::labelled(NONE, "None"))
         .choice(
             clark::SelectOption::labelled(VSCODE, "VS Code")
                 .with_hint(".vscode/extensions.json and tasks.json"),
@@ -764,8 +779,11 @@ fn stubs(root: &Path) -> Stop {
     // editor by the same file that makes it compile. A malformed one stops the
     // command for the reason it stops a build: stubs generated without it would
     // quietly leave out whatever it declared.
-    let (declarations, problems) =
-        installua::declarations::Declarations::load(&root.join(installua::declarations::DIRECTORY));
+    // The whole cascade, not just this directory's, so the editor types a
+    // shared plugin exactly where the compiler accepts one.
+    let (dirs, mut problems) = installua::project::declaration_dirs(root);
+    let (declarations, mut found) = installua::declarations::Declarations::load_all(&dirs);
+    problems.append(&mut found);
     if !problems.is_empty() {
         for problem in &problems {
             log::error(problem.to_string());
