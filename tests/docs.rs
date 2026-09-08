@@ -1,7 +1,7 @@
 //! The docs' `import "X"` and `plugin "X"` spellings resolve against what
 //! actually ships declared.
 //!
-//! `reference/commands.md` and `reference/mui2.md` both claim exhaustive
+//! `reference/commands.md` and `reference/modern-ui.md` both claim exhaustive
 //! coverage and nothing enforced the claim, so a spelling could rot in place:
 //! `concepts/nsis-shaped-not-nsis.md` offered `local winver = import "WinVer"`
 //! long after `WinVer.nsh` had been superseded by `getWinVer`, and
@@ -40,6 +40,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use installua::builtins;
 use installua::declarations::Declarations;
 use installua::mui;
 use installua::table::{self, Class};
@@ -431,6 +432,30 @@ fn every_writable_command_is_findable_by_its_nsis_name() {
     );
 }
 
+/// And the same for the constants, which the two tests above cannot see.
+///
+/// [`crate::table`] holds commands; `$DOCUMENTS` and `$HKLM64` are neither
+/// commands nor MUI2 names, so a name added to [`builtins::CONSTANTS`] and left
+/// out of the prose used to pass every gate here. It went the other way too —
+/// half the shell folders and eleven of the twenty registry roots were missing
+/// from *both* for as long as the list existed, and nothing said so.
+#[test]
+fn every_constant_is_spelled_in_the_docs() {
+    let prose = prose();
+    let missing: Vec<String> = builtins::CONSTANTS
+        .iter()
+        .filter(|constant| !whole_word(&prose, constant.installua))
+        .map(|constant| format!("{} is in no document", constant.installua))
+        .collect();
+
+    assert_eq!(
+        missing,
+        Vec::<String>::new(),
+        "reference/commands/constants.md is the list a reader looks these up in; \
+         these are resolvable in source and named nowhere"
+    );
+}
+
 /// The same sentence in `mui-reference.md`, about the 255 MUI2 names.
 ///
 /// `exposed` alone here: `internal` is MUI2's own state with nothing for a user
@@ -671,10 +696,10 @@ fn the_cli_page_matches_the_clap_declarations() {
         .output()
         .expect("the binary runs");
     let generated = String::from_utf8(generated.stdout).expect("utf-8");
-    let checked_in = fs::read_to_string(docs().join("reference/cli.md")).expect("the page exists");
+    let checked_in = fs::read_to_string(docs().join("cli.md")).expect("the page exists");
 
     assert_eq!(
         checked_in, generated,
-        "reference/cli.md is stale: regenerate it with `mise run docs:cli`"
+        "cli.md is stale: regenerate it with `mise run docs:cli`"
     );
 }

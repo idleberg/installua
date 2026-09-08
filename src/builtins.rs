@@ -86,17 +86,61 @@ impl Constant {
     }
 }
 
+/// The full predefined set, and full on purpose: these are spellings `makensis`
+/// hard-codes, so a name missing here is not "not yet implemented" but a name
+/// the user can write in NSIS and cannot write here. `$DOCUMENTS` and
+/// `$HKLM64` were both missing that way. The lists are
+/// `CEXEBuild::CEXEBuild` in `Source/build.cpp` (the variables and the shell
+/// folders) and `ParseRegRootKey` in `Source/script.cpp` (the roots).
 pub const CONSTANTS: &[Constant] = &[
     writable("INSTDIR", Ty::Str),
     writable("OUTDIR", Ty::Str),
     constant("PROGRAMFILES", Ty::Str),
+    constant("PROGRAMFILES32", Ty::Str),
     constant("PROGRAMFILES64", Ty::Str),
     constant("COMMONFILES", Ty::Str),
+    constant("COMMONFILES32", Ty::Str),
+    constant("COMMONFILES64", Ty::Str),
     constant("DESKTOP", Ty::Str),
     constant("STARTMENU", Ty::Str),
     constant("SMPROGRAMS", Ty::Str),
+    constant("SMSTARTUP", Ty::Str),
+    constant("QUICKLAUNCH", Ty::Str),
+    constant("DOCUMENTS", Ty::Str),
+    constant("MUSIC", Ty::Str),
+    constant("PICTURES", Ty::Str),
+    constant("VIDEOS", Ty::Str),
+    constant("FAVORITES", Ty::Str),
+    constant("SENDTO", Ty::Str),
+    constant("RECENT", Ty::Str),
+    constant("NETHOOD", Ty::Str),
+    constant("PRINTHOOD", Ty::Str),
+    constant("FONTS", Ty::Str),
+    constant("TEMPLATES", Ty::Str),
+    constant("ADMINTOOLS", Ty::Str),
+    constant("INTERNET_CACHE", Ty::Str),
+    constant("COOKIES", Ty::Str),
+    constant("HISTORY", Ty::Str),
+    constant("PROFILE", Ty::Str),
+    constant("RESOURCES", Ty::Str),
+    constant("RESOURCES_LOCALIZED", Ty::Str),
+    constant("CDBURN_AREA", Ty::Str),
     constant("APPDATA", Ty::Str),
     constant("LOCALAPPDATA", Ty::Str),
+    // The `USER*` and `COMMON*` halves of the folders above, naming one side
+    // outright instead of asking `setShellVarContext` which side is current.
+    constant("USERAPPDATA", Ty::Str),
+    constant("USERLOCALAPPDATA", Ty::Str),
+    constant("USERTEMPLATES", Ty::Str),
+    constant("USERSTARTMENU", Ty::Str),
+    constant("USERSMPROGRAMS", Ty::Str),
+    constant("USERDESKTOP", Ty::Str),
+    constant("COMMONLOCALAPPDATA", Ty::Str),
+    constant("COMMONPROGRAMDATA", Ty::Str),
+    constant("COMMONTEMPLATES", Ty::Str),
+    constant("COMMONSTARTMENU", Ty::Str),
+    constant("COMMONSMPROGRAMS", Ty::Str),
+    constant("COMMONDESKTOP", Ty::Str),
     constant("TEMP", Ty::Str),
     constant("WINDIR", Ty::Str),
     constant("SYSDIR", Ty::Str),
@@ -104,6 +148,7 @@ pub const CONSTANTS: &[Constant] = &[
     constant("EXEPATH", Ty::Str),
     constant("EXEFILE", Ty::Str),
     constant("PLUGINSDIR", Ty::Str),
+    constant("CMDLINE", Ty::Str),
     constant("LANGUAGE", Ty::nonneg()),
     // The installer's own window, and the only handle a program can name
     // without having created the thing it addresses: `getDlgItem(HWNDPARENT,
@@ -111,12 +156,31 @@ pub const CONSTANTS: &[Constant] = &[
     // the same reason as `$EXEDIR` — it is a fact about the running installer,
     // and NSIS accepts a write to it silently.
     constant("HWNDPARENT", Ty::Handle),
+    // `-CMDHELP` spells the roots `HKLM[32|64]`, and the `ANY` third of each
+    // family it leaves out entirely — `makensis` takes all of them, so the
+    // list here is `ParseRegRootKey`'s and not the usage line's. The long
+    // aliases (`HKEY_LOCAL_MACHINE` and friends) are the same seven roots
+    // spelled twice and stay out: one name per thing.
     root("HKLM"),
+    root("HKLM32"),
+    root("HKLM64"),
+    root("HKLMANY"),
     root("HKCU"),
+    root("HKCU32"),
+    root("HKCU64"),
+    root("HKCUANY"),
     root("HKCR"),
+    root("HKCR32"),
+    root("HKCR64"),
+    root("HKCRANY"),
     root("HKU"),
     root("HKCC"),
+    root("HKDD"),
+    root("HKPD"),
     root("SHCTX"),
+    root("SHCTX32"),
+    root("SHCTX64"),
+    root("SHCTXANY"),
 ];
 
 /// A name the compiler owns: neither a constant nor a register, because its
