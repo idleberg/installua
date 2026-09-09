@@ -1,0 +1,9 @@
+# Statically link the MSVC CRT so installua.exe runs on a clean Windows install
+# without the VC++ redistributable. Without this the binary imports
+# VCRUNTIME140.dll and dies at 0xC0000135 (STATUS_DLL_NOT_FOUND) before main,
+# with no error message to go on.
+# Gated on target_env, so Linux and macOS builds are unaffected. This file is not
+# part of the published crate, so it does not affect downstream consumers of the
+# library — only the binaries built from this repo.
+[target.'cfg(target_env = "msvc")']
+rustflags = ["-C", "target-feature=+crt-static"]
