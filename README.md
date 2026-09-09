@@ -141,3 +141,7 @@ either census. Run `installua coverage` to see the counts.
 What that does **not** mean is that every command has a Lua spelling — a good
 number are deliberately rejected, or written by the compiler on your behalf.
 Both categories are listed with their reasons in the reference.
+
+## License
+
+This work is licensed under the [Apache License 2.0](LICENSE)
