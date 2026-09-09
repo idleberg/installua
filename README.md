@@ -114,18 +114,18 @@ The documentation is the website, and its sources are in this repository under
 
 |                                                                                                              |                                                                                                             |
 | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [reference/commands.md](web/src/content/docs/reference/commands.md)                                           | **Start here.** Every NSIS command and what to write instead, grouped by what you are trying to do.         |
+| [reference/commands/](web/src/content/docs/reference/commands/index.md)                                       | **Start here.** Every NSIS command and what to write instead, grouped by what you are trying to do.         |
 | [reference/modern-ui.md](web/src/content/docs/reference/modern-ui.md)                                                   | The eight MUI2 pages and every setting on them.                                                             |
-| [reference/plugins.md](web/src/content/docs/reference/plugins.md)                                             | Every plugin method that ships declared, where its output count came from, and what is deliberately absent. |
+| [reference/plugins/](web/src/content/docs/reference/plugins/index.md)                                         | Every plugin method that ships declared, where its output count came from, and what is deliberately absent. |
 | [reference/headers.md](web/src/content/docs/reference/headers.md)                                             | The same for `FileFunc`, `TextFunc` and `WordFunc` macros.                                                  |
 | [concepts/nsis-shaped-not-nsis.md](web/src/content/docs/concepts/nsis-shaped-not-nsis.md)                     | If you know NSIS: the habits that do not carry over.                                                        |
 | [concepts/lua-shaped-not-lua.md](web/src/content/docs/concepts/lua-shaped-not-lua.md)                         | If you know Lua: what this language does not have, and why.                                                 |
 | [examples/](examples/)                                                                                       | Five complete programs, each with the `.nsi` it must produce.                                               |
 
 Some starting points in the reference: [build parameters and build-time
-`if`](web/src/content/docs/reference/commands.md#param) for the values CI sets
+`if`](web/src/content/docs/reference/commands/program-structure.md#param) for the values CI sets
 rather than the source, and [declaring a third-party plugin or
-header](web/src/content/docs/reference/commands.md#declaring-a-third-party-plugin-or-header) for the
+header](web/src/content/docs/reference/commands/plugins-and-headers.md#declaring-a-third-party-plugin-or-header) for the
 plugins beyond the ones that ship declared — a `.toml` file per plugin, since
 NSIS offers no way to ask a DLL how many values it pushes.
 
