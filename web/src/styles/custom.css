@@ -1,0 +1,85 @@
+@import '@fontsource/quicksand/400.css';
+@import '@fontsource/quicksand/600.css';
+@import '@fontsource/quicksand/700.css';
+
+/*
+ * The site's whole palette.
+ *
+ * There is one theme, not two: `ThemeProvider` and `ThemeSelect` are overridden
+ * away in `astro.config.mjs`, so nothing ever stamps `data-theme` and the light
+ * palette Starlight ships behind `[data-theme='light']` can never match. That is
+ * what lets this be a plain `:root` — otherwise it would have to outrank that
+ * block, which carries the same specificity.
+ *
+ * Starlight derives nearly everything — surfaces, hairlines, borders, muted text
+ * — from one gray ramp plus `black`/`white`, so the theme is retuned here rather
+ * than patched per component. Read the ramp as a single axis: `black` is the
+ * page, 6→5 are the surfaces stacked on it, 4→1 are text getting brighter.
+ *
+ * The stock ramp bottoms out at 10% lightness; #303456 sits at 26%, so every
+ * surface above the page moves up with it, and the text end stays bright enough
+ * to hold contrast over a mid-lightness blue.
+ */
+:root {
+	--sl-font: 'Quicksand', sans-serif;
+	color-scheme: dark; /* scrollbars and form controls, which CSS can't reach */
+
+	--sl-color-black: hsl(232, 29%, 26%); /* #303456 — the page */
+	--sl-color-gray-6: hsl(232, 26%, 32%); /* nav, sidebar, hairline */
+	--sl-color-gray-5: hsl(232, 22%, 41%); /* inline code, hairline-light */
+	--sl-color-gray-4: hsl(232, 18%, 64%); /* dimmest text, icons */
+	--sl-color-gray-3: hsl(232, 22%, 77%); /* muted text */
+	--sl-color-gray-2: hsl(232, 30%, 88%); /* body text */
+	--sl-color-gray-1: hsl(232, 40%, 95%);
+	--sl-color-white: hsl(0, 0%, 100%); /* headings */
+
+	/* Stock Starlight tints the nav and sidebar one step off the page. At 10%
+	 * lightness that reads as depth; at 26% it just reads as washed out, so both
+	 * sit flat on the page and the hairline alone does the separating. */
+	--sl-color-bg-nav: var(--sl-color-bg);
+	--sl-color-bg-sidebar: var(--sl-color-bg);
+
+	/* The stock accent is hue 224 — near-identical to the page, so links read as
+	 * muddy against it. Cyan is the cheapest hue that stays unmistakably "link". */
+	--sl-color-accent-low: hsl(196, 45%, 24%);
+	--sl-color-accent: hsl(196, 80%, 52%);
+	--sl-color-accent-high: hsl(196, 90%, 78%);
+  --sl-color-text-accent: #88a1d9;
+
+	/* Expressive Code ships its own near-black editor chrome, which reads as a
+	 * hole punched in the page. Pull its surfaces onto the same ramp; the syntax
+	 * colours are bright enough to survive the lighter background unchanged. */
+	--ec-frm-edBg: hsl(232, 30%, 21%);
+	--ec-frm-trmBg: hsl(232, 30%, 21%);
+	--ec-frm-edTabBarBg: hsl(232, 28%, 27%);
+	--ec-frm-edActTabBg: hsl(232, 30%, 21%);
+	--ec-frm-trmTtbBg: hsl(232, 28%, 27%);
+	--ec-brdCol: hsl(232, 22%, 38%);
+	--ec-frm-edActTabIndTopCol: var(--sl-color-accent);
+}
+
+html {
+  font-size: 18px;
+  font-weight: 600;
+
+  strong {
+    font-weight: 700;
+  }
+}
+
+.site-title {
+  color: #fff;
+}
+
+/*
+ * Abbreviations. The tooltip is the whole point, so it has to look like
+ * something you can hover: a dotted underline is the one decoration browsers
+ * still recognise for it, and the help cursor confirms it on the way past.
+ * Touch devices get no tooltip at all, which is why an abbreviation is only
+ * ever a shortcut to a term the sentence around it already survives without.
+ */
+abbr[title] {
+  text-decoration: underline dotted var(--sl-color-gray-4);
+  text-underline-offset: 0.2em;
+  cursor: help;
+}
