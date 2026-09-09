@@ -1,13 +1,14 @@
-# Lua-shaped, not Lua
+---
+title: Lua-shaped, not Lua
+description: What surprises you if you already know Lua, and the one reason behind all of it.
+---
 
 For someone who knows Lua. Every row is something that will surprise you, and the reason is
 always the same one: there is no runtime. Installua source is valid Lua so that your
 editor, formatter and linter work — it is not Lua that runs.
 
-The other table is [NSIS-shaped, not NSIS](nsis-shaped-not-nsis.md), for the larger
+The other table is [NSIS-shaped, not NSIS](/concepts/nsis-shaped-not-nsis/), for the larger
 audience coming the other way.
-
----
 
 ## The one-sentence version
 

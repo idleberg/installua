@@ -9,7 +9,7 @@ Installua is a single command-line program, so getting set up takes a minute or 
 Installua writes NSIS scripts and passes them to the NSIS compiler, so you need [NSIS 3.0](https://nsis.sourceforge.io/Download) or later installed and reachable on your `PATH`.
 :::
 
-Various installations methos are at your disposal, including a variety of package managers.
+Various installations methods are at your disposal, including a variety of package managers.
 
 ### Cargo
 

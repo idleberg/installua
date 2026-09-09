@@ -20,6 +20,7 @@ use installua::diag::{Code, Diagnostics};
 /// firing on it is the point rather than a nuisance: it is the only tier-2 test
 /// of a warning whose subject compiles perfectly well.
 const GOLDENS: &[(&str, &[Code])] = &[
+    ("build-time", &[]),
     ("components", &[]),
     ("control-flow", &[]),
     ("dialog", &[]),
@@ -55,6 +56,12 @@ const TIER2_ONLY: &[(&str, &[Code])] = &[("thirdparty", &[])];
 const ASSETS: &[(&str, &[u8])] = &[
     ("LICENSE.txt", b"Terms.\n"),
     ("check.bmp", include_bytes!("golden/assets/check.bmp")),
+    // Under its real path too, because `build-time` reaches it through a
+    // `glob`, and what a `glob` unrolls to is the path as written.
+    (
+        "assets/check.bmp",
+        include_bytes!("golden/assets/check.bmp"),
+    ),
 ];
 
 fn golden() -> PathBuf {
@@ -110,7 +117,9 @@ fn goldens_assemble_under_wx() {
         let script = directory.join(format!("{name}.nsi"));
         std::fs::write(&script, build(name, &source, expected)).expect("write the script");
         for (asset, bytes) in ASSETS {
-            std::fs::write(directory.join(asset), bytes).expect("write the asset");
+            let path = directory.join(asset);
+            std::fs::create_dir_all(path.parent().expect("a parent")).expect("asset directory");
+            std::fs::write(path, bytes).expect("write the asset");
         }
 
         let output = Command::new(&makensis)

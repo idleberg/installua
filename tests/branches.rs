@@ -288,6 +288,25 @@ mod the_condition_folds {
         assert!(raised(&diags, Code::NotBool), "{}", diags.render("<test>"));
     }
 
+    /// Ordering two folded integers folds too. It is a separate arm from the
+    /// arithmetic ones because it answers with a `bool`, and leaving it out is
+    /// what made `if BUILD > 40` a `const-if` error on two constants.
+    #[test]
+    fn comparing_two_folded_integers_decides_the_branch() {
+        let output = build(
+            "local BUILD <const> = 41\n\
+             attributes { name = \"A\", outFile = \"a.exe\" }\n\
+             if BUILD > 40 then\n\
+               installer { section(\"Late\", function() end) }\n\
+             else\n\
+               installer { section(\"Early\", function() end) }\n\
+             end\n",
+            &[],
+        );
+        assert!(output.contains("Section \"Late\""), "{output}");
+        assert!(!output.contains("Early"), "{output}");
+    }
+
     /// A `<const>` declared below the `if` that reads it still decides it: the
     /// fixpoint folds what it can, takes the branches that became decidable, and
     /// runs again. Order-freeness does not stop at the conditional.

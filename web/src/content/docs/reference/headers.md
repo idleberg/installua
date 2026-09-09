@@ -1,11 +1,14 @@
-# Header reference
+---
+title: Headers
+description: Every header macro Installua ships a declaration for, across FileFunc, TextFunc and WordFunc.
+---
 
 Every header macro Installua ships a declaration for: `FileFunc`, `TextFunc` and
 `WordFunc`, reached with `import "FileFunc"` and called as
 `fileFunc.getParent(path)`.
 
-For plugins, see [plugin-reference.md](plugin-reference.md). For the call
-syntax and the walker forms, see [`### import`](reference-map.md#import).
+For plugins, see the [plugin reference](/reference/plugins/). For the call
+syntax and the walker forms, see [`import`](/reference/commands/plugins-and-headers/#import).
 
 ## Why a header needs a declaration at all
 

@@ -1,7 +1,7 @@
 # Declaration reference
 
 The authority is [Declaring a third-party plugin or
-header](https://github.com/idleberg/installua/blob/main/docs/reference-map.md#declaring-a-third-party-plugin-or-header).
+header](https://github.com/idleberg/installua/blob/main/web/src/content/docs/reference/commands/plugins-and-headers.md#declaring-a-third-party-plugin-or-header).
 This file is the working subset plus the part that is not written down there:
 how to get the counts out of a plugin's source.
 

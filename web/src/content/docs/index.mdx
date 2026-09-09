@@ -5,7 +5,7 @@ template: splash # Remove or comment out this line to display the site sidebar o
 hero:
   tagline: A Lua-shaped language that compiles to NSIS.
   image:
-    file: ../../assets/houston.webp
+    file: ../../../public/installua.svg
   actions:
     - text: Getting started
       link: /getting-started/introduction/
@@ -18,23 +18,27 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-## Next steps
+## Installua at a glance
 
-<CardGrid stagger>
-	<Card title="Update content" icon="pencil">
-		Edit `src/content/docs/index.mdx` to see this page change.
-	</Card>
-	<Card title="Change page layout" icon="document">
-		Delete `template: splash` in `src/content/docs/index.mdx` to display a
-		sidebar on this page.
-	</Card>
-	<Card title="Add new content" icon="add-document">
-		Add Markdown or MDX files to `src/content/docs` to create new pages.
-	</Card>
-	<Card title="Configure your site" icon="setting">
-		Edit your `sidebar` and other config in `astro.config.mjs`.
-	</Card>
-	<Card title="Read the docs" icon="open-book">
-		Learn more in [the Starlight Docs](https://starlight.astro.build/).
-	</Card>
-</CardGrid>
+```lua
+attributes {
+	name = "MyApp",
+	outFile = "MyApp-setup.exe",
+	compressor = "lzma",
+}
+
+installer {
+	installDir = PROGRAMFILES64 .. "/MyApp",
+
+	page.welcome {},
+	page.directory {},
+	page.instFiles {},
+	page.finish {},
+
+	section("Core", function()
+		setOutPath(INSTDIR)
+		file("myapp.exe")
+		writeUninstaller(INSTDIR .. "/uninstall.exe")
+	end),
+}
+```

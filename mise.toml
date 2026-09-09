@@ -86,6 +86,10 @@ run = [
   "cargo fmt",
 ]
 
+[tasks."docs:cli"]
+description = "web/src/content/docs/cli.md — the subcommands, from clap"
+run = "cargo run -q -- generate cli > web/src/content/docs/cli.md"
+
 [tasks.web]
 description = "Launches web dev-server"
 run = "bun run --filter web dev --open"

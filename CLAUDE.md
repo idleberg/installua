@@ -45,6 +45,7 @@ comment too — rewrite it in the same commit.
 | ---- | -------------- |
 | `src/table/generated.rs` | `mise run snapshot` (reads `tables/cmdhelp-3.12.txt`) |
 | `tests/golden/coverage.txt` | `mise run coverage` |
+| `web/src/content/docs/cli.md` | `mise run docs:cli` (reads the `clap` declarations) |
 | `tests/golden/overlay-{examples,attributes}.{lua,nsi}` | `mise run goldens` |
 | `tables/{mui,locales}-3.12.txt` | `UPDATE_SNAPSHOTS=1 cargo test --test mui --test locales` |
 
@@ -57,20 +58,26 @@ by hand, line by line, against the intended lowering.
 
 When a golden fails, read the diff first: that diff is the finding.
 
+**The documentation is the website.** The prose lives in
+`web/src/content/docs/`, one directory per sidebar section, and there is no
+`docs/` directory any more. A page is Markdown with Starlight frontmatter, so
+its title is `title:` and never an `# H1`.
+
 **A new language construct needs a docs entry**, in the same change:
 
-- a MUI2 name — page, page setting, block-level setting → `docs/mui-reference.md`
-- anything else → `docs/reference-map.md`
+- a MUI2 name — page, page setting, block-level setting →
+  `web/src/content/docs/reference/modern-ui.md`
+- anything else → `web/src/content/docs/reference/commands.md`
 
 Both are hand-written and both claim exhaustive coverage (276 NSIS commands, 255
 MUI2 names). `installua coverage` cannot check that claim — it counts the tables,
 so `todo 0` reads the same whether the prose is current or was deleted this
 morning. `tests/docs.rs` is what checks it, three gates over every writable row:
-its Installua spelling is in `docs/`, its **NSIS** name is in `docs/`, and every
-writable MUI2 name is. So a new construct without its entry fails the build.
+its Installua spelling is on some page, its **NSIS** name is, and every writable
+MUI2 name is. So a new construct without its entry fails the build.
 
-Two things those gates still do not cover. They match a name anywhere in `docs/`,
-not under the right heading — teaching them the shape of both documents would be
+Two things those gates still do not cover. They match a name anywhere in the
+site, not under the right heading — teaching them the shape of both documents would be
 a second copy of the docs kept in Rust. And a **declared plugin method** is not
 required to appear at all: a census entry is a promise the language makes and
 there are 531 of them, while a declaration is one row in a `.toml`, and its

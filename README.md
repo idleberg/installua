@@ -66,7 +66,7 @@ brew install idleberg/asahi/installua
 
 ```sh
 mkdir my-app && cd my-app
-installua init .        # installua.toml, .luarc.json, selene.toml
+installua init .        # .luarc.json, selene.toml
 installua stubs         # .installua/meta/*.lua — the editor's half
 ```
 
@@ -109,20 +109,23 @@ mise run install:selene
 
 ## Documentation
 
-|                                                              |                                                                                                             |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [docs/reference-map.md](docs/reference-map.md)               | **Start here.** Every NSIS command and what to write instead, grouped by what you are trying to do.         |
-| [docs/mui-reference.md](docs/mui-reference.md)               | The eight MUI2 pages and every setting on them.                                                             |
-| [docs/plugin-reference.md](docs/plugin-reference.md)         | Every plugin method that ships declared, where its output count came from, and what is deliberately absent. |
-| [docs/header-reference.md](docs/header-reference.md)         | The same for `FileFunc`, `TextFunc` and `WordFunc` macros.                                                  |
-| [docs/nsis-shaped-not-nsis.md](docs/nsis-shaped-not-nsis.md) | If you know NSIS: the habits that do not carry over.                                                        |
-| [docs/lua-shaped-not-lua.md](docs/lua-shaped-not-lua.md)     | If you know Lua: what this language does not have, and why.                                                 |
-| [examples/](examples/)                                       | Five complete programs, each with the `.nsi` it must produce.                                               |
+The documentation is the website, and its sources are in this repository under
+[`web/src/content/docs/`](web/src/content/docs/).
+
+|                                                                                                              |                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| [reference/commands.md](web/src/content/docs/reference/commands.md)                                           | **Start here.** Every NSIS command and what to write instead, grouped by what you are trying to do.         |
+| [reference/modern-ui.md](web/src/content/docs/reference/modern-ui.md)                                                   | The eight MUI2 pages and every setting on them.                                                             |
+| [reference/plugins.md](web/src/content/docs/reference/plugins.md)                                             | Every plugin method that ships declared, where its output count came from, and what is deliberately absent. |
+| [reference/headers.md](web/src/content/docs/reference/headers.md)                                             | The same for `FileFunc`, `TextFunc` and `WordFunc` macros.                                                  |
+| [concepts/nsis-shaped-not-nsis.md](web/src/content/docs/concepts/nsis-shaped-not-nsis.md)                     | If you know NSIS: the habits that do not carry over.                                                        |
+| [concepts/lua-shaped-not-lua.md](web/src/content/docs/concepts/lua-shaped-not-lua.md)                         | If you know Lua: what this language does not have, and why.                                                 |
+| [examples/](examples/)                                                                                       | Five complete programs, each with the `.nsi` it must produce.                                               |
 
 Some starting points in the reference: [build parameters and build-time
-`if`](docs/reference-map.md#param) for the values CI sets rather than the
-source, and [declaring a third-party plugin or
-header](docs/reference-map.md#declaring-a-third-party-plugin-or-header) for the
+`if`](web/src/content/docs/reference/commands.md#param) for the values CI sets
+rather than the source, and [declaring a third-party plugin or
+header](web/src/content/docs/reference/commands.md#declaring-a-third-party-plugin-or-header) for the
 plugins beyond the ones that ship declared — a `.toml` file per plugin, since
 NSIS offers no way to ask a DLL how many values it pushes.
 

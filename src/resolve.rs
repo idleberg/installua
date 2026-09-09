@@ -1321,6 +1321,21 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
                 (BinOp::Concat, _, _) => {
                     Some(ConstValue::Str(format!("{}{}", lhs.text(), rhs.text())))
                 }
+                // Ordering folds to a `bool`, so it cannot go through
+                // [`integer`], which answers with the `int` an arithmetic
+                // operator produces.
+                (BinOp::Lt, ConstValue::Int(a), ConstValue::Int(b)) => {
+                    Some(ConstValue::Bool(a < b))
+                }
+                (BinOp::Le, ConstValue::Int(a), ConstValue::Int(b)) => {
+                    Some(ConstValue::Bool(a <= b))
+                }
+                (BinOp::Gt, ConstValue::Int(a), ConstValue::Int(b)) => {
+                    Some(ConstValue::Bool(a > b))
+                }
+                (BinOp::Ge, ConstValue::Int(a), ConstValue::Int(b)) => {
+                    Some(ConstValue::Bool(a >= b))
+                }
                 (op, ConstValue::Int(a), ConstValue::Int(b)) => {
                     integer(*op, *a, *b).map(ConstValue::Int)
                 }

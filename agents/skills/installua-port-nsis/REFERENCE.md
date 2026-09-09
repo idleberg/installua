@@ -27,12 +27,12 @@ shape.
 
 **A build-time value is not a runtime one.** `!define`-shaped things are
 compile-time constants and the compiler will tell you when you have crossed the
-line. `docs/lua-shaped-not-lua.md` §"Two stages, and you can always tell which"
+line. `concepts/lua-shaped-not-lua.md` §"Two stages, and you can always tell which"
 is the authority.
 
 ## Construct by construct
 
-The full table lives in `docs/nsis-shaped-not-nsis.md` §"Where things you know
+The full table lives in `concepts/nsis-shaped-not-nsis.md` §"Where things you know
 live now" — read it once at the start of a port. The entries that catch people:
 
 | NSIS | Installua |
@@ -87,7 +87,7 @@ carries a marker has marked nothing.
 ## Known doc drift, and limits to plan around
 
 The drift found while porting `Examples/bigtest.nsi` has been corrected in
-`docs/`, but the *shape* of it recurs, so check for it rather than trusting a
+the reference, but the *shape* of it recurs, so check for it rather than trusting a
 usage line:
 
 **A row with more than one optional position names all of them.** Exactly one
@@ -129,14 +129,14 @@ Structural limits that force a restructure rather than a spelling:
 
 ## When there is no spelling
 
-1. **Check `## Not available`** in `docs/reference-map.md` first. It is a list
+1. **Check `commands/not-available.md`** first. It is a list
    of *decisions*, each naming the replacement. Nothing there is pending.
 2. **`raw [[ … ]]`** is the escape hatch: text handed to `makensis` unread. No
    value comes out, no `local` survives it, and a failure inside one is reported
    as yours. A value crosses the boundary through a global, whose NSIS name is
    the one you wrote.
 3. Reaching for `raw` because a spelling was not found is almost always a
-   failed grep. Search the group headings (`grep -n '^## ' docs/reference-map.md`)
+   failed grep. Search the group headings (`ls commands/`)
    and look under the group the command belongs to before concluding it is absent.
 
 ## Verifying a port

@@ -4,7 +4,8 @@
 //! the whole of it — every question about the language is answered by a
 //! `installua::` call that an editor could make just as well.
 //!
-//! Exit codes: 0 success, 1 the source was rejected, 2 the invocation was.
+//! Exit codes: 0 success, 1 the source was rejected, 2 the invocation was
+//! rejected.
 //! `clap` exits 2 on a bad invocation of its own accord, which is the same
 //! number this file used before it parsed its own arguments.
 
@@ -866,10 +867,6 @@ fn cli_page() -> ExitCode {
     if let Some(about) = cli.get_about() {
         page.push_str(&format!("{about}\n\n"));
     }
-    page.push_str(
-        "Exit codes: `0` success, `1` the source was rejected, `2` the invocation was.\n",
-    );
-
     for sub in cli.get_subcommands() {
         // Hidden is hidden. `generate` is the maintainer's half and is kept out
         // of `--help` for a reason that applies here word for word. `help` is
@@ -900,6 +897,17 @@ fn cli_page() -> ExitCode {
             }
         }
     }
+
+    // Last: the same number whichever subcommand produced it, so it belongs
+    // after them rather than in front of the one a reader came for.
+    page.push_str(
+        "\n## Exit codes\n\n\
+         | Code | Meaning |\n\
+         | ---- | ------- |\n\
+         | `0` | Success. |\n\
+         | `1` | The source was rejected. |\n\
+         | `2` | The invocation was rejected. |\n",
+    );
 
     print!("{page}");
     ExitCode::SUCCESS
@@ -953,7 +961,14 @@ fn help_of(arg: &clap::Arg) -> String {
         .first()
         .filter(|_| arg.get_num_args().is_none_or(|range| range.takes_values()))
     {
-        help.push_str(&format!(" Defaults to `{}`.", default.to_string_lossy()));
+        // `.` at the end of a sentence lands two dots in a row; the name of the
+        // thing it means reads better and carries its own expansion.
+        let default = default.to_string_lossy();
+        if default == "." {
+            help.push_str(" Defaults to the <abbr title=\"current working directory\">CWD</abbr>.");
+        } else {
+            help.push_str(&format!(" Defaults to `{default}`."));
+        }
     }
     if matches!(
         arg.get_action(),

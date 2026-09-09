@@ -1,13 +1,14 @@
-# NSIS-shaped, not NSIS
+---
+title: NSIS-shaped, not NSIS
+description: Where Installua puts the things you already know from .nsi, and what it will not let you do.
+---
 
 For someone who has written `.nsi` files. You know what an installer needs to do; this is
 where Installua puts each of those things, and where it deliberately does not let you do
 what you are used to.
 
-The other table is [Lua-shaped, not Lua](lua-shaped-not-lua.md), for people arriving from
+The other table is [Lua-shaped, not Lua](/concepts/lua-shaped-not-lua/), for people arriving from
 the other side.
-
----
 
 ## The reversal that will bite hardest
 
@@ -189,5 +190,5 @@ is then as ordinary as `detailPrint`. Declaring one is not ceremony:
 `${StrCase} $0 "text" "L"` puts its destination _first_ and `${GetSize} "$dir" "" $0 $1 $2`
 puts it _last_, so there is no convention to infer, and guessing emits NSIS that looks
 right and is not. The format is in
-[the reference](reference-map.md#declaring-a-third-party-plugin-or-header); what stays
+[the reference](/reference/commands/plugins-and-headers/#declaring-a-third-party-plugin-or-header); what stays
 `raw`'s work is `!addplugindir` and anything you have not declared yet.

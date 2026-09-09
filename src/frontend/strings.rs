@@ -269,7 +269,8 @@ fn check_length(value: &str, span: Span, diags: &mut Diagnostics) {
         )
         .note(
             "`makensis` truncates it at runtime and reports nothing; \
-             set `maxStringLength` in `installua.toml` for a large-string build",
+             the limit is compiled into `makensis` itself, so raising it means \
+             the large-strings build of NSIS",
         ),
     );
 }

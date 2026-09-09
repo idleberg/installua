@@ -15,21 +15,22 @@ script that uses macros.
 
 ## The lookup rule
 
-Never write a spelling from memory. `docs/reference-map.md` is ~1900 lines and
-`docs/mui-reference.md` ~250 — **grep them, never read them whole**:
+Never write a spelling from memory. The command reference is one page per group
+under `web/src/content/docs/reference/commands/` and the MUI2 one is
+`reference/modern-ui.md` — **grep them, never read them whole**:
 
 ```bash
-grep -n -A20 '^### .*\bWriteRegStr\b' docs/reference-map.md   # a command
-grep -n -A12 'MUI_PAGE_DIRECTORY' docs/mui-reference.md       # a MUI2 name
-grep -n 'SetRegView' docs/reference-map.md                    # not found above? check Not available
+cd web/src/content/docs/reference
+grep -rn -A20 '^## .*\bWriteRegStr\b' commands/   # a command
+grep -n -A12 'MUI_PAGE_DIRECTORY' modern-ui.md    # a MUI2 name
+grep -rn 'SetRegView' commands/                   # not found above? check Not available
 ```
 
-Headings are the **NSIS** name (grouped, e.g. `### SectionGetText / SectionSetText / …`),
+Headings are the **NSIS** name (grouped, e.g. `## SectionGetText / SectionSetText / …`),
 because that is what the source script has. Everything under one is Installua.
-No hit anywhere means the command is in [Not
-available](#not-available) — that section names what to write instead. If the
-repo is not to hand, both files are in `docs/` of
-<https://github.com/idleberg/installua>.
+No hit anywhere means the command is in `commands/not-available.md` — that page
+names what to write instead. If the repo is not to hand, every page is under
+`web/src/content/docs/` of <https://github.com/idleberg/installua>.
 
 **The compiler outranks the docs**, which are hand-written and can drift. Where
 a `**Usage**` line shows trailing optional positions, the instruction almost
@@ -127,7 +128,7 @@ More at [REFERENCE.md](REFERENCE.md#construct-by-construct).
 ## Checklist
 
 - [ ] Inventory reported before any Lua was written
-- [ ] Every command's spelling traced to a `docs/` heading, not memory
+- [ ] Every command's spelling traced to a reference heading, not memory
 - [ ] Every `StrCmp` decided case-sensitive or not, on purpose
 - [ ] No `raw` used where a real spelling exists (grep before reaching for it)
 - [ ] Unknown plugins declared, not guessed

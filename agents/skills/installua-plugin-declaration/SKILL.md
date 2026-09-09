@@ -33,7 +33,7 @@ local result = unz.unzipToLog(zip, INSTDIR)
 
 1. **Check it isn't already shipped.** `installua stubs .` then read
    `.installua/meta/`, or the [plugin
-   reference](https://github.com/idleberg/installua/blob/main/docs/plugin-reference.md).
+   reference](https://github.com/idleberg/installua/blob/main/web/src/content/docs/reference/plugins/).
    22 plugins and headers ship declared; a project file redeclaring one wins, so
    correcting a shipped count is legitimate — say so in the file's comment.
 2. **Get the source.** Find the plugin's page under
