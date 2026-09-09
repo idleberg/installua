@@ -195,5 +195,5 @@ jobs:
   #       uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
   #       with:
   #         identifier: idleberg.installua
-  #         installers-regex: '-windows-setup\.exe$'
+  #         installers-regex: '-windows-x64\.exe$'
   #         token: ${{ secrets.WINGET_TOKEN }}
