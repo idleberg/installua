@@ -125,7 +125,6 @@ jobs:
         if: matrix.installer
         shell: bash
         run: |
-          NSISDIR=$(makensis -HDRINFO | tr ',' '\n' | grep '^NSISDIR=' | cut -d= -f2 | tr '\\' '/')
           curl -sSLo EnVar.zip https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip
           7z x EnVar.zip -oEnVar
           cp EnVar/Plugins/x86-unicode/EnVar.dll "$NSISDIR/Plugins/x86-unicode/"
