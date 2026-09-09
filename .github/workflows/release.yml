@@ -97,7 +97,7 @@ jobs:
 
       - name: Set up NSIS
         if: matrix.installer
-        uses: nsis-dev/setup-nsis@v1
+        uses: nsis-dev/setup-nsis@a33839d33d9fb676b90aa455b1a11fb207be059a # v1.1.1
 
       # Stock NSIS ships no EnVar; setup/install.lua uses it to put INSTDIR on
       # the user's PATH.
