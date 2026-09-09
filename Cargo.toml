@@ -2,9 +2,13 @@
 name = "installua"
 version = "0.1.0"
 description = "A Lua-shaped language that compiles to NSIS."
+authors = ["Jan T. Sott"]
+repository = "https://github.com/idleberg/installua"
+readme = "README.md"
+keywords = ["nsis", "installer", "compiler"]
+categories = ["command-line-utilities", "development-tools", "compilers"]
 edition = "2024"
 license = "Apache-2.0"
-keywords = ["nsis", "installer", "compiler"]
 include = [
 	"src/**/*.rs",
 	"src/declarations/*.toml",

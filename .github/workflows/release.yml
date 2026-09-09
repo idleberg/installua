@@ -75,9 +75,29 @@ jobs:
       #   if: matrix.use-cargo-xwin
       #   run: cargo xwin build --release --target ${{ matrix.target }}
 
-      # - name: Build (native)
-      #   if: ${{ !matrix.use-cross && !matrix.use-cargo-xwin }}
-      #   run: cargo build --release --target ${{ matrix.target }}
+      # Everything the two cross-compilers above do not: both Macs, Linux x64,
+      # and the Windows x64 that also builds the installer. Re-enabling the
+      # `cargo-xwin` entry means adding `&& !matrix.use-cargo-xwin` back to this
+      # condition — `actionlint` rejects the reference while the entry is
+      # commented out, and losing this step is how the last cleanup broke the
+      # release.
+      - name: Build (native)
+        if: ${{ !matrix.use-cross }}
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # .cargo/config.toml asks for the static CRT, and nothing fails if it is
+      # not honoured — the binary just imports VCRUNTIME140.dll and dies at
+      # 0xC0000135 on a clean Windows install, before main, with no message.
+      # This is that config, as a check.
+      - name: Verify no dynamic CRT dependency
+        if: contains(matrix.target, 'windows')
+        shell: bash
+        run: |
+          EXE="./target/${{ matrix.target }}/release/installua.exe"
+          if grep -qa 'VCRUNTIME140\|api-ms-win-crt-' "$EXE"; then
+            echo "::error::$EXE imports the dynamic CRT; it will fail with 0xC0000135 on a clean Windows install. Check .cargo/config.toml crt-static."
+            exit 1
+          fi
 
       - name: Get version
         id: version
@@ -148,3 +168,33 @@ jobs:
             installua-*.zip
             installua-*-setup.exe
             SHA256SUMS
+
+  publish-to-crates:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # Off until the package exists in winget-pkgs and WINGET_TOKEN is set on this
+  # repository; enabling it before either is a failed release. The regex is the
+  # NSIS installer rather than the zips ardent publishes — winget wants the
+  # thing that installs, and `setup/install.lua` is what produces it.
+  # publish-to-winget:
+  #   needs: create-release
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Publish to winget-pkgs
+  #       uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+  #       with:
+  #         identifier: idleberg.installua
+  #         installers-regex: '-windows-setup\.exe$'
+  #         token: ${{ secrets.WINGET_TOKEN }}
