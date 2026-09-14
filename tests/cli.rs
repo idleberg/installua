@@ -110,6 +110,42 @@ fn check_passes_a_program_that_compiles() {
     assert!(output.is_empty(), "`check` said something:\n{output}");
 }
 
+/// `emit` beside a hand-written `.nsi` — a port's original — refuses and keeps
+/// it, but writes over its own output the next time round. `output()` gives the
+/// child no terminal, which is the refusing half of the guard.
+#[test]
+fn emit_keeps_a_hand_written_nsi() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures");
+    let script = fixtures.join("emit-guard.lua");
+    let written = fixtures.join("emit-guard.nsi");
+    std::fs::write(&script, CLEAN).expect("write the program");
+    std::fs::write(&written, "Name \"by hand\"\n").expect("write the original");
+
+    let emit = || {
+        Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))
+            .arg("emit")
+            .arg(&script)
+            .current_dir(&fixtures)
+            .output()
+            .expect("run installua")
+            .status
+            .success()
+    };
+    let refused = !emit();
+    let kept = std::fs::read_to_string(&written).unwrap_or_default();
+    std::fs::remove_file(&written).expect("remove the original");
+    let first = emit();
+    let second = emit();
+    let _ = std::fs::remove_file(&script);
+    let _ = std::fs::remove_file(&written);
+
+    assert!(refused, "`emit` wrote over a hand-written script");
+    assert_eq!(kept, "Name \"by hand\"\n");
+    assert!(first && second, "`emit` refused its own output");
+}
+
 /// And it writes nothing, which is the difference between it and `emit`.
 #[test]
 fn check_writes_no_nsi() {
