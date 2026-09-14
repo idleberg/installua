@@ -43,6 +43,12 @@ impl LineMap {
         self.lines.push(origin);
     }
 
+    /// A line put above everything emitted — the CLI's generated-file marker —
+    /// so every line below it maps one further down.
+    pub fn prepend(&mut self, origin: Origin) {
+        self.lines.insert(0, origin);
+    }
+
     /// The origin of a 1-based output line, as `makensis` reports them.
     pub fn origin(&self, line: usize) -> Option<&Origin> {
         self.lines.get(line.checked_sub(1)?)
