@@ -48,6 +48,17 @@ installer {
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
 	end),
 }
+
+uninstaller {
+	page.confirm {},
+	page.instFiles {},
+
+	section("Uninstall", function()
+		delete(INSTDIR .. "/myapp.exe")
+		delete(INSTDIR .. "/uninstall.exe")
+		rmDir(INSTDIR)
+	end),
+}
 ```
 
 ## Build it
