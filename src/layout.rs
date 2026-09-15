@@ -423,6 +423,8 @@ fn terminator(
             Vec::new(),
         ),
 
+        Terminator::Halt => (Vec::new(), Vec::new()),
+
         Terminator::Unreachable => {
             debug_assert!(
                 block.steps.is_empty(),

@@ -736,6 +736,10 @@ impl BodyLowerer<'_, '_> {
                 (None, None) => {
                     let all = place(builtin, lowered, Vec::new());
                     self.emit(ir::Instruction::new(builtin.nsis, all));
+                    if matches!(builtin.nsis, "Abort" | "Quit") {
+                        let after = self.fresh("after_halt");
+                        self.terminate(Terminator::Halt, after);
+                    }
                     None
                 }
             },

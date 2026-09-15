@@ -1010,6 +1010,13 @@ impl BodyLowerer<'_, '_> {
                         let Some(flag) = self.typed(value, Ty::Bool, &field.text) else {
                             return;
                         };
+                        if let Some(scaled) = self.scaled(&flag) {
+                            self.emit(ir::Instruction::new(
+                                "ShowWindow",
+                                vec![hwnd(), ir::Arg::slot(scaled)],
+                            ));
+                            return;
+                        }
                         let scaled = self.claim_temp(field.span);
                         self.emit(ir::Instruction::new(
                             "IntOp",
@@ -1069,6 +1076,34 @@ impl BodyLowerer<'_, '_> {
 
     /// A value the field's type demands, with the mismatch named after the
     /// field rather than after the instruction it lands in.
+    /// The slot an earlier `.visible` write already scaled `flag` into, when
+    /// nothing but `ShowWindow`s has run since: a function showing a row of
+    /// controls by one `bool` multiplies it once, not once per control.
+    ///
+    /// Only the steps at the end of the current block count, and `ShowWindow`
+    /// writes no register, so neither `flag` nor the product can have changed.
+    fn scaled(&self, flag: &ir::Arg) -> Option<Slot> {
+        let steps = &self.body.block(self.current).steps;
+        let last = steps
+            .iter()
+            .rev()
+            .find(|step| !matches!(step, ir::Step::Instruction(line) if line.name == "ShowWindow"));
+        let Some(ir::Step::Instruction(line)) = last else {
+            return None;
+        };
+        match line.args.as_slice() {
+            [ir::Arg::Dest(scaled), read, ir::Arg::Raw(op), five]
+                if line.name == "IntOp"
+                    && read == flag
+                    && op == "*"
+                    && *five == ir::Arg::int(control::SW_SHOW.into()) =>
+            {
+                Some(scaled.clone())
+            }
+            _ => None,
+        }
+    }
+
     fn typed(&mut self, value: &Expr, wanted: Ty, field: &str) -> Option<ir::Arg> {
         let typed = self.value(value)?;
         if typed.ty != wanted && typed.ty != Ty::Unknown {

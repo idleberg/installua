@@ -408,6 +408,16 @@ fn visible_is_hide_and_show_rather_than_false_and_true() {
         computed.contains("ShowWindow $__GENERATED_ctl_agree $0"),
         "{computed}"
     );
+
+    // A row of controls shown by one `bool` multiplies it once.
+    let row = build(&page(
+        "local agree = checkbox { \"ok\", y = 0, height = 12 }\n\
+         local tag = label { \"hi\", y = 20, height = 12 }",
+        "agree, tag,",
+        "local on = agree.checked\nagree.visible = on\ntag.visible = on",
+    ));
+    assert_eq!(row.matches("IntOp").count(), 1, "{row}");
+    assert_eq!(row.matches("ShowWindow").count(), 2, "{row}");
 }
 
 /// One instruction sets both colours, so one field holds both. `textColor` and

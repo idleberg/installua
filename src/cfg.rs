@@ -224,6 +224,9 @@ pub enum Terminator {
         else_block: BlockId,
     },
     Return,
+    /// The block's last line never finishes: `Abort` and `Quit` leave the whole
+    /// script, so nothing follows them — not a `Return`, not a jump to a join.
+    Halt,
     Unreachable,
 }
 
@@ -242,7 +245,7 @@ impl Terminator {
                 else_block,
                 ..
             } => vec![*then_block, *else_block],
-            Terminator::Return | Terminator::Unreachable => Vec::new(),
+            Terminator::Return | Terminator::Halt | Terminator::Unreachable => Vec::new(),
         }
     }
 }

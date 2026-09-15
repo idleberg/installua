@@ -215,6 +215,30 @@ installer {
     );
 }
 
+/// `Abort` leaves the script, so the arm it ends jumps nowhere: no `Goto` to the
+/// join, and no join label nothing jumps to.
+#[test]
+fn an_arm_that_aborts_has_no_goto() {
+    let body = body(&program(
+        "\
+if fileExists(\"x\") then
+	abort(\"stop\")
+else
+	detailPrint(\"go\")
+end",
+    ));
+
+    assert_eq!(
+        shape(&body),
+        vec![
+            "IfFileExists",
+            "Abort",
+            "__GENERATED_else_0:",
+            "DetailPrint",
+        ]
+    );
+}
+
 /// Dead blocks disappear, and a `<const>` condition never becomes a branch at
 /// all — which is also why `!if`/`!ifdef` need no surface spelling. Nothing
 /// from the untaken arm reaches the `.nsi`.
