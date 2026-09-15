@@ -1,9 +1,9 @@
 ---
 title: Plugins that ship with NSIS
-description: The eleven plugins under NSISDIR/Contrib, every count read from their own source.
+description: The twelve plugins under NSISDIR/Contrib, every count read from their own source.
 ---
 
-Eleven, every count read from the plugin's own source under `NSISDIR/Contrib`
+Twelve, every count read from the plugin's own source under `NSISDIR/Contrib`
 rather than from its readme.
 
 ## nsExec
@@ -11,12 +11,14 @@ rather than from its readme.
 | Method | Arguments | Returns |
 | ------ | --------- | ------- |
 | `.execToStack(command)` | `string` | **exit code, output** |
+| `.execToLog(command)` | `string` | exit code — the output goes to the details view |
+| `.exec(command)` | `string` | exit code — the output is discarded |
 
 The exit code comes off first, then the captured output. That is `Pop` order,
 and it is the order nothing in the source states — it is the reason
 `local rc, out = nsExec.execToStack(…)` is legal at all.
 
-All three of its flags are declared, in a table written last:
+All three of its flags are declared on every method, in a table written last:
 
 | Flag | Emits | Effect |
 | ---- | ----- | ------ |
@@ -41,6 +43,22 @@ same flags emit the same line.
 the plugin pushes the string `"timeout"` where an exit code would be, and on a
 failure to launch, `"error"` — both in the same slot as a number, which is why
 the first output is a `string`.
+
+## nsDialogs
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.selectFolderDialog(title, initial)` | `string`, `path` | the folder, or `"error"` when cancelled |
+| `.selectFileDialog(mode, initial, filter)` | `string`, `path`, `string` | the file, or `""` when cancelled |
+
+The browse buttons `dirRequest` and `fileRequest` do not draw. `mode` is
+`"save"` or anything else for open; `filter` is `|`-separated pairs, and `""`
+means `All Files|*.*`. Its controls are `page.custom`'s, not methods.
+
+```lua
+local dir = nsDialogs.selectFolderDialog("Pick a folder", INSTDIR)
+if dir ~= "error" then folder.value = dir end
+```
 
 ## UserInfo
 

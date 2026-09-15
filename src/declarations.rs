@@ -327,6 +327,10 @@ const SHIPPED: &[(&str, &str)] = &[
     ("UserInfo.toml", include_str!("declarations/UserInfo.toml")),
     ("VPatch.toml", include_str!("declarations/VPatch.toml")),
     ("WordFunc.toml", include_str!("declarations/WordFunc.toml")),
+    (
+        "nsDialogs.toml",
+        include_str!("declarations/nsDialogs.toml"),
+    ),
     ("nsExec.toml", include_str!("declarations/nsExec.toml")),
     (
         "nsProcess.toml",

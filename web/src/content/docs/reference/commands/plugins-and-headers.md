@@ -12,12 +12,13 @@ compiler reserves the DLL when `.onInit` can reach the call.
 
 **Usage** `local p = plugin(name)` · `p.method(…)` → its outputs
 
-Eleven that ship with NSIS, read from each plugin's own source rather than its
+Twelve that ship with NSIS, read from each plugin's own source rather than its
 wiki page:
 
 | Plugin      | Methods                                                                                    |
 | ----------- | ------------------------------------------------------------------------------------------ |
-| `nsExec`    | `.execToStack` → exit code, output                                                         |
+| `nsExec`    | `.execToStack` → exit code, output · `.execToLog`, `.exec` → exit code                     |
+| `nsDialogs` | `.selectFolderDialog`, `.selectFileDialog` — the browse button a `dirRequest` does not draw |
 | `UserInfo`  | `.getAccountType`                                                                          |
 | `System`    | `.call` — outputs come from the signature's `.s`, not from a count                          |
 | `Dialer`    | `.attemptConnect`, `.getConnectedState`, `.autodialOnline`, `.autodialUnattended`, `.autodialHangup` |

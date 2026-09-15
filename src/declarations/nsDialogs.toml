@@ -1,0 +1,19 @@
+# nsDialogs, ships with NSIS: `NSISDIR/Docs/nsDialogs/Readme.html`.
+#
+# See docs/plugin-reference.md.
+#
+# Absent: every control and page method -- `page.custom` is compiler-owned.
+
+[[plugin]]
+name = "nsDialogs"
+method = "selectFolderDialog"
+nsis = "nsDialogs::SelectFolderDialog"
+params = ["string", "path"]
+outputs = ["string"]
+
+[[plugin]]
+name = "nsDialogs"
+method = "selectFileDialog"
+nsis = "nsDialogs::SelectFileDialog"
+params = ["string", "path", "string"]
+outputs = ["string"]

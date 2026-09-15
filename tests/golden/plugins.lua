@@ -9,6 +9,7 @@
 
 local Banner = plugin "Banner"
 local Dialer = plugin "Dialer"
+local nsDialogs = plugin "nsDialogs"
 local nsExec = plugin "nsExec"
 local NSISdl = plugin "NSISdl"
 local Splash = plugin "Splash"
@@ -82,5 +83,18 @@ installer {
 			timeout = 5000,
 		})
 		detailPrint(code .. output)
+	end),
+
+	section("Ask", function()
+		-- `exec` and `execToLog` push the exit code alone: the output goes
+		-- nowhere, or to the details view, never to the stack.
+		detailPrint(nsExec.execToLog("cmd.exe /c ver", { timeout = 5000 }))
+		detailPrint(nsExec.exec("cmd.exe /c ver"))
+
+		-- The browse buttons `dirRequest` and `fileRequest` do not draw. The
+		-- initial folder is a `path`; the filter is not, so its `|` and `*`
+		-- stay as written.
+		detailPrint(nsDialogs.selectFolderDialog("Pick a folder", INSTDIR .. "/data"))
+		detailPrint(nsDialogs.selectFileDialog("open", INSTDIR, "Text|*.txt"))
 	end),
 }

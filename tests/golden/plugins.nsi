@@ -36,3 +36,18 @@ __GENERATED_endif_0:
   Pop $1
   DetailPrint "$0$1"
 SectionEnd
+
+Section "Ask"
+  nsExec::ExecToLog /TIMEOUT=5000 "cmd.exe /c ver"
+  Pop $0
+  DetailPrint $0
+  nsExec::Exec "cmd.exe /c ver"
+  Pop $0
+  DetailPrint $0
+  nsDialogs::SelectFolderDialog "Pick a folder" "$INSTDIR\data"
+  Pop $0
+  DetailPrint $0
+  nsDialogs::SelectFileDialog "open" $INSTDIR "Text|*.txt"
+  Pop $0
+  DetailPrint $0
+SectionEnd
