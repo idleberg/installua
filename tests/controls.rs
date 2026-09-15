@@ -426,13 +426,16 @@ fn colours_are_one_field_because_they_are_one_instruction() {
         "{output}"
     );
 
-    let half = errors(&page(
+    // `""` is `SetCtlColors`' own "keep the control's colour".
+    let half = build(&page(
         "local tag = label { \"hi\", y = 0, height = 12 }",
         "tag,",
         "tag.colors = { text = \"FF0000\" }",
     ));
-    assert_eq!(half.len(), 1, "{half:?}");
-    assert_eq!(half[0].0, Code::MissingAttribute);
+    assert!(
+        half.contains("SetCtlColors $__GENERATED_ctl_tag FF0000 \"\""),
+        "{half}"
+    );
 
     // `SetCtlColors` reads anything it does not understand as black, so a colour
     // that is not one is an error rather than a label that disappears.

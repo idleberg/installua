@@ -47,14 +47,14 @@ pub(super) trait Fields {
     /// Named by its caller, because MUI2 reads its colours in pairs through that
     /// same instruction — `installer { headerColors }` and `page.directory
     /// { colors }` are this field one and two levels up.
-    fn colours(&mut self, value: &Expr, whole: &str) -> Option<(ir::Arg, ir::Arg)> {
+    fn colours(&mut self, value: &Expr, whole: &str) -> Option<(Option<ir::Arg>, Option<ir::Arg>)> {
         let Expr::Table { fields, span } = value else {
             self.bad_field(
                 value.span(),
                 whole,
                 "a table of two colours",
                 "`SetCtlColors` sets the text and the background in one instruction, so the field \
-                 that is that instruction asks for both",
+                 that is that instruction is a table of both",
             );
             return None;
         };
@@ -87,23 +87,23 @@ pub(super) trait Fields {
             }
         }
 
-        let [Some(text), Some(back)] = colours else {
+        // Either half may be left out: `SetCtlColors` reads `""` as the
+        // control's own colour, and MUI2 defaults whichever define is absent.
+        // Neither is a field that says nothing.
+        if colours == [None, None] {
             let span = *span;
             self.diags().push(
                 Diagnostic::error(
                     Code::MissingAttribute,
                     span,
-                    format!("`{whole}` wants both `text` and `background`"),
-                )
-                .note(
-                    "one instruction writes both, so leaving one out would mean writing a colour \
-                     this compiler invented over the one the theme chose",
+                    format!("`{whole}` has neither `text` nor `background`"),
                 )
                 .note("`background = \"transparent\"` is the way to leave it unpainted"),
             );
             return None;
-        };
-        Some((ir::Arg::raw(text), ir::Arg::raw(back)))
+        }
+        let [text, back] = colours.map(|colour| colour.map(ir::Arg::raw));
+        Some((text, back))
     }
 
     /// One colour: six hexadecimal digits, or `transparent` for a background

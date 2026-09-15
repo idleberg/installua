@@ -361,9 +361,7 @@ fn the_pages_are_a_closed_set() {
 }
 
 /// `colors` is one field holding two, one and two levels up from the control
-/// field of the same name: MUI2 spends both halves on a single `SetCtlColors`,
-/// so a script that could write one alone would be writing a colour this
-/// compiler invented over the one the theme chose.
+/// field of the same name: MUI2 spends both halves on a single `SetCtlColors`.
 #[test]
 fn a_colour_pair_is_one_field_at_every_level() {
     let output = build(&program(
@@ -402,22 +400,25 @@ fn the_directory_colours_do_not_survive_their_page() {
     );
 }
 
-/// Half a pair is refused, at both levels, in the same words.
+/// Half a pair keeps the default for the other half: MUI2 defaults an absent
+/// `MUI_TEXTCOLOR`, and `Directory.nsh` needs its background defined to paint
+/// at all, so there the missing half is `""`. Neither half is refused.
 #[test]
-fn half_a_colour_pair_is_refused() {
-    let page = errors(&program(
-        "page.directory { colors = { background = \"445566\" } },",
+fn half_a_colour_pair_keeps_the_default() {
+    let output = build(&program(
+        "headerColors = { background = \"000000\" },\n\
+         page.directory { colors = { text = \"112233\" } },",
     ));
-    assert_eq!(page.len(), 1, "{page:?}");
-    assert_eq!(page[0].0, Code::MissingAttribute);
-    assert!(page[0].1.contains("`colors` wants both"), "{page:?}");
-
-    let block = errors(&program("headerColors = { text = \"000000\" },"));
-    assert_eq!(block.len(), 1, "{block:?}");
+    assert!(output.contains("!define MUI_BGCOLOR 000000"), "{output}");
+    assert!(!output.contains("MUI_TEXTCOLOR"), "{output}");
     assert!(
-        block[0].1.contains("`headerColors` wants both"),
-        "{block:?}"
+        output.contains("!define MUI_DIRECTORYPAGE_BGCOLOR \"\""),
+        "{output}"
     );
+
+    let block = errors(&program("headerColors = {},"));
+    assert_eq!(block.len(), 1, "{block:?}");
+    assert_eq!(block[0].0, Code::MissingAttribute);
 }
 
 /// A colour is checked rather than passed through: `SetCtlColors` reads

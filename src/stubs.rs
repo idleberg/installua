@@ -917,8 +917,8 @@ fn controls() -> String {
          -- A colour is six hexadecimal digits, in the order Windows writes them.\n\
          -- Both are named because `SetCtlColors` writes both in one instruction.\n\
          ---@class (exact) installua.Colors\n\
-         ---@field text string\n\
-         ---@field background string Or `\"transparent\"`, to leave it unpainted.\n\
+         ---@field text? string\n\
+         ---@field background? string Or `\"transparent\"`, to leave it unpainted.\n\
          local Colors = {}\n\n\
          ---@class (exact) installua.Font\n\
          ---@field face string A typeface name; Windows substitutes if it has none.\n\

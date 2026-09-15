@@ -2807,14 +2807,14 @@ impl<'p> Lowerer<'_, 'p> {
                 // second page could not differ even if it asked.
                 "headerColors" if half == Half::Installer => {
                     if let Some((text, back)) = self.colours(value, "headerColors") {
-                        self.module.mui_defines.push(ir::Define {
-                            name: "MUI_TEXTCOLOR".to_string(),
-                            value: Some(text),
-                        });
-                        self.module.mui_defines.push(ir::Define {
-                            name: "MUI_BGCOLOR".to_string(),
-                            value: Some(back),
-                        });
+                        for (name, colour) in [("MUI_TEXTCOLOR", text), ("MUI_BGCOLOR", back)] {
+                            if let Some(colour) = colour {
+                                self.module.mui_defines.push(ir::Define {
+                                    name: name.to_string(),
+                                    value: Some(colour),
+                                });
+                            }
+                        }
                         self.mui = true;
                     }
                 }
@@ -4568,8 +4568,14 @@ impl<'p> Lowerer<'_, 'p> {
                 }
             }
             Holds::Colors(text) => {
+                // Both defined even when one was left out: the background is
+                // the `!ifdef` that turns the colours on, and `""` is what
+                // `Directory.nsh` would default the text to anyway.
                 if let Some((text_arg, back)) = self.colours(value, field.installua) {
+                    let blank = || ir::Arg::str("");
+                    let back = back.unwrap_or_else(blank);
                     define(defines, undefines, field.define, Some(back), field.cleared);
+                    let text_arg = text_arg.unwrap_or_else(blank);
                     define(defines, undefines, text, Some(text_arg), field.cleared);
                 }
             }

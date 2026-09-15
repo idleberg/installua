@@ -54,6 +54,9 @@ installer {
 Five of the seven are write-only because Windows offers no instruction that
 reports them: NSIS can set a control's colours and cannot ask what they are.
 
+Either colour may be left out and keeps the control's own. The same holds for
+`headerColors` and a directory page's `colors`, where MUI2's default fills in.
+
 ```lua
 serial.font = { face = "Tahoma", size = 8 }
 serial.colors = { text = "800000", background = "transparent" }

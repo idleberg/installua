@@ -1029,9 +1029,14 @@ impl BodyLowerer<'_, '_> {
                 let Some((text, back)) = self.colours(value, "colors") else {
                     return;
                 };
+                let blank = || ir::Arg::str("");
                 self.emit(ir::Instruction::new(
                     "SetCtlColors",
-                    vec![hwnd(), text, back],
+                    vec![
+                        hwnd(),
+                        text.unwrap_or_else(blank),
+                        back.unwrap_or_else(blank),
+                    ],
                 ));
             }
             ControlField::Font => {
