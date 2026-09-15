@@ -99,16 +99,15 @@ build time, and they are **two different names** on purpose.
 | Kept, same meaning                           | Kept, adapted                                              | Rejected                                                   |
 | -------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
 | `tostring`, `tonumber` (casts; emit no code) | `string.len` → `StrLen`                                    | `string.rep`, `.reverse`, `.byte`, `.char`                 |
-| `type`, `assert` (fold at compile time)      | `string.sub` → `StrCpy`, 1-based → 0-based                 | `string.find`/`.match`/`.gmatch`/`.gsub` **with patterns** |
-|                                              | `string.upper`/`.lower` → `${StrCase}`                     | `math.floor`, `.ceil`, `.random`                           |
-|                                              | `string.find`/`.gsub` **plain** → `${StrLoc}`, `${StrRep}` | `io.*` as free functions — use the handle form             |
-|                                              | `string.format` — `%d %i %u %x %X %c` only                 | `os.exit` differs from `abort`; both exist                 |
-|                                              | `math.abs`/`.max`/`.min`                                   | `error`, `pcall`, `xpcall`                                 |
-|                                              | `os.getenv` → `ReadEnvStr`                                 | `require`, `load`, `dofile`                                |
-|                                              | `os.remove`/`.rename` → `Delete`/`Rename`                  | `pairs`, `ipairs`, `next`, `select`                        |
-|                                              | `os.exit` → `Quit`                                         | `setmetatable`, `rawget`, `coroutine.*`                    |
-|                                              | `io.open` → a typed handle                                 |                                                            |
-|                                              | `table.*` folds at compile time                            |                                                            |
+|                                              | `string.sub` → `StrCpy`, 1-based → 0-based                 | `string.match`/`.gmatch`/`.gsub`                           |
+|                                              | `string.upper`/`.lower` → `${StrCase}`                     | `math.*`, `table.*`, `type`, `assert`                      |
+|                                              | `string.find` **plain**, two arguments → `${StrLoc}`       | `os.getenv` — use `readEnvStr`                             |
+|                                              | `string.format` — `%d %i %u %x %X %c` only                 | `os.remove`, `os.rename` — use `delete`, `rename`          |
+|                                              | `os.exit` → `Quit`                                         | `io.*` — use the `fileOpen` handle                         |
+|                                              |                                                            | `error`, `pcall`, `xpcall`                                 |
+|                                              |                                                            | `require`, `load`, `dofile`                                |
+|                                              |                                                            | `pairs`, `ipairs`, `next`, `select`                        |
+|                                              |                                                            | `setmetatable`, `rawget`, `coroutine.*`                    |
 
 `string.format` takes **one** conversion, and one of `%c %d %i %u %x %X` — `IntFmt` is
 `wsprintf` with a single integer argument, and that is `wsprintf`'s set. Flags, width and
