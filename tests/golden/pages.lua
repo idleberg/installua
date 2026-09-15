@@ -17,7 +17,7 @@ attributes {
 -- the chosen directory into it.
 dataDir = ""
 
--- The one page bound to a `local`, and the only one whose lowering differs
+-- The one page that must be bound to a `local`, and the only one whose lowering differs
 -- between the two halves. `MUI_PAGE_STARTMENU` takes an id and a variable, so
 -- the page has a *name* install-time code addresses it by: the installer reads
 -- the `Var` the page filled, and the uninstaller — which has no page, since

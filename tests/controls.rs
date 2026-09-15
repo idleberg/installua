@@ -472,6 +472,27 @@ fn a_control_is_assigned_to_a_global() {
     );
 }
 
+/// A page bound to a `local` lowers exactly as the same page written inline,
+/// controls and all: the binding decides nothing but where the page is written.
+#[test]
+fn a_bound_page_is_the_inline_page() {
+    let inline = build(&program(
+        "local agree = checkbox { \"ok\", y = 0, height = 12 }",
+        "agree,",
+    ));
+    let bound = build(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local agree = checkbox { \"ok\", y = 0, height = 12 }\n\
+         local details = page.custom { controls = { agree, } }\n\
+         installer {\n\
+         details,\n\
+         page.instFiles {},\n\
+         section(\"Core\", function() detailPrint(\"x\") end),\n\
+         }\n",
+    );
+    assert_eq!(bound, inline);
+}
+
 /// `ShowWindow`'s two states are 0 and 5, not 0 and 1, so a literal picks one
 /// and anything else is multiplied — which is exact, because a `bool` in this
 /// language is 0 or 1 and nothing else.

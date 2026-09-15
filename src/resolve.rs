@@ -112,11 +112,15 @@ pub struct Deferred<'a> {
 pub enum DeferredKind {
     Section,
     Group,
-    /// `local menu = page.startMenu { … }` — the one page that is bound to a
-    /// local, because `MUI_PAGE_STARTMENU` takes an id and a variable and both
+    /// `local menu = page.startMenu { … }` — the one page that must be bound to
+    /// a local, because `MUI_PAGE_STARTMENU` takes an id and a variable and both
     /// of them are the compiler's to mint. The local is what a shortcut-writing
     /// section then addresses the chosen folder through.
     StartMenu,
+    /// `local details = page.custom { … }` — any other page. It holds nothing
+    /// to address; the binding is only what lets a page be written in one file
+    /// and listed by the block in another.
+    Page,
     /// One of the kinds in [`crate::lower::control::CONTROLS`], carried rather
     /// than looked up again: the name is what decided this is a declaration at
     /// all, so the row it matched is already in hand.
@@ -129,6 +133,7 @@ impl DeferredKind {
             DeferredKind::Section => "section",
             DeferredKind::Group => "group",
             DeferredKind::StartMenu => "start menu page",
+            DeferredKind::Page => "page",
             DeferredKind::Control(control) => control.installua,
         }
     }
@@ -1062,12 +1067,13 @@ fn article(value: &ConstValue) -> &'static str {
 /// it happens where the call is lowered so that one wrong `section` reports once
 /// rather than once per pass.
 fn deferred_kind(value: &Expr) -> Option<DeferredKind> {
-    // The one page written as a declaration. Every other `page.*` is an entry
-    // and nothing else, because nothing else has anything for a local to hold.
-    if let Some(("page", which)) = value.callee_field()
-        && which.text == "startMenu"
-    {
-        return Some(DeferredKind::StartMenu);
+    // `page.startMenu` is the page with something for a local to hold; every
+    // other page is bound only to be listed somewhere else.
+    if let Some(("page", which)) = value.callee_field() {
+        return Some(match which.text.as_str() {
+            "startMenu" => DeferredKind::StartMenu,
+            _ => DeferredKind::Page,
+        });
     }
     let callee = value.callee_name()?;
     match callee {

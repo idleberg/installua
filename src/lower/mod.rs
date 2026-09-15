@@ -416,6 +416,8 @@ fn earned_name(local: &str, kind: DeferredKind, half: Half) -> (String, &'static
     match kind {
         DeferredKind::Control(_) => (control_var(local, half), "global"),
         DeferredKind::StartMenu => (start_menu_var(local), "global"),
+        // Nothing earned, so nothing to collide.
+        DeferredKind::Page => (String::new(), "page"),
         _ => (index_name(local, half), "`<const>`"),
     }
 }
@@ -1260,6 +1262,14 @@ impl<'p> Lowerer<'_, 'p> {
                 DeferredKind::StartMenu => (
                     "block",
                     format!("write `{local},` among the entries of `installer {{}}`"),
+                    "the block's order is the page order; the declaration's is nothing",
+                ),
+                DeferredKind::Page => (
+                    "block",
+                    format!(
+                        "write `{local},` among the entries of `installer {{}}` or \
+                         `uninstaller {{}}`"
+                    ),
                     "the block's order is the page order; the declaration's is nothing",
                 ),
                 _ => (
@@ -5098,6 +5108,11 @@ impl<'p> Lowerer<'_, 'p> {
                     self.page(value, which, half, Some(&name.text));
                 }
             }
+            DeferredKind::Page => {
+                if let Some(("page", which)) = value.callee_field() {
+                    self.page(value, which, half, None);
+                }
+            }
             // Unreachable: a control's claim comes from a `controls` list, and
             // a bare control name among a block's entries never earns one
             // ([`Site::accepts`]), so [`Self::listed`] has already said `None`.
@@ -5257,6 +5272,7 @@ impl<'p> Lowerer<'_, 'p> {
                 .globals
                 .iter()
                 .any(|global| global.name == earned),
+            "page" => false,
             _ => self.resolved.consts.contains_key(&earned),
         };
         if taken {
@@ -5289,6 +5305,13 @@ impl<'p> Lowerer<'_, 'p> {
         let (kind, value) = deferred;
         if kind == DeferredKind::Group {
             self.claim_members(value, half);
+        }
+        // And a bound custom page's controls, as an inline one's are.
+        if kind == DeferredKind::Page
+            && let Some(("page", which)) = value.callee_field()
+            && which.text == "custom"
+        {
+            self.claim_controls(value, half);
         }
     }
 
@@ -7568,6 +7591,10 @@ impl BodyLowerer<'_, '_> {
                         "assign it first, `h = {}`, and pass or `raw`-read the global",
                         name.text
                     ),
+                    DeferredKind::Page => {
+                        "a page holds nothing to read: list it in `installer {}` or `uninstaller {}`"
+                            .to_string()
+                    }
                     _ => format!(
                         "it is reached through its fields, `{}.…`, and cannot be stored, passed \
                          or assigned",

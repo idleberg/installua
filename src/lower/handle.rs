@@ -126,6 +126,17 @@ impl BodyLowerer<'_, '_> {
                     var: Slot::Global(start_menu_var(name)),
                 }));
             }
+            if kind == DeferredKind::Page {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        span,
+                        format!("`{name}` is a page, and a page has no fields"),
+                    )
+                    .note("a page is bound only to be listed by a block"),
+                );
+                return None;
+            }
 
             // Claim rule 4. The name is in the file — one `.nsi` holds both
             // halves — so `${SEC_core}` in `un.onInit` compiles, addresses

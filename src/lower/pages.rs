@@ -573,7 +573,7 @@ pub(super) const REGISTRY_FORMS: &[Form] = &[Form {
 
 /// The Start Menu folder page.
 ///
-/// The only page bound to a `local`, and the fields say why: MUI2 reads the
+/// The only page that must be bound to a `local`, and the fields say why: MUI2 reads the
 /// folder back through `MUI_STARTMENU_GETFOLDER <id>` and wraps the shortcut
 /// writing in `MUI_STARTMENU_WRITE_BEGIN <id>`, so the page has a *name* that
 /// install-time code uses. Nothing here spells that name — the id is the local

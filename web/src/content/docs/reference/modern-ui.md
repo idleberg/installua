@@ -34,6 +34,10 @@ The eight pages: `welcome`, `license`, `components`, `directory`, `startMenu`,
 `confirm` is uninstaller-only, `startMenu` installer-only; the rest exist in
 both halves and are written by which block lists them.
 
+A page can also be bound to a local and listed by name, which lets it live in
+an `include`d file: `local details = page.custom { … }`, then `details,` in the
+block.
+
 ```lua
 installer {
 	page.welcome { title = "Welcome to Example" },
