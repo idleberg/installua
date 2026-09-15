@@ -75,6 +75,20 @@ const fn root(name: &'static str) -> Constant {
     }
 }
 
+/// Whether a spliced variable (`$INSTDIR`) is one of these and names a
+/// directory — so a `/`-leading literal joined straight after it is a path
+/// wherever it ends up, and is normalised as one. `$EXEPATH`, `$EXEFILE` and
+/// `$CMDLINE` are strings but no directory; a user global might be one, and the
+/// compiler cannot tell.
+pub fn is_directory(var: &str) -> bool {
+    var.strip_prefix('$').is_some_and(|name| {
+        !matches!(name, "EXEPATH" | "EXEFILE" | "CMDLINE")
+            && CONSTANTS
+                .iter()
+                .any(|c| c.sigil && c.ty == Ty::Str && c.nsis == name)
+    })
+}
+
 impl Constant {
     /// The argument this constant becomes.
     pub fn arg(&self) -> crate::ir::Arg {

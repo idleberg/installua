@@ -67,7 +67,7 @@ fn a_body_that_names_the_directory_opens_with_the_line() {
         vec![
             "InitPluginsDir",
             "SetOutPath $PLUGINSDIR",
-            "DetailPrint \"$PLUGINSDIR/splash\"",
+            "DetailPrint \"$PLUGINSDIR\\splash\"",
         ],
         "{output}"
     );

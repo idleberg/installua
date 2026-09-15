@@ -109,6 +109,41 @@ installer {
     );
 }
 
+/// Text joined straight after a built-in directory is a path in any position,
+/// up to where a command line leaves it. A bare fragment and a non-directory
+/// are not.
+#[test]
+fn a_join_onto_a_directory_is_normalised_anywhere() {
+    let output = build(
+        r#"
+attributes { outFile = "a.exe" }
+installer {
+	section("Core", function()
+		p = EXEDIR .. "/bin/x.exe"
+		q = INSTDIR .. "/app.exe /S"
+		r = "lib" .. "/app.dll"
+		s = EXEFILE .. "/x"
+	end),
+}
+"#,
+    );
+    let copies: Vec<&str> = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("StrCpy"))
+        .collect();
+    assert_eq!(
+        copies,
+        [
+            r#"StrCpy $p "$EXEDIR\bin\x.exe""#,
+            r#"StrCpy $q "$INSTDIR\app.exe /S""#,
+            r#"StrCpy $r "lib/app.dll""#,
+            r#"StrCpy $s "$EXEFILE/x""#,
+        ],
+        "{output}"
+    );
+}
+
 /// Tier 3, live from Phase 1. The allowlist is empty: a `$`-sigil mistake, a
 /// mis-ordered `!define` and an unknown `${FOO}` are all warning 6000 plus a
 /// silently wrong installer, so a test that checks only the exit code passes on

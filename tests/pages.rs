@@ -698,7 +698,7 @@ fn auto_close_is_a_block_field_with_a_name_per_half() {
 fn the_run_checkbox_takes_a_path_on_its_own() {
     let output = build(&program("page.finish { run = INSTDIR .. \"/foo.exe\" },"));
     assert!(
-        output.contains("!define MUI_FINISHPAGE_RUN \"$INSTDIR/foo.exe\""),
+        output.contains("!define MUI_FINISHPAGE_RUN \"$INSTDIR\\foo.exe\""),
         "{output}"
     );
     // Nothing else: MUI2 words the checkbox itself and ticks it itself.
@@ -716,7 +716,7 @@ fn the_run_checkbox_takes_a_path_with_its_trimmings() {
          text = \"Run Foo now\", checked = false } },",
     ));
     for expected in [
-        "!define MUI_FINISHPAGE_RUN \"$INSTDIR/foo.exe\"",
+        "!define MUI_FINISHPAGE_RUN \"$INSTDIR\\foo.exe\"",
         "!define MUI_FINISHPAGE_RUN_PARAMETERS \"--first-run\"",
         "!define MUI_FINISHPAGE_RUN_TEXT \"Run Foo now\"",
         "!define MUI_FINISHPAGE_RUN_NOTCHECKED",

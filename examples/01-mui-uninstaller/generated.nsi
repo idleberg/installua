@@ -40,7 +40,7 @@ Section "Core"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "DisplayName" "${APP}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "DisplayVersion" "${VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "InstallLocation" $INSTDIR
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "UninstallString" "$INSTDIR/uninstall.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "UninstallString" "$INSTDIR\uninstall.exe"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Example1" "NoModify" 1
   WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd

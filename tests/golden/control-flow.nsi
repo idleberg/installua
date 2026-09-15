@@ -8,7 +8,7 @@ OutFile "control-flow-setup.exe"
 Var state
 
 Section "Core"
-  StrCpy $0 "$INSTDIR/app.exe"
+  StrCpy $0 "$INSTDIR\app.exe"
   IfFileExists $0 0 __GENERATED_false_0
   StrCpy $1 1
   Goto __GENERATED_bool_0

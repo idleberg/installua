@@ -97,11 +97,11 @@ Section "EnumRegValue"
 SectionEnd
 
 Section "Exec"
-  Exec "$INSTDIR/app.exe /S"
+  Exec "$INSTDIR\app.exe /S"
 SectionEnd
 
 Section "ExecWait"
-  ExecWait "$INSTDIR/app.exe /S" $0
+  ExecWait "$INSTDIR\app.exe /S" $0
   DetailPrint "exit $0"
 SectionEnd
 
@@ -110,7 +110,7 @@ Section "ExecShell"
 SectionEnd
 
 Section "ExecShellWait"
-  ExecShellWait "open" "$INSTDIR/readme.txt"
+  ExecShellWait "open" "$INSTDIR\readme.txt"
 SectionEnd
 
 Section "ExpandEnvStrings"

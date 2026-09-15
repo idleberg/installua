@@ -21,7 +21,7 @@ ReserveFile /plugin UserInfo.dll
 Section "Core"
   SetOutPath $INSTDIR
   File "assets\tool.exe"
-  StrCpy $0 "$INSTDIR/tool.exe"
+  StrCpy $0 "$INSTDIR\tool.exe"
   StrCpy $1 "${APP} smoke test"
   Push $0
   Push $1

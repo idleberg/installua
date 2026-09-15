@@ -369,20 +369,44 @@ fn argument(arg: &ir::Arg) -> String {
             ) || arg.as_text().is_some_and(|text| is_integer(&text)) =>
         {
             let mut out = String::new();
-            for piece in pieces {
-                push_piece(&mut out, piece, *path);
-            }
+            push_pieces(&mut out, pieces, *path);
             out
         }
 
         ir::Arg::Data { pieces, path } => {
             let mut out = String::from("\"");
-            for piece in pieces {
-                push_piece(&mut out, piece, *path);
-            }
+            push_pieces(&mut out, pieces, *path);
             out.push('"');
             out
         }
+    }
+}
+
+/// A path argument normalises every text piece. Any other argument normalises
+/// only a `/`-leading text piece straight after a built-in directory
+/// (`INSTDIR .. "/bin/x.exe"`), because that text is a path whether it reaches
+/// `ExecWait`, a `StrCpy` or a plugin. A fragment joined without one keeps its
+/// `/`: nothing says `"bin/tools"` is a path until it is used as one.
+///
+/// And only up to the first ` /` or `"`, where a command line leaves the path:
+/// `INSTDIR .. "/app.exe /S"` is `$INSTDIR\app.exe /S`, not a `\S` switch.
+fn push_pieces(out: &mut String, pieces: &[ir::Piece], path: bool) {
+    let mut after_directory = false;
+    for piece in pieces {
+        match piece {
+            ir::Piece::Text(text) if !path && after_directory && text.starts_with('/') => {
+                let end = [text.find(" /"), text.find('"')]
+                    .into_iter()
+                    .flatten()
+                    .min()
+                    .unwrap_or(text.len());
+                let (head, tail) = text.split_at(end);
+                escape_into(out, &(head.replace('/', "\\") + tail));
+            }
+            _ => push_piece(out, piece, path),
+        }
+        after_directory =
+            matches!(piece, ir::Piece::Var(var) if crate::builtins::is_directory(var));
     }
 }
 

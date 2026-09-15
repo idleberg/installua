@@ -6,7 +6,9 @@ description: Packing files in, and what happens to them on the target disk.
 The two halves of this group do different things at different times. `file`
 packs a file from the **build** machine into the installer; everything else
 moves, copies or deletes files on the **target** machine while the installer
-runs. Paths take forward slashes and are normalised on the way out.
+runs. A path parameter takes forward slashes and normalises them on the way
+out, but a path fragment stored in a variable does not, so write `\` in those
+([why](/concepts/nsis-shaped-not-nsis/)).
 
 ## File
 

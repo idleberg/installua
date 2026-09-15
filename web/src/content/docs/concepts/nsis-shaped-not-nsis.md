@@ -102,9 +102,23 @@ suggests `.. INSTDIR`.
 | `"C:\\Tools"`       | `"C:\Tools"`                                              |
 | `"C:\Tools"`        | **error** — `\T` is not an escape                         |
 
-Forward slashes are the recommended form. The overlay marks which parameters are path
-positions — filesystem paths _and_ registry subkeys — and normalises only those, so
-`detailPrint("a/b")` is left alone.
+A backslash is the recommended form, written `[[bin\tools]]` or `"bin\\tools"`: it is
+correct wherever the string goes. A forward slash is a convenience, and is normalised in
+exactly two places:
+
+- **A path position.** The overlay marks which parameters are paths — filesystem paths
+  _and_ registry subkeys — so `file("assets/icon.ico")` is fine and
+  `detailPrint("a/b")` is left alone.
+- **Text joined straight after a built-in directory**, in any position.
+  `p = INSTDIR .. "/bin/x.exe"` stores `$INSTDIR\bin\x.exe`. The rewrite stops at the
+  first ` /` or `"`, so `INSTDIR .. "/app.exe /S"` keeps its switch.
+
+Anything else keeps its `/`, and that includes most things you store and join later.
+A fragment in a variable (`sub = "bin/tools"`, later `INSTDIR .. "/" .. sub`), two
+literals joined without a directory, and a user global holding a directory
+(`appDir .. "/x.exe"`) all reach the installer as written. Those are where a
+half-converted `C:\App\bin/tools` comes from, and a command line, a plugin or the
+`GetParent` family may not accept one. Write `\` in them.
 
 `$\n`, `$\r`, `$\t` and `$\"` are written `\n`, `\r`, `\t` and `\"`.
 

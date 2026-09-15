@@ -125,8 +125,9 @@ Anything not in the table is an unknown global, and the generated `selene` std s
 literal is _data_, never a template — see the other table for why.
 
 **`"C:\Program Files"` is an error.** `\` is Lua's escape character, and `\P` is not an
-escape. Write `"C:/Program Files"` (normalised for you in path positions), `[[C:\Program Files]]`,
-or `"C:\\Program Files"`.
+escape. Write `[[C:\Program Files]]` or `"C:\\Program Files"`. `"C:/Program Files"` also
+works in a path position, but is left as written in a string you store — see
+[paths](/concepts/nsis-shaped-not-nsis/).
 
 **`local f = function() … end` is not a value.** Pass the function literal directly to
 `section`, `func` or a callback field.
