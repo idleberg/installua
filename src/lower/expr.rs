@@ -657,20 +657,31 @@ impl BodyLowerer<'_, '_> {
         }
 
         // `sources.add("C:/")` — a row added at run time, where `items` is the
-        // rows known at build time.
+        // rows known at build time. `serial.focus()` is `${NSD_SetFocus}`, and
+        // is every window's, so a `getDlgItem` local has it too.
         if let Expr::Call { callee, .. } = call
             && let Expr::Field {
                 base, name: field, ..
             } = callee.as_ref()
-            && field.text == "add"
-            && base.name().is_some_and(|base| {
-                self.resolved
-                    .deferred
-                    .get(base)
-                    .is_some_and(|deferred| deferred.kind.is_control())
-            })
+            && let Some(name) = base.name()
+            && let control = self
+                .resolved
+                .deferred
+                .get(name)
+                .is_some_and(|deferred| deferred.kind.is_control())
+            && match field.text.as_str() {
+                "add" => control,
+                "focus" => {
+                    control || matches!(self.lookup(name), Some(super::Binding::Local { .. }))
+                }
+                _ => false,
+            }
         {
-            self.control_add(base, args, dest, span);
+            if field.text == "add" {
+                self.control_add(base, args, dest, span);
+            } else {
+                self.control_focus(base, args, dest, span);
+            }
             return None;
         }
 

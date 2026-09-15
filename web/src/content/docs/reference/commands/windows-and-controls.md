@@ -66,6 +66,11 @@ and a write selects the first row that starts with the text, ignoring case — w
 `NSD_CB_SelectString` does. `handle.add("text")` appends a row at install time,
 where `items` holds the rows known at build time.
 
+`handle.focus()` moves the keyboard focus to the control — `${NSD_SetFocus}`. Call
+it in `show`, since focus set in `pre` is lost when the page is drawn. A
+`getDlgItem` handle has it too: `local next = getDlgItem(HWNDPARENT, 1)` then
+`next.focus()` focuses MUI2's Next button.
+
 ```lua
 serial.font = { face = "Tahoma", size = 8 }
 serial.colors = { text = "800000", background = "transparent" }

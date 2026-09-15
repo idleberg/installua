@@ -976,6 +976,32 @@ impl BodyLowerer<'_, '_> {
 
     /// `sources.add("C:/")` — one `ADDSTRING`, the message `items` sends once
     /// per row at build time.
+    /// `serial.focus()` — `${NSD_SetFocus}`, spelled out because nothing includes
+    /// `nsDialogs.nsh` (ruling 5). Any window takes focus, drawn here or not.
+    pub(super) fn control_focus(
+        &mut self,
+        base: &Expr,
+        args: &[Expr],
+        dest: Option<&Slot>,
+        span: Span,
+    ) {
+        let Some(Addressed::Control(handle)) = self.addressed(base, span) else {
+            return;
+        };
+        if dest.is_some() || !args.is_empty() {
+            self.diags.push(Diagnostic::error(
+                Code::WrongArity,
+                span,
+                "`focus` takes no arguments and produces no value",
+            ));
+            return;
+        }
+        let signature = ir::Arg::str("user32::SetFocus(p")
+            .concat(ir::Arg::slot(handle.slot))
+            .concat(ir::Arg::str(")"));
+        self.generated_plugin_call("System::Call", vec![signature], vec![], span);
+    }
+
     pub(super) fn control_add(
         &mut self,
         base: &Expr,

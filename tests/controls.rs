@@ -426,6 +426,28 @@ fn a_window_the_program_did_not_draw_has_the_fields_every_window_has() {
     assert!(output.contains("EnableWindow $0 0"), "{output}");
 }
 
+/// `focus()` is `${NSD_SetFocus}`, on a drawn control and a found window alike.
+#[test]
+fn focus_is_set_focus() {
+    let output = build(&page(
+        "local serial = text { \"\", y = 0, height = 12 }",
+        "serial,",
+        "serial.focus()\nlocal next = getDlgItem(HWNDPARENT, 1)\nnext.focus()",
+    ));
+    let calls: Vec<&str> = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("System::Call"))
+        .collect();
+    assert_eq!(
+        calls,
+        [
+            "System::Call \"user32::SetFocus(p$__GENERATED_ctl_serial)\"",
+            "System::Call \"user32::SetFocus(p$0)\"",
+        ]
+    );
+}
+
 /// `ShowWindow`'s two states are 0 and 5, not 0 and 1, so a literal picks one
 /// and anything else is multiplied — which is exact, because a `bool` in this
 /// language is 0 or 1 and nothing else.
