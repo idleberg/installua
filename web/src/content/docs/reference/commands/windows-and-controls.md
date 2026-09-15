@@ -23,6 +23,10 @@ it sits.
 `y` and `height` are required — there is no auto-flow. `x` defaults to 0 and
 `width` to the dialog's.
 
+A number is dialog units: `x = 25` is `25u`. A string passes through as
+nsDialogs reads it — `"25u"`, `"100%"`, `"-13u"`, or plain digits, which are
+**pixels**: `x = "25"` is 25 pixels, the unit most nsDialogs scripts use.
+
 ```lua
 local agree = checkbox { "I have read the notes", y = 60, height = 12 }
 local serial = text { x = 60, y = 90, width = 120, height = 14 }
