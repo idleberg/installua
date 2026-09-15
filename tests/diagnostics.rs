@@ -343,7 +343,7 @@ fn a_declaration_used_as_a_value_is_not_undefined() {
     for source in [
         "attributes { outFile = \"a.exe\" }\n\
          local d = text { \"\", y = 0, height = 12 }\n\
-         installer { page.custom { controls = { d }, show = function() h = d end }, \
+         installer { page.custom { controls = { d }, show = function() detailPrint(d) end }, \
          page.instFiles {} }",
         "attributes { outFile = \"a.exe\" }\n\
          local core = section(\"Core\", function() end)\n\

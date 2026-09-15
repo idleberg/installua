@@ -296,6 +296,16 @@ impl BodyLowerer<'_, '_> {
             // and, for the position it answers with, a chain.
             Expr::Name(name) if builtins::owned(&name.text) => self.owned_read(name, dest),
 
+            Expr::Name(name)
+                if self
+                    .resolved
+                    .deferred
+                    .get(&name.text)
+                    .is_some_and(|deferred| deferred.kind.is_control()) =>
+            {
+                self.control_window(expr, name.span, dest)
+            }
+
             // A bare name that `simple` could not resolve is not a shape this
             // version lacks — it is a name that exists nowhere in the file,
             // which resolution being order-free is what makes worth saying.

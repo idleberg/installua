@@ -448,6 +448,22 @@ fn focus_is_set_focus() {
     );
 }
 
+/// `h = serial` copies the window into a global `raw` can name.
+#[test]
+fn a_control_is_assigned_to_a_global() {
+    let output = build(&page(
+        "local serial = text { \"\", y = 0, height = 12 }",
+        "serial,",
+        "h = serial",
+    ));
+    let copies: Vec<&str> = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("StrCpy $h"))
+        .collect();
+    assert_eq!(copies, ["StrCpy $h $__GENERATED_ctl_serial"]);
+}
+
 /// `ShowWindow`'s two states are 0 and 5, not 0 and 1, so a literal picks one
 /// and anything else is multiplied — which is exact, because a `bool` in this
 /// language is 0 or 1 and nothing else.

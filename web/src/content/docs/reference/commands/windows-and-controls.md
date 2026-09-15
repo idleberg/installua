@@ -71,6 +71,9 @@ it in `show`, since focus set in `pre` is lost when the page is drawn. A
 `getDlgItem` handle has it too: `local next = getDlgItem(HWNDPARENT, 1)` then
 `next.focus()` focuses MUI2's Next button.
 
+A `raw` block reaches a control through a global: `h = serial`, then `$h` in the
+`raw`.
+
 ```lua
 serial.font = { face = "Tahoma", size = 8 }
 serial.colors = { text = "800000", background = "transparent" }

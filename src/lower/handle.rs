@@ -976,6 +976,19 @@ impl BodyLowerer<'_, '_> {
 
     /// `sources.add("C:/")` — one `ADDSTRING`, the message `items` sends once
     /// per row at build time.
+    /// `h = serial` — the window itself, copied out of the `Var` the compiler
+    /// named, so `raw` reads it as `$h` rather than as that internal name.
+    pub(super) fn control_window(&mut self, base: &Expr, span: Span, dest: &Slot) -> Option<Ty> {
+        let Addressed::Control(handle) = self.addressed(base, span)? else {
+            return None;
+        };
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(dest.clone()), ir::Arg::slot(handle.slot)],
+        ));
+        Some(Ty::Handle)
+    }
+
     /// `serial.focus()` — `${NSD_SetFocus}`, spelled out because nothing includes
     /// `nsDialogs.nsh` (ruling 5). Any window takes focus, drawn here or not.
     pub(super) fn control_focus(

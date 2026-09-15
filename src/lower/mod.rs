@@ -7570,11 +7570,17 @@ impl BodyLowerer<'_, '_> {
                     name.span,
                     format!("`{}` is {what}, not a value", name.text),
                 )
-                .note(format!(
-                    "it is reached through its fields, `{}.…`, and cannot be stored, passed or \
-                     assigned",
-                    name.text
-                )),
+                .note(match deferred.kind {
+                    DeferredKind::Control(_) => format!(
+                        "assign it first, `h = {}`, and pass or `raw`-read the global",
+                        name.text
+                    ),
+                    _ => format!(
+                        "it is reached through its fields, `{}.…`, and cannot be stored, passed \
+                         or assigned",
+                        name.text
+                    ),
+                }),
             );
             return;
         }
