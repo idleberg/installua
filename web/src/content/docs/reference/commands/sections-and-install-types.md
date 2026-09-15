@@ -17,19 +17,21 @@ name — `optional` starts it unticked, `required` makes it untickable,
 `section { <name>, body = …, optional = …, required = …, installTypes = { … }, size = …, description = … }`
 
 ```lua
-section("Core", function()
-	setOutPath(INSTDIR)
-	file("assets/Example.exe")
-	writeUninstaller(INSTDIR .. "/uninstall.exe")
-end)
+installer {
+	section("Core", function()
+		setOutPath(INSTDIR)
+		file("assets/Example.exe")
+		writeUninstaller(INSTDIR .. "/uninstall.exe")
+	end),
 
-section { "Start menu shortcut",
-	optional = true,
-	description = "Adds Example to the Start menu.",
-	body = function()
-		createDirectory(SMPROGRAMS .. "/Example")
-		createShortcut(SMPROGRAMS .. "/Example/Example.lnk", INSTDIR .. "/Example.exe")
-	end,
+	section { "Start menu shortcut",
+		optional = true,
+		description = "Adds Example to the Start menu.",
+		body = function()
+			createDirectory(SMPROGRAMS .. "/Example")
+			createShortcut(SMPROGRAMS .. "/Example/Example.lnk", INSTDIR .. "/Example.exe")
+		end,
+	},
 }
 ```
 
@@ -75,9 +77,12 @@ untickable one.
 **Usage** a `section`'s `installTypes = { <name>, … }` and `required = <boolean>`
 
 ```lua
-section { "Documentation",
-	installTypes = { "Full" },
-	body = function() file("assets/manual.pdf") end,
+installer {
+	installTypes = { "Typical", "Full" },
+	section { "Documentation",
+		installTypes = { "Full" },
+		body = function() file("assets/manual.pdf") end,
+	},
 }
 ```
 
@@ -136,10 +141,13 @@ By name, rather than by the number NSIS uses. Covers `GetCurInstType`,
 `instTypes.getText(name)` → `string`, `instTypes.setText(name, text)`
 
 ```lua
-onInit(function()
-	currentInstType = "Full"
-	instTypes.setText("Full", "Everything")
-end)
+installer {
+	installTypes = { "Typical", "Full" },
+	onInit(function()
+		currentInstType = "Full"
+		instTypes.setText("Full", "Everything")
+	end),
+}
 ```
 
 ## WriteUninstaller

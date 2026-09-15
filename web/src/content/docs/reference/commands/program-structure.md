@@ -100,7 +100,7 @@ that names it.
 
 **Usage** `include(path)` → nothing
 
-```lua
+```lua skip
 include("lib/shortcuts.lua")
 ```
 
@@ -112,7 +112,7 @@ list is fixed before anything ships. This is what replaces
 
 **Usage** `for path in glob(pattern) do … end`
 
-```lua
+```lua skip
 for path in glob("assets/docs/*.pdf") do
 	file(path)
 end

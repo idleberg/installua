@@ -203,6 +203,9 @@ is one sentence long. The source settles it the other way: `put`, `head` and
 one flag set. The three declarations are identical apart from the method name.
 
 ```lua
+local inetc = plugin "Inetc"
+local url = "https://example.com/toolchain.zip"
+
 local status = inetc.get(url, PLUGINSDIR .. "/toolchain.zip", {
 	caption = "Fetching the toolchain",
 	silent = true,
@@ -298,6 +301,9 @@ match.
 | `remove` (`cancel`) | — | abort *and* drop it from the queue |
 
 ```lua
+local nscurl = plugin "NScurl"
+local url = "https://example.com/tool.zip"
+
 local status = nscurl.http("GET", url, PLUGINSDIR .. "/tool.zip", {
 	connecttimeout = "30s",
 	tag = "toolchain",
@@ -550,6 +556,8 @@ They are declared on the 14 that **act** on one:
 | `sid` | `getFileOwner`, `getFileGroup`, `getRegKeyOwner`, `getRegKeyGroup` | `GetOwner` |
 
 ```lua
+local accessControl = plugin "AccessControl"
+
 accessControl.grantOnFile(INSTDIR, "(BU)", "FullAccess", { noinherit = true })
 -- AccessControl::GrantOnFile /noinherit $INSTDIR "(BU)" "FullAccess"
 ```

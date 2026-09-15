@@ -27,6 +27,8 @@ All three of its flags are declared on every method, in a table written last:
 | `mbcs = true` | `/MBCS` | treats the output as ANSI rather than detecting Unicode |
 
 ```lua
+local nsExec = plugin "nsExec"
+
 local code, output = nsExec.execToStack("cmd.exe /c ver", {
 	oem = true,
 	timeout = 5000,
@@ -56,8 +58,17 @@ The browse buttons `dirRequest` and `fileRequest` do not draw. `mode` is
 means `All Files|*.*`. Its controls are `page.custom`'s, not methods.
 
 ```lua
-local dir = nsDialogs.selectFolderDialog("Pick a folder", INSTDIR)
-if dir ~= "error" then folder.value = dir end
+local nsDialogs = plugin "nsDialogs"
+
+local folder = text { y = 0, width = "80%", height = 12 }
+local browse = button { "Browse…", x = "82%", y = 0, height = 12, onClick = function()
+	local dir = nsDialogs.selectFolderDialog("Pick a folder", INSTDIR)
+	if dir ~= "error" then folder.value = dir end
+end }
+
+installer {
+	page.custom { controls = { folder, browse } },
+}
 ```
 
 ## UserInfo
@@ -130,6 +141,9 @@ Three of its five flags are declared, on both methods:
 | `noieproxy = true` | `/NOIEPROXY` | connects direct, ignoring Internet Explorer's proxy |
 
 ```lua
+local NSISdl = plugin "NSISdl"
+local url = "https://example.com/data.pat"
+
 local status = NSISdl.download(url, PLUGINSDIR .. "/data.pat", {
 	noieproxy = true,
 	timeout = 30000,
@@ -275,6 +289,8 @@ document, reached a different way.
 | `checknoshortcuts = "…"` | `/checknoshortcuts "…"` | adds a checkbox with that label |
 
 ```lua
+local startMenu = plugin "StartMenu"
+
 local outcome, folder = startMenu.select("Example", {
 	lastused = INSTDIR,
 	autoadd = true,

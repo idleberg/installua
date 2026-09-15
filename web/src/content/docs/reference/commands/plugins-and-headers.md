@@ -174,6 +174,8 @@ write. Three answers, where a loop has two.
 **Usage** `textFunc.lineFind(input, output, range, body)` → nothing
 
 ```lua
+local textFunc = import "TextFunc"
+
 textFunc.lineFind(INSTDIR .. "/app.ini", INSTDIR .. "/app.new", "1:-1", function(line, number)
 	if number > 500 then
 		return stop      -- ends the walk
@@ -248,7 +250,7 @@ The one position where `raw` is not a statement. As an argument of a
 its text into that call's line — unquoted, with no path conversion and no type
 check — and everything else about the call stays declared:
 
-```lua
+```lua skip
 local node = nsJSON.get(raw "/index 0 /index 1 /index 3", "$Doc")
 ```
 
@@ -396,6 +398,8 @@ flags = [
 ```
 
 ```lua
+local startMenu = plugin "StartMenu"
+
 startMenu.select("Example", { lastused = INSTDIR, autoadd = true })
 -- StartMenu::Select /autoadd /lastused $INSTDIR "Example"
 ```
@@ -437,6 +441,9 @@ terminator = "/END"
 ```
 
 ```lua
+local nscurl = plugin "NScurl"
+local url = "https://example.com/tool.zip"
+
 nscurl.http("GET", url, PLUGINSDIR .. "/tool.zip", { silent = true })
 -- NScurl::http "GET" "…" "$PLUGINSDIR\tool.zip" /SILENT /END
 ```
@@ -466,6 +473,9 @@ terminator = "/END"
 ```
 
 ```lua
+local inetc = plugin "Inetc"
+local url = "https://example.com/tool.zip"
+
 inetc.get(url, PLUGINSDIR .. "/tool.zip", { silent = true })
 -- inetc::get /SILENT "…" "$PLUGINSDIR\tool.zip" /END
 ```

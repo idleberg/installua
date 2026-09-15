@@ -221,7 +221,8 @@ fn calls<'a>(text: &'a str, binding: &str) -> Vec<(&'a str, usize)> {
             let end = tail
                 .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
                 .unwrap_or(tail.len());
-            if end > 0 {
+            // `inetc.cpp` in prose is a file, not a call.
+            if end > 0 && tail[end..].starts_with('(') {
                 found.push((&tail[..end], index + 1));
             }
         }
@@ -702,4 +703,200 @@ fn the_cli_page_matches_the_clap_declarations() {
         checked_in, generated,
         "cli.md is stale: regenerate it with `mise run docs:cli`"
     );
+}
+
+// -- examples ---------------------------------------------------------------
+
+/// One ```` ```lua ```` block: the page, the line of its opening fence, the word
+/// after `lua` if any, and the code.
+#[derive(Debug)]
+struct Example {
+    page: String,
+    line: usize,
+    mode: String,
+    code: String,
+}
+
+/// Every Lua block in the site. Strict rather than forgiving: a fence form this
+/// does not read is a failure, so a page cannot hide an example from the check.
+fn examples() -> Vec<Example> {
+    let found: Vec<Example> = documents()
+        .iter()
+        .flat_map(|(page, text)| blocks(page, text))
+        .collect();
+    assert!(
+        !found.is_empty(),
+        "no ```lua block under {}",
+        docs().display()
+    );
+    found
+}
+
+fn blocks(page: &str, text: &str) -> Vec<Example> {
+    let mut found = Vec::new();
+    {
+        // `Some(None)` is inside a block in another language.
+        let mut open: Option<Option<Example>> = None;
+        for (index, line) in text.lines().enumerate() {
+            let at = index + 1;
+            let trimmed = line.trim_start();
+            assert!(
+                !(trimmed.starts_with("```") && trimmed != line)
+                    && !trimmed.starts_with("~~~")
+                    && !trimmed.starts_with("````")
+                    && !trimmed.starts_with("<Code"),
+                "{page}:{at}: a code block form the example check does not read"
+            );
+            let Some(info) = line.strip_prefix("```").map(str::trim) else {
+                if let Some(Some(example)) = &mut open {
+                    example.code.push_str(line);
+                    example.code.push('\n');
+                }
+                continue;
+            };
+            open = match (open.take(), info) {
+                (Some(Some(example)), "") => {
+                    found.push(example);
+                    None
+                }
+                (Some(None), "") => None,
+                (Some(_), _) => panic!("{page}:{at}: a fence opens inside an open block"),
+                (None, info) => {
+                    let mut words = info.split_whitespace();
+                    Some((words.next() == Some("lua")).then(|| Example {
+                        page: page.to_string(),
+                        line: at,
+                        mode: words.next().unwrap_or("").to_string(),
+                        code: String::new(),
+                    }))
+                }
+            };
+        }
+        assert!(open.is_none(), "{page}: a code block is never closed");
+    }
+    found
+}
+
+/// How a block is shown to the compiler. A block is usually a fragment, and
+/// which kind it is is not written down: each wrapper is tried in turn, and
+/// the block passes if one of them compiles it.
+///
+/// A `local x = import "…"` or `plugin "…"` line only exists at the top level,
+/// so it is lifted there whichever wrapper the rest of the block lands in.
+fn wrappings(code: &str) -> [String; 3] {
+    let (mut top, mut body) = (String::new(), String::new());
+    for line in code.lines() {
+        let binds = line.starts_with("local ")
+            && (line.contains("= import \"") || line.contains("= plugin \""));
+        let into = if binds { &mut top } else { &mut body };
+        into.push_str(line);
+        into.push('\n');
+    }
+    let attributes = "attributes { outFile = \"a.exe\" }\n";
+    let section = "section(\"Core\", function() end),\n";
+    [
+        format!("{attributes}{top}installer {{\nsection(\"Core\", function()\n{body}end),\n}}\n"),
+        // Top level: an `attributes {}` in the block gets the one field every
+        // program needs, and a block with no `installer {}` gets one.
+        format!(
+            "{}{top}{}\n{}",
+            if body.contains("attributes {") {
+                ""
+            } else {
+                attributes
+            },
+            body.replacen("attributes {", "attributes { outFile = \"a.exe\",", 1),
+            if body.contains("installer {") {
+                String::new()
+            } else {
+                format!("installer {{ {section}}}\n")
+            },
+        ),
+        format!(
+            "{attributes}{top}installer {{\n{},\n{section}}}\n",
+            body.trim_end().trim_end_matches(',')
+        ),
+    ]
+}
+
+/// Every Lua example in the site compiles, so the docs cannot show code the
+/// compiler rejects. The fence word opts a block out: `skip` for a sketch that
+/// needs files on disk, `error` for code shown *because* it is rejected.
+///
+/// Not checked yet: that a `-->` comment matches what is emitted, and
+/// `makensis -WX` over the result — most examples `file()` paths that are not
+/// on disk.
+#[test]
+fn every_lua_example_compiles() {
+    let mut failures = Vec::new();
+    for example in examples() {
+        // A `param` with no default needs its `-D`, and one nothing declares
+        // is an error of its own, so the value is only given where it is read.
+        let options = installua::Options {
+            params: ["REV", "SIGNING_CERT"]
+                .into_iter()
+                .filter(|name| example.code.contains(&format!("param(\"{name}\")")))
+                .map(|name| (name.to_string(), "1".to_string()))
+                .collect(),
+            ..Default::default()
+        };
+        let errors: Vec<String> = wrappings(&example.code)
+            .iter()
+            .filter_map(|source| {
+                let mut diags = installua::diag::Diagnostics::new();
+                let built = installua::build_with(source, &options, &mut diags);
+                (built.is_none() || diags.has_errors()).then(|| {
+                    let rendered = diags.render("example");
+                    rendered
+                        .lines()
+                        .find(|l| l.contains("error["))
+                        .unwrap_or("")
+                        .to_string()
+                })
+            })
+            .collect();
+        let compiles = errors.len() < 3;
+        let at = format!("{}:{}", example.page, example.line);
+        match example.mode.as_str() {
+            "" if !compiles => failures.push(format!("{at}\n    {}", errors.join("\n    "))),
+            "error" if compiles => failures.push(format!("{at}: marked `error` and compiles")),
+            "" | "error" | "skip" => {}
+            other => failures.push(format!(
+                "{at}: `lua {other}` is not a word this check reads"
+            )),
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} examples:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+/// And the check has to be able to fail: a block it cannot read is an error,
+/// not a block it quietly skips, and a broken example compiles under no wrapper.
+#[test]
+fn the_example_check_sees_what_it_was_written_for() {
+    let found = blocks(
+        "page",
+        "```nsis\n!define X\n```\n\n```lua skip\ninclude(\"x\")\n```\n",
+    );
+    assert_eq!(found.len(), 1);
+    assert_eq!((found[0].line, found[0].mode.as_str()), (5, "skip"));
+
+    for broken in [
+        "```lua\nx()\n",
+        "  ```lua\nx()\n  ```\n",
+        "```lua\n```lua\n```\n",
+    ] {
+        let read = std::panic::catch_unwind(|| blocks("page", broken));
+        assert!(read.is_err(), "{broken:?} should not be read");
+    }
+
+    let options = installua::Options::default();
+    assert!(wrappings("detailPrint(nope)").iter().all(|source| {
+        let mut diags = installua::diag::Diagnostics::new();
+        installua::build_with(source, &options, &mut diags).is_none() || diags.has_errors()
+    }));
 }

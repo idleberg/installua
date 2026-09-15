@@ -15,6 +15,7 @@ the other side.
 **`==` on strings is case-sensitive.**
 
 ```lua
+local channel = readEnvStr("CHANNEL")
 if channel == "beta" then end          --> StrCmpS $0 "beta" …
 if string.lower(channel) == "beta" then end  --> StrCmp $0 "beta" …
 ```
@@ -144,18 +145,16 @@ your source means.
 
 `PageEx`, `Page` and `UninstPage` have no Installua spelling. MUI2 is what gets generated.
 
-The reason page settings group into a `page { … }` table rather than sitting loose is
+The reason page settings group into a `page.<name> { … }` table rather than sitting loose is
 correctness, not tidiness: MUI2's settings are `!define`s that apply to _the next_
 `!insertmacro MUI_PAGE_*` and are then undefined. Hand-written MUI2 can attach a header
-text to the wrong page and nothing will tell you. A `page { … }` table cannot express the
+text to the wrong page and nothing will tell you. A `page.<name> { … }` table cannot express the
 mistake.
 
 ```lua
-page {
-  "Directory",
-  headerText        = "Choose a location",
-  directoryVariable = INSTDIR,
-  pre = function() … end,
+page.directory {
+  headerText = "Choose a location",
+  pre = function() detailPrint("choosing a location") end,
 }
 ```
 

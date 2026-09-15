@@ -141,7 +141,7 @@ Until then it is `raw` — and this is the plugin the **raw argument** form was
 built for. Declare `get` with one `string` parameter in your own `.toml` and
 spell the whole path through it:
 
-```lua
+```lua skip
 local node = nsJSON.get(raw "/index 0 /index 1 /index 3", "$Doc")
 ```
 

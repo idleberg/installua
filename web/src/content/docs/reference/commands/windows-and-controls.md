@@ -76,9 +76,19 @@ A `raw` block reaches a control through a global: `h = serial`, then `$h` in the
 `h.focus()` work in any function.
 
 ```lua
-serial.font = { face = "Tahoma", size = 8 }
-serial.colors = { text = "800000", background = "transparent" }
-agree.enabled = false
+local agree = checkbox { "I have read the notes", y = 60, height = 12 }
+local serial = text { x = 60, y = 90, width = 120, height = 14 }
+
+installer {
+	page.custom { "Details",
+		controls = { agree, serial },
+		show = function()
+			serial.font = { face = "Tahoma", size = 8 }
+			serial.colors = { text = "800000", background = "transparent" }
+			agree.enabled = false
+		end,
+	},
+}
 ```
 
 ## GetDlgItem / FindWindow / IsWindow / SendMessage

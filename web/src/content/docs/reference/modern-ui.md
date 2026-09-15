@@ -94,8 +94,16 @@ page.license {
 	bottomText = "Press Page Down to see the rest of the agreement.",
 	checkbox = "I accept the terms",
 }
+```
 
-page.license { file = { English = "en.txt", German = "de.txt" } }
+```lua
+languages {
+	locales = { English = {}, German = {} },
+}
+
+installer {
+	page.license { file = { English = "en.txt", German = "de.txt" } },
+}
 ```
 
 ### MUI_PAGE_COMPONENTS
@@ -161,6 +169,15 @@ read a variable from — it reads the folder back out of the registry instead.
 One spelling, two lowerings, and the block decides which:
 
 ```lua
+local menu = page.startMenu {
+	defaultFolder = "Example",
+	registry = { root = "HKCU", key = "Software/Example", value = "StartMenu" },
+}
+
+installer {
+	menu,
+}
+
 uninstaller {
 	page.instFiles {},
 	section("Shortcuts", function()

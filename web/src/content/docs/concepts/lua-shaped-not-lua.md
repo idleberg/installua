@@ -52,7 +52,7 @@ follows from those four.
 Lua says everything but `nil` and `false` is truthy. Installua has neither value, so rather
 than invent a rule it narrows: only a `bool` may be a condition.
 
-```lua
+```lua error
 if fileExists(p) then end        -- fine, and costs no register
 local ok = errors()
 if ok then end                   -- fine

@@ -29,6 +29,8 @@ more = ["string"]
 first popped value is one of `tagged`. Both are part of the Lua arity:
 
 ```lua
+local accessControl = plugin "AccessControl"
+
 local granted, why = accessControl.grantOnFile(INSTDIR, "(BU)", "FullAccess")
 if granted == "error" then
     detailPrint("ACL not set: " .. why)

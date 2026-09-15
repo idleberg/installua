@@ -25,12 +25,14 @@ no arguments; it is a jump, so anything after it in the same block is dead.
 **Usage** `continue()` → nothing
 
 ```lua
+local handle = fileOpen(INSTDIR .. "/app.ini", "r")
 for line in lines(handle) do
 	if line == "" then
 		continue()
 	end
 	detailPrint(line)
 end
+handle:close()
 ```
 
 Every run-time loop carries a target: `while`, the numeric `for`, `for … in
