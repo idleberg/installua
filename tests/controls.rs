@@ -448,20 +448,28 @@ fn focus_is_set_focus() {
     );
 }
 
-/// `h = serial` copies the window into a global `raw` can name.
+/// `h = serial` copies the window into a global `raw` can name, and the global
+/// keeps the fields a `getDlgItem` local has.
 #[test]
 fn a_control_is_assigned_to_a_global() {
     let output = build(&page(
         "local serial = text { \"\", y = 0, height = 12 }",
         "serial,",
-        "h = serial",
+        "h = serial\nh.enabled = false\nh.focus()",
     ));
-    let copies: Vec<&str> = output
+    let lines: Vec<&str> = output
         .lines()
         .map(str::trim)
-        .filter(|line| line.starts_with("StrCpy $h"))
+        .filter(|line| line.contains("$h"))
         .collect();
-    assert_eq!(copies, ["StrCpy $h $__GENERATED_ctl_serial"]);
+    assert_eq!(
+        lines,
+        [
+            "StrCpy $h $__GENERATED_ctl_serial",
+            "EnableWindow $h 0",
+            "System::Call \"user32::SetFocus(p$h)\"",
+        ]
+    );
 }
 
 /// `ShowWindow`'s two states are 0 and 5, not 0 and 1, so a literal picks one

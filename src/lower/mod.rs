@@ -6467,19 +6467,12 @@ impl BodyLowerer<'_, '_> {
         for (target, value) in targets.iter().zip(values) {
             // `docs.text = ""` — a handle's field, which is an instruction and
             // not a register at all. A control's `serial.value = "…"` is the
-            // same shape over a window, and a local holding one is not a
+            // same shape over a window, and a register holding one is not a
             // declaration, so the test is what the base *resolves to* rather
             // than whether it was declared.
             if let Expr::Field { base, name, .. } = target
                 && base.name().is_some_and(|base| {
-                    self.resolved.deferred.contains_key(base)
-                        || matches!(
-                            self.lookup(base),
-                            Some(Binding::Local {
-                                ty: Ty::Handle | Ty::Unknown,
-                                ..
-                            })
-                        )
+                    self.resolved.deferred.contains_key(base) || self.window_slot(base).is_some()
                 })
             {
                 self.field_write(base, name, value);

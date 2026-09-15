@@ -681,9 +681,7 @@ impl BodyLowerer<'_, '_> {
                 .is_some_and(|deferred| deferred.kind.is_control())
             && match field.text.as_str() {
                 "add" => control,
-                "focus" => {
-                    control || matches!(self.lookup(name), Some(super::Binding::Local { .. }))
-                }
+                "focus" => control || self.window_slot(name).is_some(),
                 _ => false,
             }
         {

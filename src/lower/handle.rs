@@ -178,18 +178,34 @@ impl BodyLowerer<'_, '_> {
         // windows alike, so this accepts more than it should — a `fileOpen`
         // handle has an `enabled` here — and narrowing it is a fifth type
         // rather than a check.
-        match self.lookup(name) {
-            Some(Binding::Local { slot, ty }) if *ty == Ty::Handle || *ty == Ty::Unknown => {
-                Some(Addressed::Control(ControlHandle {
-                    slot: slot.clone(),
-                    control: None,
-                    base: name.to_string(),
-                }))
-            }
-            _ => {
+        match self.window_slot(name) {
+            Some(slot) => Some(Addressed::Control(ControlHandle {
+                slot,
+                control: None,
+                base: name.to_string(),
+            })),
+            None => {
                 self.todo(span, "this expression");
                 None
             }
+        }
+    }
+
+    /// The register a window was copied into — a `local`, or a global since
+    /// `h = serial` is how `raw` reaches one. An `Unknown` is a type the
+    /// fixpoint has not settled, and a later round checks it again.
+    pub(super) fn window_slot(&self, name: &str) -> Option<Slot> {
+        match self.lookup(name) {
+            Some(Binding::Local { slot, ty }) => {
+                matches!(ty, Ty::Handle | Ty::Unknown).then(|| slot.clone())
+            }
+            Some(_) => None,
+            None => (self.resolved.global(name)
+                && self
+                    .globals
+                    .get(name)
+                    .is_none_or(|(ty, _)| matches!(ty, Ty::Handle | Ty::Unknown)))
+            .then(|| Slot::Global(name.to_string())),
         }
     }
 
