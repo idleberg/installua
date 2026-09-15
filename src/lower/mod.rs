@@ -6505,7 +6505,9 @@ impl BodyLowerer<'_, '_> {
             }
 
             let Expr::Name(name) = target else {
-                self.todo(target.span(), "this assignment target");
+                if !matches!(target, Expr::Field { base, .. } if self.undefined_base(base)) {
+                    self.todo(target.span(), "this assignment target");
+                }
                 continue;
             };
 
@@ -7522,6 +7524,31 @@ impl BodyLowerer<'_, '_> {
             )
             .note(note),
         );
+    }
+
+    /// `nope.run()`, `nope.x = 1`: the base of a dotted name that is nothing,
+    /// reported as that rather than as a shape this version lacks. Asked only
+    /// where the answer would otherwise be a `todo`, so a base anything knows
+    /// keeps the `todo`.
+    pub(super) fn undefined_base(&mut self, base: &Expr) -> bool {
+        let Expr::Name(name) = base else {
+            return false;
+        };
+        let text = name.text.as_str();
+        let known = self.lookup(text).is_some()
+            || self.resolved.global(text)
+            || self.resolved.consts.contains_key(text)
+            || self.resolved.namespaces.contains_key(text)
+            || self.resolved.deferred.contains_key(text)
+            || self.resolved.functions.contains_key(text)
+            || crate::builtins::lookup(text).is_some()
+            || crate::builtins::constant_named(text).is_some()
+            || crate::builtins::owned(text)
+            || matches!(text, "string" | "page" | RAW);
+        if !known {
+            self.undefined(name);
+        }
+        !known
     }
 
     fn undefined(&mut self, name: &Name) {

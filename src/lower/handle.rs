@@ -212,7 +212,9 @@ impl BodyLowerer<'_, '_> {
                 base: name.to_string(),
             })),
             None => {
-                self.todo(span, "this expression");
+                if !self.undefined_base(base) {
+                    self.todo(span, "this expression");
+                }
                 None
             }
         }

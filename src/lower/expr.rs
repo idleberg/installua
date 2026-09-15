@@ -715,6 +715,7 @@ impl BodyLowerer<'_, '_> {
             match call {
                 Expr::Call { callee, .. } => match callee.as_ref() {
                     Expr::Name(name) => self.undefined(name),
+                    Expr::Field { base, .. } if self.undefined_base(base) => {}
                     other => self.todo(other.span(), "this call"),
                 },
                 _ => unreachable!(),
@@ -2690,7 +2691,9 @@ impl BodyLowerer<'_, '_> {
             if let Some(builtin) = builtins::lookup(&name) {
                 return self.builtin_multi(builtin, args, dests, *span);
             }
-            self.todo(*span, "binding several values from this call");
+            if !matches!(callee.as_ref(), Expr::Field { base, .. } if self.undefined_base(base)) {
+                self.todo(*span, "binding several values from this call");
+            }
             return None;
         }
         self.call_function(&name, args, dests, *span)

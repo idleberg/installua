@@ -358,6 +358,35 @@ fn a_declaration_used_as_a_value_is_not_undefined() {
     }
 }
 
+/// A dotted name on nothing is not defined, in every position a dot reaches —
+/// not a shape this version lacks. A base the compiler knows keeps the `todo`.
+#[test]
+fn an_undefined_base_is_undefined() {
+    for (line, undefined) in [
+        ("nope.run()", true),
+        ("nope.x = 1", true),
+        ("local a, b = nope.run()", true),
+        ("local c = nope.y", true),
+        ("detailPrint(nope.z)", true),
+        ("string.nope(\"a\")", false),
+        ("local n = 1\nn.x = 2", false),
+    ] {
+        let diags = compile(&format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n{line}\nend), }}"
+        ));
+        assert_eq!(
+            (
+                diags.contains(Code::UndefinedName),
+                diags.contains(Code::NotYetImplemented)
+            ),
+            (undefined, !undefined),
+            "{line}\n{}",
+            diags.render("<test>")
+        );
+    }
+}
+
 #[test]
 fn a_cast_refuses_a_bool() {
     let diags = compile(
