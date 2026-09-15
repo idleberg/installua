@@ -1486,6 +1486,50 @@ fn a_valued_flag_says_what_it_wants() {
             && impossible.contains("`OK`, `CANCEL`"),
         "{impossible}"
     );
+
+    let wrong_default =
+        errors("messageBox { text = \"Go?\", buttons = \"YESNO\", defaultAnswer = \"CANCEL\" }");
+    assert!(
+        wrong_default.contains("`YESNO` cannot answer `CANCEL`"),
+        "{wrong_default}"
+    );
+}
+
+/// Three answers from one `MessageBox`: two keyed arms and a fallthrough, and
+/// the default button named by its answer rather than counted.
+#[test]
+fn a_three_button_box_branches_three_ways() {
+    let mut diags = Diagnostics::new();
+    let nsi = installua::build(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local a = messageBox { text = \"Go?\", buttons = \"ABORTRETRYIGNORE\", defaultAnswer = \"RETRY\" }\n\
+         detailPrint(a)\n\
+         end), }",
+        &mut diags,
+    )
+    .unwrap_or_else(|| panic!("{}", diags.render("<test>")));
+    let section: Vec<&str> = nsi
+        .lines()
+        .skip_while(|line| !line.starts_with("Section"))
+        .skip(1)
+        .take_while(|line| *line != "SectionEnd")
+        .collect();
+    assert_eq!(
+        section,
+        [
+            "  MessageBox MB_ABORTRETRYIGNORE|MB_DEFBUTTON2 \"Go?\" IDRETRY __GENERATED_mb_0_retry IDIGNORE __GENERATED_mb_0_ignore",
+            "  StrCpy $0 \"ABORT\"",
+            "  Goto __GENERATED_mb_0_end",
+            "__GENERATED_mb_0_retry:",
+            "  StrCpy $0 \"RETRY\"",
+            "  Goto __GENERATED_mb_0_end",
+            "__GENERATED_mb_0_ignore:",
+            "  StrCpy $0 \"IGNORE\"",
+            "__GENERATED_mb_0_end:",
+            "  DetailPrint $0",
+        ]
+    );
 }
 
 /// The error that replaces "takes 2 to 9 arguments, and 4 were given".

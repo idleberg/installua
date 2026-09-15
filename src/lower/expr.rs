@@ -52,8 +52,8 @@ pub(super) struct Written {
 }
 
 /// What a `messageBox` call said, before any of it is checked against the
-/// button set. Four fields rather than a tuple because `silentAnswer` made the
-/// tuple's third and fourth members indistinguishable at the call site.
+/// button set. Fields rather than a tuple because `silentAnswer` and
+/// `defaultAnswer` would be indistinguishable members of one.
 struct MessageBoxFields {
     text: ir::Arg,
     buttons: String,
@@ -62,6 +62,9 @@ struct MessageBoxFields {
     /// one this dialog can produce. `None` leaves `/SD` unwritten, which is
     /// NSIS's own default.
     silent: Option<(String, Span)>,
+    /// The button focused when the dialog opens, as its answer. `None` is the
+    /// first, which is also what `MB_DEFBUTTON1` means.
+    default: Option<(String, Span)>,
 }
 
 /// A value and what the lattice knows about it.
@@ -2397,6 +2400,7 @@ impl BodyLowerer<'_, '_> {
             buttons,
             icon,
             silent,
+            default,
         } = self.message_box_fields(args, span)?;
         let Some(set) = BUTTONS.iter().find(|set| set.installua == buttons) else {
             self.diags.push(
@@ -2441,22 +2445,21 @@ impl BodyLowerer<'_, '_> {
             flags.push_str(&format!("|MB_ICON{icon}"));
         }
 
+        // `MB_DEFBUTTON2` is the second button, and the buttons are the answers
+        // in order, so the answer says which without anyone counting.
+        if let Some((answer, where_)) = default {
+            let index = self.answer_index(set, &answer, where_)?;
+            if index > 0 {
+                flags.push_str(&format!("|MB_DEFBUTTON{}", index + 1));
+            }
+        }
+
         // `/SD IDNO`, checked against the buttons rather than against a list of
         // its own: an answer this dialog cannot give is a silent install that
         // takes a branch nobody wrote, and NSIS accepts the line either way.
         let mut arguments = vec![ir::Arg::raw(flags), text];
         if let Some((answer, where_)) = silent {
-            if !set.answers.contains(&answer.as_str()) {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::BadFieldValue,
-                        where_,
-                        format!("`{}` cannot answer `{answer}`", set.installua),
-                    )
-                    .note(format!("its answers are {}", set.listed())),
-                );
-                return None;
-            }
+            self.answer_index(set, &answer, where_)?;
             arguments.push(ir::Arg::raw("/SD".to_string()));
             arguments.push(ir::Arg::raw(format!("ID{answer}")));
         }
@@ -2485,10 +2488,6 @@ impl BodyLowerer<'_, '_> {
             return Some(Ty::Str);
         }
 
-        if set.answers.len() > 2 {
-            self.todo(span, &format!("the `{}` button set", set.installua));
-            return None;
-        }
         let dest = dest?;
 
         // What this slot can hold, for [`Self::unanswerable`]. Recorded only on
@@ -2496,9 +2495,13 @@ impl BodyLowerer<'_, '_> {
         // returned above, already having said so.
         self.answers.insert(dest.clone(), set);
 
+        // One arm per answer, each writing its name and joining at the end.
         let n = self.body.construct();
-        let first = self.fresh(format!("mb_{n}_{}", set.answers[0].to_lowercase()));
-        let second = self.fresh(format!("mb_{n}_{}", set.answers[1].to_lowercase()));
+        let arms: Vec<BlockId> = set
+            .answers
+            .iter()
+            .map(|answer| self.fresh(format!("mb_{n}_{}", answer.to_lowercase())))
+            .collect();
         let end = self.fresh(format!("mb_{n}_end"));
 
         let current = self.current;
@@ -2513,25 +2516,41 @@ impl BodyLowerer<'_, '_> {
                         .iter()
                         .map(|answer| format!("ID{answer}"))
                         .collect(),
+                    more: arms[2..].to_vec(),
                 },
-                then_block: first,
-                else_block: second,
+                then_block: arms[0],
+                else_block: arms[1],
             },
         );
 
-        self.current = first;
-        self.emit(ir::Instruction::new(
-            "StrCpy",
-            vec![ir::Arg::dest(dest.clone()), ir::Arg::str(set.answers[0])],
-        ));
-        self.terminate(Terminator::Jump(end), second);
-        self.emit(ir::Instruction::new(
-            "StrCpy",
-            vec![ir::Arg::dest(dest.clone()), ir::Arg::str(set.answers[1])],
-        ));
-        self.terminate(Terminator::Jump(end), end);
+        self.current = arms[0];
+        for (index, answer) in set.answers.iter().enumerate() {
+            self.emit(ir::Instruction::new(
+                "StrCpy",
+                vec![ir::Arg::dest(dest.clone()), ir::Arg::str(*answer)],
+            ));
+            let next = arms.get(index + 1).copied().unwrap_or(end);
+            self.terminate(Terminator::Jump(end), next);
+        }
 
         Some(Ty::Str)
+    }
+
+    /// Where `answer` sits among the set's buttons, or an error when this dialog
+    /// cannot give it.
+    fn answer_index(&mut self, set: &ButtonSet, answer: &str, span: Span) -> Option<usize> {
+        let index = set.answers.iter().position(|known| *known == answer);
+        if index.is_none() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    span,
+                    format!("`{}` cannot answer `{answer}`", set.installua),
+                )
+                .note(format!("its answers are {}", set.listed())),
+            );
+        }
+        index
     }
 
     /// `messageBox("done")` and `messageBox { text = …, buttons = … }` — the
@@ -2560,11 +2579,12 @@ impl BodyLowerer<'_, '_> {
                 buttons: "OK".to_string(),
                 icon: None,
                 silent: None,
+                default: None,
             });
         };
 
         let (mut text, mut buttons, mut icon) = (None, "OK".to_string(), None);
-        let mut silent = None;
+        let (mut silent, mut default) = (None, None);
         for field in fields {
             let TableField::Named { name, value } = field else {
                 self.todo(span, "a positional entry in `messageBox`");
@@ -2579,6 +2599,7 @@ impl BodyLowerer<'_, '_> {
                 // meaningful against `buttons`, which is checked below
                 // (`Offer::Handled`).
                 "silentAnswer" => silent = Some((self.constant(value)?.text(), name.span)),
+                "defaultAnswer" => default = Some((self.constant(value)?.text(), name.span)),
                 other => {
                     self.diags.push(
                         Diagnostic::error(
@@ -2586,7 +2607,10 @@ impl BodyLowerer<'_, '_> {
                             name.span,
                             format!("`{other}` is not a `messageBox` field"),
                         )
-                        .note("the fields are `text`, `buttons`, `icon` and `silentAnswer`"),
+                        .note(
+                            "the fields are `text`, `buttons`, `icon`, `silentAnswer` and \
+                             `defaultAnswer`",
+                        ),
                     );
                     return None;
                 }
@@ -2605,6 +2629,7 @@ impl BodyLowerer<'_, '_> {
             buttons,
             icon,
             silent,
+            default,
         })
     }
 
@@ -2797,6 +2822,7 @@ impl BodyLowerer<'_, '_> {
                                     name: builtin.nsis.to_string(),
                                     args: lowered,
                                     keywords: Vec::new(),
+                                    more: Vec::new(),
                                 },
                                 then_block: then_b,
                                 else_block: else_b,

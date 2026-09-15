@@ -182,10 +182,14 @@ impl Body {
     pub fn terminate(&mut self, id: BlockId, terminator: Terminator) {
         let terminator = match terminator {
             Terminator::Branch {
+                ref test,
                 then_block,
                 else_block,
-                ..
-            } if then_block == else_block => Terminator::Jump(then_block),
+            } if then_block == else_block
+                && !matches!(test, Test::Predicate { more, .. } if !more.is_empty()) =>
+            {
+                Terminator::Jump(then_block)
+            }
             other => other,
         };
         self.blocks[id.0].terminator = terminator;
@@ -241,10 +245,16 @@ impl Terminator {
         match self {
             Terminator::Jump(target) => vec![*target],
             Terminator::Branch {
+                test,
                 then_block,
                 else_block,
-                ..
-            } => vec![*then_block, *else_block],
+            } => {
+                let mut targets = vec![*then_block, *else_block];
+                if let Test::Predicate { more, .. } = test {
+                    targets.extend(more);
+                }
+                targets
+            }
             Terminator::Return | Terminator::Halt | Terminator::Unreachable => Vec::new(),
         }
     }
@@ -287,6 +297,9 @@ pub enum Test {
         /// keyed and **omitted** rather than spelled `0` when they fall
         /// through.
         keywords: Vec<String>,
+        /// Keyed arms past the two a `Branch` names, one per keyword after the
+        /// second: `MB_ABORTRETRYIGNORE` answers three ways from one line.
+        more: Vec<BlockId>,
     },
 }
 

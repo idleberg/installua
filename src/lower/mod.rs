@@ -6991,6 +6991,7 @@ impl BodyLowerer<'_, '_> {
                     name: "IfErrors".to_string(),
                     args: Vec::new(),
                     keywords: Vec::new(),
+                    more: Vec::new(),
                 },
                 then_block: end,
                 else_block: inside,

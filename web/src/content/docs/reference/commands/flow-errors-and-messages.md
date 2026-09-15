@@ -110,13 +110,14 @@ Shows a dialog and returns the button the user pressed, by name. Written with a
 table rather than positionally, because the flags NSIS fuses into one argument
 are separate decisions.
 
-**Usage** `messageBox { text = …, buttons = …, icon = …, silentAnswer = … }` → `string`
+**Usage** `messageBox { text = …, buttons = …, icon = …, defaultAnswer = …, silentAnswer = … }` → `string`
 
 ```lua
 local answer = messageBox {
 	text = "Remove Example and all of its files?",
 	buttons = "YESNO",
 	icon = "QUESTION",
+	defaultAnswer = "NO",
 	silentAnswer = "NO",
 }
 if answer == "NO" then
@@ -128,6 +129,11 @@ The answers are the button names in capitals — `OK`, `CANCEL`, `YES`, `NO`,
 `RETRY`, `ABORT`, `IGNORE` — and comparing one against a string the dialog
 cannot give is a warning, not a dead branch that builds. `answer ~= "yes"` is
 the one to watch: `==` is `StrCmpS`, so the case is part of the value.
+
+`buttons` is one of `OK`, `OKCANCEL`, `YESNO`, `RETRYCANCEL`,
+`ABORTRETRYIGNORE` and `YESNOCANCEL`. `defaultAnswer` focuses that button when
+the dialog opens (`MB_DEFBUTTON2` and so on); both it and `silentAnswer` must be
+an answer the set can give.
 
 ## SetAutoClose
 

@@ -383,6 +383,7 @@ fn terminator(
                     name,
                     args,
                     keywords,
+                    ..
                 } if keywords.is_empty() => {
                     let arms = vec![arm(*then_block), arm(*else_block)];
                     let mut all = args.clone();
@@ -398,9 +399,13 @@ fn terminator(
                     name,
                     args,
                     keywords,
+                    more,
                 } => {
                     let mut all = args.clone();
-                    for (keyword, target) in keywords.iter().zip([*then_block, *else_block]) {
+                    let arms = [*then_block, *else_block]
+                        .into_iter()
+                        .chain(more.iter().copied());
+                    for (keyword, target) in keywords.iter().zip(arms) {
                         if next == Some(target) {
                             continue;
                         }
