@@ -7549,6 +7549,29 @@ impl BodyLowerer<'_, '_> {
             return;
         }
 
+        // A declaration bound to a local is in the file, just not as a value:
+        // it has no slot to read or write, only fields. "Not defined" two lines
+        // below `local d = text { … }` sends the reader looking for a typo.
+        if let Some(deferred) = self.resolved.deferred.get(&name.text) {
+            let what = match deferred.kind {
+                DeferredKind::Control(_) => format!("a `{}` control", deferred.kind.word()),
+                kind => format!("a {}", kind.word()),
+            };
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    name.span,
+                    format!("`{}` is {what}, not a value", name.text),
+                )
+                .note(format!(
+                    "it is reached through its fields, `{}.…`, and cannot be stored, passed or \
+                     assigned",
+                    name.text
+                )),
+            );
+            return;
+        }
+
         let mut diagnostic = Diagnostic::error(
             Code::UndefinedName,
             name.span,

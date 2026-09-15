@@ -336,6 +336,28 @@ fn a_narrower_type_fits_a_wider_parameter() {
 /// known types still conflict.
 /// A bool is `1` or `0` in a register, and Lua's `tostring(true)` is `"true"`,
 /// so the cast that would silently disagree with Lua is refused instead.
+/// A control or section bound to a local is in the file, so using it as a value
+/// says what it is rather than that it is not defined.
+#[test]
+fn a_declaration_used_as_a_value_is_not_undefined() {
+    for source in [
+        "attributes { outFile = \"a.exe\" }\n\
+         local d = text { \"\", y = 0, height = 12 }\n\
+         installer { page.custom { controls = { d }, show = function() h = d end }, \
+         page.instFiles {} }",
+        "attributes { outFile = \"a.exe\" }\n\
+         local core = section(\"Core\", function() end)\n\
+         installer { core, section(\"Other\", function() detailPrint(core) end) }",
+    ] {
+        let diags = compile(source);
+        assert!(
+            diags.contains(Code::TypeMismatch) && !diags.contains(Code::UndefinedName),
+            "{}",
+            diags.render("<test>")
+        );
+    }
+}
+
 #[test]
 fn a_cast_refuses_a_bool() {
     let diags = compile(
