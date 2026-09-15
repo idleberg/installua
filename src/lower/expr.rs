@@ -101,6 +101,20 @@ impl BodyLowerer<'_, '_> {
             });
         }
 
+        // A cast over a simple value is that value, retyped. Anything wrong
+        // with it falls through to [`Self::cast`], which owns the diagnostic —
+        // reporting here would report twice, since `value_into` asks `simple`
+        // first and `call` second.
+        if let Expr::Call { callee, args, .. } = expr
+            && let Some(name) = callee.name()
+            && self.is_cast(name)
+            && let [argument] = args.as_slice()
+            && let Some(typed) = self.simple(argument)
+            && let Some(ty) = cast_to(name, typed.ty)
+        {
+            return Some(Typed { arg: typed.arg, ty });
+        }
+
         match expr {
             Expr::Name(name) => match self.lookup(&name.text) {
                 Some(Binding::Local { slot, ty }) => Some(Typed {
@@ -594,6 +608,9 @@ impl BodyLowerer<'_, '_> {
             }
             "string.sub" | "string.find" | "string.lower" | "string.upper" | "string.format" => {
                 return self.string_adapter(&name, args, dest, span);
+            }
+            "tostring" | "tonumber" if self.is_cast(&name) => {
+                return self.cast(&name, args, dest, span);
             }
             // The one table in the surface addressed by string rather than by
             // handle: an install type is a line in a block's field, so there is
@@ -2245,6 +2262,49 @@ impl BodyLowerer<'_, '_> {
         Some(Ty::Str)
     }
 
+    /// `tostring` and `tonumber` — not shadowed by a `func`, a `local` or a
+    /// global of the same name, which would be the author's and not Lua's.
+    fn is_cast(&self, name: &str) -> bool {
+        matches!(name, "tostring" | "tonumber")
+            && !self.resolved.functions.contains_key(name)
+            && self.lookup(name).is_none()
+            && !self.resolved.global(name)
+    }
+
+    /// `tostring(n)`, `tonumber(s)`: a cast, and never an instruction.
+    ///
+    /// Every NSIS value is already a string, so there is nothing to convert —
+    /// what changes is what the lattice lets the value be handed to. That makes
+    /// `tonumber` NSIS's reading rather than Lua's: `"abc"` is `0` where Lua
+    /// answers `nil`, and `IntOp` reads a leading `0x` as hex and a leading `0`
+    /// as octal. A bool is refused both ways, because it is stored as `1`/`0`
+    /// and `tostring(true)` in Lua is `"true"`.
+    fn cast(&mut self, name: &str, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
+        let [argument] = args else {
+            return self.wrong_arity(name, 1, args.len(), span);
+        };
+        let from = match dest {
+            Some(dest) => self.value_into(argument, dest)?,
+            None => self.value(argument)?.ty,
+        };
+        if let Some(ty) = cast_to(name, from) {
+            return Some(ty);
+        }
+        let mut diagnostic = Diagnostic::error(
+            Code::TypeMismatch,
+            argument.span(),
+            format!("`{name}` takes an int or a string, and this is a {from}"),
+        );
+        if from == Ty::Bool {
+            diagnostic = diagnostic.note(
+                "a bool is stored as `1` or `0`, not `true` or `false`; branch on it and write \
+                 the text you mean",
+            );
+        }
+        self.diags.push(diagnostic);
+        None
+    }
+
     fn wrong_arity(&mut self, name: &str, wanted: usize, got: usize, span: Span) -> Option<Ty> {
         self.diags.push(
             Diagnostic::error(
@@ -2973,6 +3033,17 @@ const CONVERSIONS: &[char] = &['c', 'C', 'd', 'i', 'u', 'x', 'X'];
 /// deliberately not, so `%I64d` surfaces as an unknown `%I` rather than passing
 /// as a `%d`. `IntFmt` passes a `UINT`; reading it as 64 bits is `Int64Fmt`'s
 /// job and this is not that instruction.
+/// What a cast makes of a value, or `None` when it refuses it. An int keeps its
+/// sign through `tonumber`, since nothing about it changed.
+fn cast_to(name: &str, from: Ty) -> Option<Ty> {
+    match (name, from) {
+        ("tostring", Ty::Int(_) | Ty::Str | Ty::Unknown) => Some(Ty::Str),
+        ("tonumber", Ty::Int(_)) => Some(from),
+        ("tonumber", Ty::Str | Ty::Unknown) => Some(Ty::int()),
+        _ => None,
+    }
+}
+
 fn conversions(text: &str) -> Vec<Option<char>> {
     let mut found = Vec::new();
     let mut chars = text.chars().peekable();

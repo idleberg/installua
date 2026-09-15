@@ -334,6 +334,22 @@ fn a_narrower_type_fits_a_wider_parameter() {
 /// program conflicted with itself, *"assigned a string here and a unknown
 /// elsewhere"*, with no site for the elsewhere. Two assignments of different
 /// known types still conflict.
+/// A bool is `1` or `0` in a register, and Lua's `tostring(true)` is `"true"`,
+/// so the cast that would silently disagree with Lua is refused instead.
+#[test]
+fn a_cast_refuses_a_bool() {
+    let diags = compile(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function() \
+         local b = fileExists(\"x\") detailPrint(tostring(b)) end), }",
+    );
+    assert!(
+        diags.contains(Code::TypeMismatch),
+        "{}",
+        diags.render("<test>")
+    );
+}
+
 #[test]
 fn a_global_assigned_a_parameter_takes_its_type() {
     let parameter = compile(

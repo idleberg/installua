@@ -1389,6 +1389,10 @@ const LANGUAGE: &[(&str, &str)] = &[
     // to say about `raw.middle`.
     ("raw.head", "      - type: string\n"),
     ("raw.tail", "      - type: string\n"),
+    // Lua's own names, kept as casts. Listed because there is no `base:` to
+    // inherit them from.
+    ("tostring", "      - type: any\n"),
+    ("tonumber", "      - type: any\n"),
 ];
 
 /// The names `lua-language-server` keeps and Installua rejects. Each names its

@@ -109,6 +109,31 @@ detailPrint(\"length \" .. string.len(path))",
     assert_eq!(body.temps, 1);
 }
 
+/// `tostring` and `tonumber` are casts: the lattice changes its mind and the
+/// output does not. Over a call, the call's own register is the only cost.
+#[test]
+fn a_cast_emits_nothing() {
+    let body = body(&program(
+        "\
+local v = readEnvStr(\"X\")
+local n = tonumber(v) + 1
+detailPrint(tostring(n))
+detailPrint(tostring(string.len(v)))",
+    ));
+
+    assert_eq!(
+        shape(&body),
+        [
+            "ReadEnvStr",
+            "IntOp",
+            "DetailPrint",
+            "StrLen",
+            "DetailPrint"
+        ]
+    );
+    assert_eq!(body.temps, 1);
+}
+
 /// `IntCmp a b <eq> <lt> <gt>` covers all six relational operators in one
 /// instruction with no temporaries — the payoff of "no materialised booleans",
 /// and not obvious from the NSIS documentation, so it is written down as a

@@ -37,6 +37,24 @@ func("majorOf", function(version)
 end)
 ```
 
+## Casts
+
+Every NSIS value is already a string, so `tostring` and `tonumber` emit no code.
+They change what the compiler lets a value be passed to, and nothing else.
+
+| Installua                  | Takes            | Notes                                                                  |
+| -------------------------- | ---------------- | ---------------------------------------------------------------------- |
+| `tostring(v)` → `string`   | `int`, `string`  | concatenation already accepts an `int`: `"step " .. i` needs no cast   |
+| `tonumber(s)` → `int`      | `string`, `int`  | NSIS's reading, not Lua's: `"abc"` is `0`, `"0x10"` is 16, `"010"` is 8 |
+
+A `bool` is refused by both, because it is stored as `1` or `0` and Lua's
+`tostring(true)` is `"true"`.
+
+```lua
+local count = tonumber(readEnvStr("RETRIES")) + 1
+messageBox(tostring(count))
+```
+
 ## ExpandEnvStrings / ReadEnvStr
 
 | NSIS               | Installua                             |
