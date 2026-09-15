@@ -101,7 +101,7 @@ that names it.
 **Usage** `include(path)` → nothing
 
 ```lua skip
-include("lib/shortcuts.lua")
+include "lib/shortcuts.lua"
 ```
 
 ## glob
