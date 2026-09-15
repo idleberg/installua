@@ -421,6 +421,12 @@ pub enum Setting {
 pub struct Part {
     pub field: &'static str,
     pub holds: Setting,
+    /// Whether `""` in this position is NSIS's own "keep the default", so a
+    /// gap before a later part can be filled rather than refused. True of the
+    /// language-file strings, which `SetInnerString` stores and
+    /// `GenerateLangTable` skips when empty; false of a colour or a size, where
+    /// `""` is a value and a wrong one.
+    pub blank: bool,
 }
 
 /// The census bucket. There is exactly one enum, because the buckets and the

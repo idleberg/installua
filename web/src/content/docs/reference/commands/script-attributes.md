@@ -166,4 +166,8 @@ instead — see [Pages and MUI](/reference/modern-ui/).
 | `SilentInstall`       | `silentInstall = "normal" \| "silent" \| "silentlog"`        |
 | `SilentUnInstall`     | `silentUninstall = "normal" \| "silent"`                     |
 
+Any part of `buttonText`, `fileErrorText` or `spaceTexts` may be left out, and
+keeps the running language's text: `buttonText = { close = "Quit" }` renames one
+button. The other tables count positions, so a part may only be left off the end.
+
 ---

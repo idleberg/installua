@@ -257,7 +257,22 @@ const fn attribute(nsis: &'static str, field: &'static str, holds: Setting) -> R
 /// with. The parts stand against the snapshot's positions in order, so the
 /// count is checked by the census rather than by reading.
 const fn part(field: &'static str, holds: Setting) -> Part {
-    Part { field, holds }
+    Part {
+        field,
+        holds,
+        blank: false,
+    }
+}
+
+/// A [`part`] holding one of the language file's strings, where `""` keeps the
+/// text of whatever language is running — so leaving it out before a later
+/// part is filled with `""` instead of refused.
+const fn label(field: &'static str) -> Part {
+    Part {
+        field,
+        holds: STR,
+        blank: true,
+    }
 }
 
 /// The two commonest [`Setting`]s, spelled short because the rows are a column.
@@ -965,7 +980,7 @@ pub const ROWS: &[Row] = &[
     attribute(
         "FileErrorText",
         "fileErrorText",
-        Setting::Table(&[part("text", STR), part("withoutIgnore", STR)]),
+        Setting::Table(&[label("text"), label("withoutIgnore")]),
     ),
     exposed(
         "FileOpen",
@@ -2171,16 +2186,17 @@ pub const ROWS: &[Row] = &[
     // withhold them.
     //
     // The four labels of `MiscButtonText` are one line and therefore one field:
-    // NSIS reads them by position, so writing only the last still means writing
-    // the three before it, and a table is where that is checkable.
+    // NSIS reads them by position, so writing only the last still means a
+    // position for each of the three before it. Each is a [`label`], so those
+    // are `""` and keep the language's own text.
     attribute(
         "MiscButtonText",
         "buttonText",
         Setting::Table(&[
-            part("back", STR),
-            part("next", STR),
-            part("cancel", STR),
-            part("close", STR),
+            label("back"),
+            label("next"),
+            label("cancel"),
+            label("close"),
         ]),
     ),
     attribute("DetailsButtonText", "detailsButtonText", STR),
@@ -2194,7 +2210,7 @@ pub const ROWS: &[Row] = &[
         "spaceTexts",
         Setting::Off {
             word: "none",
-            parts: &[part("required", STR), part("available", STR)],
+            parts: &[label("required"), label("available")],
             least: 1,
         },
     ),

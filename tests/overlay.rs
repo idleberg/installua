@@ -896,6 +896,50 @@ fn an_alternation_may_stop_early() {
     assert_eq!(lines, ["BGGradient 000000"], "in:\n{built}");
 }
 
+/// A gap before a later part is `""` where NSIS reads `""` as the language's own
+/// text, and still refused where `""` would be a colour.
+#[test]
+fn a_label_left_out_before_a_later_one_keeps_its_default() {
+    let source = "attributes {\n\
+        \toutFile = \"a.exe\",\n\
+        \tname = \"a\",\n\
+        \tbuttonText = { close = \"Quit\" },\n\
+        \tfileErrorText = { withoutIgnore = \"x\" },\n\
+        \tspaceTexts = { available = \"y\" },\n\
+        }\n";
+
+    let mut diags = Diagnostics::new();
+    let built = installua::build(source, &mut diags).unwrap_or_default();
+    assert!(!diags.has_errors(), "{}", diags.render("gap.lua"));
+
+    let lines: Vec<&str> = built
+        .lines()
+        .filter(|line| {
+            ["MiscButtonText", "FileErrorText", "SpaceTexts"]
+                .iter()
+                .any(|name| line.starts_with(name))
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "MiscButtonText \"\" \"\" \"\" \"Quit\"",
+            "FileErrorText \"\" \"x\"",
+            "SpaceTexts \"\" \"y\"",
+        ],
+        "in:\n{built}"
+    );
+
+    let source = "attributes { outFile = \"a.exe\", name = \"a\", bgGradient = { top = \"000000\", text = \"FFFFFF\" } }\n";
+    let mut diags = Diagnostics::new();
+    installua::build(source, &mut diags);
+    assert!(
+        diags.contains(installua::diag::Code::BadFieldValue),
+        "{}",
+        diags.render("gradient.lua")
+    );
+}
+
 /// `true` is not the other half of `false` here. There is nothing to turn *on*:
 /// the row has no default colours, so the table branch is the only way to say
 /// yes and the message has to point at it.
@@ -1036,9 +1080,7 @@ fn an_open_enum_takes_what_it_does_not_list() {
     assert!(diags.has_errors(), "a closed enum still closes");
 }
 
-/// The three ways a repeating position can be written wrong. `fileErrorText` is
-/// beside them because its two parts are both optional and NSIS counts
-/// arguments: the second cannot be reached without the first.
+/// The three ways a repeating position can be written wrong.
 #[test]
 fn a_repeating_position_wants_a_list() {
     const PRELUDE: &str = "attributes { outFile = \"a.exe\", name = \"a\", ";
@@ -1051,10 +1093,6 @@ fn a_repeating_position_wants_a_list() {
         (
             "a named entry",
             "manifest = { supportedOS = { os = \"Win10\" } }",
-        ),
-        (
-            "a value it cannot reach",
-            "fileErrorText = { withoutIgnore = \"x\" }",
         ),
     ] {
         let mut diags = Diagnostics::new();

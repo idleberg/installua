@@ -2513,8 +2513,9 @@ impl<'p> Lowerer<'_, 'p> {
             written.push((name.text.as_str(), part));
         }
 
-        // The last part anybody wrote. Everything up to it has to be there, and
-        // an optional position after it is simply not emitted.
+        // The last part anybody wrote. Everything up to it has to be there —
+        // written, or a [`table::Part::blank`] filled with `""` — and an
+        // optional position after it is simply not emitted.
         let last = parts
             .iter()
             .rposition(|part| written.iter().any(|(key, _)| *key == part.field));
@@ -2533,6 +2534,10 @@ impl<'p> Lowerer<'_, 'p> {
             }
             // Last one wins, which is what Lua does with a repeated key.
             let Some((_, given)) = written.iter().rev().find(|(key, _)| *key == part.field) else {
+                if part.blank && last.is_some_and(|last| index < last) {
+                    args.push(ir::Arg::str(""));
+                    continue;
+                }
                 let mut diag = Diagnostic::error(
                     Code::BadFieldValue,
                     value.span(),
@@ -2551,7 +2556,10 @@ impl<'p> Lowerer<'_, 'p> {
                     None => optional_parts(entry, parts),
                 };
                 if !spare.is_empty() {
-                    diag = diag.note(format!("only {} may be left out", list(&spare)));
+                    diag = diag.note(format!(
+                        "only {} may be left out, and only after the last part you wrote",
+                        list(&spare)
+                    ));
                 }
                 self.diags.push(diag);
                 return None;
