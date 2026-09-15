@@ -316,6 +316,49 @@ fn text_is_read_by_a_call_and_written_by_a_message() {
     assert!(!output.contains("nsDialogs.nsh"), "{output}");
 }
 
+/// A list's text is its selection. A combo box's is its window text, so the read
+/// is the edit box's; a list box has none, so it asks for the index and then the
+/// row. A write selects, and `add` is `items` at run time.
+#[test]
+fn a_list_is_read_and_selected_by_its_rows() {
+    let output = build(&page(
+        "local drop = dropList { y = 0, height = 60 }\n\
+         local list = listBox { y = 70, height = 60 }",
+        "drop, list,",
+        "drop.add(\"B\")\n\
+         drop.value = \"B\"\n\
+         list.value = \"X\"\n\
+         detailPrint(drop.value)\n\
+         detailPrint(list.value)",
+    ));
+
+    let body: Vec<&str> = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("SendMessage") || line.starts_with("System::Call"))
+        .collect();
+    assert_eq!(
+        body,
+        [
+            "SendMessage $__GENERATED_ctl_drop 0x0143 0 \"STR:B\"",
+            "SendMessage $__GENERATED_ctl_drop 0x014D -1 \"STR:B\"",
+            "SendMessage $__GENERATED_ctl_list 0x018C -1 \"STR:X\"",
+            "System::Call \"user32::GetWindowText(p$__GENERATED_ctl_drop,t.s,i${NSIS_MAX_STRLEN})\"",
+            "SendMessage $__GENERATED_ctl_list 0x0188 0 0 $0",
+            "System::Call \"user32::SendMessage(p$__GENERATED_ctl_list,i393,p$0,t.s)\"",
+        ],
+        "{output}"
+    );
+
+    let raised = errors(&page(
+        "local serial = text { \"\", y = 0, height = 12 }",
+        "serial,",
+        "serial.add(\"x\")",
+    ));
+    assert_eq!(raised.len(), 1, "{raised:?}");
+    assert_eq!(raised[0].0, Code::UnknownField);
+}
+
 /// Five of the seven fields have a setter and no getter, and the diagnostic says
 /// which instruction the setter is rather than inventing a message number whose
 /// answer would be whatever the control does with a message it does not know.

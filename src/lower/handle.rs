@@ -912,6 +912,34 @@ impl BodyLowerer<'_, '_> {
             // be spelled at all; `GetWindowText` through the `System` plugin is
             // what `nsDialogs.nsh` does, and `${NSIS_MAX_STRLEN}` is makensis'
             // own define, so this still includes nothing (ruling 5).
+            // A list box has no window text: its selection is an index, and
+            // the row's text comes back through `System` into a buffer.
+            // `LB_GETCURSEL` answers -1 with nothing selected, and `LB_GETTEXT`
+            // then leaves the buffer empty, so the read is `""`.
+            ControlField::Value if handle.control.is_some_and(|c| c.installua == "listBox") => {
+                self.emit(ir::Instruction::new(
+                    "SendMessage",
+                    vec![
+                        ir::Arg::slot(handle.slot.clone()),
+                        message(control::LB_GETCURSEL),
+                        ir::Arg::int(0),
+                        ir::Arg::int(0),
+                        ir::Arg::dest(dest.clone()),
+                    ],
+                ));
+                let signature = ir::Arg::str("user32::SendMessage(p")
+                    .concat(ir::Arg::slot(handle.slot.clone()))
+                    .concat(ir::Arg::str(format!(",i{},p", control::LB_GETTEXT)))
+                    .concat(ir::Arg::slot(dest.clone()))
+                    .concat(ir::Arg::str(",t.s)"));
+                self.generated_plugin_call(
+                    "System::Call",
+                    vec![signature],
+                    vec![dest.clone()],
+                    field.span,
+                );
+                Some(Ty::Str)
+            }
             ControlField::Value => {
                 let signature = ir::Arg::str("user32::GetWindowText(p")
                     .concat(ir::Arg::slot(handle.slot.clone()))
@@ -946,6 +974,59 @@ impl BodyLowerer<'_, '_> {
         }
     }
 
+    /// `sources.add("C:/")` — one `ADDSTRING`, the message `items` sends once
+    /// per row at build time.
+    pub(super) fn control_add(
+        &mut self,
+        base: &Expr,
+        args: &[Expr],
+        dest: Option<&Slot>,
+        span: Span,
+    ) {
+        let Some(Addressed::Control(handle)) = self.addressed(base, span) else {
+            return;
+        };
+        let Some(add) = handle.control.and_then(|control| control.add_item) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    span,
+                    format!("`{}` holds no items to add to", handle.base),
+                )
+                .note("`add` is a `dropList`'s and a `listBox`'s: they are the two controls that are a list"),
+            );
+            return;
+        };
+        if dest.is_some() {
+            self.diags.push(Diagnostic::error(
+                Code::TypeMismatch,
+                span,
+                "`add` produces no value",
+            ));
+            return;
+        }
+        let [item] = args else {
+            self.diags.push(Diagnostic::error(
+                Code::WrongArity,
+                span,
+                "`add` takes one argument, the row's text",
+            ));
+            return;
+        };
+        let Some(text) = self.typed(item, Ty::Str, "add") else {
+            return;
+        };
+        self.emit(ir::Instruction::new(
+            "SendMessage",
+            vec![
+                ir::Arg::slot(handle.slot.clone()),
+                message(add),
+                ir::Arg::int(0),
+                ir::Arg::str("STR:").concat(text),
+            ],
+        ));
+    }
+
     /// `agree.checked = true` — a write, which is one instruction each.
     fn control_write(&mut self, handle: &ControlHandle, field: &Name, value: &Expr) {
         let Some(what) = self.control_field(handle, field) else {
@@ -958,12 +1039,15 @@ impl BodyLowerer<'_, '_> {
                 let Some(text) = self.typed(value, Ty::Str, &field.text) else {
                     return;
                 };
+                // A list's text is a row, so writing it picks one: `-1` is
+                // "search from the top".
+                let select = handle.control.and_then(control::Control::select_item);
                 self.emit(ir::Instruction::new(
                     "SendMessage",
                     vec![
                         hwnd(),
-                        message(control::WM_SETTEXT),
-                        ir::Arg::int(0),
+                        message(select.unwrap_or(control::WM_SETTEXT)),
+                        ir::Arg::int(if select.is_some() { -1 } else { 0 }),
                         // `STR:` is how `SendMessage` is told that an argument
                         // is a string and not a number, and it is the
                         // compiler's to write for the same reason the message

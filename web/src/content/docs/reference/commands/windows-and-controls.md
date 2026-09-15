@@ -61,6 +61,11 @@ reports them: NSIS can set a control's colours and cannot ask what they are.
 Either colour may be left out and keeps the control's own. The same holds for
 `headerColors` and a directory page's `colors`, where MUI2's default fills in.
 
+On a `dropList` or `listBox`, `value` is the selected row: `""` when none is,
+and a write selects the first row that starts with the text, ignoring case — what
+`NSD_CB_SelectString` does. `handle.add("text")` appends a row at install time,
+where `items` holds the rows known at build time.
+
 ```lua
 serial.font = { face = "Tahoma", size = 8 }
 serial.colors = { text = "800000", background = "transparent" }

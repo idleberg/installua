@@ -656,6 +656,24 @@ impl BodyLowerer<'_, '_> {
             return None;
         }
 
+        // `sources.add("C:/")` — a row added at run time, where `items` is the
+        // rows known at build time.
+        if let Expr::Call { callee, .. } = call
+            && let Expr::Field {
+                base, name: field, ..
+            } = callee.as_ref()
+            && field.text == "add"
+            && base.name().is_some_and(|base| {
+                self.resolved
+                    .deferred
+                    .get(base)
+                    .is_some_and(|deferred| deferred.kind.is_control())
+            })
+        {
+            self.control_add(base, args, dest, span);
+            return None;
+        }
+
         if let Some((base, method)) = name.split_once('.')
             && self.resolved.namespaces.contains_key(base)
         {

@@ -62,6 +62,17 @@ const SS_BITMAP: u32 = 0x0000_000E;
 const CB_ADDSTRING: u32 = 0x0143;
 const LB_ADDSTRING: u32 = 0x0180;
 
+/// A list's `value`. Written by `SELECTSTRING`, which is what nsDialogs'
+/// `NSD_CB_SelectString`/`NSD_LB_SelectString` send: the first row that
+/// *starts with* the text, compared without case. A combo box's selection is
+/// its window text, so `GetWindowText` reads it like any other; a list box has
+/// no window text, so its read is `LB_GETCURSEL` and then `LB_GETTEXT` through
+/// `System`, as `NSD_LB_GetSelection` does.
+pub const CB_SELECTSTRING: u32 = 0x014D;
+pub const LB_SELECTSTRING: u32 = 0x018C;
+pub const LB_GETCURSEL: u32 = 0x0188;
+pub const LB_GETTEXT: u32 = 0x0189;
+
 /// The messages a field is, where the field is one.
 ///
 /// There is no `WM_GETTEXT` here, and its absence is the one asymmetry in the
@@ -111,6 +122,14 @@ impl Control {
     /// whether it has a message for adding one.
     pub fn takes_items(&self) -> bool {
         self.add_item.is_some()
+    }
+
+    /// The `SELECTSTRING` message a write to a list's `value` is.
+    pub fn select_item(&self) -> Option<u32> {
+        match self.add_item? {
+            CB_ADDSTRING => Some(CB_SELECTSTRING),
+            _ => Some(LB_SELECTSTRING),
+        }
     }
 
     /// Whether the kind holds a tick.
@@ -366,7 +385,7 @@ impl ControlField {
         match (self, control) {
             (ControlField::Checked, control) => control.is_some_and(Control::checkable),
             (ControlField::Image, control) => control.is_some_and(Control::imageable),
-            (ControlField::Value, Some(control)) => control.text.is_some(),
+            (ControlField::Value, Some(control)) => control.text.is_some() || control.takes_items(),
             _ => true,
         }
     }
@@ -389,7 +408,7 @@ impl ControlField {
         match self {
             ControlField::Checked => "a `checkbox` or a `radioButton`",
             ControlField::Image => "a `bitmap`",
-            ControlField::Value => "a control drawn with text",
+            ControlField::Value => "a control drawn with text or a list",
             _ => "any window",
         }
     }
