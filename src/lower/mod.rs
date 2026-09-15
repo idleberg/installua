@@ -6540,7 +6540,12 @@ impl BodyLowerer<'_, '_> {
             };
 
             match (slot, declared) {
-                (Slot::Global(name), Some(previous)) if previous != ty => {
+                // An `Unknown` here is an earlier fixpoint round's guess, seeded
+                // without sites — not an assignment the author wrote — so it
+                // yields to the type this one settles on.
+                (Slot::Global(name), Some(previous))
+                    if previous != ty && previous != Ty::Unknown =>
+                {
                     let sites = self
                         .globals
                         .get(&name)

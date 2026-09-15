@@ -327,6 +327,37 @@ fn a_narrower_type_fits_a_wider_parameter() {
     );
 }
 
+/// A global takes its type from a parameter learned at the call site.
+///
+/// The fixpoint's first round lowers `g = v` while `v` is still `Unknown`, and
+/// the next round was seeded with that guess — so the one assignment in the
+/// program conflicted with itself, *"assigned a string here and a unknown
+/// elsewhere"*, with no site for the elsewhere. Two assignments of different
+/// known types still conflict.
+#[test]
+fn a_global_assigned_a_parameter_takes_its_type() {
+    let parameter = compile(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function() f(\"x\") end), }\n\
+         func(\"f\", function(v) g = v end)",
+    );
+    assert!(
+        !parameter.contains(Code::TypeConflict),
+        "one assignment cannot conflict:\n{}",
+        parameter.render("<test>")
+    );
+
+    let two = compile(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function() f(\"x\") g = 1 end), }\n\
+         func(\"f\", function(v) g = v end)",
+    );
+    assert!(
+        two.contains(Code::TypeConflict),
+        "a string and an int are still two types"
+    );
+}
+
 /// A declaration's parameter types are checked, and checked the same way.
 ///
 /// The rule above is the instruction table's, and the two declaration surfaces
