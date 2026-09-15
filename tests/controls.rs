@@ -426,6 +426,22 @@ fn a_window_the_program_did_not_draw_has_the_fields_every_window_has() {
     assert!(output.contains("EnableWindow $0 0"), "{output}");
 }
 
+/// The same field, written straight onto the call with no `local` to hold it.
+#[test]
+fn a_field_is_written_onto_a_call() {
+    let output = build(&page(
+        "",
+        "label { \"hi\", y = 0, height = 12 },",
+        "getDlgItem(HWNDPARENT, 2).enabled = false",
+    ));
+    let lines: Vec<&str> = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("GetDlgItem") || line.starts_with("EnableWindow"))
+        .collect();
+    assert_eq!(lines, ["GetDlgItem $0 $HWNDPARENT 2", "EnableWindow $0 0"]);
+}
+
 /// `focus()` is `${NSD_SetFocus}`, on a drawn control and a found window alike.
 #[test]
 fn focus_is_set_focus() {

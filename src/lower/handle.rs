@@ -101,6 +101,22 @@ impl BodyLowerer<'_, '_> {
     /// last of those is a `todo` rather than an error, because `a.b` on
     /// something else is a shape this version lacks rather than a mistake.
     pub(super) fn addressed(&mut self, base: &Expr, span: Span) -> Option<Addressed> {
+        // `getDlgItem(HWNDPARENT, 1037).colors = …` — a window straight out of a
+        // call, into a temporary, as a `local` holding it would have been.
+        if let Expr::Call { .. } = base {
+            let slot = self.claim_temp(span);
+            return match self.value_into(base, &slot)? {
+                Ty::Handle | Ty::Unknown => Some(Addressed::Control(ControlHandle {
+                    slot,
+                    control: None,
+                    base: "this window".to_string(),
+                })),
+                _ => {
+                    self.todo(span, "this expression");
+                    None
+                }
+            };
+        }
         let Some(name) = base.name() else {
             self.todo(span, "this expression");
             return None;

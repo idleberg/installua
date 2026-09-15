@@ -97,6 +97,8 @@ local cancel = getDlgItem(HWNDPARENT, 2)
 cancel.enabled = false
 ```
 
+A one-off write needs no `local`: `getDlgItem(HWNDPARENT, 2).enabled = false`.
+
 ## HideWindow / BringToFront / LockWindow / SetBrandingImage / SetDetailsView
 
 | NSIS               | Installua                          |

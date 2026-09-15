@@ -6494,9 +6494,11 @@ impl BodyLowerer<'_, '_> {
             // declaration, so the test is what the base *resolves to* rather
             // than whether it was declared.
             if let Expr::Field { base, name, .. } = target
-                && base.name().is_some_and(|base| {
-                    self.resolved.deferred.contains_key(base) || self.window_slot(base).is_some()
-                })
+                && (matches!(**base, Expr::Call { .. })
+                    || base.name().is_some_and(|base| {
+                        self.resolved.deferred.contains_key(base)
+                            || self.window_slot(base).is_some()
+                    }))
             {
                 self.field_write(base, name, value);
                 continue;
