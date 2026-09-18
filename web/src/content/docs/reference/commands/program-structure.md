@@ -243,4 +243,32 @@ byte-for-byte the script you would get by writing only the branch that won.
 `include` is the one thing that cannot go in a branch: files are merged before
 any of this runs.
 
+### Inside a section or a func
+
+The same `if` works in a body, with no separate spelling. When its condition
+folds, the compiler takes the branch there too: the losing side is dropped and
+no `StrCmp` or jump is emitted, which is what `!if` around a few instructions
+does in NSIS.
+
+```lua
+local ARCH <const> = param("ARCH", "x86")
+
+installer {
+	section("Core", function()
+		if ARCH == "x64" then
+			file("bin/x64/app.exe")
+		else
+			file("bin/x86/app.exe")
+		end
+	end),
+}
+```
+
+With `-D ARCH=x64` the section is a single `File "bin\x64\app.exe"`.
+
+The difference from the top level is what happens when the condition does not
+fold. At the top level that is an error; in a body it is an ordinary runtime
+`if`, decided by the installer. You write both the same way, and whether a
+condition folds is the only thing that decides which one you get.
+
 ---

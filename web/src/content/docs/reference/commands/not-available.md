@@ -28,7 +28,7 @@ have ordinary constructs:
 | ------------------------------------------------ | -------------------------------------------------- |
 | `!define APP "Example"`                          | `local APP <const> = "Example"`                     |
 | `!ifndef VERSION` / `!define` / `!endif`         | `local VERSION <const> = param("VERSION", "1.4.2")` |
-| `!if ${ARCH} == "x64"` … `!else` … `!endif`      | a [top-level `if`](/reference/commands/program-structure/#build-time-if) |
+| `!if ${ARCH} == "x64"` … `!else` … `!endif`      | an `if` on a `<const>`, at the [top level or in a body](/reference/commands/program-structure/#build-time-if) |
 | `!include "MyHelpers.nsh"` (your own file)       | `include("helpers.lua")`                            |
 | `!include "FileFunc.nsh"` (an NSIS header)       | `local fileFunc = import "FileFunc"`                |
 | `!macro Banner text` … `!macroend`               | `func("banner", function(text) … end)`              |

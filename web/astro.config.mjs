@@ -18,9 +18,9 @@ export default defineConfig({
 				ThemeSelect: './src/components/NoTheme.astro',
 			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/idleberg/installua' }],
-       expressiveCode: {
-    themes: ['github-dark'],
-  },
+			expressiveCode: {
+				themes: ['github-dark'],
+			},
 			sidebar: [
 				{
 					label: 'Getting started',
@@ -73,10 +73,10 @@ export default defineConfig({
 							],
 						},
 						{
-              label: 'Plugins',
+							label: 'Plugins',
 							collapsed: true,
 							items: [
-                { label: 'Overview', slug: 'reference/plugins' },
+								{ label: 'Overview', slug: 'reference/plugins' },
 								{ label: 'Tagged outputs', slug: 'reference/plugins/tagged-outputs' },
 								{ label: 'Shipped with NSIS', slug: 'reference/plugins/plugins-that-ship-with-nsis' },
 								{ label: 'Third-party', slug: 'reference/plugins/third-party-plugins' },
@@ -84,7 +84,7 @@ export default defineConfig({
 							],
 						},
 						{ label: 'Headers', slug: 'reference/headers' },
-            { label: 'Modern UI', slug: 'reference/modern-ui' },
+						{ label: 'Modern UI', slug: 'reference/modern-ui' },
 					],
 				},
 			],
