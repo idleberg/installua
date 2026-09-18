@@ -344,8 +344,9 @@ const SHIPPED: &[(&str, &str)] = &[
 ///
 /// A *set* rather than a file, because two files in one
 /// `.installua/declarations` disagreeing is the mistake worth reporting, and
-/// [`crate::project`]'s cascade is the case where the same override is the
-/// feature working.
+/// a project's own directory overriding its workspace's — see
+/// [`crate::project`] — is the case where the same override is the feature
+/// working.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Scope(Vec<(bool, String, String)>);
 

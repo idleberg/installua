@@ -104,13 +104,13 @@ impl Options {
         }
     }
 
-    /// [`Options::for_file`], plus the declarations every
-    /// `.installua/declarations` from `<base>` up to the project root holds —
-    /// see [`project::declaration_dirs`].
+    /// [`Options::for_file`], plus the declarations in `<base>`'s own
+    /// `.installua/declarations` and in the one beside the nearest
+    /// `installua.toml` above it — see [`project::declaration_dirs`].
     ///
-    /// `base` itself is unchanged by the cascade: a marker says where the
-    /// *search* stops, and nothing about where a `glob` or an `include`
-    /// resolves from. Relative paths still mean "beside the source".
+    /// `base` itself is unchanged by the workspace: `installua.toml` says where
+    /// the declaration *search* stops, and nothing about where a `glob` or an
+    /// `include` resolves from. Relative paths still mean "beside the source".
     ///
     /// The problems come back rather than being folded into a [`Diagnostics`]:
     /// a malformed declaration file has no span in any Lua source, and a caller

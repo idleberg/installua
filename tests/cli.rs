@@ -263,8 +263,9 @@ installer { page.instFiles {}, section(\"Core\", function() detailPrint(VERSION)
     }
 }
 
-/// The declaration cascade, from the outside: a plugin declared once at the
-/// top of a checkout is one an installer under it may call.
+/// The workspace, from the outside: a plugin declared once at the top of a
+/// checkout is one an installer under it may call, and the projects
+/// `installua.toml` lists are what a command runs on when it is named no file.
 ///
 /// A library test can build the `Declarations` directly — `tests/project.rs`
 /// does — but not answer the question this asks, which is whether the *command*
@@ -290,7 +291,7 @@ local acme = plugin \"acme\"
 installer { page.instFiles {}, section(\"Core\", function() acme.install(\"$INSTDIR\") end) }
 ";
 
-    /// A checkout with the workspace marker at the top and one installer three
+    /// A checkout with `installua.toml` at the top and one installer two
     /// directories down. `shared` says whether the workspace declares the
     /// plugin at all — the control, since a test whose compile passes either
     /// way proves nothing.
@@ -300,8 +301,7 @@ installer { page.instFiles {}, section(\"Core\", function() acme.install(\"$INST
 
         let project = root.join("installers/pro");
         std::fs::create_dir_all(&project).expect("create the project");
-        std::fs::write(root.join("installua.toml"), "[project]\nroot = true\n")
-            .expect("write the marker");
+        std::fs::write(root.join("installua.toml"), "").expect("write the workspace");
         std::fs::write(project.join("install.lua"), CALLER).expect("write the program");
         if shared {
             let dir = root.join(".installua/declarations");
@@ -345,6 +345,117 @@ installer { page.instFiles {}, section(\"Core\", function() acme.install(\"$INST
         let root = checkout("bare", false);
         let (passed, output) = check(&root);
         assert!(!passed, "an undeclared plugin call compiled:\n{output}");
+    }
+
+    /// `installua <args>`, run from `dir` and named no file.
+    fn run_in(dir: &Path, args: &[&str]) -> (bool, String) {
+        let output = Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .expect("run installua");
+        (
+            output.status.success(),
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        )
+    }
+
+    /// A checkout listing `projects`, each a `name` and a clean program under
+    /// `installers/<name>/install.lua`.
+    fn listed(name: &str, projects: &[&str]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("installua-workspace-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut file = String::new();
+        for project in projects {
+            let dir = root.join("installers").join(project);
+            std::fs::create_dir_all(&dir).expect("create the project");
+            std::fs::write(dir.join("install.lua"), CLEAN).expect("write the program");
+            file.push_str(&format!(
+                "[[project]]\nname = \"{project}\"\nentry = \"installers/{project}/install.lua\"\n"
+            ));
+        }
+        std::fs::write(root.join("installua.toml"), file).expect("write the workspace");
+        root
+    }
+
+    /// One project: `emit` with no file compiles it, from the workspace or from
+    /// anywhere under it, and writes beside the entry rather than beside the
+    /// shell.
+    #[test]
+    fn one_project_needs_no_file() {
+        let root = listed("one", &["pro"]);
+        let (passed, output) = run_in(&root.join("installers/pro"), &["emit"]);
+        assert!(passed, "{output}");
+        assert!(
+            root.join("installers/pro/install.nsi").exists(),
+            "`emit` wrote nowhere near the entry:\n{output}"
+        );
+    }
+
+    /// Several: `-p` picks one, and without it the command refuses and names
+    /// them rather than building the first.
+    #[test]
+    fn several_projects_need_p() {
+        let root = listed("several", &["pro", "lite"]);
+
+        let (passed, output) = run_in(&root, &["emit"]);
+        assert!(!passed, "`emit` picked one of two:\n{output}");
+        assert!(output.contains("`pro`, `lite`"), "{output}");
+
+        let (passed, output) = run_in(&root, &["emit", "-p", "lite"]);
+        assert!(passed, "{output}");
+        assert!(
+            root.join("installers/lite/install.nsi").exists(),
+            "{output}"
+        );
+        assert!(
+            !root.join("installers/pro/install.nsi").exists(),
+            "{output}"
+        );
+    }
+
+    /// `check` with nothing named checks every project, because it is the CI
+    /// gate: one broken installer among several has to fail it.
+    #[test]
+    fn check_runs_every_project() {
+        let root = listed("check", &["pro", "lite"]);
+        let (passed, output) = run_in(&root, &["check"]);
+        assert!(passed, "{output}");
+
+        std::fs::write(root.join("installers/lite/install.lua"), LOWERING_ERROR)
+            .expect("break one program");
+        let (passed, output) = run_in(&root, &["check"]);
+        assert!(
+            !passed,
+            "`check` passed a workspace with a broken project:\n{output}"
+        );
+
+        let (passed, output) = run_in(&root, &["check", "-p", "pro"]);
+        assert!(passed, "{output}");
+    }
+
+    /// A file and a project at once is two answers to one question.
+    #[test]
+    fn a_file_and_a_project_conflict() {
+        let root = listed("conflict", &["pro"]);
+        let (passed, output) = run_in(&root, &["emit", "installers/pro/install.lua", "-p", "pro"]);
+        assert!(!passed, "{output}");
+        assert!(output.contains("cannot be used with"), "{output}");
+    }
+
+    /// No file and no workspace says which of the two is missing.
+    #[test]
+    fn no_file_and_no_workspace_is_refused() {
+        let root = std::env::temp_dir().join("installua-workspace-none");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".git")).expect("create the .git directory");
+        let (passed, output) = run_in(&root, &["build"]);
+        assert!(!passed, "{output}");
+        assert!(output.contains("no `FILE.LUA` given"), "{output}");
     }
 }
 
@@ -396,33 +507,12 @@ mod init {
         for name in CONFIGS {
             assert!(dir.join(name).exists(), "`init` wrote no {name}:\n{output}");
         }
-        // The marker is a power feature and a plain project needs none, so a
-        // bare `init` writing one would be a file that does nothing.
+        // The workspace file lists projects only the author can name, so
+        // `init` writing one would be a file that says nothing.
         assert!(
             !dir.join("installua.toml").exists(),
-            "`init` wrote a project marker:\n{output}"
+            "`init` wrote installua.toml:\n{output}"
         );
-    }
-
-    /// And the flag that does write one writes the *workspace* marker, which is
-    /// the only shape of the file that changes anything.
-    #[test]
-    fn workspace_writes_the_marker_and_nothing_else() {
-        let dir = scratch("workspace");
-        let (passed, output) = init(&dir, &["--workspace"]);
-        assert!(passed, "{output}");
-        assert!(
-            std::fs::read_to_string(dir.join("installua.toml"))
-                .expect("no installua.toml")
-                .contains("root = true"),
-            "{output}"
-        );
-        for name in CONFIGS {
-            assert!(
-                !dir.join(name).exists(),
-                "`--workspace` wrote {name} into a directory with no sources:\n{output}"
-            );
-        }
     }
 
     /// The change this is here for: a re-run used to print "left alone" and
