@@ -10,7 +10,8 @@
 //! - **It names the programs a command runs on** when it was handed none:
 //!   each `[[project]]` is a `name` and an `entry`, so `installua build` in a
 //!   one-project checkout needs no file, and `installua build -p pro` picks one
-//!   out of several.
+//!   out of several. Leaving `-p` off with several is still a refusal here; the
+//!   CLI turns it into a question when there is a terminal to ask at.
 //!
 //! Absence is the common case and changes nothing: no file anywhere leaves the
 //! source's own directory as the whole search scope, and a command that was

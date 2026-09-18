@@ -269,19 +269,61 @@ fn workspace() -> Option<installua::project::Workspace> {
 }
 
 /// The one program `build` or `emit` compiles: the file it was named, or the
-/// project `-p` picks from the workspace, or the workspace's only project.
-fn input(args: &BuildArgs) -> Option<PathBuf> {
+/// project `-p` picks from the workspace, or the workspace's only project —
+/// or, when it lists several and nobody said which, the one picked from a list.
+fn input(args: &BuildArgs) -> Result<PathBuf, ExitCode> {
     if let Some(input) = &args.input {
-        return Some(input.clone());
+        return Ok(input.clone());
     }
-    let workspace = workspace()?;
+    let workspace = workspace().ok_or(ExitCode::from(2))?;
+    if args.project.is_none() && workspace.projects.len() > 1 {
+        let project = pick_project(&workspace)?;
+        return Ok(workspace.entry(project));
+    }
     match workspace.select(args.project.as_deref()) {
-        Ok(project) => Some(workspace.entry(project)),
+        Ok(project) => Ok(workspace.entry(project)),
         Err(message) => {
             log::error(message);
-            None
+            Err(ExitCode::from(2))
         }
     }
+}
+
+/// Ask which of several projects to build, searchable by name and entry.
+///
+/// Here and not in `Workspace::select`: the library answers or refuses, and
+/// asking is the CLI's business. Without a terminal there is nobody to ask, so
+/// it is `select`'s refusal, which lists the names `-p` takes. The prompt draws
+/// on stderr, which is why `emit --stdout` can still ask.
+fn pick_project(
+    workspace: &installua::project::Workspace,
+) -> Result<&installua::project::Project, ExitCode> {
+    use std::io::IsTerminal;
+
+    if !std::io::stdin().is_terminal() {
+        let message = workspace
+            .select(None)
+            .expect_err("several projects and no name is a refusal");
+        log::error(message);
+        return Err(ExitCode::from(2));
+    }
+    let options = workspace
+        .projects
+        .iter()
+        .enumerate()
+        .map(|(index, project)| {
+            let name = project.name.as_deref().unwrap_or(&project.entry);
+            clark::SelectOption::labelled(index, name).with_hint(&project.entry)
+        });
+    // A search that matches nothing settles on no option, which `interact`
+    // would report as a cancel; refusing it keeps the prompt open instead.
+    let index = clark::autocomplete("Which project?")
+        .options(options)
+        .placeholder("Type to search")
+        .validate(|index: Option<&usize>| index.is_none().then(|| "no project matches".to_string()))
+        .interact()
+        .map_err(cancelled("nothing built"))?;
+    Ok(&workspace.projects[index])
 }
 
 /// The programs `check` runs on. Named files win; failing those, the projects
@@ -373,8 +415,9 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
         return usage_error("`--stdout` has no script for `makensis` to read; use `emit`");
     }
 
-    let Some(input) = &input(args) else {
-        return ExitCode::from(2);
+    let input = &match input(args) {
+        Ok(input) => input,
+        Err(code) => return code,
     };
     let Some(source) = read(input) else {
         return ExitCode::from(2);

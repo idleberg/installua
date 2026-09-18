@@ -57,8 +57,10 @@ $ installua build -p pro
 $ installua emit -p lite -o dist/lite.nsi
 ```
 
-Leaving `-p` off with several projects is an error that lists their names. It
-won't guess, because building the wrong installer is worse than building none.
+Leave `-p` off with several projects and, at a terminal, `build` and `emit` ask
+which one, from a list you can search by name or entry. Without a terminal
+(a script, CI) it's an error that lists the names instead. Either way it won't
+guess, because building the wrong installer is worse than building none.
 
 `check` is the exception: with nothing named, it checks **every** project, since
 it's what you'd run in CI and one broken installer should fail it. `-p` works
