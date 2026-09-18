@@ -14,7 +14,7 @@ python = "latest"
 HK_MISE = 1
 
 [hooks]
-postinstall = "hk install --mise && mise run install:toolchain && pnpm install"
+postinstall = "hk install --mise && mise run install:toolchain && pnpm install --filter web"
 
 # Setup, in dependency order: rustup first — `cargo` is a component of the
 # toolchain it installs, so `cargo install` before it is a chicken-and-egg.
