@@ -36,6 +36,7 @@ installua emit [OPTIONS] [FILE.LUA]
 | `<FILE.LUA>` | The program to compile. Without one, the project installua.toml lists. |
 | `-p, --project <NAME>` | Compile this project from installua.toml instead. |
 | `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
+| `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
 | `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. Repeatable. |
 | `--stdout` | Write to stdout. |
 
@@ -52,6 +53,7 @@ installua build [OPTIONS] [FILE.LUA]
 | `<FILE.LUA>` | The program to compile. Without one, the project installua.toml lists. |
 | `-p, --project <NAME>` | Compile this project from installua.toml instead. |
 | `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
+| `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
 | `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. Repeatable. |
 
 ## installua coverage
