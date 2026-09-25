@@ -236,7 +236,7 @@ pub fn nearest(name: &str) -> Option<&'static str> {
 /// the same name shadows it as it shadows those. `WinCore.nsh` could not be
 /// read this way — it defines `HKLM` as a number.
 ///
-/// The eleven `${_NSIS_DEFAW}` names, `LVM_GETITEMTEXT` and friends, are left
+/// The nine `${_NSIS_DEFAW}` names, `LVM_GETITEMTEXT` and friends, are left
 /// out: which of the `A` and `W` twins they are depends on `unicode`, and the
 /// twins are here under their own names.
 const MESSAGES: &str = include_str!("../tables/winmessages-3.12.txt");
