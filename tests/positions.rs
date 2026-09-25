@@ -304,24 +304,7 @@ const CELLS: &[(&str, &str, Class)] = &[
 /// leaves this list.
 #[rustfmt::skip]
 const KNOWN: &[(&str, &str)] = &[
-    // 1. a declaration used as a value is rightly refused, and then errors again
-    //    where the value lands: `x` undefined, a field "of a control", or a
-    //    `func` that "returns 0 values"
-    ("section", "local"),
-    ("section", "global"),
-    ("section", "argument"),
-    ("section", "call base"),
-    ("group", "local"),
-    ("group", "global"),
-    ("group", "argument"),
-    ("group", "call base"),
-    ("page", "local"),
-    ("page", "call base"),
-    ("start menu page", "local"),
-    ("start menu page", "global"),
-    ("start menu page", "argument"),
-    ("start menu page", "call base"),
-    // 2. a field on a file handle is reported as a field of a control
+    // a field on a file handle is reported as a field of a control
     ("file handle", "field read"),
     ("file handle", "field write"),
 ];

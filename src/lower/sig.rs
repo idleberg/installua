@@ -15,7 +15,7 @@
 //! call site in the program means there is no separately-compilable unit. An
 //! installer is one program with one output, so nothing wants one.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::resolve::Resolved;
 use crate::types::Ty;
@@ -66,6 +66,26 @@ pub struct Inferred {
     /// global still sees the right type — the one thing Phase 2 left
     /// order-dependent.
     pub globals: BTreeMap<String, Ty>,
+    /// Kept out of the rounds: [`crate::lower::lower`] strips it from each one
+    /// and hands only the settled round's to the round that reports.
+    pub failed: Failed,
+}
+
+/// Where a value that failed landed. Its error is already reported, and a
+/// second one where it lands — a use in the body, a call counting what it
+/// returns — only buries the first, so uses of these stay quiet.
+///
+/// A round never reads its own marks back. One set while a type was still
+/// unsettled would silence the very uses that would clear it, and a program
+/// with an error and no diagnostic reaches layout.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Failed {
+    /// `(func, index)`: an argument a call site passed.
+    pub params: BTreeSet<(String, usize)>,
+    /// A `func` with a `return` whose value failed.
+    pub returns: BTreeSet<String>,
+    /// A global assigned one.
+    pub globals: BTreeSet<String>,
 }
 
 impl Inferred {
@@ -80,12 +100,12 @@ impl Inferred {
                         name.clone(),
                         Signature {
                             params: vec![None; function.params.len()],
-                            returns: None,
+                            ..Signature::default()
                         },
                     )
                 })
                 .collect(),
-            globals: BTreeMap::new(),
+            ..Inferred::default()
         }
     }
 

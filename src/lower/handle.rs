@@ -123,6 +123,9 @@ impl BodyLowerer<'_, '_> {
             }
             return None;
         };
+        if self.reported(name) {
+            return None;
+        }
 
         if let Some(kind) = self
             .resolved

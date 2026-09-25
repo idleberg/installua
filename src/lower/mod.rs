@@ -743,14 +743,17 @@ pub fn lower(
     //    still incomplete, so reporting them would be reporting the compiler's
     //    intermediate state to the user.
     let mut inferred = Inferred::seed(resolved);
+    let mut failed = Default::default();
     for _ in 0..MAX_ROUNDS {
         let mut scratch = Diagnostics::new();
-        let round = lower_once(resolved, options, &mut scratch, &inferred).1;
+        let mut round = lower_once(resolved, options, &mut scratch, &inferred).1;
+        failed = std::mem::take(&mut round.failed);
         if round == inferred {
             break;
         }
         inferred = round;
     }
+    inferred.failed = failed;
 
     let (mut module, _) = lower_once(resolved, options, diags, &inferred);
 
@@ -5914,11 +5917,16 @@ impl<'p> Lowerer<'_, 'p> {
             .and_then(|name| self.known.signature(name))
             .cloned()
             .unwrap_or_default();
+        let mut failed_return = false;
         let (body, returns) = self.body_with(span, half, place, |lowerer| {
-            lowerer.parameters(params, &signature);
+            lowerer.parameters(owner, params, &signature);
             lowerer.block(block);
+            failed_return = lowerer.failed_return;
         });
         self.returns(owner, &returns);
+        if let Some(name) = owner.filter(|_| failed_return) {
+            self.learned.failed.returns.insert(name.to_string());
+        }
         body
     }
 
@@ -5959,6 +5967,7 @@ impl<'p> Lowerer<'_, 'p> {
             loops: Vec::new(),
             callback: None,
             returns: Vec::new(),
+            failed_return: false,
             answers: BTreeMap::new(),
             span,
             current: Body::ENTRY,
@@ -6119,8 +6128,15 @@ enum Field {
 /// is build-time, so a use folds rather than reads.
 #[derive(Clone, Debug)]
 enum Binding {
-    Local { slot: Slot, ty: Ty },
+    Local {
+        slot: Slot,
+        ty: Ty,
+    },
     Const(ConstValue),
+    /// A name whose value failed, with the error already reported. Bound
+    /// rather than left out, so its uses stay quiet instead of saying "not
+    /// defined" about a name two lines below its `local`.
+    Reported,
 }
 
 /// Where `break` and `continue()` go. Both are ordinary terminators, which is
@@ -6185,6 +6201,8 @@ struct BodyLowerer<'a, 'p> {
     callback: Option<CallbackExits>,
     /// What each `return` in this body leaves on the stack.
     returns: Vec<(Vec<Ty>, Span)>,
+    /// A `return` whose value failed: see [`sig::Failed`].
+    failed_return: bool,
     /// Which slots hold a `messageBox` answer, and which dialog's.
     ///
     /// The set is closed and known here — lowering writes `StrCpy $0 "YES"`
@@ -6226,20 +6244,28 @@ impl BodyLowerer<'_, '_> {
 
     /// The callee's half of the calling convention: arguments come off the
     /// stack in source order, because the caller pushed them in reverse.
-    fn parameters(&mut self, params: &[Name], signature: &Signature) {
+    fn parameters(&mut self, owner: Option<&str>, params: &[Name], signature: &Signature) {
         for (index, param) in params.iter().enumerate() {
             let slot = self.body.vreg(param.span);
             self.emit(ir::Instruction::new(
                 "Pop",
                 vec![ir::Arg::dest(slot.clone())],
             ));
-            self.bind(
-                &param.text,
+            let failed = owner.is_some_and(|owner| {
+                self.known
+                    .failed
+                    .params
+                    .contains(&(owner.to_string(), index))
+            });
+            let binding = if failed {
+                Binding::Reported
+            } else {
                 Binding::Local {
                     slot,
                     ty: signature.param(index),
-                },
-            );
+                }
+            };
+            self.bind(&param.text, binding);
         }
     }
 
@@ -6402,6 +6428,7 @@ impl BodyLowerer<'_, '_> {
         let mut lowered = Vec::with_capacity(values.len());
         for value in values {
             let Some(typed) = self.value(value) else {
+                self.failed_return = true;
                 return;
             };
             lowered.push(typed);
@@ -6432,6 +6459,9 @@ impl BodyLowerer<'_, '_> {
                 .map(|name| self.claim_local(name.span))
                 .collect();
             let Some(types) = self.call_multi(&values[0], &slots) else {
+                for name in names {
+                    self.bind(&name.text, Binding::Reported);
+                }
                 return;
             };
             for ((name, slot), ty) in names.iter().zip(slots).zip(types) {
@@ -6472,6 +6502,7 @@ impl BodyLowerer<'_, '_> {
             // into a temporary and a `StrCpy` after it.
             let slot = self.claim_local(name.span);
             let Some(ty) = self.value_into(value, &slot) else {
+                self.bind(&name.text, Binding::Reported);
                 continue;
             };
             self.bind(&name.text, Binding::Local { slot, ty });
@@ -6526,6 +6557,7 @@ impl BodyLowerer<'_, '_> {
 
             let (slot, declared) = match self.lookup(&name.text).cloned() {
                 Some(Binding::Local { slot, ty }) => (slot, Some(ty)),
+                Some(Binding::Reported) => continue,
                 Some(Binding::Const(_)) => {
                     self.diags.push(
                         Diagnostic::error(
@@ -6576,6 +6608,9 @@ impl BodyLowerer<'_, '_> {
             self.answers.remove(&slot);
 
             let Some(ty) = self.value_into(value, &slot) else {
+                if matches!(slot, Slot::Global(_)) {
+                    self.learned.failed.globals.insert(name.text.clone());
+                }
                 continue;
             };
 
@@ -7486,6 +7521,7 @@ impl BodyLowerer<'_, '_> {
             loops: Vec::new(),
             callback: None,
             returns: Vec::new(),
+            failed_return: false,
             answers: BTreeMap::new(),
             span,
             current: Body::ENTRY,
@@ -7512,7 +7548,7 @@ impl BodyLowerer<'_, '_> {
             match local {
                 Some((_, Binding::Const(value))) => Some(value.clone()),
                 // A `local` shadows a top-level `<const>` without folding to it.
-                Some((_, Binding::Local { .. })) => None,
+                Some((_, Binding::Local { .. } | Binding::Reported)) => None,
                 None => resolved.consts.get(name).map(|c| c.value.clone()),
             }
         })
@@ -7557,7 +7593,19 @@ impl BodyLowerer<'_, '_> {
         !known
     }
 
+    /// Whether `name` holds a value that failed, with the error already
+    /// reported: see [`Binding::Reported`].
+    pub(super) fn reported(&self, name: &str) -> bool {
+        match self.lookup(name) {
+            Some(binding) => matches!(binding, Binding::Reported),
+            None => self.known.failed.globals.contains(name),
+        }
+    }
+
     fn undefined(&mut self, name: &Name) {
+        if self.reported(&name.text) {
+            return;
+        }
         // An NSIS instruction with a Lua spelling is not an unknown name: the
         // compiler knows exactly what it is, and the generic error would tell
         // an NSIS user that it had never heard of the instruction they use

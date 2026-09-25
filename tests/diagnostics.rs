@@ -386,6 +386,27 @@ fn an_undefined_base_is_undefined() {
     }
 }
 
+/// A value that failed is reported once, where it failed, and not again
+/// wherever it lands: a `local`, a global, a parameter, a `return`.
+#[test]
+fn a_failed_value_is_reported_once() {
+    let diags = compile(
+        "attributes { outFile = \"a.exe\" }\n\
+         func(\"make\", function() return nope end)\n\
+         func(\"take\", function(y) local q = y.selected end)\n\
+         installer { section(\"Core\", function()\n\
+         local x = nope\n\
+         detailPrint(x)\n\
+         g = nope\n\
+         local r = g.selected\n\
+         take(nope)\n\
+         local s = make().selected\n\
+         end), }",
+    );
+    assert_eq!(diags.iter().count(), 4, "{}", diags.render("<test>"));
+    assert!(diags.iter().all(|d| d.code == Code::UndefinedName));
+}
+
 #[test]
 fn a_cast_refuses_a_bool() {
     let diags = compile(

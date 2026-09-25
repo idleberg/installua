@@ -128,6 +128,7 @@ impl BodyLowerer<'_, '_> {
                     ty: value.ty(),
                     arg: ir::Arg::str(value.text()),
                 }),
+                Some(Binding::Reported) => None,
                 None => {
                     if let Some(constant) = builtins::constant_named(&name.text) {
                         return Some(Typed {
@@ -2755,7 +2756,10 @@ impl BodyLowerer<'_, '_> {
 
         let mut lowered = Vec::with_capacity(args.len());
         for (index, argument) in args.iter().enumerate() {
-            let value = self.value(argument)?;
+            let Some(value) = self.value(argument) else {
+                self.learned.failed.params.insert((name.to_string(), index));
+                return None;
+            };
             // What a parameter's type is comes from here — there are no
             // annotations, so the call sites are the only evidence.
             self.learned.learn_param(name, index, value.ty);
@@ -2767,6 +2771,9 @@ impl BodyLowerer<'_, '_> {
         // the binding's own count stands in. A real disagreement is reported
         // once the table has settled.
         let arity = signature.arity().unwrap_or(dests.len());
+        if dests.len() > arity && self.known.failed.returns.contains(name) {
+            return None;
+        }
         if dests.len() > arity {
             self.diags.push(
                 Diagnostic::error(
