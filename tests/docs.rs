@@ -823,9 +823,10 @@ fn wrappings(code: &str) -> [String; 3] {
 /// compiler rejects. The fence word opts a block out: `skip` for a sketch that
 /// needs files on disk, `error` for code shown *because* it is rejected.
 ///
-/// Not checked yet: that a `-->` comment matches what is emitted, and
-/// `makensis -WX` over the result — most examples `file()` paths that are not
-/// on disk.
+/// A `-->` comment has to match what is emitted. `makensis -WX` is not run:
+/// an example is a fragment, and of the 39 in 95 it failed, every one was a
+/// file or plugin not on disk, or a program the fragment leaves incomplete (no
+/// sections, no `instfiles` page, a `func` nothing calls).
 #[test]
 fn every_lua_example_compiles() {
     let mut failures = Vec::new();
@@ -840,23 +841,31 @@ fn every_lua_example_compiles() {
                 .collect(),
             ..Default::default()
         };
-        let errors: Vec<String> = wrappings(&example.code)
-            .iter()
-            .filter_map(|source| {
-                let mut diags = installua::diag::Diagnostics::new();
-                let built = installua::build_with(source, &options, &mut diags);
-                (built.is_none() || diags.has_errors()).then(|| {
-                    let rendered = diags.render("example");
-                    rendered
+        let (mut errors, mut emitted) = (Vec::new(), String::new());
+        for source in wrappings(&example.code) {
+            let mut diags = installua::diag::Diagnostics::new();
+            match installua::build_with(&source, &options, &mut diags) {
+                Some(nsi) if !diags.has_errors() => emitted.push_str(&nsi),
+                _ => errors.push(
+                    diags
+                        .render("example")
                         .lines()
                         .find(|l| l.contains("error["))
                         .unwrap_or("")
-                        .to_string()
-                })
-            })
-            .collect();
+                        .to_string(),
+                ),
+            }
+        }
         let compiles = errors.len() < 3;
         let at = format!("{}:{}", example.page, example.line);
+        // `--> DetailPrint "…"` shows the line an example lowers to; a trailing
+        // `…` stands for the rest of it, so the claim is a prefix.
+        for claim in example.code.lines().filter_map(|l| l.split_once("-->")) {
+            let claim = claim.1.trim().trim_end_matches('…').trim_end();
+            if compiles && !emitted.lines().any(|l| l.trim_start().starts_with(claim)) {
+                failures.push(format!("{at}: nothing emitted starts with `{claim}`"));
+            }
+        }
         match example.mode.as_str() {
             "" if !compiles => failures.push(format!("{at}\n    {}", errors.join("\n    "))),
             "error" if compiles => failures.push(format!("{at}: marked `error` and compiles")),
