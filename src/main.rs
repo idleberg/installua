@@ -40,9 +40,14 @@ struct Cli {
 enum Command {
     /// Everything `build` would say, writing nothing
     Check {
-        /// The programs to check
-        #[arg(required = true, value_name = "FILE.LUA")]
+        /// The programs to check. Without any, every project installua.toml
+        /// lists
+        #[arg(value_name = "FILE.LUA")]
         files: Vec<PathBuf>,
+
+        /// Check this project from installua.toml instead
+        #[arg(short = 'p', long, value_name = "NAME", conflicts_with = "files")]
+        project: Vec<String>,
 
         /// Set a build parameter, as `build` would
         #[arg(short = 'D', long = "param", value_name = "NAME=VALUE")]
@@ -89,11 +94,6 @@ enum Command {
         /// Overwrite what is already there, without asking
         #[arg(short = 'f', long)]
         force: bool,
-
-        /// Write installua.toml instead: the marker that says the declarations
-        /// under this directory are shared by every installer below it
-        #[arg(short = 'w', long)]
-        workspace: bool,
     },
 
     /// .installua/meta/*.lua and the selene std
@@ -115,13 +115,21 @@ enum Command {
 /// each declares its own and the difference is visible where it is decided.
 #[derive(Args)]
 struct BuildArgs {
-    /// The program to compile
+    /// The program to compile. Without one, the project installua.toml lists
     #[arg(value_name = "FILE.LUA")]
-    input: PathBuf,
+    input: Option<PathBuf>,
+
+    /// Compile this project from installua.toml instead
+    #[arg(short = 'p', long, value_name = "NAME", conflicts_with = "input")]
+    project: Option<String>,
 
     /// Write here instead of alongside the input
     #[arg(short, long, value_name = "FILE.NSI")]
     output: Option<PathBuf>,
+
+    /// Overwrite a .nsi installua did not write, without asking
+    #[arg(short = 'f', long)]
+    force: bool,
 
     /// Set a build parameter declared with `param(…)`
     ///
@@ -170,7 +178,11 @@ enum Generate {
 
 fn main() -> ExitCode {
     match Cli::parse().command {
-        Command::Check { files, define } => check(&files, &define),
+        Command::Check {
+            files,
+            project,
+            define,
+        } => check(&files, &project, &define),
         Command::Emit { args, stdout } => build(&args, stdout, false),
         Command::Build { args, stdout } => build(&args, stdout, true),
         Command::Coverage => coverage(),
@@ -178,8 +190,7 @@ fn main() -> ExitCode {
             dir,
             interactive,
             force,
-            workspace,
-        } => init(&dir, interactive, force, workspace),
+        } => init(&dir, interactive, force),
         Command::Stubs { dir } => stubs(&dir).err().unwrap_or(ExitCode::SUCCESS),
         Command::Generate(Generate::Table { snapshot }) => table(&snapshot),
         Command::Generate(Generate::Cli) => cli_page(),
@@ -238,9 +249,127 @@ fn defines(define: &[String]) -> Option<std::collections::BTreeMap<String, Strin
     Some(params)
 }
 
-fn check(files: &[PathBuf], define: &[String]) -> ExitCode {
+/// The workspace around the current directory, for a command that was named
+/// no file. `None` once the reason has been printed.
+fn workspace() -> Option<installua::project::Workspace> {
+    let (workspace, problems) = installua::project::find(Path::new("."));
+    if !problems.is_empty() {
+        for problem in &problems {
+            log::error(problem.to_string());
+        }
+        return None;
+    }
+    if workspace.is_none() {
+        log::error(format!(
+            "no `FILE.LUA` given, and no {} here or above to name one",
+            installua::project::MARKER
+        ));
+    }
+    workspace
+}
+
+/// The one program `build` or `emit` compiles: the file it was named, or the
+/// project `-p` picks from the workspace, or the workspace's only project —
+/// or, when it lists several and nobody said which, the one picked from a list.
+fn input(args: &BuildArgs) -> Result<PathBuf, ExitCode> {
+    if let Some(input) = &args.input {
+        return Ok(input.clone());
+    }
+    let workspace = workspace().ok_or(ExitCode::from(2))?;
+    if args.project.is_none() && workspace.projects.len() > 1 {
+        let project = pick_project(&workspace)?;
+        return Ok(workspace.entry(project));
+    }
+    match workspace.select(args.project.as_deref()) {
+        Ok(project) => Ok(workspace.entry(project)),
+        Err(message) => {
+            log::error(message);
+            Err(ExitCode::from(2))
+        }
+    }
+}
+
+/// Ask which of several projects to build, searchable by name and entry.
+///
+/// Here and not in `Workspace::select`: the library answers or refuses, and
+/// asking is the CLI's business. Without a terminal there is nobody to ask, so
+/// it is `select`'s refusal, which lists the names `-p` takes. The prompt draws
+/// on stderr, which is why `emit --stdout` can still ask.
+fn pick_project(
+    workspace: &installua::project::Workspace,
+) -> Result<&installua::project::Project, ExitCode> {
+    use std::io::IsTerminal;
+
+    if !std::io::stdin().is_terminal() {
+        let message = workspace
+            .select(None)
+            .expect_err("several projects and no name is a refusal");
+        log::error(message);
+        return Err(ExitCode::from(2));
+    }
+    let options = workspace
+        .projects
+        .iter()
+        .enumerate()
+        .map(|(index, project)| {
+            let name = project.name.as_deref().unwrap_or(&project.entry);
+            clark::SelectOption::labelled(index, name).with_hint(&project.entry)
+        });
+    // A search that matches nothing settles on no option, which `interact`
+    // would report as a cancel; refusing it keeps the prompt open instead.
+    let index = clark::autocomplete("Which project?")
+        .options(options)
+        .placeholder("Type to search")
+        .validate(|index: Option<&usize>| index.is_none().then(|| "no project matches".to_string()))
+        .interact()
+        .map_err(cancelled("nothing built"))?;
+    Ok(&workspace.projects[index])
+}
+
+/// The programs `check` runs on. Named files win; failing those, the projects
+/// `-p` names; failing those, every project the workspace lists — because
+/// `check` is the CI gate, and a gate that checked one of several would pass a
+/// checkout whose other installers do not compile.
+fn inputs(files: &[PathBuf], projects: &[String]) -> Option<Vec<PathBuf>> {
+    if !files.is_empty() {
+        return Some(files.to_vec());
+    }
+    let workspace = workspace()?;
+    if projects.is_empty() {
+        if workspace.projects.is_empty() {
+            // `select` owns the wording for "there is nothing to run".
+            if let Err(message) = workspace.select(None) {
+                log::error(message);
+            }
+            return None;
+        }
+        return Some(
+            workspace
+                .projects
+                .iter()
+                .map(|project| workspace.entry(project))
+                .collect(),
+        );
+    }
+    let mut inputs = Vec::new();
+    for name in projects {
+        match workspace.select(Some(name)) {
+            Ok(project) => inputs.push(workspace.entry(project)),
+            Err(message) => {
+                log::error(message);
+                return None;
+            }
+        }
+    }
+    Some(inputs)
+}
+
+fn check(files: &[PathBuf], projects: &[String], define: &[String]) -> ExitCode {
+    let Some(files) = inputs(files, projects) else {
+        return ExitCode::from(2);
+    };
     let mut failed = false;
-    for path in files {
+    for path in &files {
         let Some(source) = read(path) else {
             return ExitCode::from(2);
         };
@@ -286,7 +415,10 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
         return usage_error("`--stdout` has no script for `makensis` to read; use `emit`");
     }
 
-    let input = &args.input;
+    let input = &match input(args) {
+        Ok(input) => input,
+        Err(code) => return code,
+    };
     let Some(source) = read(input) else {
         return ExitCode::from(2);
     };
@@ -311,14 +443,17 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    // `-o` names its target, so writing over it is what was asked for. The
-    // default does not: it is `input.nsi`, and in a port that is the file being
-    // ported — overwritten twice, uncommitted, before this check existed.
+    // `-o` names its target, so writing over it is what was asked for, and so
+    // does `--force`. The default does not: it is `input.nsi`, and in a port
+    // that is the file being ported — overwritten twice, uncommitted, before
+    // this check existed.
     let output = match &args.output {
         Some(output) => output.clone(),
         None => {
             let output = input.with_extension("nsi");
-            if let Err(stop) = guard_hand_written(&output) {
+            if !args.force
+                && let Err(stop) = guard_hand_written(&output)
+            {
                 return stop;
             }
             output
@@ -372,8 +507,8 @@ const GENERATED: &str = "; Generated by installua. Edit the .lua, not this file.
 /// Refuse to write over a `.nsi` that does not start with [`GENERATED`], unless a
 /// human at a terminal says yes.
 ///
-/// Without a terminal there is nobody to ask, so it is an error naming the two
-/// ways past it. A script from an Installua that predates the marker is asked
+/// Without a terminal there is nobody to ask, so it is an error naming the
+/// ways past it. `--force` skips the question, and this function with it. A script from an Installua that predates the marker is asked
 /// about once; the build that says yes marks it.
 fn guard_hand_written(path: &Path) -> Stop {
     use std::io::IsTerminal;
@@ -387,7 +522,7 @@ fn guard_hand_written(path: &Path) -> Stop {
 
     if !std::io::stdin().is_terminal() {
         log::error(format!(
-            "{} was not written by installua; move it, or pass `-o` to write over it",
+            "{} was not written by installua; move it, or pass `--force` or `-o` to write over it",
             path.display()
         ));
         return Err(ExitCode::from(2));
@@ -446,10 +581,11 @@ enum OnCollision {
 
 /// `installua init [dir]`: the two config files.
 ///
-/// `--workspace` writes one file instead, and a different one: the
-/// `root = true` marker that bounds a monorepo's declaration search. It is not
-/// a variant of the same command — a workspace directory holds no `.lua` file
-/// of its own, so an editor configuration there would be about nothing.
+/// Not `installua.toml`. 0.1 wrote one under `--workspace`, when the file's
+/// whole content was `root = true` and writing it was the feature. It is a
+/// list of projects now, and the two values each needs are ones only the
+/// author knows — while an empty file, which is all `init` could write, is
+/// one `touch` away.
 ///
 /// **A directory that has them already is refused**, listing every file in the
 /// way and writing none of them — checked before the first write, so a refusal
@@ -457,14 +593,7 @@ enum OnCollision {
 /// printed "left alone" and exited 0, which meant an upgrade that should have
 /// refreshed a stale `.luarc.json` was indistinguishable from one that did.
 /// `--force` overwrites; `--interactive` asks per file.
-fn init(root: &Path, interactive: bool, force: bool, workspace: bool) -> ExitCode {
-    // One file with one line in it has nothing to ask about, and every question
-    // `--interactive` asks — stubs, the editor's tasks, the `.gitignore` — is
-    // about a directory holding sources, which a workspace root is not.
-    if workspace && interactive {
-        return usage_error("`--workspace` writes one file and asks nothing about it");
-    }
-
+fn init(root: &Path, interactive: bool, force: bool) -> ExitCode {
     let on = match (interactive, force) {
         (_, true) => OnCollision::Force,
         (true, false) => OnCollision::Ask,
@@ -486,14 +615,10 @@ fn init(root: &Path, interactive: bool, force: bool, workspace: bool) -> ExitCod
         }
     };
 
-    let files: Vec<(&'static str, String)> = if workspace {
-        vec![("installua.toml", installua::stubs::workspace_toml())]
-    } else {
-        vec![
-            (".luarc.json", installua::stubs::luarc()),
-            ("selene.toml", installua::stubs::selene_toml()),
-        ]
-    };
+    let files: Vec<(&'static str, String)> = vec![
+        (".luarc.json", installua::stubs::luarc()),
+        ("selene.toml", installua::stubs::selene_toml()),
+    ];
 
     // Every collision at once, before any write. One at a time would leave a
     // directory half initialised and a user re-running the command to find the
@@ -521,13 +646,8 @@ fn init(root: &Path, interactive: bool, force: bool, workspace: bool) -> ExitCod
                 return code;
             }
         }
-        if workspace {
-            log::info("shared declarations go in .installua/declarations here");
-            log::log("every installer below this directory reads them");
-        } else {
-            log::info("now run `installua stubs` to generate the editor's meta files");
-            log::log("or `installua init --interactive` to be offered it, and more");
-        }
+        log::info("now run `installua stubs` to generate the editor's meta files");
+        log::log("or `installua init --interactive` to be offered it, and more");
         Ok(())
     };
 
@@ -845,7 +965,7 @@ fn stubs(root: &Path) -> Stop {
     // editor by the same file that makes it compile. A malformed one stops the
     // command for the reason it stops a build: stubs generated without it would
     // quietly leave out whatever it declared.
-    // The whole cascade, not just this directory's, so the editor types a
+    // The workspace's as well as this directory's, so the editor types a
     // shared plugin exactly where the compiler accepts one.
     let (dirs, mut problems) = installua::project::declaration_dirs(root);
     let (declarations, mut found) = installua::declarations::Declarations::load_all(&dirs);

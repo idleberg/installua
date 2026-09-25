@@ -502,13 +502,13 @@ in the *same* `.installua/declarations/` is a mistake, and says so.
 ## Sharing declarations across a monorepo
 
 Several installers in one checkout can read one declaration instead of a copy
-each. Write `installua.toml` at the top — `installua init --workspace .` is the
-whole of it — and a compile walks up from the source's own directory reading
-every `.installua/declarations/` it passes:
+each. Put an `installua.toml` at the top — an empty one will do — and a compile
+reads the `.installua/declarations/` beside it as well as the one beside its
+own source:
 
 ```text
 myapp/
-  installua.toml              # root = true — the walk stops here
+  installua.toml              # the workspace — the search stops here
   .installua/declarations/
     acme.toml                 # shared by both installers below
   installers/
@@ -518,9 +518,10 @@ myapp/
 
 The nearer directory wins where two declare the same method, by the same rule a
 project's own file wins over a builtin — so the shared one is a default, not a
-wall. The walk also stops at a directory holding `.git`, marker or no marker,
-and the file holds nothing but `root`: it says where the search ends and
-nothing about what the compiler does.
+wall. The search stops at the nearest `installua.toml`, so keep one per
+workspace, and also at a directory holding `.git`. The same file can list the
+installers so a build needs no file name; see
+[The installua.toml file](/project-file/).
 
 Projects with no `installua.toml` anywhere are unaffected, which is most of
 them: a single installer reads its own `.installua/declarations/` and no other.

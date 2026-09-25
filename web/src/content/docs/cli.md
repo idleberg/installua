@@ -14,12 +14,13 @@ A Lua-shaped language that compiles to NSIS.
 Everything `build` would say, writing nothing.
 
 ```sh
-installua check [OPTIONS] <FILE.LUA>...
+installua check [OPTIONS] [FILE.LUA]...
 ```
 
 | | |
 | --- | --- |
-| `<FILE.LUA>` | The programs to check. Repeatable. |
+| `<FILE.LUA>` | The programs to check. Without any, every project installua.toml lists. Repeatable. |
+| `-p, --project <NAME>` | Check this project from installua.toml instead. Repeatable. |
 | `-D, --param <NAME=VALUE>` | Set a build parameter, as `build` would. Repeatable. |
 
 ## installua emit
@@ -27,13 +28,15 @@ installua check [OPTIONS] <FILE.LUA>...
 Compile to .nsi and stop.
 
 ```sh
-installua emit [OPTIONS] <FILE.LUA>
+installua emit [OPTIONS] [FILE.LUA]
 ```
 
 | | |
 | --- | --- |
-| `<FILE.LUA>` | The program to compile. |
+| `<FILE.LUA>` | The program to compile. Without one, the project installua.toml lists. |
+| `-p, --project <NAME>` | Compile this project from installua.toml instead. |
 | `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
+| `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
 | `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. Repeatable. |
 | `--stdout` | Write to stdout. |
 
@@ -42,13 +45,15 @@ installua emit [OPTIONS] <FILE.LUA>
 Compile, then run `makensis -WX`.
 
 ```sh
-installua build [OPTIONS] <FILE.LUA>
+installua build [OPTIONS] [FILE.LUA]
 ```
 
 | | |
 | --- | --- |
-| `<FILE.LUA>` | The program to compile. |
+| `<FILE.LUA>` | The program to compile. Without one, the project installua.toml lists. |
+| `-p, --project <NAME>` | Compile this project from installua.toml instead. |
 | `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
+| `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
 | `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. Repeatable. |
 
 ## installua coverage
@@ -72,7 +77,6 @@ installua init [OPTIONS] [DIR]
 | `<DIR>` | Where to write them. Defaults to the <abbr title="current working directory">CWD</abbr>. |
 | `-i, --interactive` | Also offer the stubs, the editor's tasks and the .gitignore entries. |
 | `-f, --force` | Overwrite what is already there, without asking. |
-| `-w, --workspace` | Write installua.toml instead: the marker that says the declarations under this directory are shared by every installer below it. |
 
 ## installua stubs
 

@@ -1471,24 +1471,6 @@ pub fn luarc() -> String {
     )
 }
 
-/// `installua.toml` for a monorepo's top directory — the one shape of this
-/// file whose contents matter and whose spelling nobody would guess.
-///
-/// A single installer needs no marker at all, which is why `init` stopped
-/// writing one: a file that changes nothing does not belong among the three
-/// every project gets. `init --workspace` writes this instead, and it is the
-/// whole of what the file may say.
-pub fn workspace_toml() -> String {
-    String::from(
-        "# The workspace marker: `root = true` is where a compile stops walking up.\n\
-         # Every `.installua/declarations` from a source's own directory to this one is\n\
-         # read, outermost first, so several installers under here share one\n\
-         # declaration of a plugin instead of a copy each. It holds no settings.\n\
-         [project]\n\
-         root = true\n",
-    )
-}
-
 /// `selene.toml`. `deprecated = \"deny\"` is not decoration: it is what makes
 /// the generated std's replacement text a failure rather than advice.
 pub fn selene_toml() -> String {
