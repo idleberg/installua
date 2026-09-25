@@ -774,6 +774,7 @@ pub fn coverage() -> String {
     // are one question to anybody writing an installer, and a number that lives
     // in a document of its own is a number that goes stale in one.
     out.push_str(&crate::mui::coverage());
+    out.push_str(&crate::headers::coverage());
 
     out
 }

@@ -1,0 +1,38 @@
+# The headers NSIS ships, as its `Include` directory reads it.
+#
+# One path per line, without `.nsh`, sorted. Each has a row in
+# `src/headers.rs`. Regenerate with:
+#
+#     NSISDIR="..." UPDATE_SNAPSHOTS=1 cargo test --test headers
+
+Colors
+FileFunc
+InstallOptions
+Integration
+LangFile
+Library
+LogicLib
+MUI
+MUI2
+Memento
+MultiUser
+Sections
+StrFunc
+TextFunc
+UpgradeDLL
+Util
+VB6RunTime
+VPatchLib
+Win/COM
+Win/Propkey
+Win/RestartManager
+Win/WinDef
+Win/WinError
+Win/WinNT
+Win/WinUser
+WinCore
+WinMessages
+WinVer
+WordFunc
+nsDialogs
+x64

@@ -14,3 +14,26 @@ installua MUI coverage -- Modern UI 2, 255 names
   internal         108
   rejected          17
   todo               0
+
+installua header coverage -- NSISDIR/Include, 31 headers
+
+  exposed            3
+  lowering           4
+  replaced           4
+  rejected           7
+  todo              13
+
+header todo:
+  Integration             `UnpinShortcut` and `NotifyShell_AssocChanged`, small and actually used
+  Library                 `InstallLib`/`UnInstallLib` are behaviour, not a signature, so a lowering
+  VB6RunTime              rides on `Library.nsh`, so it is classified once that lands
+  Win/COM                 Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  Win/Propkey             Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  Win/RestartManager      Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  Win/WinDef              Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  Win/WinError            Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  Win/WinNT               Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  Win/WinUser             Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  WinCore                 Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  WinMessages             Windows constants only; named constants or "write the number", decided by how `sendMessage` callers read
+  x64                     `RunningX64`, `IsWow64` and `IsNative*` are LogicLib conditions with no spelling yet

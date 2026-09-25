@@ -41,6 +41,7 @@ pub mod declarations;
 pub mod diag;
 pub mod emit;
 pub mod frontend;
+pub mod headers;
 pub mod ir;
 pub mod layout;
 pub mod locale;
