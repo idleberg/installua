@@ -24,6 +24,7 @@ mod fields;
 mod handle;
 mod insttype;
 mod languages;
+mod memento;
 mod multi_user;
 mod pages;
 mod sig;
@@ -579,6 +580,7 @@ pub const SECTION_OPTIONS: &[&str] = &[
     "installTypes",
     "size",
     "description",
+    "remember",
 ];
 
 pub const GROUP_OPTIONS: &[&str] = &["expanded", "description"];
@@ -721,6 +723,7 @@ const V1_BLOCKS: &[&str] = &[
     "uninstaller",
     "languages",
     "multiUser",
+    "memento",
     "func",
     "import",
     "plugin",
@@ -1070,6 +1073,9 @@ fn lower_once(
         init_prelude: [Vec::new(), Vec::new()],
         lang_strings: BTreeSet::new(),
         multi_user: None,
+        memento: None,
+        remembered: BTreeMap::new(),
+        remember_written: false,
         locales: Vec::new(),
         license_tables: 0,
         descriptions: [Vec::new(), Vec::new()],
@@ -1123,6 +1129,14 @@ struct Lowerer<'a, 'p> {
     lang_strings: BTreeSet<String>,
     /// The `multiUser {}` block, when there is one: the page reads it.
     multi_user: Option<multi_user::MultiUser>,
+    /// Where `memento {}` is, when there is one: `remember` needs it.
+    memento: Option<Span>,
+    /// Each `remember` id and where it was written, so a second can point at
+    /// the first — two sections under one id share one registry value.
+    remembered: BTreeMap<String, Span>,
+    /// Whether any section wrote `remember`, right or wrong, so a block with
+    /// only failed ones is not also told it has none.
+    remember_written: bool,
     /// The locales `languages {}` declared, in the order it listed them — read
     /// by the license page, which has to check its own per-locale table against
     /// exactly this set. Declaration order rather than a set, because
@@ -1243,6 +1257,7 @@ impl<'p> Lowerer<'_, 'p> {
         // order-freeness argument as the claims.
         self.languages_pass();
         self.multi_user_pass();
+        self.memento_pass();
         self.claim_pass();
 
         for stmt in self.resolved.block.clone() {
@@ -1335,6 +1350,38 @@ impl<'p> Lowerer<'_, 'p> {
                 ),
                 body,
             });
+        }
+        // `memento {}`'s save. The one `.onInstSuccess` there is: the language
+        // has no spelling for the callback, so nothing else writes one.
+        if let Some(span) = self.memento
+            && self.requires.headers.contains("Memento")
+        {
+            if !self.remember_written {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::MissingAttribute,
+                        span,
+                        "`memento {}` with no section that `remember`s",
+                    )
+                    .note("write `remember = \"id\"` on each section whose box should be kept"),
+                );
+            } else if !self.remembered.is_empty() {
+                let (body, _) = self.body_with(
+                    span,
+                    Some(Half::Installer),
+                    table::Place::Anywhere,
+                    |lowerer| {
+                        lowerer.emit(ir::Instruction::new(
+                            "!insertmacro",
+                            vec![ir::Arg::raw("MementoSectionSave")],
+                        ));
+                    },
+                );
+                self.module.functions.push(ir::Function {
+                    name: ".onInstSuccess".to_string(),
+                    body,
+                });
+            }
         }
         // Globals in first-seen order, emitted before the first body that
         // touches them — which the field order in `ir::Module` already
@@ -1563,7 +1610,7 @@ impl<'p> Lowerer<'_, 'p> {
             }
             // Lowered by [`Self::languages_pass`] before this loop began, so
             // that a body written above it can still read `lang.greeting`.
-            "languages" | "multiUser" => {}
+            "languages" | "multiUser" | "memento" => {}
             // `import` and `plugin` are the last two, and both are exposed as
             // *expressions* — `local mui = import "MUI2"`. What is missing is
             // this position, not the name, and the message says which rather
@@ -5692,6 +5739,7 @@ impl<'p> Lowerer<'_, 'p> {
         let mut inst_types = Vec::new();
         let mut size = None;
         let mut description = None;
+        let mut remember = None;
         for (name, value) in options {
             match name.text.as_str() {
                 "optional" => match self.constant(value) {
@@ -5735,6 +5783,7 @@ impl<'p> Lowerer<'_, 'p> {
                 // the page has no way to name a section and MUI2's own macro
                 // addresses one by its index.
                 "description" => description = self.constant_arg(value, "description"),
+                "remember" => remember = self.memento_id(value, half),
                 other => {
                     self.diags.push(
                         Diagnostic::error(
@@ -5777,10 +5826,23 @@ impl<'p> Lowerer<'_, 'p> {
             // `description` minted. A section that is neither addressed nor
             // described gets no third word: the `!define` NSIS would make is one
             // more name in a namespace shared with the author's.
-            index_name: match description {
-                Some(text) => Some(self.describe(index, text, half)),
-                None => index,
+            index_name: {
+                let index = match description {
+                    Some(text) => Some(self.describe(index, text, half)),
+                    None => index,
+                };
+                // `MementoSectionEnd` reads the index back through its define,
+                // so a remembered section has to have one.
+                match (index, &remember) {
+                    (None, Some(_)) => {
+                        let name = format!("SEC.memento.{}", self.minted);
+                        self.minted += 1;
+                        Some(name)
+                    }
+                    (index, _) => index,
+                }
             },
+            remember,
             body: self.body(block, &[], *span, None, Some(half), table::Place::Anywhere),
         })
     }

@@ -261,6 +261,11 @@ fn blocks() -> String {
          ---@field modeRegistry? { key: string, value: string }\n\n\
          ---@param options installua.MultiUser\n\
          function multiUser(options) end\n\n\
+         ---@class (exact) installua.Memento\n\
+         ---@field root string A registry root, `HKLM` or `SHCTX`.\n\
+         ---@field key string\n\n\
+         ---@param options installua.Memento\n\
+         function memento(options) end\n\n\
          --- The strings `languages {}` declared. A read is `$(name)`, resolved\n\
          --- against `$LANGUAGE` at run time.\n\
          ---@type table<string, string>\n\
@@ -608,6 +613,7 @@ fn declarations() -> String {
          ---@field installTypes? string[] Which of the block's `installTypes` this belongs to.\n\
          ---@field size? integer Extra kilobytes to charge, beyond the files installed.\n\
          ---@field description? string The words the components page shows on hover.\n\
+         ---@field remember? string The id `memento {}` keeps its box under.\n\
          local SectionOptions = {}\n\n\
          ---@param name string\n\
          ---@param body fun()\n\
@@ -1375,6 +1381,7 @@ const LANGUAGE: &[(&str, &str)] = &[
     ("uninstaller", "      - type: table\n"),
     ("languages", "      - type: table\n"),
     ("multiUser", "      - type: table\n"),
+    ("memento", "      - type: table\n"),
     // Both take either `(name, body)` or a single options table, so the second
     // position is optional and neither is typed more tightly than that.
     (

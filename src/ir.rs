@@ -296,6 +296,9 @@ pub struct Section {
     /// unaddressed program pays nothing for the feature — the `!define` NSIS
     /// would make is one more name in a namespace shared with the author's.
     pub index_name: Option<String>,
+    /// `remember = "id"`: written through `Memento.nsh`, which keeps the box's
+    /// state under this id. [`Self::index_name`] is always `Some` beside it.
+    pub remember: Option<String>,
     pub body: cfg::Body,
 }
 

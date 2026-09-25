@@ -100,6 +100,48 @@ section { "Offline map data",
 }
 ```
 
+## Remembering what was ticked
+
+The components page can start the way the user left it last time, through
+the `Memento.nsh` header that ships with NSIS. The script names a registry key,
+and each section to remember gets an id. The id is the name of a registry
+value, so keep it the same from one version to the next, or that choice is
+forgotten.
+
+**Usage** a top-level `memento { root = <root>, key = <key> }`, and a
+`section`'s `remember = <id>` (letters, digits and `_`)
+
+```lua
+memento { root = HKLM, key = "Software/Example/Components" }
+
+installer {
+	page.components {},
+	page.instFiles {},
+
+	section { "Documentation",
+		remember = "docs",
+		body = function() file("assets/manual.pdf") end,
+	},
+
+	section { "Samples",
+		remember = "samples",
+		optional = true,
+		body = function() file("assets/samples/*.example") end,
+	},
+}
+```
+
+On the first run `optional` decides, as it always does. On a later run the
+stored choice does, and a section that is new since then is drawn in bold.
+The choice is saved only when the install succeeds. Beside
+[`multiUser {}`](/reference/commands/script-attributes/#per-machine-or-per-user),
+write `root = SHCTX`, so each mode keeps its own choice.
+
+Only installer sections can remember. The compiler writes the header's lines:
+`MementoSectionEx` and `MementoSectionEnd` around each remembered section,
+`MementoSectionDone` after the last one, `MementoSectionRestore` at the start
+of `.onInit` and `MementoSectionSave` in an `.onInstSuccess` of its own.
+
 ## Reading and changing a section while it runs
 
 Your installer reaches a section through the handle `section(…)` gives back,

@@ -441,6 +441,71 @@ fn multi_user_says_what_is_wrong() {
     }
 }
 
+#[test]
+fn memento_says_what_is_wrong() {
+    let head = "attributes { outFile = \"a.exe\" }\n";
+    let block = "memento { root = HKLM, key = \"Software/App\" }\n";
+    let section = |remember: &str| {
+        format!("section {{ \"Core\", remember = {remember}, body = function() end }}")
+    };
+    for (source, code) in [
+        (
+            format!("{head}installer {{ {} }}", section("\"core\"")),
+            Code::MissingAttribute,
+        ),
+        (
+            format!("{head}{block}installer {{ section(\"Core\", function() end) }}"),
+            Code::MissingAttribute,
+        ),
+        (
+            format!("{head}memento {{ root = HKLM }}"),
+            Code::MissingAttribute,
+        ),
+        (
+            format!("{head}memento {{ root = INSTDIR, key = \"k\" }}"),
+            Code::BadFieldValue,
+        ),
+        (
+            format!(
+                "{head}memento {{ root = HKLM, key = \"k\", nope = 1 }}\ninstaller {{ {} }}",
+                section("\"core\"")
+            ),
+            Code::UnknownField,
+        ),
+        (
+            format!(
+                "{head}{block}{block}installer {{ {} }}",
+                section("\"core\"")
+            ),
+            Code::DuplicateBlock,
+        ),
+        (
+            format!("{head}{block}installer {{ {} }}", section("\"a b\"")),
+            Code::BadFieldValue,
+        ),
+        (
+            format!(
+                "{head}{block}installer {{ {}, {} }}",
+                section("\"core\""),
+                section("\"core\"")
+            ),
+            Code::BadFieldValue,
+        ),
+        (
+            format!(
+                "{head}{block}installer {{ {} }}\nuninstaller {{ {} }}",
+                section("\"a\""),
+                section("\"b\"")
+            ),
+            Code::BadFieldValue,
+        ),
+    ] {
+        let diags = compile(&source);
+        let codes: Vec<Code> = diags.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [code], "{source}\n{}", diags.render("<test>"));
+    }
+}
+
 /// A value that failed is reported once, where it failed, and not again
 /// wherever it lands: a `local`, a global, a parameter, a `return`.
 #[test]

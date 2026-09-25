@@ -27,6 +27,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("headers", &[]),
     ("include", &[]),
     ("languages", &[]),
+    ("memento", &[]),
     ("multiuser", &[]),
     ("multiuser-plain", &[]),
     ("pages", &[]),

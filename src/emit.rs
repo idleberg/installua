@@ -191,6 +191,19 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
             }
         }
     }
+    // `Memento.nsh`'s end marker, once, after the last remembered section: it
+    // closes the chain of functions each `MementoSectionEnd` opened.
+    let remembers = |section: &ir::Section| section.remember.is_some();
+    if module.sections.iter().any(|item| match item {
+        ir::SectionItem::Section(section) => remembers(section),
+        ir::SectionItem::Group(group) => group.sections.iter().any(remembers),
+    }) {
+        out.blank();
+        out.line(
+            "!insertmacro MementoSectionDone",
+            Origin::Emitted("SectionEnd"),
+        );
+    }
 
     // 9b. The description blocks, between the sections and the functions: each
     //     `MUI_DESCRIPTION_TEXT` expands a section index, which is a `!define`
@@ -250,10 +263,22 @@ fn section_block(out: &mut Out, section: &ir::Section, depth: usize) {
     let flag = if section.optional { " /o" } else { "" };
     let name = argument(&ir::Arg::str(section.name.clone()));
     let index = index_word(section.index_name.as_deref());
-    out.line(
-        format!("{indent}Section{flag} {name}{index}"),
-        Origin::Emitted("Section"),
-    );
+    match (&section.remember, &section.index_name) {
+        // `MementoSectionEx` in every case, rather than picking between it and
+        // `MementoSection`/`MementoUnselectedSection`: it is the one that takes
+        // the id apart from the index, and the flag in the same position.
+        (Some(id), Some(index)) => out.line(
+            format!(
+                "{indent}!insertmacro MementoSectionEx {} {name} {id} {index}",
+                argument(&ir::Arg::str(flag.trim().to_string()))
+            ),
+            Origin::Emitted("Section"),
+        ),
+        _ => out.line(
+            format!("{indent}Section{flag} {name}{index}"),
+            Origin::Emitted("Section"),
+        ),
+    }
     // `SectionIn` and `AddSize` are declarations that NSIS spells as
     // instructions: they read as the first two lines of the body and are not
     // executed, which is why they are options on the surface and are emitted
@@ -275,7 +300,12 @@ fn section_block(out: &mut Out, section: &ir::Section, depth: usize) {
         );
     }
     body(out, &section.body, depth + 1);
-    out.line(format!("{indent}SectionEnd"), Origin::Emitted("SectionEnd"));
+    let end = if section.remember.is_some() {
+        "!insertmacro MementoSectionEnd"
+    } else {
+        "SectionEnd"
+    };
+    out.line(format!("{indent}{end}"), Origin::Emitted("SectionEnd"));
 }
 
 fn body(out: &mut Out, body: &crate::cfg::Body, depth: usize) {
