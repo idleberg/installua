@@ -6505,8 +6505,14 @@ impl BodyLowerer<'_, '_> {
             }
 
             let Expr::Name(name) = target else {
-                if !matches!(target, Expr::Field { base, .. } if self.undefined_base(base)) {
-                    self.todo(target.span(), "this assignment target");
+                match target {
+                    Expr::Field { base, .. } if self.undefined_base(base) => {}
+                    Expr::Field { base, .. } => {
+                        if let Some(ty) = self.value(base) {
+                            self.no_fields(ty.ty, base.span());
+                        }
+                    }
+                    _ => self.todo(target.span(), "this assignment target"),
                 }
                 continue;
             };
@@ -6982,7 +6988,7 @@ impl BodyLowerer<'_, '_> {
                 Diagnostic::error(
                     Code::TypeMismatch,
                     span,
-                    format!("`lines` wants a handle, and this is a {}", handle.ty),
+                    format!("`lines` wants a handle, and this is {:#}", handle.ty),
                 )
                 .note("a handle comes from `fileOpen` and from nowhere else"),
             );
@@ -7242,7 +7248,7 @@ impl BodyLowerer<'_, '_> {
                         Code::TypeMismatch,
                         argument.span(),
                         format!(
-                            "`{base}.{}` wants a {}, and this is a {}",
+                            "`{base}.{}` wants {:#}, and this is {:#}",
                             method.text, param.ty, value.ty
                         ),
                     )

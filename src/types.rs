@@ -123,7 +123,16 @@ impl Sign {
 /// What a diagnostic calls the type. Deliberately not `Debug`: `Int(Int { width:
 /// W32, .. })` is the compiler's spelling and `int` is the user's.
 impl fmt::Display for Ty {
+    /// `{:#}` puts the article in front — `an int`, `a string` — so a message
+    /// never has to write `a {}` and get `a int`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            let article = match self {
+                Ty::Int(_) | Ty::Unknown => "an",
+                _ => "a",
+            };
+            write!(f, "{article} ")?;
+        }
         match self {
             Ty::Int(int) => match int.width {
                 Width::W32 => f.write_str("int"),

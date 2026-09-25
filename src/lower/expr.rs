@@ -568,7 +568,7 @@ impl BodyLowerer<'_, '_> {
             Diagnostic::error(
                 Code::TypeMismatch,
                 span,
-                format!("arithmetic needs an int, and this is a {}", value.ty),
+                format!("arithmetic needs an int, and this is {:#}", value.ty),
             )
             .note("there is no coercion: NSIS's `IntOp` reads whatever is there as a number"),
         );
@@ -716,6 +716,26 @@ impl BodyLowerer<'_, '_> {
                 Expr::Call { callee, .. } => match callee.as_ref() {
                     Expr::Name(name) => self.undefined(name),
                     Expr::Field { base, .. } if self.undefined_base(base) => {}
+                    // `core.nope()`. The base is addressed first, so a page or
+                    // the other half's declaration says what it says for a field.
+                    Expr::Field {
+                        base, name: method, ..
+                    } if base
+                        .name()
+                        .is_some_and(|base| self.resolved.deferred.contains_key(base)) =>
+                    {
+                        if self.addressed(base, span).is_some() {
+                            self.diags.push(Diagnostic::error(
+                                Code::UnknownField,
+                                method.span,
+                                format!(
+                                    "`{}` is not a method of `{}`",
+                                    method.text,
+                                    base.name().unwrap_or_default()
+                                ),
+                            ));
+                        }
+                    }
                     other => self.todo(other.span(), "this call"),
                 },
                 _ => unreachable!(),
@@ -1412,7 +1432,7 @@ impl BodyLowerer<'_, '_> {
                 Diagnostic::error(
                     Code::TypeMismatch,
                     receiver.span(),
-                    format!("a {} has no methods", handle.ty),
+                    format!("{:#} has no methods", handle.ty),
                 )
                 .note("methods exist on a handle, which comes from `fileOpen`"),
             );
@@ -2897,7 +2917,7 @@ impl BodyLowerer<'_, '_> {
                 Diagnostic::error(
                     Code::NotBool,
                     span,
-                    format!("a condition needs a `bool`, and this is a {}", value.ty),
+                    format!("a condition needs a `bool`, and this is {:#}", value.ty),
                 )
                 .note(replacement)
                 .note(

@@ -369,7 +369,6 @@ fn an_undefined_base_is_undefined() {
         ("local c = nope.y", true),
         ("detailPrint(nope.z)", true),
         ("string.nope(\"a\")", false),
-        ("local n = 1\nn.x = 2", false),
     ] {
         let diags = compile(&format!(
             "attributes {{ outFile = \"a.exe\" }}\n\

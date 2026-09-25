@@ -184,7 +184,7 @@ impl BodyLowerer<'_, '_> {
                             Code::TypeConflict,
                             text.span(),
                             format!(
-                                "an install type's label is a `string`, and this is a {}",
+                                "an install type's label is a `string`, and this is {:#}",
                                 label.ty
                             ),
                         )

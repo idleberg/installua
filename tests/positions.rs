@@ -179,7 +179,7 @@ const GROUP: Class = Rejected(Code::TypeMismatch, "is a group, not a value");
 const PAGE: Class = Rejected(Code::TypeMismatch, "is a page, not a value");
 const PAGE_FIELD: Class = Rejected(Code::UnknownField, "a page has no fields");
 const MENU: Class = Rejected(Code::TypeMismatch, "is a start menu page, not a value");
-const NO_FIELD: Class = Rejected(Code::UnknownField, "`nope` is not a field");
+const NO_METHOD: Class = Rejected(Code::UnknownField, "`nope` is not a method of");
 const FILE_FIELD: Class = Rejected(Code::UnknownField, "a file handle");
 const STRING_FIELD: Class = Rejected(Code::TypeMismatch, "a string has no fields");
 const INT_FIELD: Class = Rejected(Code::TypeMismatch, "an int has no fields");
@@ -214,7 +214,7 @@ const CELLS: &[(&str, &str, Class)] = &[
     ("section", "global", SECTION),
     ("section", "field read", Accepted),
     ("section", "field write", Accepted),
-    ("section", "method call", NO_FIELD),
+    ("section", "method call", NO_METHOD),
     ("section", "argument", SECTION),
     ("section", "call base", SECTION),
     ("section", "raw", SECTION),
@@ -225,7 +225,7 @@ const CELLS: &[(&str, &str, Class)] = &[
     ("group", "global", GROUP),
     ("group", "field read", Accepted),
     ("group", "field write", Accepted),
-    ("group", "method call", NO_FIELD),
+    ("group", "method call", NO_METHOD),
     ("group", "argument", GROUP),
     ("group", "call base", GROUP),
     ("group", "raw", GROUP),
@@ -324,19 +324,6 @@ const KNOWN: &[(&str, &str)] = &[
     // 2. a field on a file handle is reported as a field of a control
     ("file handle", "field read"),
     ("file handle", "field write"),
-    // 3. a field on a scalar is `not-yet-implemented`
-    ("string", "field read"),
-    ("string", "field write"),
-    ("int", "field read"),
-    ("int", "field write"),
-    ("bool", "field read"),
-    ("bool", "field write"),
-    // 4. a method on a section, group or page is `not-yet-implemented`
-    ("section", "method call"),
-    ("group", "method call"),
-    ("page", "method call"),
-    // 5. "a int has no methods"
-    ("int", "method call"),
 ];
 
 fn uses(kind: &Kind, value: &str) -> String {

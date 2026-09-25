@@ -734,7 +734,7 @@ fn not_bool(cond: &Expr, value: &ConstValue, diags: &mut Diagnostics) {
         Diagnostic::error(
             Code::NotBool,
             cond.span(),
-            format!("a condition needs a `bool`, and this is a {}", value.ty()),
+            format!("a condition needs a `bool`, and this is {:#}", value.ty()),
         )
         .note(replacement)
         .note(

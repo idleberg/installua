@@ -111,14 +111,16 @@ impl BodyLowerer<'_, '_> {
                     control: None,
                     base: "this window".to_string(),
                 })),
-                _ => {
-                    self.todo(span, "this expression");
+                ty => {
+                    self.no_fields(ty, base.span());
                     None
                 }
             };
         }
         let Some(name) = base.name() else {
-            self.todo(span, "this expression");
+            if let Some(ty) = self.value(base) {
+                self.no_fields(ty.ty, base.span());
+            }
             return None;
         };
 
@@ -212,12 +214,27 @@ impl BodyLowerer<'_, '_> {
                 base: name.to_string(),
             })),
             None => {
-                if !self.undefined_base(base) {
-                    self.todo(span, "this expression");
+                if !self.undefined_base(base)
+                    && let Some(ty) = self.value(base)
+                {
+                    self.no_fields(ty.ty, base.span());
                 }
                 None
             }
         }
+    }
+
+    /// `s.len` on a string: a value with no field surface. Its base was lowered
+    /// only to learn the type, and the program is in error either way.
+    pub(super) fn no_fields(&mut self, ty: Ty, span: Span) {
+        if matches!(ty, Ty::Handle | Ty::Unknown) {
+            self.todo(span, "this expression");
+            return;
+        }
+        self.diags.push(
+            Diagnostic::error(Code::TypeMismatch, span, format!("{ty:#} has no fields"))
+                .note("fields exist on controls, windows, sections and start menu pages"),
+        );
     }
 
     /// The register a window was copied into — a `local`, or a global since
@@ -722,7 +739,7 @@ impl BodyLowerer<'_, '_> {
                         Diagnostic::error(
                             Code::TypeConflict,
                             value.span(),
-                            format!("`text` is a `string`, and this is a {}", text.ty),
+                            format!("`text` is a `string`, and this is {:#}", text.ty),
                         )
                         .note(
                             "it is the row the components tree draws; blank it to draw no row                              at all",
@@ -786,7 +803,7 @@ impl BodyLowerer<'_, '_> {
                         Diagnostic::error(
                             Code::TypeConflict,
                             value.span(),
-                            format!("`{}` is a `bool`, and this is a {}", field.text, typed.ty),
+                            format!("`{}` is a `bool`, and this is {:#}", field.text, typed.ty),
                         )
                         .note("it is one bit of the section's flags, so there is no third value"),
                     );
@@ -1278,7 +1295,7 @@ impl BodyLowerer<'_, '_> {
             self.diags.push(Diagnostic::error(
                 Code::TypeConflict,
                 value.span(),
-                format!("`{field}` is a `{wanted}`, and this is a {}", typed.ty),
+                format!("`{field}` is a `{wanted}`, and this is {:#}", typed.ty),
             ));
             return None;
         }
