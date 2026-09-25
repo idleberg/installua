@@ -311,6 +311,10 @@ const SHIPPED: &[(&str, &str)] = &[
     ("EnVar.toml", include_str!("declarations/EnVar.toml")),
     ("FileFunc.toml", include_str!("declarations/FileFunc.toml")),
     ("Inetc.toml", include_str!("declarations/Inetc.toml")),
+    (
+        "Integration.toml",
+        include_str!("declarations/Integration.toml"),
+    ),
     ("NSISdl.toml", include_str!("declarations/NSISdl.toml")),
     ("NScurl.toml", include_str!("declarations/NScurl.toml")),
     ("Nsis7z.toml", include_str!("declarations/Nsis7z.toml")),

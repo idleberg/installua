@@ -1,0 +1,15 @@
+# Integration.nsh, ships with NSIS; documented only in the header itself.
+
+[[header]]
+name = "Integration"
+method = "notifyShellAssocChanged"
+nsis = "NotifyShell_AssocChanged"
+params = []
+outputs = []
+
+[[header]]
+name = "Integration"
+method = "unpinShortcut"
+nsis = "UnpinShortcut"
+params = ["path"]
+outputs = []

@@ -1,10 +1,10 @@
 ---
 title: Headers
-description: Every header macro Installua ships a declaration for, across FileFunc, TextFunc and WordFunc.
+description: Every header macro Installua ships a declaration for, across FileFunc, Integration, TextFunc and WordFunc.
 ---
 
-Every header macro Installua ships a declaration for: `FileFunc`, `TextFunc` and
-`WordFunc`, reached with `import "FileFunc"` and called as
+Every header macro Installua ships a declaration for: `FileFunc`, `Integration`,
+`TextFunc` and `WordFunc`, reached with `import "FileFunc"` and called as
 `fileFunc.getParent(path)`.
 
 For plugins, see the [plugin reference](/reference/plugins/). For the call
@@ -172,6 +172,22 @@ calling `rmDir`.
 
 `refreshShellIcons` tells the shell to re-read its icons after a file
 association changed. Nothing in, nothing out.
+
+---
+
+# Integration
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.unpinShortcut(lnk)` | `path` | nothing |
+| `.notifyShellAssocChanged()` | — | nothing |
+
+`unpinShortcut` removes a shortcut from the Start menu and taskbar pins. Call it
+before deleting the `.lnk`, which leaves a dead pin behind otherwise.
+
+`notifyShellAssocChanged` tells the shell that `HKCR` changed, so Explorer picks
+up a new or removed file association without a logoff. Call it after the
+registry writes, in the installer and the uninstaller alike.
 
 ---
 

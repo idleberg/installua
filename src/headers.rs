@@ -69,10 +69,7 @@ pub const ROWS: &[(&str, Class)] = &[
         "InstallOptions",
         Class::Rejected("superseded by nsDialogs, which `page.custom` is"),
     ),
-    (
-        "Integration",
-        Class::Todo("`UnpinShortcut` and `NotifyShell_AssocChanged`, small and actually used"),
-    ),
+    ("Integration", Class::Exposed("`import \"Integration\"`")),
     (
         "LangFile",
         Class::Rejected("the macros a language file is written in; MUI2 includes it itself"),

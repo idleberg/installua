@@ -87,12 +87,13 @@ Brings a declared NSIS header's macros into scope. The `!include` and any
 
 **Usage** `local h = import(header)` · `h.macro(…)`
 
-Three headers ship declared, and between them they are the whole of what NSIS
+Four headers ship declared, and between them they are the whole of what NSIS
 provides that a fixed argument list can describe:
 
 | Header | Methods | Worth knowing |
 | ------ | ------- | ------------- |
 | `FileFunc` | `getParameters`, `getOptions`, `getOptionsS`, `getParent`, `getFileName`, `getBaseName`, `getFileExt`, `getRoot`, `bannerTrimPath`, `getExeName`, `getExePath`, `getSize`, `driveSpace`, `getTime`, `getFileVersion`, `getFileAttributes`, `dirState`, `refreshShellIcons` | `getTime` returns **day, month, year, weekday, hour, minute, second** — seven strings, and a swapped pair is invisible at runtime. `dirState` is `-1` missing, `0` empty, `1` has files |
+| `Integration` | `unpinShortcut`, `notifyShellAssocChanged` | Both return **nothing**. Unpin before deleting the `.lnk`; notify after writing `HKCR` |
 | `WordFunc` | `wordFind`, `wordFind2X`, `wordFind3X`, `wordReplace`, `wordAdd`, `wordInsert`, `strFilter`, `versionCompare`, `versionConvert`, and the `S` half of the first seven | Every result is a `string`: the option argument decides whether the answer is a word or a count, so no narrower type is available |
 | `TextFunc` | `lineRead`, `lineSum`, `fileJoin`, `configRead`, `configReadS`, `configWrite`, `configWriteS`, `fileRecode`, `trimNewLines` | `fileJoin` and `fileRecode` return **nothing** — their result is the file. `trimNewLines` takes a string, not a path, despite what NSIS calls the argument |
 

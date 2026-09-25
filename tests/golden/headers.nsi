@@ -4,6 +4,7 @@ Unicode true
 !define CONF "/app.conf"
 
 !include "FileFunc.nsh"
+!include "Integration.nsh"
 !include "TextFunc.nsh"
 !include "WordFunc.nsh"
 
@@ -83,6 +84,8 @@ __GENERATED_endif_0:
   ${GetExeName} $1
   DetailPrint "$0\$1"
   ${RefreshShellIcons}
+  ${UnpinShortcut} "$SMPROGRAMS\Example (old).lnk"
+  ${NotifyShell_AssocChanged}
 SectionEnd
 
 Function .onInit

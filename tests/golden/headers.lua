@@ -1,4 +1,4 @@
--- The three headers NSIS ships that are worth declaring, and the one fact a
+-- The headers NSIS ships that are worth declaring, and the one fact a
 -- header declaration carries: which end the outputs go on.
 --
 -- A macro cannot return anything, so `!insertmacro` is handed the registers to
@@ -11,6 +11,7 @@
 local fileFunc = import "FileFunc"
 local textFunc = import "TextFunc"
 local wordFunc = import "WordFunc"
+local integration = import "Integration"
 
 -- Written as constants and joined at each call rather than bound to a local
 -- once, and that is not style. A `path` parameter normalises `/` to `\` **at
@@ -171,5 +172,12 @@ installer {
 
 		-- Nothing in and nothing out: the entire call is one word.
 		fileFunc.refreshShellIcons()
+
+		-- An upgrade that renames its shortcut unpins the old one first, since
+		-- deleting a pinned `.lnk` leaves a dead tile behind. Then the other
+		-- half of `refreshShellIcons`: that one re-reads icons, this one tells
+		-- the shell the `HKCR` associations changed.
+		integration.unpinShortcut(SMPROGRAMS .. "/Example (old).lnk")
+		integration.notifyShellAssocChanged()
 	end),
 }
