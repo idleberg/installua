@@ -1173,6 +1173,15 @@ impl BodyLowerer<'_, '_> {
         if !self.fits(param.ty, value.ty, name, Self::FROM_TABLE, argument.span()) {
             return None;
         }
+        // `sendMessage`'s `wParam` and `lParam`, a number or a string: see its
+        // row. Before the member check, since `STR:lParam` is not a keyword.
+        if param.ty == Ty::Unknown {
+            return Some(if value.ty == Ty::Str {
+                ir::Arg::str("STR:").concat(value.arg)
+            } else {
+                value.arg
+            });
+        }
         // A closed member list was the stub's completion set and nothing else:
         // `Kind::Enum` reached no check here, so `showMode = "SW_NONSENSE"`
         // compiled and NSIS ignored the word at assembly time. That gap is what

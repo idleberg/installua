@@ -96,11 +96,12 @@ installer {
 Reaching a window Installua did not draw — MUI2's own Cancel button, or another
 process's.
 
-| NSIS         | Installua                                                                |
-| ------------ | ------------------------------------------------------------------------ |
-| `GetDlgItem` | `getDlgItem(dialog, itemId)` → `handle`                                  |
-| `FindWindow` | `findWindow(class[, { title, parent, childAfter }])` → `handle` |
-| `IsWindow`   | `isWindow(hwnd)` → `boolean`                                             |
+| NSIS          | Installua                                                           |
+| ------------- | ------------------------------------------------------------------- |
+| `GetDlgItem`  | `getDlgItem(dialog, itemId)` → `handle`                             |
+| `FindWindow`  | `findWindow(class[, { title, parent, childAfter }])` → `handle`     |
+| `IsWindow`    | `isWindow(hwnd)` → `boolean`                                        |
+| `SendMessage` | `sendMessage(hwnd, message, wParam, lParam[, { timeout }])` → `int` |
 
 ```lua
 local cancel = getDlgItem(HWNDPARENT, 2)
@@ -108,6 +109,24 @@ cancel.enabled = false
 ```
 
 A one-off write needs no `local`: `getDlgItem(HWNDPARENT, 2).enabled = false`.
+
+`sendMessage` is every message a field is not. The message is a
+[window message constant](/reference/commands/constants/) or a number, and
+`wParam` and `lParam` are each a number, a handle or a string. A string is
+passed as a pointer to its text, which is what `STR:` means in NSIS. `timeout`
+is in milliseconds.
+
+The directory page's path field is item 1019 of the dialog inside the
+installer window, and this caps it at 100 characters:
+
+```lua
+page.directory {
+	show = function()
+		local inner = findWindow("#32770", { parent = HWNDPARENT })
+		sendMessage(getDlgItem(inner, 1019), EM_LIMITTEXT, 100, 0)
+	end,
+},
+```
 
 ## HideWindow / BringToFront / LockWindow / SetBrandingImage / SetDetailsView
 

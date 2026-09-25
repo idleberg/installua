@@ -90,6 +90,11 @@ pub fn is_directory(var: &str) -> bool {
 }
 
 impl Constant {
+    /// A registry root. Not merely `!sigil`, which a message number is too.
+    pub fn is_root(&self) -> bool {
+        !self.sigil && self.ty == Ty::Handle
+    }
+
     /// The argument this constant becomes.
     pub fn arg(&self) -> crate::ir::Arg {
         if self.sigil {
@@ -207,7 +212,7 @@ pub fn owned(name: &str) -> bool {
 }
 
 pub fn constant_named(name: &str) -> Option<&'static Constant> {
-    CONSTANTS.iter().find(|c| c.installua == name)
+    constants().find(|c| c.installua == name)
 }
 
 /// Suggestions for a name that resolved to nothing. Every rejection names its
@@ -218,6 +223,129 @@ pub fn nearest(name: &str) -> Option<&'static str> {
         .iter()
         .filter(|entry| entry.class == Class::Exposed)
         .filter_map(|entry| entry.installua)
-        .chain(CONSTANTS.iter().map(|c| c.installua))
+        .chain(constants().map(|c| c.installua))
         .find(|candidate| candidate.to_lowercase() == lowered && *candidate != name)
 }
+
+/// `WinMessages.nsh`'s names, `WM_SETTEXT` and the rest, as the numbers the
+/// header defines them to be. A name is its number in the output, so there is
+/// no `!include` to order and nothing for a `raw` block to redefine.
+///
+/// Flat beside `HWNDPARENT` rather than under a namespace: every one is an
+/// upper-case prefixed name, none clashes with [`CONSTANTS`], and a `local` of
+/// the same name shadows it as it shadows those. `WinCore.nsh` could not be
+/// read this way — it defines `HKLM` as a number.
+///
+/// The eleven `${_NSIS_DEFAW}` names, `LVM_GETITEMTEXT` and friends, are left
+/// out: which of the `A` and `W` twins they are depends on `unicode`, and the
+/// twins are here under their own names.
+const MESSAGES: &str = include_str!("../tables/winmessages-3.12.txt");
+
+fn messages() -> &'static [Constant] {
+    static PARSED: std::sync::OnceLock<Vec<Constant>> = std::sync::OnceLock::new();
+    PARSED.get_or_init(|| {
+        MESSAGES
+            .lines()
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .filter_map(|line| line.split_once(' '))
+            .map(|(name, value)| Constant {
+                installua: name,
+                nsis: value,
+                ty: if value.starts_with('-') {
+                    Ty::int()
+                } else {
+                    Ty::nonneg()
+                },
+                sigil: false,
+                writable: false,
+            })
+            .collect()
+    })
+}
+
+/// [`CONSTANTS`], then the message names.
+pub fn constants() -> impl Iterator<Item = &'static Constant> {
+    CONSTANTS.iter().chain(messages())
+}
+
+/// The message snapshot, regenerated: `tests/headers.rs` under
+/// `UPDATE_SNAPSHOTS`.
+///
+/// Four shapes of `!define` carry a number — a literal, `/math ${X} + n`, an
+/// alias `${X}`, and any of those behind `/ifndef` — and the rest (`SYSSTRUCT_*`
+/// layouts, the `_NSIS_DEFAW` plumbing) are skipped. A reference to a name not
+/// yet read is an error rather than a skip, so a reordered header cannot drop
+/// a name quietly.
+pub fn scan_messages(root: &std::path::Path) -> Result<String, String> {
+    let path = root.join("Include").join("WinMessages.nsh");
+    let text =
+        std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut values = std::collections::BTreeMap::<String, i64>::new();
+    for line in text.lines() {
+        let code = line.split([';', '#']).next().unwrap_or_default();
+        let mut tokens = code.split_whitespace().peekable();
+        if !tokens
+            .next()
+            .is_some_and(|t| t.eq_ignore_ascii_case("!define"))
+        {
+            continue;
+        }
+        let mut math = false;
+        while let Some(flag) = tokens.next_if(|t| t.starts_with('/')) {
+            math |= flag.eq_ignore_ascii_case("/math");
+        }
+        let Some(name) = tokens.next().filter(|name| {
+            name.starts_with(|c: char| c.is_ascii_uppercase())
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        }) else {
+            continue;
+        };
+        let rest: Vec<&str> = tokens.collect();
+        let operand = |token: &str| -> Result<Option<i64>, String> {
+            if let Some(reference) = token.strip_prefix("${").and_then(|t| t.strip_suffix('}')) {
+                return values
+                    .get(reference)
+                    .copied()
+                    .map(Some)
+                    .ok_or(format!("`{name}` reads `{reference}` before it is defined"));
+            }
+            let (negative, digits) = match token.strip_prefix('-') {
+                Some(digits) => (true, digits),
+                None => (false, token),
+            };
+            let parsed = match digits.strip_prefix("0x").or(digits.strip_prefix("0X")) {
+                Some(hex) => i64::from_str_radix(hex, 16).ok(),
+                None => digits.parse().ok(),
+            };
+            Ok(parsed.map(|value| if negative { -value } else { value }))
+        };
+        let value = match (math, rest.as_slice()) {
+            (true, [lhs, "+", rhs]) => match (operand(lhs)?, operand(rhs)?) {
+                (Some(lhs), Some(rhs)) => lhs + rhs,
+                _ => return Err(format!("`{name}`: `/math` on something not a number")),
+            },
+            (true, _) => return Err(format!("`{name}`: a `/math` this does not read")),
+            (false, [token]) => match operand(token)? {
+                Some(value) => value,
+                None => continue,
+            },
+            (false, _) => continue,
+        };
+        values.insert(name.to_string(), value);
+    }
+
+    let mut out = String::from(MESSAGES_HEADER);
+    for (name, value) in values {
+        out.push_str(&format!("{name} {value}\n"));
+    }
+    Ok(out)
+}
+
+const MESSAGES_HEADER: &str = "\
+# The numbers `WinMessages.nsh` defines, as `builtins::constants` reads them.
+#
+# One `NAME value` per line, sorted, the value in decimal. Regenerate with:
+#
+#     NSISDIR=\"...\" UPDATE_SNAPSHOTS=1 cargo test --test headers
+
+";

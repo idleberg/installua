@@ -55,7 +55,7 @@ impl Class {
 }
 
 const WIN_TODO: Class = Class::Todo(
-    "Windows constants only; named constants or \"write the number\", decided by how `sendMessage` callers read",
+    "Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number",
 );
 
 /// One row per snapshot path, in its order.
@@ -128,7 +128,10 @@ pub const ROWS: &[(&str, Class)] = &[
     ("Win/WinNT", WIN_TODO),
     ("Win/WinUser", WIN_TODO),
     ("WinCore", WIN_TODO),
-    ("WinMessages", WIN_TODO),
+    (
+        "WinMessages",
+        Class::Exposed("its names as numbers, `sendMessage(h, WM_SETTEXT, 0, \"…\")`"),
+    ),
     (
         "WinVer",
         Class::Replaced("`getWinVer`, a real instruction since NSIS 3"),

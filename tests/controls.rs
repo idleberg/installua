@@ -800,18 +800,17 @@ fn a_callback_carries_the_half_that_owns_it() {
     );
 }
 
-/// The seven instructions the fields and the events write are `lowering-target`
+/// The six instructions the fields and the events write are `lowering-target`
 /// rows and not `todo` ones, which is the retired-instruction diagnostic rather
-/// than a census entry: a user who reaches for `SendMessage` is told the field
+/// than a census entry: a user who reaches for `EnableWindow` is told the field
 /// to write, and gets it in the compiler rather than in a document.
 ///
-/// None of them could have been `exposed`. A call needs a handle, and every
-/// handle there is belongs to a control this compiler drew — so the field *is*
-/// the call, with the kind checked and the register spilled.
+/// `SendMessage` was a seventh, and is `exposed` now: the fields cover the
+/// messages they are, and `getDlgItem` and `findWindow` hand out windows this
+/// compiler did not draw, which take every other message.
 #[test]
 fn the_instructions_behind_the_fields_are_retired_rather_than_missing() {
     for (name, field) in [
-        ("sendMessage", "`agree.checked = true`"),
         ("enableWindow", "`agree.enabled = false`"),
         ("showWindow", "`badge.visible = false`"),
         ("setCtlColors", "a control's `colors`"),

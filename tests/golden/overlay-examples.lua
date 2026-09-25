@@ -302,6 +302,12 @@ installer {
 		local label = instTypes.getText("Full")
 		detailPrint(label)
 	end),
+	section("SendMessage", function()
+		local cancel = getDlgItem(HWNDPARENT, 2)
+		sendMessage(cancel, WM_SETTEXT, 0, "Stop")
+		local count = sendMessage(cancel, WM_GETTEXTLENGTH, 0, 0, { timeout = 500 })
+		detailPrint("length " .. count)
+	end),
 	section("SetAutoClose", function()
 		setAutoClose("true")
 	end),

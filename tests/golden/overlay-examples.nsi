@@ -415,6 +415,13 @@ Section "InstTypeGetText"
   DetailPrint $0
 SectionEnd
 
+Section "SendMessage"
+  GetDlgItem $0 $HWNDPARENT 2
+  SendMessage $0 12 0 "STR:Stop"
+  SendMessage $0 14 0 0 $0 /TIMEOUT=500
+  DetailPrint "length $0"
+SectionEnd
+
 Section "SetAutoClose"
   SetAutoClose "true"
 SectionEnd

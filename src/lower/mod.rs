@@ -2330,13 +2330,13 @@ impl<'p> Lowerer<'_, 'p> {
     /// Almost always a string — `compressor = "lzma"` — but a registry root is
     /// a **bare** name, because `readRegStr(HKLM, …)` already spells it that
     /// way and one idea with two spellings is worse than either of them. The
-    /// names this accepts are exactly the sigil-less constants, so no other
+    /// names this accepts are exactly the registry roots, so no other
     /// field changes: there is no constant called `lzma` for `compressor =
     /// lzma` to find, and an unknown bare name still fails as a value.
     fn keyword(&mut self, value: &Expr, field: &str) -> Option<String> {
         if let Expr::Name(name) = value
             && let Some(constant) = crate::builtins::constant_named(&name.text)
-            && !constant.sigil
+            && constant.is_root()
         {
             return Some(constant.nsis.to_string());
         }

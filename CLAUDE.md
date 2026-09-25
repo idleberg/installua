@@ -47,7 +47,7 @@ comment too — rewrite it in the same commit.
 | `tests/golden/coverage.txt` | `mise run coverage` |
 | `web/src/content/docs/cli.md` | `mise run docs:cli` (reads the `clap` declarations) |
 | `tests/golden/overlay-{examples,attributes}.{lua,nsi}` | `mise run goldens` |
-| `tables/{mui,locales,headers}-3.12.txt` | `UPDATE_SNAPSHOTS=1 cargo test --test mui --test locales --test headers` |
+| `tables/{mui,locales,headers,winmessages}-3.12.txt` | `UPDATE_SNAPSHOTS=1 cargo test --test mui --test locales --test headers` |
 
 Those three tests are the only ones honouring `UPDATE_SNAPSHOTS`; all three skip
 without `NSISDIR`.

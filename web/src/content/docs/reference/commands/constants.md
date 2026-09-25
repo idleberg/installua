@@ -38,6 +38,14 @@ assigning to one is refused.
 The `32`/`64` suffix forces a view of the registry regardless of
 `setRegView`; `ANY` restores the default of following it.
 
+**Window messages** Every number `WinMessages.nsh` defines, under the same
+name: `WM_SETTEXT` · `WM_CLOSE` · `BM_SETCHECK` · `EM_LIMITTEXT` ·
+`PBM_SETPOS` · `SW_HIDE` · `HWND_BROADCAST` and about 730 more, for
+[`sendMessage`](/reference/commands/windows-and-controls/#getdlgitem--findwindow--iswindow--sendmessage).
+Each is its number in the output, so there is no `!include`. The few whose value
+depends on `unicode` (`LVM_GETITEMTEXT`, `TCM_INSERTITEM`, …) are written with
+their explicit `W` or `A` suffix.
+
 ```lua
 setOutPath(PROGRAMFILES64 .. "/Example")
 ```

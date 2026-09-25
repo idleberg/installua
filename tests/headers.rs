@@ -52,3 +52,20 @@ fn the_snapshot_matches_the_local_nsis() {
         "classify whatever is new in `headers::ROWS`",
     );
 }
+
+#[test]
+fn the_message_snapshot_matches_the_local_nsis() {
+    let Ok(nsis) = std::env::var("NSISDIR") else {
+        eprintln!("skipping: NSISDIR is unset");
+        return;
+    };
+    // A failure here is a header this scan misread, not an absent NSIS, so it
+    // fails rather than skips.
+    let text = installua::builtins::scan_messages(std::path::Path::new(&nsis))
+        .unwrap_or_else(|error| panic!("{error}"));
+    common::check_or_update(
+        "tables/winmessages-3.12.txt",
+        &text,
+        "check the new names in `builtins::constants`",
+    );
+}

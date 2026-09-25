@@ -75,7 +75,7 @@ impl Lowerer<'_, '_> {
                         continue;
                     };
                     match crate::builtins::constant_named(&root) {
-                        Some(constant) if !constant.sigil => pair[0] = Some(ir::Arg::raw(root)),
+                        Some(constant) if constant.is_root() => pair[0] = Some(ir::Arg::raw(root)),
                         _ => self.bad_value(
                             value.span(),
                             "root",

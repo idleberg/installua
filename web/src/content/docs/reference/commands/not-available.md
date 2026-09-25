@@ -185,7 +185,6 @@ here so a search for the NSIS name lands somewhere.
 | `InitPluginsDir`                                                             | a body that names `PLUGINSDIR`                        |
 | `ReserveFile /plugin`                                                        | a plugin `.onInit` can reach                          |
 | `!addplugindir`                                                              | a plugin declared with a `dir`                        |
-| `SendMessage`                                                                | a control's `value` / `checked`                       |
 | `EnableWindow` / `ShowWindow`                                                | a control's `enabled` / `visible`                     |
 | `SetCtlColors` / `CreateFont`                                                | a control's `colors` / `font`                         |
 | `LoadAndSetImage`                                                            | a `bitmap`'s `image`                                  |

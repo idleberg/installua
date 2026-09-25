@@ -50,6 +50,8 @@ pub struct Ann {
     /// The name this position takes in the trailing options table. Required
     /// positions are positional and carry none.
     pub field: Option<Field>,
+    /// Required although `-CMDHELP` brackets it. See [`required`].
+    pub required: bool,
 }
 
 pub struct Row {
@@ -94,6 +96,19 @@ const fn ann(ty: Ty, kind: Kind) -> Ann {
         kind,
         fill: None,
         field: None,
+        required: false,
+    }
+}
+
+/// A position `-CMDHELP` prints in brackets and `makensis` still requires.
+/// `SendMessage`'s usage line brackets `wparam` and `lparam`, and its entry in
+/// `Source/tokens.cpp` says four required — so a call without them is
+/// "expects 4-6 parameters, got 2". The snapshot keeps what is printed, for
+/// [`Kind::Fused`]'s reason, and the correction is here.
+const fn required(ty: Ty, kind: Kind) -> Ann {
+    Ann {
+        required: true,
+        ..ann(ty, kind)
     }
 }
 
@@ -1613,13 +1628,31 @@ pub const ROWS: &[Row] = &[
         &[ann(Ty::Str, Kind::Value), ann(Ty::Str, Kind::Value)],
         "local label = instTypes.getText(\"Full\")\ndetailPrint(label)",
     ),
-    // Three fields at once — `checked`, `value` and the second half of `font` —
-    // because a message *is* the setter for most of what a control holds. The
-    // one field it cannot serve is reading `value`: `WM_GETTEXT` wants a buffer
-    // and NSIS has nowhere to put one, so that read is `System::Call`.
-    lowering(
-        "SendMessage",
-        "a control's fields: `agree.checked = true`, `serial.value = \"\"`",
+    // Three fields lower to it — `checked`, `value` and the second half of
+    // `font` — because a message *is* the setter for most of what a control
+    // holds, and this is every message they are not: `EM_LIMITTEXT`,
+    // `PBM_SETPOS`, `WM_CLOSE` to someone else's window. The one field it
+    // cannot serve is reading `value`: `WM_GETTEXT` wants a buffer and NSIS has
+    // nowhere to put one, so that read is `System::Call`.
+    //
+    // `wParam` and `lParam` are the table's only `unknown` positions: a message
+    // takes a number or a string, and the compiler writes `STR:` before a
+    // string. The members `-CMDHELP` prints for them are that spelling, not an
+    // enum.
+    flagged(
+        exposed(
+            "SendMessage",
+            "sendMessage",
+            &[
+                ann(Ty::Handle, Kind::Value),
+                ann(Ty::int(), Kind::Value),
+                required(Ty::Unknown, Kind::Value),
+                required(Ty::Unknown, Kind::Value),
+                ann(Ty::int(), Kind::Value),
+            ],
+            "local cancel = getDlgItem(HWNDPARENT, 2)\nsendMessage(cancel, WM_SETTEXT, 0, \"Stop\")\nlocal count = sendMessage(cancel, WM_GETTEXTLENGTH, 0, 0, { timeout = 500 })\ndetailPrint(\"length \" .. count)",
+        ),
+        &[valued("timeout", Ty::nonneg(), Kind::Value)],
     ),
     // The third row filed under "addresses a window by handle" that takes no
     // handle, after `HideWindow` and `LockWindow`. A group reason is a guess

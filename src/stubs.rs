@@ -1119,7 +1119,7 @@ fn constants() -> String {
          --------------------------------------------------------------------------------\n\n",
     );
 
-    for constant in builtins::CONSTANTS {
+    for constant in builtins::constants() {
         let _ = writeln!(
             out,
             "---@type {}\n{} = nil\n",
@@ -1349,7 +1349,7 @@ pub fn selene_std() -> String {
         let _ = writeln!(out, "  {name}:\n    property: full-write");
     }
 
-    for constant in builtins::CONSTANTS {
+    for constant in builtins::constants() {
         let _ = writeln!(out, "  {}:\n    property: read-only", constant.installua);
     }
     out
