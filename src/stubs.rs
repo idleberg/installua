@@ -251,6 +251,16 @@ fn blocks() -> String {
          ---@field ask? installua.Ask\n\n\
          ---@param options installua.Languages\n\
          function languages(options) end\n\n\
+         ---@class (exact) installua.MultiUser\n\
+         ---@field executionLevel \"admin\"|\"power\"|\"highest\"|\"standard\"\n\
+         ---@field commandLine? boolean\n\
+         ---@field defaultCurrentUser? boolean\n\
+         ---@field folder? string\n\
+         ---@field programFiles64? boolean\n\
+         ---@field folderRegistry? { key: string, value: string }\n\
+         ---@field modeRegistry? { key: string, value: string }\n\n\
+         ---@param options installua.MultiUser\n\
+         function multiUser(options) end\n\n\
          --- The strings `languages {}` declared. A read is `$(name)`, resolved\n\
          --- against `$LANGUAGE` at run time.\n\
          ---@type table<string, string>\n\
@@ -260,10 +270,10 @@ fn blocks() -> String {
     out
 }
 
-/// The eight pages, as a table of constructors rather than a list of names.
+/// The nine pages, as a table of constructors rather than a list of names.
 ///
 /// `page.directory { … }` and not `page("Directory", … )` because the set is
-/// **closed**: MUI2 picks seven of these and a user picks a section's name, so a
+/// **closed**: the headers pick these and a user picks a section's name, so a
 /// member completes where a string cannot. That is also what buys a per-page
 /// field class — the settings differ by page, and one `page(name, options)`
 /// signature would have to take the union of all of them.
@@ -273,9 +283,9 @@ fn blocks() -> String {
 /// parameter model has nothing to say about it. `tests/stubs.rs` compiles every
 /// field against the compiler to keep the two honest.
 const PAGES: &str = "\
--- The hooks every page has, and the header strip five of the eight draw into.\n\
+-- The hooks every page has, and the header strip six of the nine draw into.\n\
 -- `welcome` and `finish` are full-window pages with no header, which is why\n\
--- they inherit the bare class and the other six inherit the headed one.\n\
+-- they inherit the bare class and the other seven inherit the headed one.\n\
 ---@class (exact) installua.Page\n\
 ---@field pre? fun()\n\
 ---@field show? fun()\n\
@@ -357,6 +367,10 @@ const PAGES: &str = "\
 ---@field [1]? string\n\
 ---@field controls? table\n\
 \n\
+-- `MultiUser.nsh`'s page, and installer-only: it needs a `multiUser {}` block.\n\
+---@class (exact) installua.Page.InstallMode : installua.Page.Headed\n\
+---@field destroyed? fun()\n\
+\n\
 -- The one page bound to a local — `local menu = page.startMenu { … }` — because\n\
 -- MUI2 names it from install-time code: the folder is read back through the id\n\
 -- and the shortcut writing is wrapped in it.\n\
@@ -377,6 +391,7 @@ local StartMenu = {}\n\n\
 ---@field finish fun(options?: installua.Page.Finish)\n\
 ---@field confirm fun(options?: installua.Page.Confirm)\n\
 ---@field custom fun(options?: installua.Page.Custom)\n\
+---@field installMode fun(options?: installua.Page.InstallMode)\n\
 \n\
 -- `nil` and not `{}`: an empty table is a value with none of the fields the\n\
 -- type requires, and a `---@meta` global wants a declaration rather than an\n\
@@ -1359,6 +1374,7 @@ const LANGUAGE: &[(&str, &str)] = &[
     ("installer", "      - type: table\n"),
     ("uninstaller", "      - type: table\n"),
     ("languages", "      - type: table\n"),
+    ("multiUser", "      - type: table\n"),
     // Both take either `(name, body)` or a single options table, so the second
     // position is optional and neither is typed more tightly than that.
     (

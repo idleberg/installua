@@ -24,6 +24,7 @@ mod fields;
 mod handle;
 mod insttype;
 mod languages;
+mod multi_user;
 mod pages;
 mod sig;
 
@@ -719,6 +720,7 @@ const V1_BLOCKS: &[&str] = &[
     "installer",
     "uninstaller",
     "languages",
+    "multiUser",
     "func",
     "import",
     "plugin",
@@ -1067,6 +1069,7 @@ fn lower_once(
         on_init: [false, false],
         init_prelude: [Vec::new(), Vec::new()],
         lang_strings: BTreeSet::new(),
+        multi_user: None,
         locales: Vec::new(),
         license_tables: 0,
         descriptions: [Vec::new(), Vec::new()],
@@ -1118,6 +1121,8 @@ struct Lowerer<'a, 'p> {
     /// The `LangString` names `languages {}` declared, so `lang.greeting` is a
     /// resolved read rather than a `$(…)` nobody checked.
     lang_strings: BTreeSet<String>,
+    /// The `multiUser {}` block, when there is one: the page reads it.
+    multi_user: Option<multi_user::MultiUser>,
     /// The locales `languages {}` declared, in the order it listed them — read
     /// by the license page, which has to check its own per-locale table against
     /// exactly this set. Declaration order rather than a set, because
@@ -1237,6 +1242,7 @@ impl<'p> Lowerer<'_, 'p> {
         // could read `lang.greeting` or ask for an `.onInit` — same
         // order-freeness argument as the claims.
         self.languages_pass();
+        self.multi_user_pass();
         self.claim_pass();
 
         for stmt in self.resolved.block.clone() {
@@ -1381,6 +1387,34 @@ impl<'p> Lowerer<'_, 'p> {
                     "!insertmacro",
                     vec![ir::Arg::raw("MUI_LANGUAGE"), ir::Arg::str("English")],
                 ));
+            }
+        }
+        if let Some(multi_user) = &self.multi_user {
+            if self.uninstaller_span.is_none() {
+                self.module.defines.push(ir::Define {
+                    name: "MULTIUSER_NOUNINSTALL".to_string(),
+                    value: None,
+                });
+            }
+            if self
+                .module
+                .attributes
+                .iter()
+                .any(|line| line.name == "RequestExecutionLevel")
+            {
+                let span = multi_user.span;
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::IgnoredSetting,
+                        span,
+                        "`multiUser {}` and `requestExecutionLevel` both set the execution level",
+                    )
+                    .note(
+                        "`MultiUser.nsh` writes `RequestExecutionLevel` from `executionLevel`, \
+                         and the attribute's line below it would win without a word",
+                    )
+                    .note("drop `requestExecutionLevel` from `attributes {}`"),
+                );
             }
         }
         self.module.includes.extend(
@@ -1529,7 +1563,7 @@ impl<'p> Lowerer<'_, 'p> {
             }
             // Lowered by [`Self::languages_pass`] before this loop began, so
             // that a body written above it can still read `lang.greeting`.
-            "languages" => {}
+            "languages" | "multiUser" => {}
             // `import` and `plugin` are the last two, and both are exposed as
             // *expressions* — `local mui = import "MUI2"`. What is missing is
             // this position, not the name, and the message says which rather
@@ -3531,6 +3565,35 @@ impl<'p> Lowerer<'_, 'p> {
             return;
         }
 
+        if page.installua == "installMode" {
+            match &self.multi_user {
+                None => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::MissingAttribute,
+                            which.span,
+                            "`page.installMode` needs a `multiUser {}` block",
+                        )
+                        .note("the page is `MultiUser.nsh`'s, and the block is what includes it"),
+                    );
+                    return;
+                }
+                Some(multi_user) if !multi_user.all_users => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::BadFieldValue,
+                            which.span,
+                            "`page.installMode` has no choice to offer at `executionLevel = \"standard\"`",
+                        )
+                        .note_at("the level is set in", multi_user.span)
+                        .note("the page asks for all users or one, and `standard` cannot install for all"),
+                    );
+                    return;
+                }
+                Some(_) => {}
+            }
+        }
+
         let Expr::Call { args, .. } = call else {
             return;
         };
@@ -3656,7 +3719,11 @@ impl<'p> Lowerer<'_, 'p> {
 
         self.page_fields_known(&named, page);
 
-        let mut all = vec![ir::Arg::raw(format!("{}{}", half.page_prefix(), page.nsis))];
+        let prefix = match page.installua {
+            "installMode" => "MULTIUSER_PAGE_",
+            _ => half.page_prefix(),
+        };
+        let mut all = vec![ir::Arg::raw(format!("{prefix}{}", page.nsis))];
         all.extend(macro_args);
         let lowered = ir::Page {
             defines,

@@ -178,7 +178,7 @@ pub(super) struct PageField {
 /// The one field a page has that is not a [`PageField`], because it is not a
 /// `!define` at all.
 ///
-/// Two of the eight have one. `license`'s `file` is an argument of the
+/// Two of the nine have one. `license`'s `file` is an argument of the
 /// `!insertmacro` rather than a setting read from inside it, and `custom`'s
 /// `controls` is what the compiler draws — no define exists for either, so
 /// there is nothing for the table to hold and they are named here instead.
@@ -660,13 +660,13 @@ pub(super) const fn page(
     }
 }
 
-/// The eight pages, as a **closed set**: this is why a page is reached by
+/// The nine pages, as a **closed set**: this is why a page is reached by
 /// member access (`page.directory`) where a section is reached by string
 /// (`section("Tools", …)`). A user picks a section's name and MUI2 picks these,
 /// so one completes and the other cannot.
 ///
-/// Seven of them are MUI2's and the eighth is not, and it is still in the same
-/// list for the same reason: what a user picks from is a set an editor can
+/// Seven of them are MUI2's, the eighth is ours and the ninth is
+/// `MultiUser.nsh`'s, and they are in the same list for the same reason: what a user picks from is a set an editor can
 /// finish, and where the page's body comes from is not a fact about the name.
 pub(super) const V1_PAGES: &[Page] = &[
     Page {
@@ -709,8 +709,8 @@ pub(super) const V1_PAGES: &[Page] = &[
         custom: false,
         own: CONFIRM_FIELDS,
     },
-    // The eighth, and the only one that is not MUI2's. It is reached by the
-    // same member access as the other seven because it is a *page* — the set
+    // The eighth, and the only one no header inserts. It is reached by the
+    // same member access as the others because it is a *page* — the set
     // stays closed, and what a user picks is still from a list an editor can
     // complete. What it is not is a `!insertmacro`: `Page custom` names two
     // functions, and both of them are ours to write.
@@ -721,6 +721,18 @@ pub(super) const V1_PAGES: &[Page] = &[
         header: true,
         custom: true,
         own: &[],
+    },
+    // The ninth is `MultiUser.nsh`'s, and a MUI2 page all the same:
+    // `MULTIUSER_PAGE_INSTALLMODE` inserts `MUI_PAGE_INIT` and calls MUI2's
+    // four hooks and its header text, so the common fields work unchanged.
+    // Installer-only because the header defines no uninstaller twin.
+    Page {
+        installua: "installMode",
+        nsis: "INSTALLMODE",
+        halves: [true, false],
+        header: true,
+        custom: false,
+        own: &[DESTROYED_FIELD],
     },
 ];
 

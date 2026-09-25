@@ -1,6 +1,6 @@
 ---
 title: MUI2
-description: The eight pages, the settings each one takes, and the block-level settings that govern all of them.
+description: The nine pages, the settings each one takes, and the block-level settings that govern all of them.
 ---
 
 <!-- Hand-written. Not generated yet — see "Generating this file" in
@@ -8,7 +8,7 @@ description: The eight pages, the settings each one takes, and the block-level s
      `src/mui/rows.rs` and `src/lower/mod.rs`, so the entries are true as of the
      current tables. -->
 
-The MUI2 half of the [command reference](/reference/commands/): the eight pages,
+The MUI2 half of the [command reference](/reference/commands/): the nine pages,
 the settings on each, and the block-level settings that govern all of them.
 
 Installua targets MUI2 and nothing else. It writes every `!insertmacro` and
@@ -29,10 +29,10 @@ its controls — is in [the command reference](/reference/commands/).
 A page is a member of `page`, listed in the block it belongs to, in the order it
 should appear.
 
-The eight pages: `welcome`, `license`, `components`, `directory`, `startMenu`,
-`instFiles`, `finish`, `confirm` — plus [`custom`](/reference/commands/windows-and-controls/).
-`confirm` is uninstaller-only, `startMenu` installer-only; the rest exist in
-both halves and are written by which block lists them.
+The nine pages: `welcome`, `license`, `components`, `directory`, `startMenu`,
+`instFiles`, `finish`, `confirm`, `installMode` — plus [`custom`](/reference/commands/windows-and-controls/).
+`confirm` is uninstaller-only, `startMenu` and `installMode` installer-only; the
+rest exist in both halves and are written by which block lists them.
 
 A page can also be bound to a local and listed by name, which lets it live in
 an `include`d file: `local details = page.custom { … }`, then `details,` in the
@@ -58,7 +58,7 @@ installer {
 | `MUI_PAGE_CUSTOMFUNCTION_PRE`        | `pre = function() … end`                            |
 | `MUI_PAGE_CUSTOMFUNCTION_SHOW`       | `show = function() … end`                           |
 | `MUI_PAGE_CUSTOMFUNCTION_LEAVE`      | `leave = function() … end`                          |
-| `MUI_PAGE_CUSTOMFUNCTION_DESTROYED`  | `destroyed = function() … end` (welcome and finish) |
+| `MUI_PAGE_CUSTOMFUNCTION_DESTROYED`  | `destroyed = function() … end` (welcome, finish and installMode) |
 | `SubCaption` / `UninstallSubCaption` | `subCaption`                                        |
 
 ### MUI_PAGE_WELCOME
@@ -237,6 +237,28 @@ Uninstaller-only.
 uninstaller {
 	page.confirm { topText = "Example will be removed from this computer." },
 	page.instFiles {},
+}
+```
+
+### MULTIUSER_PAGE_INSTALLMODE
+
+`MultiUser.nsh`'s page, not MUI2's, but it takes every MUI2 page setting above.
+It asks whether to install for all users or only the current one. Installer
+only, and it needs a [`multiUser {}`](/reference/commands/script-attributes/#per-machine-or-per-user)
+block whose `executionLevel` is not `"standard"`.
+
+**Usage** `page.installMode { headerText = …, pre = …, … }`
+
+```lua
+attributes { name = "Example", outFile = "example-setup.exe" }
+
+multiUser { executionLevel = "highest" }
+
+installer {
+	page.installMode {},
+	page.directory {},
+	page.instFiles {},
+	section("Core", function() end),
 }
 ```
 

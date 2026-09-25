@@ -85,7 +85,9 @@ puts the word on every command, and this language puts it on the table once.
 
 `requestExecutionLevel` lands in the manifest too and is written flat, because
 its NSIS name says nothing about a manifest: the groups are the prefixes NSIS
-itself uses, so the map from one to the other stays mechanical.
+itself uses, so the map from one to the other stays mechanical. With a
+[`multiUser {}`](#per-machine-or-per-user) block, leave it out: the block sets
+the level itself, and setting both is an error.
 
 ```lua
 attributes {
@@ -95,6 +97,52 @@ attributes {
 		dpiAwareness = "PerMonitorV2,system",
 		longPathAware = true,
 	},
+}
+```
+
+## Per-machine or per-user
+
+`multiUser {}` is `MultiUser.nsh`: the installer runs for all users or for one,
+and picks `SetShellVarContext`, `$INSTDIR` and the registry root to match. It is
+a top-level block, and every field is a `MULTIUSER_*` define the compiler writes
+above the `!include`. The compiler also puts `MULTIUSER_INIT` and
+`MULTIUSER_UNINIT` at the start of `.onInit` and `un.onInit` (after the
+[language dialog](/reference/commands/languages-and-locales/)), and it defines
+`MULTIUSER_NOUNINSTALL` when there is no `uninstaller {}`.
+
+**Usage** `multiUser { executionLevel = …, … }`
+
+| NSIS                                                     | Installua                                                   |
+| -------------------------------------------------------- | ----------------------------------------------------------- |
+| `MULTIUSER_EXECUTIONLEVEL`                               | `executionLevel = "admin" \| "power" \| "highest" \| "standard"` |
+| `MULTIUSER_INSTALLMODE_COMMANDLINE`                      | `commandLine = true` (`/AllUsers`, `/CurrentUser`)          |
+| `MULTIUSER_INSTALLMODE_DEFAULT_CURRENTUSER`              | `defaultCurrentUser = true`                                 |
+| `MULTIUSER_INSTALLMODE_INSTDIR`                          | `folder`, a folder name without a path                      |
+| `MULTIUSER_USE_PROGRAMFILES64`                           | `programFiles64 = true`                                     |
+| `MULTIUSER_INSTALLMODE_INSTDIR_REGISTRY_KEY` / `…_VALUENAME`  | `folderRegistry = { key = …, value = … }`              |
+| `MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_KEY` / `…_VALUENAME`  | `modeRegistry = { key = …, value = … }`                |
+
+`executionLevel` is required. `folderRegistry` is where a previous install's
+folder is read from, and `modeRegistry` is a value whose presence under `HKCU`
+rather than `HKLM` means the last install was per-user. Write both under
+`SHCTX`, which is `HKLM` or `HKCU` by mode. The page that lets the user choose
+is [`page.installMode`](/reference/modern-ui/#multiuser_page_installmode).
+
+```lua
+attributes { name = "Example", outFile = "example-setup.exe" }
+
+multiUser {
+	executionLevel = "highest",
+	commandLine = true,
+	folder = "Example",
+	modeRegistry = { key = "Software/Example", value = "Installed" },
+}
+
+installer {
+	section("Core", function()
+		setOutPath(INSTDIR)
+		writeReg(SHCTX, "Software/Example", "Installed", 1)
+	end),
 }
 ```
 

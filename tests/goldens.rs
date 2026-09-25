@@ -27,6 +27,8 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("headers", &[]),
     ("include", &[]),
     ("languages", &[]),
+    ("multiuser", &[]),
+    ("multiuser-plain", &[]),
     ("pages", &[]),
     ("plugins", &[]),
     ("returns", &[Code::DeepRecursion]),

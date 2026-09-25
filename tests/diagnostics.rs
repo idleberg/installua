@@ -386,6 +386,61 @@ fn an_undefined_base_is_undefined() {
     }
 }
 
+/// `multiUser {}`'s rejections, each alone: the one diagnostic and nothing
+/// after it.
+#[test]
+fn multi_user_says_what_is_wrong() {
+    let head = "attributes { outFile = \"a.exe\" }\n";
+    let body = "installer { page.installMode {}, section(\"Core\", function() end), }";
+    for (source, code) in [
+        (format!("{head}{body}"), Code::MissingAttribute),
+        (
+            format!("{head}multiUser {{ executionLevel = \"standard\" }}\n{body}"),
+            Code::BadFieldValue,
+        ),
+        (
+            format!("{head}multiUser {{ commandLine = true }}"),
+            Code::MissingAttribute,
+        ),
+        (
+            format!("{head}multiUser {{ executionLevel = \"root\" }}"),
+            Code::BadFieldValue,
+        ),
+        (
+            format!("{head}multiUser {{ executionLevel = \"admin\", nope = 1 }}"),
+            Code::UnknownField,
+        ),
+        (
+            format!(
+                "{head}multiUser {{ executionLevel = \"admin\", \
+                 modeRegistry = {{ key = \"Software/App\" }} }}"
+            ),
+            Code::MissingAttribute,
+        ),
+        (
+            format!(
+                "{head}multiUser {{ executionLevel = \"admin\" }}\n\
+                 multiUser {{ executionLevel = \"admin\" }}"
+            ),
+            Code::DuplicateBlock,
+        ),
+        (
+            "attributes { outFile = \"a.exe\", requestExecutionLevel = \"admin\" }\n\
+             multiUser { executionLevel = \"admin\" }"
+                .to_string(),
+            Code::IgnoredSetting,
+        ),
+        (
+            format!("{head}uninstaller {{ page.installMode {{}} }}"),
+            Code::UnknownField,
+        ),
+    ] {
+        let diags = compile(&source);
+        let codes: Vec<Code> = diags.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [code], "{source}\n{}", diags.render("<test>"));
+    }
+}
+
 /// A value that failed is reported once, where it failed, and not again
 /// wherever it lands: a `local`, a global, a parameter, a `return`.
 #[test]
