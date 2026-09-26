@@ -8,7 +8,7 @@ export default defineConfig({
 		starlight({
 			title: 'Installua',
 			logo: {
-				src: './public/installua.svg',
+				src: './public/favicon.svg',
 			},
 			customCss: ['./src/styles/custom.css'],
 			// One theme, so neither the toggle nor the provider that honours it
