@@ -45,7 +45,7 @@ installer with wrong behaviour.
 | `Section /o`                                         | `section { "Name", optional = true, body = function() … end }` — options move the whole call into one table |
 | `SectionGroup`                                       | `group("Name", { … })` — a list of sections, not a body; nesting one is not yet implemented          |
 | `Function` / `FunctionEnd`                           | `func("name", function() … end)`                                                                     |
-| `Function .onInit`                                   | `onInit(function() … end)` — the leading `.` is emitted, never written                               |
+| `Function .onInit`, `Function .onSelChange`, …       | `onInit(function() … end)` — the leading `.` is emitted, never written                               |
 | `Section un.Main`, `Function un.Foo`                 | declare them inside `uninstaller {}`; `un.` has no spelling at all                                   |
 | `LangString`                                         | the `languages {}` block, keyed locale-first; `un.` is applied for you where it helps                |
 | `!include "WinVer.nsh"`                              | nothing — `getWinVer("MAJOR")` is a real instruction since NSIS 3, and returns a number              |

@@ -36,6 +36,23 @@ compiler's business.
 
 **Usage** `onInit(body)`, listed in `installer {}` or `uninstaller {}`
 
+The other callbacks are written the same way, each at most once per block, and
+each takes a body with no arguments. The names are NSIS's without the `.`:
+
+| NSIS                                     | Installua                             | Runs                                           |
+| ---------------------------------------- | ------------------------------------- | ---------------------------------------------- |
+| `.onInstSuccess` / `un.onUninstSuccess`  | `onInstSuccess` / `onUninstSuccess`   | after the last section, when nothing failed    |
+| `.onInstFailed` / `un.onUninstFailed`    | `onInstFailed` / `onUninstFailed`     | after the last section, when something failed |
+| `.onVerifyInstDir` / `un.onVerifyInstDir`| `onVerifyInstDir`                     | each time the directory changes; `abort()` rejects it |
+| `.onSelChange` / `un.onSelChange`        | `onSelChange`                         | each time a component is ticked or unticked    |
+| `.onGUIEnd` / `un.onGUIEnd`              | `onGUIEnd`                            | after the window closes                        |
+| `.onRebootFailed` / `un.onRebootFailed`  | `onRebootFailed`                      | when `reboot()` could not restart              |
+
+The uninstaller's outcomes say `Uninst`, as NSIS does, and the installer's
+spelling in `uninstaller {}` is an error. `.onGUIInit`, `.onUserAbort` and
+`.onMouseOverSection` are MUI2's; their entries are on
+[Pages and MUI](/reference/modern-ui/).
+
 ```lua
 installer {
 	page.instFiles {},

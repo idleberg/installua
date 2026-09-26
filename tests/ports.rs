@@ -21,7 +21,7 @@ use std::process::Command;
 
 use installua::diag::Diagnostics;
 
-const PORTS: &[&str] = &["example1", "example2", "primes"];
+const PORTS: &[&str] = &["example1", "example2", "primes", "silent"];
 
 /// Trace lines that differ by design rather than by mistake.
 const DROPPED: &[&str] = &[
@@ -29,7 +29,7 @@ const DROPPED: &[&str] = &[
     "Processing default plugins",
     " + ",
     // The default, which the original says by saying nothing.
-    "Unicode: false",
+    "Unicode: true",
     "NSIS Modern User Interface",
     // Pages.
     "Page: ",
@@ -40,10 +40,13 @@ const DROPPED: &[&str] = &[
     "StrCmp",
     "IntOp: ",
     "IntCmp",
+    "IfSilent",
     "Goto: ",
     "Call ",
     "Return",
     "Function",
+    // Written around the one `File` it is for, and put back after it.
+    "AllowSkipFiles: ",
 ];
 
 fn port(name: &str) -> String {
@@ -88,7 +91,8 @@ fn ports_do_what_the_originals_do() {
 }
 
 /// The effect lines of one `makensis -V4` run, with an uninstaller section's
-/// `un.` prefix taken off: `Section "Uninstall"` is the same section. The
+/// `un.` prefix taken off: `Section "Uninstall"` is the same section. Functions
+/// are moved after the sections, where Installua writes them. The
 /// attributes above the first section are sorted and deduplicated, because
 /// their order does nothing and Installua writes `Unicode` first. A message
 /// box's `(on IDNO goto label)` is cut, because the label is the compiler's.
@@ -105,11 +109,21 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
         output.status.success(),
         "makensis rejected {script}:\n{log}"
     );
-    let mut lines: Vec<String> = log
+    let mut in_function = false;
+    let (functions, rest): (Vec<&str>, Vec<&str>) = log
         .lines()
         .skip_while(|line| !line.starts_with("Processing script file"))
         .skip(1)
         .take_while(|line| !line.starts_with("Processed "))
+        .partition(|line| {
+            in_function |= line.starts_with("Function: ");
+            let inside = in_function;
+            in_function &= !line.starts_with("FunctionEnd");
+            inside
+        });
+    let mut lines: Vec<String> = rest
+        .into_iter()
+        .chain(functions)
         .filter(|line| !line.trim().is_empty() && !DROPPED.iter().any(|p| line.starts_with(p)))
         .map(|line| {
             let line = line.replacen("Section: \"un.", "Section: \"", 1);

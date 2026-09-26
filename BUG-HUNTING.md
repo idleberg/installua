@@ -97,7 +97,7 @@ issue. One-off, not a guard.
 **Started:** `tests/ports.rs` checks each port in `tests/ports/` against its
 original by `makensis -V4` trace: the effect lines have to match, and pages
 are left out because Installua only writes MUI2 pages. `example1`,
-`example2` and `primes` port with no workaround.
+`example2`, `primes` and `silent` port with no workaround.
 
 **Rule:** a port that needs a missing feature or hits a bug waits. The fix
 goes into Installua first, and the port follows once it is in.
@@ -108,7 +108,11 @@ Waiting on a fix:
   MUI2 hooks, and nothing else: `.onSelChange`, `.onInstSuccess`,
   `.onInstFailed`, `.onVerifyInstDir`, `.onGUIEnd`, `.onRebootFailed` and
   their `un.` twins have no spelling. No census counts callbacks, so `todo 0`
-  never saw them.
+  never saw them. — fixed: every callback is an entry of its block, with
+  `onUninstSuccess`/`onUninstFailed` in the uninstaller as NSIS spells them.
+  A second one, or the other half's spelling, is an error; `func` no longer
+  takes a callback name; a `memento {}` save goes first in the author's
+  `onInstSuccess` (golden `callbacks`).
 - **`silent`:** `file()` has no `/oname=`. The census keeps only the first
   alternative of `File`'s syntax, so the rename form was never offered.
   — fixed: `file(p, { outName = … })`, an overlay flag the snapshot lacks,

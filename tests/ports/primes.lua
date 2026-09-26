@@ -10,7 +10,6 @@ attributes {
 	allowRootDirInstall = true,
 	installDir = EXEDIR,
 	requestExecutionLevel = "user",
-	unicode = false,
 }
 
 func("doPrimes", function()

@@ -514,24 +514,26 @@ fn top_level<'a>(resolved: &mut Resolved<'a>, diags: &mut Diagnostics) {
 /// does not change. Rejecting the name outright is the answer that reads the
 /// same either way — and every one of these has a spelling that works.
 ///
-/// Deliberately **not** the whole of NSIS's `.`-led callback namespace:
-/// `func(".onVerifyInstDir", …)` is the only way to write that callback today,
-/// and this compiler generates nothing by that name.
-fn reserved(name: &str) -> Option<&'static str> {
-    if name == ".onInit" || name == "un.onInit" {
-        return Some(
-            "write `onInit(function() … end)` among the entries of `installer {}` or \
-             `uninstaller {}` — the `.` and the `un.` are the compiler's",
-        );
+/// That includes every callback NSIS calls by name, since each is written as an
+/// entry of its block, which the compiler lowers to the function.
+fn reserved(name: &str) -> Option<String> {
+    if let Some(word) = crate::lower::callback_word(name) {
+        return Some(format!(
+            "write `{word}(function() … end)` among the entries of `installer {{}}` or \
+             `uninstaller {{}}` — the `.` and the `un.` are the compiler's"
+        ));
     }
     if name.starts_with("mui.") || name.starts_with("un.mui.") {
         return Some(
             "`mui.` is where the page callbacks and MUI2 hooks land: write the code on the page \
-             or the block that runs it, and the compiler names the function",
+             or the block that runs it, and the compiler names the function"
+                .into(),
         );
     }
     if name.starts_with(crate::cfg::LABEL_PREFIX) {
-        return Some("that prefix is the compiler's, for the labels and callbacks it invents");
+        return Some(
+            "that prefix is the compiler's, for the labels and callbacks it invents".into(),
+        );
     }
     None
 }

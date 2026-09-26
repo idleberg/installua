@@ -21,6 +21,7 @@ use installua::diag::{Code, Diagnostics};
 /// of a warning whose subject compiles perfectly well.
 const GOLDENS: &[(&str, &[Code])] = &[
     ("build-time", &[]),
+    ("callbacks", &[]),
     ("components", &[]),
     ("control-flow", &[]),
     ("dialog", &[]),

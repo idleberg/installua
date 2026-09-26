@@ -140,7 +140,8 @@ write `root = SHCTX`, so each mode keeps its own choice.
 Only installer sections can remember. The compiler writes the header's lines:
 `MementoSectionEx` and `MementoSectionEnd` around each remembered section,
 `MementoSectionDone` after the last one, `MementoSectionRestore` at the start
-of `.onInit` and `MementoSectionSave` in an `.onInstSuccess` of its own.
+of `.onInit` and `MementoSectionSave` at the start of `.onInstSuccess`, which
+it writes itself when the block has no `onInstSuccess`.
 
 ## Reading and changing a section while it runs
 

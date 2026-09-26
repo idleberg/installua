@@ -17,8 +17,8 @@
 //! - `MementoSectionDone` after the last section;
 //! - `MementoSectionRestore` in the init prelude, after `multiUser {}`'s, since
 //!   an `SHCTX` root is only decided once that has run;
-//! - `MementoSectionSave` in an `.onInstSuccess` of its own. The language has
-//!   no spelling for that callback, so the compiler's is the only one.
+//! - `MementoSectionSave` first in `.onInstSuccess`: the author's, when the
+//!   block has an `onInstSuccess`, or else one of its own.
 //!
 //! `remember` takes the id rather than `true`: it is the registry value's name,
 //! and the header says it must not change between versions. A minted index or

@@ -1399,7 +1399,20 @@ const LANGUAGE: &[(&str, &str)] = &[
         "      - type: any\n      - type: any\n        required: false\n",
     ),
     ("func", "      - type: string\n      - type: function\n"),
+    // Every callback, both halves' spellings: one global each to selene,
+    // which cannot see the block they are written in.
     ("onInit", "      - type: function\n"),
+    ("onInstSuccess", "      - type: function\n"),
+    ("onInstFailed", "      - type: function\n"),
+    ("onUninstSuccess", "      - type: function\n"),
+    ("onUninstFailed", "      - type: function\n"),
+    ("onVerifyInstDir", "      - type: function\n"),
+    ("onGUIEnd", "      - type: function\n"),
+    ("onSelChange", "      - type: function\n"),
+    ("onRebootFailed", "      - type: function\n"),
+    ("onGUIInit", "      - type: function\n"),
+    ("onUserAbort", "      - type: function\n"),
+    ("onMouseOverSection", "      - type: function\n"),
     ("include", "      - type: string\n"),
     // The default is typed by the declaration and not by selene: `any` is as
     // much as a positional model can say about a value whose type is the point.

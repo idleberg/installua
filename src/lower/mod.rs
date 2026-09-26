@@ -235,11 +235,10 @@ const STRETCH_MODES: &[&str] = &[
 /// A hook MUI2 calls from a callback of its own: a define holding a function
 /// name, and the function beside it.
 ///
-/// Three of the four NSIS callbacks a MUI2 script wants are **MUI2's** —
-/// `MUI2.nsh` writes `.onGUIInit`, `.onUserAbort` and `.onMouseOverSection`
-/// itself — so a script cannot write them and this is the only door in. `onInit`
-/// is not here for exactly that reason: NSIS's `.onInit` is nobody else's, so
-/// the compiler writes it directly.
+/// Three of NSIS's callbacks are **MUI2's** — `MUI2.nsh` writes `.onGUIInit`,
+/// `.onUserAbort` and `.onMouseOverSection` itself — so a script cannot write
+/// them and this is the only door in. The rest are in [`CALLBACKS`] for exactly
+/// that reason: nobody else writes them, so the compiler writes them directly.
 #[derive(Clone, Copy, Debug)]
 struct MuiHook {
     /// The word written in the block, which is NSIS's own name for the callback
@@ -289,6 +288,44 @@ impl MuiHook {
             Half::Uninstaller => self.uninstall,
         }
     }
+}
+
+/// The callbacks NSIS calls by name, as its `build.cpp` resolves them, less the
+/// three [`MUI_HOOKS`]. Each half has the same ten, except that the
+/// uninstaller's two outcomes say `Uninst` where the installer's say `Inst`.
+/// The words are NSIS's, so a script being ported greps for them and finds
+/// them, and a half's list is by index.
+const CALLBACKS: [[&str; 7]; 2] = [
+    [
+        "onInit",
+        "onInstSuccess",
+        "onInstFailed",
+        "onVerifyInstDir",
+        "onGUIEnd",
+        "onSelChange",
+        "onRebootFailed",
+    ],
+    [
+        "onInit",
+        "onUninstSuccess",
+        "onUninstFailed",
+        "onVerifyInstDir",
+        "onGUIEnd",
+        "onSelChange",
+        "onRebootFailed",
+    ],
+];
+
+/// The entry that writes `name`, when it is a callback NSIS calls: `.onSelChange`
+/// is `onSelChange`, and so is `un.onSelChange`.
+pub(crate) fn callback_word(name: &str) -> Option<&str> {
+    [(".", Half::Installer), ("un.", Half::Uninstaller)]
+        .into_iter()
+        .find_map(|(prefix, half)| {
+            name.strip_prefix(prefix).filter(|word| {
+                CALLBACKS[half.index()].contains(word) || MuiHook::named(word).is_some()
+            })
+        })
 }
 
 /// The fields NSIS reads once for the whole script, so only `installer {}` has
@@ -1074,7 +1111,7 @@ fn lower_once(
         mui: false,
         global_inits: Vec::new(),
         claims: BTreeMap::new(),
-        on_init: [false, false],
+        callbacks: BTreeMap::new(),
         init_prelude: [Vec::new(), Vec::new()],
         lang_strings: BTreeSet::new(),
         multi_user: None,
@@ -1122,9 +1159,10 @@ struct Lowerer<'a, 'p> {
     /// define it is addressed through is [`index_name`] of the two, and so is
     /// not stored beside them.
     claims: BTreeMap<String, Claim>,
-    /// Whether an `.onInit` was written, so that one is not invented twice. The
-    /// uninstaller's is the second slot (`languages {}` needs both).
-    on_init: [bool; 2],
+    /// The callbacks a block has written, by their NSIS name, so that one is
+    /// not written twice and `.onInit` and `.onInstSuccess` are not invented
+    /// beside the author's.
+    callbacks: BTreeMap<String, Span>,
     /// Lines the compiler owes the *first* of each half's init callback:
     /// `MUI_LANGDLL_DISPLAY` and `MUI_UNGETLANGUAGE`, which have to run before
     /// anything reads `$LANGUAGE` and so cannot wait for a body to ask for them.
@@ -1331,7 +1369,11 @@ impl<'p> Lowerer<'_, 'p> {
                 Half::Installer => std::mem::take(&mut self.global_inits),
                 Half::Uninstaller => Vec::new(),
             };
-            if self.on_init[half.index()] || (prelude.is_empty() && inits.is_empty()) {
+            let written = self.callbacks.contains_key(match half {
+                Half::Installer => ".onInit",
+                Half::Uninstaller => "un.onInit",
+            });
+            if written || (prelude.is_empty() && inits.is_empty()) {
                 continue;
             }
             // The uninstaller's is worth nothing when there is no uninstaller:
@@ -1356,8 +1398,8 @@ impl<'p> Lowerer<'_, 'p> {
                 body,
             });
         }
-        // `memento {}`'s save. The one `.onInstSuccess` there is: the language
-        // has no spelling for the callback, so nothing else writes one.
+        // `memento {}`'s save, in an `.onInstSuccess` of its own when the
+        // author wrote none. One they did write took it as its first line.
         if let Some(span) = self.memento
             && self.requires.headers.contains("Memento")
         {
@@ -1370,7 +1412,8 @@ impl<'p> Lowerer<'_, 'p> {
                     )
                     .note("write `remember = \"id\"` on each section whose box should be kept"),
                 );
-            } else if !self.remembered.is_empty() {
+            } else if !self.remembered.is_empty() && !self.callbacks.contains_key(".onInstSuccess")
+            {
                 let (body, _) = self.body_with(
                     span,
                     Some(Half::Installer),
@@ -5214,11 +5257,26 @@ impl<'p> Lowerer<'_, 'p> {
                 }
             }
             "group" => self.group(value, half, None),
-            "onInit" => self.callback(value, half, "onInit"),
+            other if CALLBACKS[half.index()].contains(&other) => self.callback(value, half, other),
+            // The other half's outcome, which NSIS spells differently.
+            other if CALLBACKS[1 - half.index()].contains(&other) => {
+                let (this, that) = match half {
+                    Half::Installer => ("installer", other.replacen("Uninst", "Inst", 1)),
+                    Half::Uninstaller => ("uninstaller", other.replacen("Inst", "Uninst", 1)),
+                };
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        value.span(),
+                        format!("`{other}` is not a callback of the {this}"),
+                    )
+                    .note(format!("the {this}'s is `{that}`")),
+                );
+            }
             other => match MuiHook::named(other) {
                 // The MUI2 hooks, which are entries and not fields for the
-                // reason `onInit` is: a block's positional entries are its
-                // declarations of code, and its named fields are its settings.
+                // reason the callbacks are: a block's positional entries are
+                // its declarations of code, and its named fields its settings.
                 Some(hook) => self.mui_callback(value, half, hook),
                 None => self.todo(value.span(), &format!("`{other}` here")),
             },
@@ -5488,8 +5546,8 @@ impl<'p> Lowerer<'_, 'p> {
         }
     }
 
-    /// `onInit(function() … end)`. The leading `.` is emitted, never written,
-    /// and so is the `un.` on the uninstaller's.
+    /// `onInit(function() … end)` and the rest of [`CALLBACKS`]. The leading
+    /// `.` is emitted, never written, and so is the `un.` on the uninstaller's.
     fn callback(&mut self, value: &Expr, half: Half, which: &str) {
         let Expr::Call { args, .. } = value else {
             return;
@@ -5521,24 +5579,42 @@ impl<'p> Lowerer<'_, 'p> {
             Half::Installer => format!(".{which}"),
             Half::Uninstaller => format!("un.{which}"),
         };
+        if let Some(&first) = self.callbacks.get(&name) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::DuplicateBlock,
+                    value.span(),
+                    format!("`{which}` appears more than once"),
+                )
+                .note_at("the first one is at", first)
+                .note("NSIS calls one function by that name, so there is exactly one"),
+            );
+            return;
+        }
+        self.callbacks.insert(name.clone(), value.span());
         // The global initialisers go in front of whatever the user wrote, so a
         // `.onInit` that reads a global sees its value.
         let block = if half == Half::Installer && which == "onInit" {
-            self.on_init[half.index()] = true;
             let mut all = std::mem::take(&mut self.global_inits);
             all.extend(block.iter().cloned());
             all
         } else {
-            if which == "onInit" {
-                self.on_init[half.index()] = true;
-            }
             block.clone()
         };
         // The `languages {}` line goes in front of everything, including the
         // global initialisers: one of them may read `lang.greeting`, and until
-        // the dialog has run `$LANGUAGE` is whatever the system said.
+        // the dialog has run `$LANGUAGE` is whatever the system said. And
+        // `memento {}`'s save goes first in the installer's `.onInstSuccess`,
+        // which is where the header wants it and where it lands when the
+        // compiler has to write the callback itself.
         let prelude = match which {
             "onInit" => std::mem::take(&mut self.init_prelude[half.index()]),
+            "onInstSuccess" if self.requires.headers.contains("Memento") => {
+                vec![ir::Instruction::new(
+                    "!insertmacro",
+                    vec![ir::Arg::raw("MementoSectionSave")],
+                )]
+            }
             _ => Vec::new(),
         };
         // The one callback with a rule of its own: `SetSilent` is read before

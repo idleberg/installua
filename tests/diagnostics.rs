@@ -840,13 +840,16 @@ local c = nil
 /// `Function .onInit` in the emitted script, rejected by `makensis` against a
 /// line the author never wrote. Every name below is generated somewhere in
 /// `lower` — `.onInit` from a global initialiser as readily as from an
-/// `onInit(…)` block, `mui.…` from a page's callbacks, and the label prefix from
+/// `onInit(…)` block, every other callback from its entry, `mui.…` from a page's callbacks, and the label prefix from
 /// everything the CFG invents.
 #[test]
 fn a_func_may_not_take_a_generated_name() {
     for name in [
         ".onInit",
         "un.onInit",
+        ".onVerifyInstDir",
+        "un.onUninstSuccess",
+        ".onGUIInit",
         "mui.welcome.pre",
         "un.mui.onGUIInit",
         "__GENERATED_endif_0",
@@ -862,16 +865,34 @@ fn a_func_may_not_take_a_generated_name() {
     }
 }
 
-/// And the `.`-led namespace is NSIS's, not this compiler's: the callbacks it
-/// generates nothing for stay writable, because `func` is the only way to write
-/// them at all.
+/// One callback, one function: a second `onSelChange` in the same block is
+/// refused on its line, not as NSIS's duplicate-function error on the output.
+/// The other half's spelling is its own error, since the uninstaller says
+/// `Uninst` where the installer says `Inst`.
 #[test]
-fn a_callback_the_compiler_does_not_generate_is_still_writable() {
-    let diags = compile("func(\".onVerifyInstDir\", function() end)");
+fn a_callback_is_written_once_and_in_its_own_half() {
+    let program = |entries: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ page.instFiles {{}}, section(\"Core\", function() end), {entries} }}"
+        )
+    };
+    let twice = compile(&program(
+        "onSelChange(function() end), onSelChange(function() end),",
+    ));
     assert!(
-        !diags.contains(Code::DuplicateBlock),
+        twice
+            .iter()
+            .any(|d| d.code == Code::DuplicateBlock && d.message.contains("onSelChange")),
         "{}",
-        diags.render("install.lua")
+        twice.render("install.lua")
+    );
+    let other = compile(&program("onUninstSuccess(function() end),"));
+    assert!(
+        other.iter().any(|d| d.code == Code::UnknownField
+            && d.notes.iter().any(|n| n.text.contains("`onInstSuccess`"))),
+        "{}",
+        other.render("install.lua")
     );
 }
 
