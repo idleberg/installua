@@ -37,4 +37,4 @@ brew install idleberg/asahi/installua
 
 ### GitHub
 
-No package manager? Download the installer straight from the [releases](https://github.com/idleberg/installua/releases) page.
+No package manager? Download the installer straight from the [releases](https://github.com/idleberg/installua/releases/latest) page.
