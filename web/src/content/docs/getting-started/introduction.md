@@ -3,7 +3,7 @@ title: Why Installua?
 description: What is Installua and why do you want to use it.
 ---
 
-For more than 20 years, [NSIS](https://nsis.sourceforge.io/) has proven to be a trusted solution for writing custom Windows setup routines, installing millions of apps on computers worldwide. It continues to serve as the foundation for tools such as **CPack**, **Electron Builder** or **Pynsist**. While the scripting language is simple, it has its quirks that may frustrate developers.
+For more than 25 years, [NSIS](https://nsis.sourceforge.io/) has proven to be a trusted solution for writing custom Windows setup routines, installing millions of apps on computers worldwide. It continues to serve as the foundation for tools such as **CPack**, **Electron Builder** or **Pynsist**. While the scripting language is simple, it has its quirks that may frustrate developers.
 
 ## The language
 
