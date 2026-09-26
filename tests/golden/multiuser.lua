@@ -2,7 +2,8 @@
 -- fields are `MULTIUSER_*` defines above its `!include`; the init macros are
 -- the first lines of each half's `.onInit`, ahead of what the script wrote
 -- there; and the install-mode page is a MUI2 page among the others, taking the
--- same header text and hooks.
+-- same header text and hooks. A remembered section keeps its box under
+-- `SHCTX`, so each mode has its own.
 
 attributes {
 	name = "Shared",
@@ -18,6 +19,13 @@ multiUser {
 	modeRegistry = { key = "Software/Shared", value = "Installed" },
 }
 
+local docs = section { "Documentation",
+	remember = true,
+	body = function()
+		setOutPath(INSTDIR)
+	end,
+}
+
 installer {
 	onInit(function()
 		detailPrint("ready")
@@ -25,6 +33,7 @@ installer {
 
 	page.welcome {},
 	page.installMode { headerText = "Who is this for?" },
+	page.components {},
 	page.directory {},
 	page.instFiles {},
 
@@ -33,6 +42,8 @@ installer {
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
 		writeReg(SHCTX, "Software/Shared", "Installed", "1")
 	end),
+
+	docs,
 }
 
 uninstaller {

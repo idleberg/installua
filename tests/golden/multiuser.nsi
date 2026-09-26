@@ -5,8 +5,11 @@ Unicode true
 !define MULTIUSER_INSTALLMODE_INSTDIR "Shared"
 !define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_KEY "Software\Shared"
 !define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_VALUENAME "Installed"
+!define MEMENTO_REGISTRY_ROOT SHCTX
+!define MEMENTO_REGISTRY_KEY "Software\Shared\Components"
 
 !include "MUI2.nsh"
+!include "Memento.nsh"
 !include "MultiUser.nsh"
 
 Name "Shared"
@@ -16,6 +19,7 @@ OutFile "multiuser.exe"
 
 !define MUI_PAGE_HEADER_TEXT "Who is this for?"
 !insertmacro MULTIUSER_PAGE_INSTALLMODE
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 
@@ -30,17 +34,28 @@ Section "Core"
   WriteRegStr SHCTX "Software\Shared" "Installed" 1
 SectionEnd
 
+!insertmacro MementoSectionEx "" "Documentation" docs SEC_docs
+  SetOutPath $INSTDIR
+!insertmacro MementoSectionEnd
+
 Section "un.Uninstall"
   DeleteRegKey SHCTX "Software\Shared"
   Delete "$INSTDIR\uninstall.exe"
   RMDir $INSTDIR
 SectionEnd
 
+!insertmacro MementoSectionDone
+
 Function .onInit
   !insertmacro MULTIUSER_INIT
+  !insertmacro MementoSectionRestore
   DetailPrint "ready"
 FunctionEnd
 
 Function un.onInit
   !insertmacro MULTIUSER_UNINIT
+FunctionEnd
+
+Function .onInstSuccess
+  !insertmacro MementoSectionSave
 FunctionEnd
