@@ -3,7 +3,7 @@ title: Third-party plugins
 description: The plugins declared from their own source and a corpus of real scripts, and the methods left out.
 ---
 
-Six, chosen on a scan of 984 real-world scripts.
+Nine, eight of them chosen on a scan of 984 real-world scripts.
 
 ## EnVar
 
@@ -343,11 +343,9 @@ separators first. Hashing a literal string with a `/` in it is what that costs.
 
 ## SimpleFC
 
-NSIS Simple Firewall, 24 corpus scripts, and the **only** firewall plugin
-declared here — see [`nsisFirewall`](/reference/commands/not-available/#third-party-plugins-that-stay-out)
-for the one that was dropped and why. It drives `INetFwPolicy2`, so it reaches
-per-profile rules, direction, ports and ICMP types that the older plugin cannot
-express, and it ships an ANSI **and** a Unicode build, both at 1.21, both named
+NSIS Simple Firewall, 24 corpus scripts. It drives `INetFwPolicy2`, so it reaches
+per-profile rules, direction, ports and ICMP types that
+[`nsisFirewallW`](#nsisfirewallw) cannot express, and it ships an ANSI **and** a Unicode build, both at 1.21, both named
 `SimpleFC.dll`. Source: `Source/SimpleFC.dpr`, and it is the first of these read from
 **Delphi** rather than C++ — the idiom is `PopString` / `PushString` from
 `nsis.pas`, but the counting is the same.
@@ -435,6 +433,32 @@ prefer it.
 
 `_Unload` is deliberately absent: it exists so a script using `/NOUNLOAD` can
 release the DLL, and Installua emits no `/NOUNLOAD`.
+
+**The Unicode build ships as `nsProcessW.dll`**, and version 1.6's readme says to
+rename it to `nsProcess.dll`. Do that: an Installua installer is always Unicode,
+and the declaration calls `nsProcess::`, so it loads whichever DLL has that name.
+
+## nsisFirewallW
+
+nsisFirewall 1.2, 1 corpus script: add a program to the Windows Firewall
+exception list, or take it off again.
+Source: `nsisFirewall.cpp`, from <http://wiz0u.free.fr/prog/nsisFirewall/>.
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.addAuthorizedApplication(path, name)` | `path`, `string` | HRESULT (`int`) |
+| `.removeAuthorizedApplication(path)` | `path` | HRESULT (`int`) |
+
+**Declared under its Unicode name.** Version 1.2 added Unicode as a DLL of its
+own, `nsisFirewallW.dll`, and NSIS finds a plugin's DLL by the name in front of
+the `::` — so the Unicode build is called as `nsisFirewallW::…`, and that is the
+name this declaration has. The ANSI `nsisFirewall` cannot load in an Installua
+installer at all.
+
+`0` is success and anything below it is an HRESULT, which is why the code is
+`int` rather than `uint`. `name` is the title the rule gets in the firewall's
+control panel. The plugin uses the older `INetFwMgr` interface and knows nothing
+of firewall profiles; [`SimpleFC`](#simplefc) is the one for anything more.
 
 ## AccessControl
 

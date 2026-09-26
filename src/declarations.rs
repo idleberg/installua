@@ -341,6 +341,10 @@ const SHIPPED: &[(&str, &str)] = &[
         "nsProcess.toml",
         include_str!("declarations/nsProcess.toml"),
     ),
+    (
+        "nsisFirewallW.toml",
+        include_str!("declarations/nsisFirewallW.toml"),
+    ),
 ];
 
 /// What one set of declaration files has already declared, so that a second

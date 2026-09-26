@@ -1,0 +1,18 @@
+# nsisFirewall 1.2, third-party: <http://wiz0u.free.fr/prog/nsisFirewall/>.
+# The Unicode build, which is a DLL of its own name: `nsisFirewallW.dll`.
+#
+# See docs/plugin-reference.md.
+
+[[plugin]]
+name = "nsisFirewallW"
+method = "addAuthorizedApplication"
+nsis = "nsisFirewallW::AddAuthorizedApplication"
+params = ["path", "string"]
+outputs = ["int"]
+
+[[plugin]]
+name = "nsisFirewallW"
+method = "removeAuthorizedApplication"
+nsis = "nsisFirewallW::RemoveAuthorizedApplication"
+params = ["path"]
+outputs = ["int"]

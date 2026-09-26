@@ -211,7 +211,7 @@ second is what `page.custom` emits.
 
 The same decision, made against a scan of 984 real-world scripts. Each of these
 is common enough to have been considered and turned down for a stated reason —
-and all but the last are about the **declaration format** rather than about the
+and every reason is about the **declaration format** rather than about the
 plugin, which is what makes the list worth keeping. All remain
 callable through [`raw`](/reference/commands/plugins-and-headers/#raw), and any of them can be declared by a project
 in five lines of [its own `.toml`](/reference/commands/plugins-and-headers/#declaring-a-third-party-plugin-or-header).
@@ -225,7 +225,6 @@ in five lines of [its own `.toml`](/reference/commands/plugins-and-headers/#decl
 | `Nsis7z.extractWithCallback` | 5   | Not the register protocol the six `FileFunc`/`TextFunc` macros use — it pushes its two values on the stack. It stays out a step earlier than that: its second argument is the **address** of a function, `params` has no type for one, and `GetFunctionAddress` has no Lua spelling. See [the plugin reference](/reference/plugins/what-stays-out/#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
 | `nsJSON`                 | 3       | Its node path is a **variable number of positional strings** — one to four across 25 call sites — and `params` is a fixed list, so a declaration would have to pick a depth and miscount the `Pop`s at every other one. The repeated `/index` run its readme advertises turns out to appear in no script at all. See [the plugin reference](/reference/plugins/what-stays-out/#nsjsons-blocker-is-its-path-not-its-flags). |
 | `Inetc.post`             | 2       | Its POST body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch — and a `params` entry is emitted after the flags. `get`, `head` and `put` ship declared; only this entry point has an argument in front. |
-| `nsisFirewall`           | 1       | The only entry turned down over the plugin rather than the format: its Unicode build is a differently *named* DLL. Version 1.2 (2009, the last) added Unicode as **`nsisFirewallW`**, and NSIS resolves `nsisFirewall::…` to `nsisFirewall.dll` — so a declaration spelling the ANSI token cannot load in an Installua installer, which is always `Unicode`. Use [`SimpleFC`](/reference/plugins/third-party-plugins/#simplefc), which ships an ANSI and a Unicode build under one name and reaches `INetFwPolicy2` besides. |
 
 ## Rejected NSIS commands
 
