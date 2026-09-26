@@ -26,12 +26,12 @@
 //! the compiler already does first; the strings `page.installMode` needs are
 //! keyed on the page macro rather than on it.
 
-use crate::ast::{Expr, Stmt, TableField};
+use crate::ast::{Expr, Name, Stmt, TableField};
 use crate::diag::{Code, Diagnostic, Span};
 use crate::ir;
 use crate::resolve::ConstValue;
 
-use super::{Half, Lowerer, list};
+use super::{BodyLowerer, Half, Lowerer, Requirements, list};
 
 const FIELDS: &[&str] = &[
     "executionLevel",
@@ -275,5 +275,61 @@ impl Lowerer<'_, '_> {
             name: name.to_string(),
             value,
         });
+    }
+}
+
+/// `multiUser.installMode` and `multiUser.privileges`: the header's two `Var`s,
+/// which `MULTIUSER_INIT` and `MULTIUSER_UNINIT` fill in. Read-only, because
+/// the header changes mode through its own functions, and a bare write would
+/// leave `SHCTX` and `$INSTDIR` on the old one.
+const VARS: &[(&str, &str)] = &[
+    ("installMode", "$MultiUser.InstallMode"),
+    ("privileges", "$MultiUser.Privileges"),
+];
+
+/// The variable `multiUser.x` reads, folded like a `lang.x`; anything else
+/// falls through to [`BodyLowerer::multi_user_field`] for its diagnostic.
+pub(super) fn var_ref(expr: &Expr, requires: &Requirements) -> Option<&'static str> {
+    let Expr::Field { base, name, .. } = expr else {
+        return None;
+    };
+    if !matches!(&**base, Expr::Name(base) if base.text == "multiUser")
+        || !requires.headers.contains("MultiUser")
+    {
+        return None;
+    }
+    VARS.iter()
+        .find(|(field, _)| *field == name.text)
+        .map(|(_, var)| *var)
+}
+
+impl BodyLowerer<'_, '_> {
+    /// A `multiUser.x` that [`var_ref`] did not fold, or any write to one.
+    pub(super) fn multi_user_field(&mut self, field: &Name, write: bool) {
+        let diagnostic = if !self.requires.headers.contains("MultiUser") {
+            Diagnostic::error(
+                Code::MissingAttribute,
+                field.span,
+                format!("`multiUser.{}` needs a `multiUser {{}}` block", field.text),
+            )
+            .note("the header that sets it is only included beside one")
+        } else if !VARS.iter().any(|(name, _)| *name == field.text) {
+            Diagnostic::error(
+                Code::UnknownField,
+                field.span,
+                format!("`{}` is not a field of `multiUser`", field.text),
+            )
+            .note("the two are `installMode` and `privileges`")
+        } else if write {
+            Diagnostic::error(
+                Code::BadFieldValue,
+                field.span,
+                format!("`multiUser.{}` is not something to assign to", field.text),
+            )
+            .note("the user picks the mode, on `page.installMode` or with `commandLine = true`")
+        } else {
+            return;
+        };
+        self.diags.push(diagnostic);
     }
 }

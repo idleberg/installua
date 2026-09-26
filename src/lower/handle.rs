@@ -339,6 +339,10 @@ impl BodyLowerer<'_, '_> {
                 .push(diagnostic.note("the names are `$(^…)`'s, as `Source/lang.cpp` lists them"));
             return None;
         }
+        if matches!(base, Expr::Name(name) if name.text == "multiUser") {
+            self.multi_user_field(field, false);
+            return None;
+        }
 
         match self.addressed(base, base.span())? {
             Addressed::Section(handle) => self.handle_read(&handle, field, dest),
@@ -349,6 +353,9 @@ impl BodyLowerer<'_, '_> {
 
     /// `a.b = c`, likewise.
     pub(super) fn field_write(&mut self, base: &Expr, field: &Name, value: &Expr) {
+        if matches!(base, Expr::Name(name) if name.text == "multiUser") {
+            return self.multi_user_field(field, true);
+        }
         match self.addressed(base, base.span()) {
             Some(Addressed::Section(handle)) => self.handle_write(&handle, field, value),
             Some(Addressed::Control(handle)) => self.control_write(&handle, field, value),

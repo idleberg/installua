@@ -97,9 +97,10 @@ issue. One-off, not a guard.
 **Started:** `tests/ports.rs` checks each port in `tests/ports/` against its
 original by `makensis -V4` trace: the effect lines have to match, and pages
 are left out because Installua only writes MUI2 pages. `example1`,
-`example2`, `Memento`, `one-section`, `primes`, `silent` and the five
-`Modern UI/` examples port with no workaround. A line the original writes
-inside a macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
+`example2`, `Memento`, `MultiUser`, `one-section`, `primes`, `silent` and
+the five `Modern UI/` examples port with no workaround. A line the original
+writes inside a macro is invisible to `-V4`, so `HIDDEN` lists the port's
+copy; it also lists `MultiUser`'s `File`, whose source is a `!tempfile`.
 
 **Rule:** a port that needs a missing feature or hits a bug waits. The fix
 goes into Installua first, and the port follows once it is in.
@@ -152,6 +153,13 @@ Waiting on a fix:
   would undo an author's `x.selected = false` instead. The trace cannot see
   it: the restore is a macro. — fixed: `memento.restore()` places it, and the
   compiler's first one is left out (golden `memento`).
+
+- **`MultiUser`:** `$(^Name)` had no spelling, and the original names its
+  folder and uninstall key by it. — fixed: `lang.builtin.<name>`.
+- **`MultiUser`:** `$MultiUser.InstallMode` had no spelling, and the original
+  writes it as a value name so the uninstaller finds the mode. — fixed:
+  `multiUser.installMode` and `multiUser.privileges`, read-only (golden
+  `multiuser`).
 
 Not portable: `rtest` tests `GetLabelAddress` and `Call` through an
 address, both rejected.

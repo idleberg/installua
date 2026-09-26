@@ -144,6 +144,34 @@ installer {
 }
 ```
 
+What the header decided can be read while the installer runs, but not
+changed: the user picks the mode, on the page or on the command line.
+
+| NSIS                     | Installua                                                               |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `$MultiUser.InstallMode` | `multiUser.installMode` → `"AllUsers"` or `"CurrentUser"`               |
+| `$MultiUser.Privileges`  | `multiUser.privileges` → `"Admin"`, `"Power"`, `"User"` or `"Guest"`    |
+
+Written as a value's name, the mode is how an uninstaller finds a per-user
+install: only that one writes a value named `CurrentUser`.
+
+```lua
+attributes { name = "Example", outFile = "example-setup.exe" }
+
+multiUser {
+	executionLevel = "highest",
+	folder = "Example",
+	modeRegistry = { key = "Software/Example", value = "CurrentUser" },
+}
+
+installer {
+	section("Core", function()
+		setOutPath(INSTDIR)
+		writeReg(SHCTX, "Software/Example", multiUser.installMode, 1)
+	end),
+}
+```
+
 ## Version info
 
 `VIProductVersion` is the four-part version Explorer shows on the Properties

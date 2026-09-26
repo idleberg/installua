@@ -438,6 +438,26 @@ fn multi_user_says_what_is_wrong() {
             format!("{head}uninstaller {{ page.installMode {{}} }}"),
             Code::UnknownField,
         ),
+        (
+            format!(
+                "{head}installer {{ section(\"C\", function() detailPrint(multiUser.privileges) end) }}"
+            ),
+            Code::MissingAttribute,
+        ),
+        (
+            format!(
+                "{head}multiUser {{ executionLevel = \"admin\" }}\n\
+                 installer {{ section(\"C\", function() detailPrint(multiUser.mode) end) }}"
+            ),
+            Code::UnknownField,
+        ),
+        (
+            format!(
+                "{head}multiUser {{ executionLevel = \"admin\" }}\n\
+                 installer {{ section(\"C\", function() multiUser.installMode = \"x\" end) }}"
+            ),
+            Code::BadFieldValue,
+        ),
     ] {
         let diags = compile(&source);
         let codes: Vec<Code> = diags.iter().map(|d| d.code).collect();

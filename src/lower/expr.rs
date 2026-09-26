@@ -185,6 +185,14 @@ impl BodyLowerer<'_, '_> {
                     ty: Ty::Str,
                 })
             }
+            field @ Expr::Field { .. }
+                if let Some(var) = super::multi_user::var_ref(field, self.requires) =>
+            {
+                Some(Typed {
+                    arg: ir::Arg::var(var),
+                    ty: Ty::Str,
+                })
+            }
 
             _ => None,
         }

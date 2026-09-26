@@ -4,7 +4,7 @@ Unicode true
 !define MULTIUSER_INSTALLMODE_COMMANDLINE
 !define MULTIUSER_INSTALLMODE_INSTDIR "Shared"
 !define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_KEY "Software\Shared"
-!define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_VALUENAME "Installed"
+!define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_VALUENAME "CurrentUser"
 !define MEMENTO_REGISTRY_ROOT SHCTX
 !define MEMENTO_REGISTRY_KEY "Software\Shared\Components"
 
@@ -31,7 +31,7 @@ OutFile "multiuser.exe"
 Section "Core"
   SetOutPath $INSTDIR
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  WriteRegStr SHCTX "Software\Shared" "Installed" 1
+  WriteRegStr SHCTX "Software\Shared" $MultiUser.InstallMode 1
 SectionEnd
 
 !insertmacro MementoSectionEx "" "Documentation" docs SEC_docs

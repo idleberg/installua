@@ -32,13 +32,15 @@ const PORTS: &[&str] = &[
     "Modern UI/StartMenu",
     "Modern UI/WelcomeFinish",
     "Memento",
+    "MultiUser",
     "one-section",
     "primes",
     "silent",
 ];
 
 /// Lines one side writes inside a macro, where `-V4` prints nothing, and the
-/// other side writes in the open: taken out of the side that shows them.
+/// other side writes in the open, or that cannot match: taken out of both
+/// sides, by prefix.
 const HIDDEN: &[(&str, &str)] = &[
     // `${If} ${Cmd} `MessageBox …``.
     (
@@ -47,6 +49,17 @@ const HIDDEN: &[(&str, &str)] = &[
     ),
     // MUI2 writes it in `MUI_INTERFACE`, and refuses a second one.
     ("Memento", "XPStyle: on"),
+    // The original builds its application into a `!tempfile` with `!makensis`,
+    // and the port installs a stand-in.
+    ("MultiUser", "File: "),
+];
+
+/// Names NSIS reads in any case, which an original does not always write the
+/// way the compiler does.
+const SPELLED: &[(&str, &str)] = &[
+    ("ShCtx", "SHCTX"),
+    ("$InstDir", "$INSTDIR"),
+    ("$SMPrograms", "$SMPROGRAMS"),
 ];
 
 /// Trace lines that differ by design rather than by mistake.
@@ -111,6 +124,9 @@ fn ports_do_what_the_originals_do() {
         // The original installs itself, so it is also the file the port's `file()` reads.
         std::fs::copy(examples.join(format!("{name}.nsi")), directory.join(&file))
             .expect("copy the original");
+        // What MultiUser.nsi builds its pretend application from.
+        std::fs::copy(examples.join("AppGen.nsi"), directory.join("AppGen.nsi"))
+            .expect("copy AppGen.nsi");
         std::fs::write(directory.join("port.nsi"), port(name)).expect("write the port");
 
         let hidden: Vec<&str> = HIDDEN
@@ -119,7 +135,9 @@ fn ports_do_what_the_originals_do() {
             .map(|(_, line)| *line)
             .collect();
         let shown = |trace: String| {
-            let lines = trace.lines().filter(|line| !hidden.contains(line));
+            let lines = trace
+                .lines()
+                .filter(|line| !hidden.iter().any(|h| line.starts_with(h)));
             lines.collect::<Vec<_>>().join("\n")
         };
         let original = shown(trace(&directory, &file, &[]));
@@ -130,7 +148,7 @@ fn ports_do_what_the_originals_do() {
 }
 
 /// The effect lines of one `makensis -V4` run, with an uninstaller section's
-/// `un.` prefix taken off: `Section "Uninstall"` is the same section. Functions
+/// `un.` or `-` prefix taken off: `Section "Uninstall"` is the same section. Functions
 /// are moved after the sections, where Installua writes them. The
 /// attributes above the first section are sorted and deduplicated, because
 /// their order does nothing and Installua writes `Unicode` first. A
@@ -171,7 +189,14 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
         .chain(functions)
         .filter(|line| !line.trim().is_empty() && !DROPPED.iter().any(|p| line.starts_with(p)))
         .map(|line| {
-            let line = line.replacen("Section: \"un.", "Section: \"", 1);
+            let line = line.replacen("Section: \"un.", "Section: \"", 1).replacen(
+                "Section: \"-Uninstall\"",
+                "Section: \"Uninstall\"",
+                1,
+            );
+            let line = SPELLED
+                .iter()
+                .fold(line, |line, (from, to)| line.replace(from, to));
             // A section's define is named from its `local`, with the half.
             let line = line
                 .replacen("->(SEC_", "->(", 1)

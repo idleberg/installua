@@ -6811,7 +6811,8 @@ impl BodyLowerer<'_, '_> {
             if let Expr::Field { base, name, .. } = target
                 && (matches!(**base, Expr::Call { .. })
                     || base.name().is_some_and(|base| {
-                        self.resolved.deferred.contains_key(base)
+                        base == "multiUser"
+                            || self.resolved.deferred.contains_key(base)
                             || self.window_slot(base).is_some()
                     }))
             {
