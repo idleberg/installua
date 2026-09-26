@@ -84,6 +84,15 @@ abbr[title] {
   cursor: help;
 }
 
+/* The search box sits in the code blocks' well rather than on the page colour,
+ * so it reads as a field. Only the desktop layout draws it as a box at all. The
+ * extra `site-search` outranks the component's own scoped rule. */
+@media (min-width: 50rem) {
+  site-search button[data-open-modal] {
+    background-color: var(--ec-frm-edBg);
+  }
+}
+
 .hero>img {
   width: min(60%, 16rem);
 }
