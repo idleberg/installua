@@ -144,6 +144,30 @@ Only installer sections can remember. The compiler writes the header's lines:
 of `.onInit` and `MementoSectionSave` at the start of `.onInstSuccess`, which
 it writes itself when the block has no `onInstSuccess`.
 
+The restore goes first so that a `docs.selected = false` in `onInit` sticks.
+To restore later, after writing a saved state yourself, call
+`memento.restore()` at the top level of the installer's `onInit`, and the
+compiler leaves out its own:
+
+```lua
+memento { root = HKLM, key = "Software/Example/Components" }
+
+installer {
+	page.components {},
+	page.instFiles {},
+
+	section { "Documentation",
+		remember = "docs",
+		body = function() setOutPath(INSTDIR) end,
+	},
+
+	onInit(function()
+		writeReg(HKLM, "Software/Example/Components", "MementoSection_docs", 1)
+		memento.restore()
+	end),
+}
+```
+
 ## One of several
 
 Sections the user picks between, as radio buttons: ticking one unticks the one

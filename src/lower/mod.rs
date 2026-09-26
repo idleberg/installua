@@ -5662,7 +5662,18 @@ impl<'p> Lowerer<'_, 'p> {
         // which is where the header wants it and where it lands when the
         // compiler has to write the callback itself.
         let prelude = match which {
-            "onInit" => std::mem::take(&mut self.init_prelude[half.index()]),
+            "onInit" => {
+                let mut lines = std::mem::take(&mut self.init_prelude[half.index()]);
+                // `memento.restore()` written in the body is the author placing
+                // the restore, so the prelude's goes.
+                if block
+                    .iter()
+                    .any(|stmt| matches!(stmt, Stmt::Call(call) if memento::restores(call)))
+                {
+                    lines.retain(|line| !memento::is_restore(line));
+                }
+                lines
+            }
             "onSelChange" => std::mem::take(&mut self.sel_prelude[half.index()]),
             "onInstSuccess" if self.requires.headers.contains("Memento") => {
                 vec![ir::Instruction::new(
@@ -6977,6 +6988,10 @@ impl BodyLowerer<'_, '_> {
                     .note("it skips to the next iteration of the innermost `while` or `for`"),
                 ),
             }
+            return;
+        }
+        if memento::restores(call) {
+            self.memento_restore(call);
             return;
         }
 

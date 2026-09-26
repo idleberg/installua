@@ -146,11 +146,12 @@ Waiting on a fix:
 - **`Memento`:** a group inside a group was `not-yet-implemented`, on
   purpose: "one level deep". — fixed: a group holds groups, inline or by
   `local` (golden `sections`).
-- **`Memento`:** open. `MementoSectionRestore` goes first in `.onInit`,
-  before the author's code; the original puts it last, after writing an
-  example state to the registry. Restore first, that state is written too
-  late to load. Restore last, an author's `x.selected = false` in `onInit` is
-  undone by the restore. The trace cannot see it: the restore is a macro.
+- **`Memento`:** `MementoSectionRestore` goes first in `.onInit`, before the
+  author's code; the original puts it last, after writing an example state to
+  the registry, so that state was written too late to load. Moving it last
+  would undo an author's `x.selected = false` instead. The trace cannot see
+  it: the restore is a macro. — fixed: `memento.restore()` places it, and the
+  compiler's first one is left out (golden `memento`).
 
 Not portable: `rtest` tests `GetLabelAddress` and `Call` through an
 address, both rejected.

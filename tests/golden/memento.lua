@@ -1,7 +1,8 @@
 -- Memento.nsh, lowered through the header. `remember` swaps a section's
 -- `Section`/`SectionEnd` for the header's pair and names the registry value
 -- its box is kept in; the compiler adds the end marker after the last section,
--- the restore to `.onInit` and the save to an `.onInstSuccess` of its own.
+-- the save to an `.onInstSuccess` of its own, and the restore first in
+-- `.onInit` — here, where `memento.restore()` places it instead.
 
 attributes {
 	name = "Kept",
@@ -37,4 +38,9 @@ installer {
 			setOutPath(INSTDIR)
 		end,
 	},
+
+	onInit(function()
+		writeReg(HKLM, "Software/Kept/Components", "MementoSection_samples", 1)
+		memento.restore()
+	end),
 }

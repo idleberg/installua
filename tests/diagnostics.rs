@@ -458,6 +458,24 @@ fn memento_says_what_is_wrong() {
             Code::MissingAttribute,
         ),
         (
+            format!("{head}installer {{ onInit(function() memento.restore() end) }}"),
+            Code::MissingAttribute,
+        ),
+        (
+            format!(
+                "{head}{block}installer {{ {}, onInit(function() if true then memento.restore() end end) }}",
+                section("\"core\"")
+            ),
+            Code::WrongPlace,
+        ),
+        (
+            format!(
+                "{head}{block}installer {{ {}, onSelChange(function() memento.restore() end) }}",
+                section("\"core\"")
+            ),
+            Code::WrongPlace,
+        ),
+        (
             format!("{head}memento {{ root = HKLM }}"),
             Code::MissingAttribute,
         ),

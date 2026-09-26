@@ -29,6 +29,7 @@ SectionEnd
 !insertmacro MementoSectionDone
 
 Function .onInit
+  WriteRegDWORD HKLM "Software\Kept\Components" "MementoSection_samples" 1
   !insertmacro MementoSectionRestore
 FunctionEnd
 

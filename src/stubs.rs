@@ -264,8 +264,11 @@ fn blocks() -> String {
          ---@class (exact) installua.Memento\n\
          ---@field root string A registry root, `HKLM` or `SHCTX`.\n\
          ---@field key string\n\n\
-         ---@param options installua.Memento\n\
-         function memento(options) end\n\n\
+         ---@class installua.MementoBlock\n\
+         ---@overload fun(options: installua.Memento)\n\
+         memento = {}\n\n\
+         --- The restore, here instead of first in the installer's `onInit`.\n\
+         function memento.restore() end\n\n\
          --- The strings `languages {}` declared. A read is `$(name)`, resolved\n\
          --- against `$LANGUAGE` at run time.\n\
          ---@type table<string, string>\n\

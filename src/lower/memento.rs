@@ -16,7 +16,10 @@
 //!
 //! - `MementoSectionDone` after the last section;
 //! - `MementoSectionRestore` in the init prelude, after `multiUser {}`'s, since
-//!   an `SHCTX` root is only decided once that has run;
+//!   an `SHCTX` root is only decided once that has run. First rather than last,
+//!   so an `x.selected = false` in `onInit` is not undone by it; an author who
+//!   wants it later — after writing a saved state, as `Examples/Memento.nsi`
+//!   does — writes `memento.restore()` there, and the prelude's goes;
 //! - `MementoSectionSave` first in `.onInstSuccess`: the author's, when the
 //!   block has an `onInstSuccess`, or else one of its own.
 //!
@@ -29,7 +32,7 @@ use crate::diag::{Code, Diagnostic};
 use crate::ir;
 use crate::resolve::ConstValue;
 
-use super::{Half, Lowerer};
+use super::{BodyLowerer, Half, Lowerer};
 
 impl Lowerer<'_, '_> {
     /// Its own pass, for `multiUser {}`'s reason, and after it: the restore
@@ -193,5 +196,68 @@ impl Lowerer<'_, '_> {
         }
         self.remembered.insert(id.clone(), span);
         Some(id)
+    }
+}
+
+/// `memento.restore()`, the one call spelled on the block's name.
+pub(super) fn restores(call: &Expr) -> bool {
+    matches!(call.callee_field(), Some(("memento", name)) if name.text == "restore")
+}
+
+/// The prelude's restore line, which a written `memento.restore()` replaces.
+pub(super) fn is_restore(line: &ir::Instruction) -> bool {
+    matches!(line.args.as_slice(), [ir::Arg::Raw(name)] if name == "MementoSectionRestore")
+}
+
+impl BodyLowerer<'_, '_> {
+    /// Top level of the installer's `onInit` only: that is the one place the
+    /// prelude's line is dropped for it, so anywhere else would restore twice
+    /// or not at all.
+    pub(super) fn memento_restore(&mut self, call: &Expr) {
+        let Expr::Call { args, span, .. } = call else {
+            return;
+        };
+        if !self.requires.headers.contains("Memento") {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    *span,
+                    "`memento.restore()` needs a `memento {}` block",
+                )
+                .note("write `memento { root = HKLM, key = \"Software/App\" }`"),
+            );
+            return;
+        }
+        if !args.is_empty() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    *span,
+                    "`memento.restore()` takes no arguments",
+                )
+                .note("the block says where the boxes are stored"),
+            );
+            return;
+        }
+        // The body's own scope, then the block's: any deeper is inside an `if`
+        // or a loop.
+        if self.half != Some(Half::Installer)
+            || self.place != crate::table::Place::OnInit
+            || self.scopes.len() != 2
+        {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongPlace,
+                    *span,
+                    "`memento.restore()` goes in the installer's `onInit`, not inside an `if` or a loop",
+                )
+                .note("without it, the restore runs first in `onInit`"),
+            );
+            return;
+        }
+        self.emit(ir::Instruction::new(
+            "!insertmacro",
+            vec![ir::Arg::raw("MementoSectionRestore")],
+        ));
     }
 }
