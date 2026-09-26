@@ -52,6 +52,8 @@ Reach for it when a `plugin` or `import` name comes back undeclared.
 
 ## Installing them
 
+### Git
+
 Copy either directory into `.claude/skills/` in your project, or into
 `~/.claude/skills/` to have it everywhere:
 
@@ -60,6 +62,19 @@ git clone https://github.com/idleberg/installua
 mkdir -p ~/.claude/skills
 cp -r installua/agents/skills/* ~/.claude/skills/
 ```
+
+### npx
+
+If you have Node.js, the [`skills`](https://github.com/vercel-labs/skills) CLI
+fetches them straight from the repository and asks which agents to install them
+for:
+
+```sh
+npx skills add idleberg/installua
+```
+
+Add `--skill installua-port-nsis` to take just one, or `-g` to install it for
+every project rather than the current one.
 
 Agents load a skill when the work matches its description, so there's nothing to
 invoke — start a port, or hit an undeclared plugin, and the right one comes in.
