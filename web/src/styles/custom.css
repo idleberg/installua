@@ -45,6 +45,13 @@
 	--sl-color-accent: hsl(196, 80%, 52%);
 	--sl-color-accent-high: hsl(196, 90%, 78%);
   --sl-color-text-accent: #88a1d9;
+	/* Text on a `text-accent` fill: the active sidebar item, the skip link. Stock
+	 * points it at `accent-low`, which here is a dark cyan — a hue clash on the
+	 * periwinkle, and 3.7:1. The page colour is 4.7:1, like the primary button. */
+	--sl-color-text-invert: var(--sl-color-black);
+	/* Inline code on gray-5 left a link inside it at 2.7:1. The code-block well
+	 * holds the link at 5.5:1 and plain text higher still. */
+	--sl-color-bg-inline-code: var(--ec-frm-edBg);
 
 	/* Expressive Code ships its own near-black editor chrome, which reads as a
 	 * hole punched in the page. Pull its surfaces onto the same ramp; the syntax
@@ -86,10 +93,12 @@ abbr[title] {
 
 /* The search box sits in the code blocks' well rather than on the page colour,
  * so it reads as a field. Only the desktop layout draws it as a box at all. The
- * extra `site-search` outranks the component's own scoped rule. */
+ * extra `site-search` outranks the component's own scoped rule. The border is
+ * all that outlines the field, so it takes gray-4 (4.9:1) over gray-5 (2:1). */
 @media (min-width: 50rem) {
   site-search button[data-open-modal] {
     background-color: var(--ec-frm-edBg);
+    border-color: var(--sl-color-gray-4);
   }
 }
 
