@@ -20,15 +20,5 @@ installua header coverage -- NSISDIR/Include, 31 headers
   exposed            5
   lowering           6
   replaced           4
-  rejected           8
-  todo               8
-
-header todo:
-  Win/COM                 Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  Win/Propkey             Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  Win/RestartManager      Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  Win/WinDef              Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  Win/WinError            Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  Win/WinNT               Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  Win/WinUser             Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  WinCore                 Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
+  rejected          16
+  todo               0

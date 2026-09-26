@@ -54,8 +54,8 @@ impl Class {
         &["exposed", "lowering", "replaced", "rejected", "todo"];
 }
 
-const WIN_TODO: Class = Class::Todo(
-    "Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number",
+const WIN: Class = Class::Rejected(
+    "Windows constants; write the number, as `WinMessages` covers the family `sendMessage` needs",
 );
 
 /// One row per snapshot path, in its order.
@@ -120,14 +120,14 @@ pub const ROWS: &[(&str, Class)] = &[
         "VPatchLib",
         Class::Rejected("the NSIS 2.0.5 wrapper of the `VPatch` plugin, which is declared"),
     ),
-    ("Win/COM", WIN_TODO),
-    ("Win/Propkey", WIN_TODO),
-    ("Win/RestartManager", WIN_TODO),
-    ("Win/WinDef", WIN_TODO),
-    ("Win/WinError", WIN_TODO),
-    ("Win/WinNT", WIN_TODO),
-    ("Win/WinUser", WIN_TODO),
-    ("WinCore", WIN_TODO),
+    ("Win/COM", WIN),
+    ("Win/Propkey", WIN),
+    ("Win/RestartManager", WIN),
+    ("Win/WinDef", WIN),
+    ("Win/WinError", WIN),
+    ("Win/WinNT", WIN),
+    ("Win/WinUser", WIN),
+    ("WinCore", WIN),
     (
         "WinMessages",
         Class::Exposed("its names as numbers, `sendMessage(h, WM_SETTEXT, 0, \"…\")`"),
