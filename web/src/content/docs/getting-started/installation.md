@@ -11,7 +11,7 @@ Installua writes NSIS scripts and passes them to the NSIS compiler, so you need 
 
 Various installations methods are at your disposal, including a variety of package managers.
 
-### GitHub
+### Installer
 
 No package manager? Download the installer straight from the [releases](https://github.com/idleberg/installua/releases/latest) page.
 
