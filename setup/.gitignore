@@ -1,5 +1,8 @@
 # generated
 .installua/
+.vscode/
+.luarc.json
+selene.toml
 
 # artifacts
 *.nsi
