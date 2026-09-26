@@ -65,7 +65,7 @@ cp -r installua/agents/skills/* ~/.claude/skills/
 
 ### NodeJS
 
-If you have Node.js, the [`skills`](https://github.com/vercel-labs/skills) CLI
+If you have NodeJS, the [`skills`](https://github.com/vercel-labs/skills) CLI
 fetches them straight from the repository and asks which agents to install them
 for:
 
