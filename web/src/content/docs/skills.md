@@ -63,7 +63,7 @@ mkdir -p ~/.claude/skills
 cp -r installua/agents/skills/* ~/.claude/skills/
 ```
 
-### npx
+### NodeJS
 
 If you have Node.js, the [`skills`](https://github.com/vercel-labs/skills) CLI
 fetches them straight from the repository and asks which agents to install them
