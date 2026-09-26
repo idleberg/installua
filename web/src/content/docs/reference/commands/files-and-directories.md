@@ -18,7 +18,7 @@ otherwise.
 
 **Usage** `file(filespec, …[, { … }])` → nothing
 **Options** `recursive`, `exclude = { … }`, `keepAttributes`, `nonFatal`,
-`allowSkip`, `overwrite`
+`allowSkip`, `overwrite`, `outName`
 
 ```lua
 setOutPath(INSTDIR)
@@ -32,6 +32,15 @@ commands hold for every `File` after them in the script, so the compiler writes
 them before this `File` and puts back the
 [`allowSkipFiles` and `overwrite`](/reference/commands/script-attributes/)
 attributes after it.
+
+`outName` is `/oname=`: it unpacks the file under another name, relative to the
+output directory unless it is a full path. It takes one filespec without a
+wildcard, and neither `recursive` nor `exclude`.
+
+```lua
+setOutPath(INSTDIR)
+file("config.default.ini", { outName = "config.ini" })
+```
 
 ## ReserveFile
 

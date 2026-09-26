@@ -111,6 +111,10 @@ Waiting on a fix:
   never saw them.
 - **`silent`:** `file()` has no `/oname=`. The census keeps only the first
   alternative of `File`'s syntax, so the rename form was never offered.
+  — fixed: `file(p, { outName = … })`, an overlay flag the snapshot lacks,
+  refused beside `recursive`, `exclude`, a second file or a wildcard (golden
+  `files`). The literal of any `/FLAG=` value was glued unquoted and
+  unescaped, and a path value's `/FLAG` became `\FLAG`; both are fixed.
 - **`silent`:** `AllowSkipFiles` is only an `attributes {}` field, but NSIS
   lets it change between `File` lines; the example turns it off halfway
   through a section. — fixed: `file(…, { allowSkip = false })` writes it

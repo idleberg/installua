@@ -834,6 +834,7 @@ fn join() -> Vec<Instruction> {
                 options: skeleton
                     .options
                     .iter()
+                    .chain(row.map_or(&[][..], |row| row.extra))
                     .enumerate()
                     .map(|(index, opt)| Flag {
                         opt: *opt,

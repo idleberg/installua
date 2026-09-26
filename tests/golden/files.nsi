@@ -22,4 +22,6 @@ Section ""
   File "LICENSE.txt"
   SetOverwrite ifnewer
   AllowSkipFiles on
+  File /oname=COPYING "LICENSE.txt"
+  File "/oname=$INSTDIR\docs\read me.txt" "LICENSE.txt"
 SectionEnd

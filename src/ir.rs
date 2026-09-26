@@ -601,15 +601,37 @@ impl Arg {
     /// So it is a [`Piece::Text`] ahead of the value's own pieces, which also
     /// gets the quoting right for free: the emitter quotes the token as a
     /// whole, and `"/SOURCE=$Path"` is how the corpus writes it too.
+    ///
+    /// A path value is normalised here rather than by the emitter, which would
+    /// turn the flag's own `/` into `\` along with the path's.
     pub fn prefixed(text: impl Into<String>, value: Arg) -> Self {
         let text = text.into();
-        // A literal is glued as text so the output reads the way a hand-written
-        // script does — `/TIMEOUT=5000`, unquoted. Anything holding a register
-        // keeps its pieces, because [`Arg::Raw`] reads nothing and hiding a
-        // register from liveness is not a formatting decision.
+        let value = match value {
+            Arg::Data { pieces, path: true } => Arg::data(
+                pieces
+                    .into_iter()
+                    .map(|piece| match piece {
+                        Piece::Text(text) => Piece::Text(text.replace('/', "\\")),
+                        piece => piece,
+                    })
+                    .collect(),
+            ),
+            value => value,
+        };
+        // A literal with nothing to quote or escape is glued as text so the
+        // output reads the way a hand-written script does — `/TIMEOUT=5000`,
+        // unquoted. Anything holding a register keeps its pieces, because
+        // [`Arg::Raw`] reads nothing and hiding a register from liveness is not
+        // a formatting decision.
         match value.as_text() {
-            Some(literal) => Arg::raw(format!("{text}{literal}")),
-            None => Arg::str(text).concat(value),
+            Some(literal)
+                if literal
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._-\\:".contains(&b)) =>
+            {
+                Arg::raw(format!("{text}{literal}"))
+            }
+            _ => Arg::str(text).concat(value),
         }
     }
 

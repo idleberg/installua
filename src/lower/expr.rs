@@ -600,6 +600,7 @@ impl BodyLowerer<'_, '_> {
         match name.as_str() {
             "writeReg" => return self.write_reg(args, dest, span),
             "messageBox" => return self.message_box(args, dest, span),
+            "file" if !self.one_out_name(args) => return None,
             "file"
                 if FILE_STATES
                     .iter()
@@ -883,6 +884,27 @@ impl BodyLowerer<'_, '_> {
             self.emit(set(command, default));
         }
         ty
+    }
+
+    /// `file(…, { outName = … })` renames one file, so it takes one filespec
+    /// and no wildcard: `File /oname=` refuses anything else.
+    fn one_out_name(&mut self, args: &[Expr]) -> bool {
+        if file_option(args, "outName").is_none() {
+            return true;
+        }
+        let files = &args[..args.len() - 1];
+        let wildcard = |file: &Expr| matches!(self.constant(file), Some(ConstValue::Str(s)) if s.contains(['*', '?']));
+        match files {
+            [file] if !wildcard(file) => true,
+            _ => {
+                let span = files.first().map_or(args[0].span(), Expr::span);
+                self.diags.push(
+                    Diagnostic::error(Code::BadFieldValue, span, "`outName` renames one file")
+                        .note("give `file` one filespec without a wildcard"),
+                );
+                false
+            }
+        }
     }
 
     /// The state's `attributes {}` field, or NSIS's default of `on`.
@@ -1209,6 +1231,35 @@ impl BodyLowerer<'_, '_> {
                 None => self.coerce(param, name, value)?,
             };
             placed[position].push(lowered);
+        }
+
+        // The row's other alternatives: an option from one set rules out every
+        // other set, `file`'s `outName` against `recursive` and `exclude`.
+        let named: Vec<&str> = builtin
+            .options
+            .iter()
+            .zip(&set)
+            .filter(|(_, set)| **set)
+            .filter_map(|(flag, _)| flag.name())
+            .collect();
+        let branches: Vec<&str> = builtin
+            .conflicts
+            .iter()
+            .filter_map(|branch| named.iter().find(|name| branch.contains(name)).copied())
+            .collect();
+        if let [first, second, ..] = branches[..] {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    span,
+                    format!("`{first}` and `{second}` cannot be used together"),
+                )
+                .note(format!(
+                    "they are two different forms of `{}`",
+                    builtin.nsis
+                )),
+            );
+            return None;
         }
 
         Some(Written {

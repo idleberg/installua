@@ -23,7 +23,7 @@
 //! retired row there, which is not a contradiction: the emitter needs its
 //! shape and the user needs the replacement.
 
-use super::{Class, Field, Kind, Offer, Part, Place, Setting};
+use super::{Class, Field, Kind, Offer, Opt, Part, Place, Setting};
 use crate::types::Ty;
 
 /// The hand-written half of one parameter, positional against the skeleton's
@@ -73,6 +73,10 @@ pub struct Row {
     /// skeleton's option list the way [`Ann`] is against its parameter list.
     /// The census checks the lengths agree on an `Exposed` row.
     pub options: &'static [Offer],
+    /// Flags of a later alternative, which the snapshot drops (see
+    /// [`Note::Alternation`](super::Note::Alternation)): `File`'s `/oname=`.
+    /// Judged by the `options` past the snapshot's own.
+    pub extra: &'static [Opt],
     /// Mutually exclusive option sets: `File`'s `/oname=` branch against its
     /// repeated-filespec branch. The error names both spellings.
     pub conflicts: &'static [&'static [&'static str]],
@@ -204,6 +208,7 @@ const fn row(nsis: &'static str, installua: Option<&'static str>, class: Class) 
         class,
         params: &[],
         options: &[],
+        extra: &[],
         conflicts: &[],
         predicate: false,
         place: Place::Anywhere,
@@ -936,20 +941,32 @@ pub const ROWS: &[Row] = &[
     // `Offer::List` exists for. It takes a filespec *and* repeats, so its field
     // holds the exclusions and the emitter writes one `/x` each — which is the
     // only shape in which a caller can say two of them.
-    flagged(
-        exposed(
-            "File",
-            "file",
-            &[ann(Ty::Str, Kind::Path)],
-            "file(\"assets/icon.ico\", { exclude = { \"*.tmp\", \"*.log\" } })",
-        ),
-        &[
-            named("nonFatal"),
-            named("keepAttributes"),
-            named("recursive"),
-            list("exclude", Kind::Path),
-        ],
-    ),
+    //
+    // `/oname=` is the second alternative, so the snapshot never saw it: it is
+    // an `extra` flag, and the two branches are the `conflicts`.
+    Row {
+        extra: &[Opt {
+            nsis: "/oname",
+            value: true,
+            after: 0,
+        }],
+        conflicts: &[&["outName"], &["recursive", "exclude"]],
+        ..flagged(
+            exposed(
+                "File",
+                "file",
+                &[ann(Ty::Str, Kind::Path)],
+                "file(\"assets/icon.ico\", { exclude = { \"*.tmp\", \"*.log\" } })",
+            ),
+            &[
+                named("nonFatal"),
+                named("keepAttributes"),
+                named("recursive"),
+                list("exclude", Kind::Path),
+                valued("outName", Ty::Str, Kind::Path),
+            ],
+        )
+    },
     attribute("FileBufSize", "fileBufSize", Setting::Int),
     exposed(
         "FlushINI",

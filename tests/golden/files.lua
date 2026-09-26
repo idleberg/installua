@@ -1,7 +1,8 @@
 -- `AllowSkipFiles` and `SetOverwrite` for one `file` call. NSIS's commands are
 -- build-time state that holds for every `File` after it in the script, and
 -- bodies here are laid out by the compiler, so each option is written before its
--- one `File` and put back to the `attributes {}` value after it.
+-- one `File` and put back to the `attributes {}` value after it. `outName` is
+-- `File /oname=`, which unpacks one file under another name.
 
 attributes {
 	name = "Files",
@@ -21,5 +22,8 @@ installer {
 		file("LICENSE.txt", { allowSkip = true, overwrite = "ifnewer" })
 		-- Both, put back in the reverse order.
 		file("LICENSE.txt", { allowSkip = false, overwrite = "off" })
+		file("LICENSE.txt", { outName = "COPYING" })
+		-- The flag and the name are one token, quoted as one.
+		file("LICENSE.txt", { outName = INSTDIR .. "/docs/read me.txt" })
 	end),
 }
