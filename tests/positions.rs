@@ -299,12 +299,13 @@ const CELLS: &[(&str, &str, Class)] = &[
     ("file handle", "page callback", Accepted),
 ];
 
-/// Open findings (BUG-HUNTING.md, step 3): cells that do not yet match their
+/// Open findings: cells that do not yet match their
 /// class. Each must still mismatch, so a fix fails the test until its cell
 /// leaves this list.
 #[rustfmt::skip]
 const KNOWN: &[(&str, &str)] = &[
-    // a field on a file handle is reported as a field of a control
+    // a field on a file handle is reported as a field of a control: files and
+    // windows share one `handle` type (`src/lower/handle.rs`)
     ("file handle", "field read"),
     ("file handle", "field write"),
 ];
