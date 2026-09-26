@@ -480,7 +480,14 @@ fn memento_says_what_is_wrong() {
             Code::MissingAttribute,
         ),
         (
-            format!("{head}memento {{ root = INSTDIR, key = \"k\" }}"),
+            format!(
+                "{head}memento {{ root = INSTDIR, key = \"k\" }}\ninstaller {{ {} }}",
+                section("\"core\"")
+            ),
+            Code::BadFieldValue,
+        ),
+        (
+            format!("{head}{block}installer {{ {} }}", section("true")),
             Code::BadFieldValue,
         ),
         (

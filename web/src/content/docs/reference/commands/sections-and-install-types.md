@@ -104,25 +104,27 @@ section { "Offline map data",
 ## Remembering what was ticked
 
 The components page can start the way the user left it last time, through
-the `Memento.nsh` header that ships with NSIS. The script names a registry key,
-and each section to remember gets an id. The id is the name of a registry
-value, so keep it the same from one version to the next, or that choice is
-forgotten.
+the `Memento.nsh` header that ships with NSIS. Each section to remember says
+`remember = true`, and its `local` becomes an id: the name of the registry
+value that stores its box. A section written inline has no `local`, so it
+gives the id as a string.
 
-**Usage** a top-level `memento { root = <root>, key = <key> }`, and a
-`section`'s `remember = <id>` (letters, digits and `_`)
+**Usage** a `section`'s `remember = true`, or `remember = <id>` (letters,
+digits and `_`)
 
 ```lua
-memento { root = HKLM, key = "Software/Example/Components" }
+attributes { name = "Example" }
+
+local docs = section { "Documentation",
+	remember = true,
+	body = function() file("assets/manual.pdf") end,
+}
 
 installer {
 	page.components {},
 	page.instFiles {},
 
-	section { "Documentation",
-		remember = "docs",
-		body = function() file("assets/manual.pdf") end,
-	},
+	docs,
 
 	section { "Samples",
 		remember = "samples",
@@ -134,9 +136,20 @@ installer {
 
 On the first run `optional` decides, as it always does. On a later run the
 stored choice does, and a section that is new since then is drawn in bold.
-The choice is saved only when the install succeeds. Beside
-[`multiUser {}`](/reference/commands/script-attributes/#per-machine-or-per-user),
-write `root = SHCTX`, so each mode keeps its own choice.
+The choice is saved only when the install succeeds.
+
+The boxes are stored under `HKLM\Software\<name>\Components`, with the `name`
+from `attributes {}`. Beside
+[`multiUser {}`](/reference/commands/script-attributes/#per-machine-or-per-user)
+the root is `SHCTX`, so each mode keeps its own choice. A top-level
+`memento {}` changes either one:
+
+**Usage** `memento { root = <root>, key = <key> }`, both optional
+
+Keep the key and the ids the same from one version to the next, or the stored
+choices are forgotten. So when the product is renamed, write the old key with
+`memento { key = "Software/OldName/Components" }`. When a `local` is renamed,
+write its old name with `remember = "oldname"`.
 
 Only installer sections can remember. The compiler writes the header's lines:
 `MementoSectionEx` and `MementoSectionEnd` around each remembered section,
@@ -150,16 +163,18 @@ To restore later, after writing a saved state yourself, call
 compiler leaves out its own:
 
 ```lua
-memento { root = HKLM, key = "Software/Example/Components" }
+attributes { name = "Example" }
+
+local docs = section { "Documentation",
+	remember = true,
+	body = function() setOutPath(INSTDIR) end,
+}
 
 installer {
 	page.components {},
 	page.instFiles {},
 
-	section { "Documentation",
-		remember = "docs",
-		body = function() setOutPath(INSTDIR) end,
-	},
+	docs,
 
 	onInit(function()
 		writeReg(HKLM, "Software/Example/Components", "MementoSection_docs", 1)

@@ -1120,7 +1120,6 @@ fn lower_once(
         multi_user: None,
         memento: None,
         remembered: BTreeMap::new(),
-        remember_written: false,
         locales: Vec::new(),
         license_tables: 0,
         descriptions: [Vec::new(), Vec::new()],
@@ -1180,14 +1179,11 @@ struct Lowerer<'a, 'p> {
     lang_strings: BTreeSet<String>,
     /// The `multiUser {}` block, when there is one: the page reads it.
     multi_user: Option<multi_user::MultiUser>,
-    /// Where `memento {}` is, when there is one: `remember` needs it.
+    /// Where `memento {}` is, or the first `remember` when that implies it.
     memento: Option<Span>,
     /// Each `remember` id and where it was written, so a second can point at
     /// the first — two sections under one id share one registry value.
     remembered: BTreeMap<String, Span>,
-    /// Whether any section wrote `remember`, right or wrong, so a block with
-    /// only failed ones is not also told it has none.
-    remember_written: bool,
     /// The locales `languages {}` declared, in the order it listed them — read
     /// by the license page, which has to check its own per-locale table against
     /// exactly this set. Declaration order rather than a set, because
@@ -1411,34 +1407,24 @@ impl<'p> Lowerer<'_, 'p> {
         // author wrote none. One they did write took it as its first line.
         if let Some(span) = self.memento
             && self.requires.headers.contains("Memento")
+            && !self.remembered.is_empty()
+            && !self.callbacks.contains_key(".onInstSuccess")
         {
-            if !self.remember_written {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::MissingAttribute,
-                        span,
-                        "`memento {}` with no section that `remember`s",
-                    )
-                    .note("write `remember = \"id\"` on each section whose box should be kept"),
-                );
-            } else if !self.remembered.is_empty() && !self.callbacks.contains_key(".onInstSuccess")
-            {
-                let (body, _) = self.body_with(
-                    span,
-                    Some(Half::Installer),
-                    table::Place::Anywhere,
-                    |lowerer| {
-                        lowerer.emit(ir::Instruction::new(
-                            "!insertmacro",
-                            vec![ir::Arg::raw("MementoSectionSave")],
-                        ));
-                    },
-                );
-                self.module.functions.push(ir::Function {
-                    name: ".onInstSuccess".to_string(),
-                    body,
-                });
-            }
+            let (body, _) = self.body_with(
+                span,
+                Some(Half::Installer),
+                table::Place::Anywhere,
+                |lowerer| {
+                    lowerer.emit(ir::Instruction::new(
+                        "!insertmacro",
+                        vec![ir::Arg::raw("MementoSectionSave")],
+                    ));
+                },
+            );
+            self.module.functions.push(ir::Function {
+                name: ".onInstSuccess".to_string(),
+                body,
+            });
         }
         // `radioButtons {}`'s lines, in an `.onSelChange` of their own when the
         // author wrote none.
@@ -5946,7 +5932,7 @@ impl<'p> Lowerer<'_, 'p> {
                 // the page has no way to name a section and MUI2's own macro
                 // addresses one by its index.
                 "description" => description = self.constant_arg(value, "description"),
-                "remember" => remember = self.memento_id(value, half),
+                "remember" => remember = self.memento_id(value, half, index.as_deref()),
                 other => {
                     self.diags.push(
                         Diagnostic::error(

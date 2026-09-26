@@ -262,8 +262,8 @@ fn blocks() -> String {
          ---@param options installua.MultiUser\n\
          function multiUser(options) end\n\n\
          ---@class (exact) installua.Memento\n\
-         ---@field root string A registry root, `HKLM` or `SHCTX`.\n\
-         ---@field key string\n\n\
+         ---@field root? string A registry root; `SHCTX` beside `multiUser {}`, else `HKLM`.\n\
+         ---@field key? string Defaults to `Software\\<name>\\Components`.\n\n\
          ---@class installua.MementoBlock\n\
          ---@overload fun(options: installua.Memento)\n\
          memento = {}\n\n\
@@ -616,7 +616,7 @@ fn declarations() -> String {
          ---@field installTypes? string[] Which of the block's `installTypes` this belongs to.\n\
          ---@field size? integer Extra kilobytes to charge, beyond the files installed.\n\
          ---@field description? string The words the components page shows on hover.\n\
-         ---@field remember? string The id `memento {}` keeps its box under.\n\
+         ---@field remember? string|true Keeps the box between runs, under this id or the `local`.\n\
          local SectionOptions = {}\n\n\
          ---@param name string\n\
          ---@param body fun()\n\
