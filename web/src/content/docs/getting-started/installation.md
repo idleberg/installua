@@ -11,13 +11,9 @@ Installua writes NSIS scripts and passes them to the NSIS compiler, so you need 
 
 Various installations methods are at your disposal, including a variety of package managers.
 
-### Cargo
+### GitHub
 
-If you have the Rust toolchain around, this builds Installua from source and puts it on your `PATH`:
-
-```sh
-cargo install installua
-```
+No package manager? Download the installer straight from the [releases](https://github.com/idleberg/installua/releases/latest) page.
 
 ### Winget
 
@@ -35,6 +31,10 @@ On macOS and Linux, from our own tap:
 brew install idleberg/asahi/installua
 ```
 
-### GitHub
+### Cargo
 
-No package manager? Download the installer straight from the [releases](https://github.com/idleberg/installua/releases/latest) page.
+If you have the Rust toolchain around, this builds Installua from source and puts it on your `PATH`:
+
+```sh
+cargo install installua
+```
