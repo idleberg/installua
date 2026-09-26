@@ -63,6 +63,10 @@ pub fn parse(log: &str) -> Vec<Message> {
     // recognise. `makensis` prints the complaint and the cursor from the same
     // error path, so adjacency is the only thing that holds for all of them.
     let mut previous: Option<&str> = None;
+    // A failed command prints its complaint and then its usage, and the
+    // usage can run over several lines. Those lines are not the cause, so
+    // `previous` stays on the complaint until the cursor.
+    let mut usage = false;
     for raw in log.lines() {
         let text = raw.trim();
         // Syntax 1: parse-time. `Error in script "x.nsi" on line 4 -- …`
@@ -76,6 +80,12 @@ pub fn parse(log: &str) -> Vec<Message> {
                 cause: previous.map(str::to_string),
             });
             previous = None;
+            usage = false;
+            continue;
+        }
+
+        usage |= text.starts_with("Usage: ");
+        if usage {
             continue;
         }
 

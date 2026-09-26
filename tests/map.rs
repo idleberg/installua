@@ -196,6 +196,16 @@ fn a_cursor_carries_the_line_before_it_as_its_cause() {
             ),
             "!define: \"X\" already defined!",
         ),
+        (
+            concat!(
+                "Processing script file: \"u.nsi\" (UTF8)\n",
+                "File: \"app.exe\" -> no files found.\n",
+                "Usage: File [/nonfatal] [/a] ([/r] [/x filespec [...]] filespec [...] |\n",
+                "   /oname=outfile one_file_only)\n",
+                "Error in script \"u.nsi\" on line 3 -- aborting creation process\n",
+            ),
+            "File: \"app.exe\" -> no files found.",
+        ),
     ] {
         let parsed = assemble::parse(log);
         // One diagnostic, not two: the cause is folded in rather than reported
