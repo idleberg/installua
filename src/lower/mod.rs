@@ -29,6 +29,7 @@ mod memento;
 mod multi_user;
 mod pages;
 mod sig;
+mod x64;
 
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -28,6 +28,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("include", &[]),
     ("languages", &[]),
     ("library", &[]),
+    ("x64", &[]),
     ("memento", &[]),
     ("multiuser", &[]),
     ("multiuser-plain", &[]),

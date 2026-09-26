@@ -143,9 +143,7 @@ pub const ROWS: &[(&str, Class)] = &[
     ),
     (
         "x64",
-        Class::Todo(
-            "`RunningX64`, `IsWow64` and `IsNative*` are LogicLib conditions with no spelling yet",
-        ),
+        Class::Lowering("`runningX64()`, `wow64()` and `nativeMachine(\"ARM64\")`"),
     ),
 ];
 

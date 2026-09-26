@@ -39,4 +39,17 @@ rather than counting anything.
 setRegView("64")
 ```
 
+## RunningX64 / IsWow64 / IsNative*
+
+The conditions of the stock `x64.nsh`: whether Windows is 64-bit, whether
+this installer runs under WOW64, and which processor the machine really has.
+
+**Usage** `runningX64()` → `boolean` · `wow64()` → `boolean` ·
+`nativeMachine("IA32" | "AMD64" | "ARM64")` → `boolean`
+
+```lua
+if runningX64() then setRegView("64") end
+if nativeMachine("ARM64") then detailPrint("ARM64, under emulation") end
+```
+
 ---

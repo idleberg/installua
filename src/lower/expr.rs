@@ -31,7 +31,7 @@ use crate::resolve::{ConstValue, DeferredKind};
 use crate::table;
 use crate::types::{Sign, Ty};
 
-use super::{Binding, BodyLowerer};
+use super::{Binding, BodyLowerer, x64};
 
 /// What a caller wrote for one instruction, sorted into the two things an NSIS
 /// line is made of.
@@ -601,6 +601,17 @@ impl BodyLowerer<'_, '_> {
             "writeReg" => return self.write_reg(args, dest, span),
             "messageBox" => return self.message_box(args, dest, span),
             "installLib" | "uninstallLib" => return self.library(&name, args, dest, span),
+            "runningX64" | "wow64" | "nativeMachine" => {
+                let Some(dest) = dest else {
+                    self.diags.push(Diagnostic::error(
+                        Code::TypeMismatch,
+                        span,
+                        format!("`{name}` answers a question that nothing reads"),
+                    ));
+                    return None;
+                };
+                return self.materialise(call, dest, span);
+            }
             "raw" => return self.raw(args, dest, span),
             // The anchored form, in the one place it means nothing: a body
             // already has a "here", and an anchor is a position *outside* every
@@ -2873,6 +2884,23 @@ impl BodyLowerer<'_, '_> {
             // A predicate fuses directly into its branching instruction and
             // spends no register — the case that dissolved a whole second
             // condition shape.
+            Expr::Call { callee, args, span }
+                if callee_path(callee).is_some_and(|name| x64::NAMES.contains(&name.as_str())) =>
+            {
+                let name = callee_path(callee).unwrap_or_default();
+                if let Some(test) = self.x64(&name, args, *span) {
+                    let current = self.current;
+                    self.body.terminate(
+                        current,
+                        Terminator::Branch {
+                            test,
+                            then_block: then_b,
+                            else_block: else_b,
+                        },
+                    );
+                }
+            }
+
             Expr::Call { callee, args, span } => {
                 let predicate = callee_path(callee)
                     .and_then(|name| builtins::lookup(&name))

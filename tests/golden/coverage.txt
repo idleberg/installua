@@ -18,10 +18,10 @@ installua MUI coverage -- Modern UI 2, 255 names
 installua header coverage -- NSISDIR/Include, 31 headers
 
   exposed            5
-  lowering           5
+  lowering           6
   replaced           4
   rejected           7
-  todo              10
+  todo               9
 
 header todo:
   VB6RunTime              rides on `Library.nsh`, so it is classified once that lands
@@ -33,4 +33,3 @@ header todo:
   Win/WinNT               Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
   Win/WinUser             Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
   WinCore                 Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
-  x64                     `RunningX64`, `IsWow64` and `IsNative*` are LogicLib conditions with no spelling yet

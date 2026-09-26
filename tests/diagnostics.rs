@@ -550,6 +550,24 @@ fn library_says_what_is_wrong() {
     }
 }
 
+#[test]
+fn x64_says_what_is_wrong() {
+    for (call, code) in [
+        ("if runningX64(1) then end", Code::WrongArity),
+        ("local a = wow64(1)", Code::WrongArity),
+        ("if nativeMachine(\"ARM\") then end", Code::BadFieldValue),
+        ("runningX64()", Code::TypeMismatch),
+    ] {
+        let source = format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function() {call} end) }}"
+        );
+        let diags = compile(&source);
+        let codes: Vec<Code> = diags.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [code], "{source}\n{}", diags.render("<test>"));
+    }
+}
+
 /// A value that failed is reported once, where it failed, and not again
 /// wherever it lands: a `local`, a global, a parameter, a `return`.
 #[test]
