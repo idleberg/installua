@@ -32,6 +32,10 @@ installer {
 }
 ```
 
+A read also works where the value has to be known while building, such as a
+section's `description` or a page's text: it is `$(name)`, and NSIS picks the
+locale when the installer runs.
+
 ## The language dialog
 
 `ask` is `MUI_LANGDLL_DISPLAY` and its settings. Present it and the compiler

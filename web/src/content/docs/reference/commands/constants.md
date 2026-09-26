@@ -25,6 +25,10 @@ side outright: `USERAPPDATA` · `USERLOCALAPPDATA` · `USERTEMPLATES` ·
 **Paths** `INSTDIR` · `OUTDIR` · `TEMP` · `WINDIR` · `SYSDIR` · `EXEDIR` ·
 `EXEPATH` · `EXEFILE` · `PLUGINSDIR`
 
+**Build machine** `NSISDIR`: where `makensis` keeps `Include/`, `Contrib/` and
+`Docs/`. It is `${NSISDIR}`, filled in while building, so it works in a path
+the build reads, such as `page.license { file = NSISDIR .. "/Docs/License.txt" }`.
+
 `INSTDIR` and `OUTDIR` are writable; the rest are facts about the machine and
 assigning to one is refused.
 

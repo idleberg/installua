@@ -385,13 +385,13 @@ impl Lowerer<'_, '_> {
         // returns nothing at all rather than a partial set.
         if let [Some(root), Some(key), Some(name)] = &registry {
             for (define, value) in [
-                ("MUI_LANGDLL_REGISTRY_ROOT", root),
-                ("MUI_LANGDLL_REGISTRY_KEY", key),
-                ("MUI_LANGDLL_REGISTRY_VALUENAME", name),
+                ("MUI_LANGDLL_REGISTRY_ROOT", ir::Arg::str(root.clone())),
+                ("MUI_LANGDLL_REGISTRY_KEY", ir::Arg::path(key.clone())),
+                ("MUI_LANGDLL_REGISTRY_VALUENAME", ir::Arg::str(name.clone())),
             ] {
                 self.module.mui_defines.push(ir::Define {
                     name: define.to_string(),
-                    value: Some(ir::Arg::str(value.clone())),
+                    value: Some(value),
                 });
             }
         }

@@ -36,6 +36,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("multiuser-plain", &[]),
     ("pages", &[]),
     ("plugins", &[]),
+    ("radio-buttons", &[]),
     ("returns", &[Code::DeepRecursion]),
     ("sections", &[]),
     ("walkers", &[]),

@@ -896,6 +896,38 @@ fn a_callback_is_written_once_and_in_its_own_half() {
     );
 }
 
+/// `radioButtons {}` lists two or more sections of its own block.
+#[test]
+fn radio_buttons_list_sections_of_their_block() {
+    let program = |entries: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             local a = section(\"A\", function() end)\n\
+             local b = section(\"B\", function() end)\n\
+             local u = section(\"U\", function() end)\n\
+             installer {{ page.components {{}}, page.instFiles {{}}, a, b, {entries} }}\n\
+             uninstaller {{ page.instFiles {{}}, u }}"
+        )
+    };
+    for (entries, says) in [
+        ("radioButtons { a },", "two sections or more"),
+        (
+            "radioButtons { a, u },",
+            "`u` is not a section of the `installer`",
+        ),
+        ("radioButtons { a, \"b\" },", "by their `local`"),
+    ] {
+        let diags = compile(&program(entries));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == Code::BadFieldValue && d.message.contains(says)),
+            "{entries}\n{}",
+            diags.render("install.lua")
+        );
+    }
+}
+
 /// The two literal checks are warnings rather than errors: both describe output
 /// that is legal and probably not what was meant, and neither blocks lowering.
 #[test]

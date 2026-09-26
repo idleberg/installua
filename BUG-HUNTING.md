@@ -97,7 +97,8 @@ issue. One-off, not a guard.
 **Started:** `tests/ports.rs` checks each port in `tests/ports/` against its
 original by `makensis -V4` trace: the effect lines have to match, and pages
 are left out because Installua only writes MUI2 pages. `example1`,
-`example2`, `primes` and `silent` port with no workaround.
+`example2`, `one-section`, `primes`, `silent` and the five `Modern UI/`
+examples port with no workaround.
 
 **Rule:** a port that needs a missing feature or hits a bug waits. The fix
 goes into Installua first, and the port follows once it is in.
@@ -113,6 +114,11 @@ Waiting on a fix:
   A second one, or the other half's spelling, is an error; `func` no longer
   takes a callback name; a `memento {}` save goes first in the author's
   `onInstSuccess` (golden `callbacks`).
+- **`one-section`:** the `Sections.nsh` radio buttons keep the ticked
+  section in a variable, and a section is not a value. — fixed:
+  `radioButtons { a, b, c }` is an entry of its block, and the compiler writes
+  the macros first in `.onSelChange` and the start in `.onInit` (golden
+  `radio-buttons`).
 - **`silent`:** `file()` has no `/oname=`. The census keeps only the first
   alternative of `File`'s syntax, so the rename form was never offered.
   — fixed: `file(p, { outName = … })`, an overlay flag the snapshot lacks,
@@ -123,6 +129,18 @@ Waiting on a fix:
   lets it change between `File` lines; the example turns it off halfway
   through a section. — fixed: `file(…, { allowSkip = false })` writes it
   around that one `File` and puts the attribute's value back (golden `files`).
+
+- **`Modern UI/*`:** `${NSISDIR}` has no spelling, so the license page
+  cannot name the file NSIS ships. — fixed: `NSISDIR`, a constant that is
+  `${NSISDIR}`.
+- **`Modern UI/Basic`:** a section's `description` refuses `lang.x`, though
+  `$(DESC_…)` is what the original passes. So did every page text. — fixed:
+  any build-time field takes a declared `lang.x` as `$(x)`.
+- **`Modern UI/StartMenu`:** the Start menu page's registry `key` and the
+  language dialog's kept their `/`, so the folder was remembered under
+  `Software/…` beside every other key's `Software\…`. The `pages` golden
+  had the bug written into it. The trace cannot see it, because MUI2's
+  macros print nothing. — fixed (goldens `pages`, `languages`).
 
 Not portable: `rtest` tests `GetLabelAddress` and `Call` through an
 address, both rejected.

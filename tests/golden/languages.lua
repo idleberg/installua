@@ -9,7 +9,7 @@ languages {
     title = "Installer Language",
     info = "Please select a language.",
     alwaysShow = true,
-    remember = { root = "HKCU", key = "Software\\Polyglot", value = "Installer Language" },
+    remember = { root = "HKCU", key = "Software/Polyglot", value = "Installer Language" },
   },
 
   locales = {

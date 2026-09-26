@@ -1388,6 +1388,7 @@ const LANGUAGE: &[(&str, &str)] = &[
     ("languages", "      - type: table\n"),
     ("multiUser", "      - type: table\n"),
     ("memento", "      - type: table\n"),
+    ("radioButtons", "      - type: table\n"),
     // Both take either `(name, body)` or a single options table, so the second
     // position is optional and neither is typed more tightly than that.
     (

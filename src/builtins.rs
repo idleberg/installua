@@ -175,6 +175,13 @@ pub const CONSTANTS: &[Constant] = &[
     // the same reason as `$EXEDIR` — it is a fact about the running installer,
     // and NSIS accepts a write to it silently.
     constant("HWNDPARENT", Ty::Handle),
+    // A define and not a variable: `makensis` fills it in while building, with
+    // the directory `Include/`, `Contrib/` and `Docs/` are in, so it is the one
+    // constant a build-time path such as `page.license { file = … }` can use.
+    Constant {
+        nsis: "{NSISDIR}",
+        ..constant("NSISDIR", Ty::Str)
+    },
     // `-CMDHELP` spells the roots `HKLM[32|64]`, and the `ANY` third of each
     // family it leaves out entirely — `makensis` takes all of them, so the
     // list here is `ParseRegRootKey`'s and not the usage line's. The long

@@ -12,6 +12,9 @@ use super::{Half, V1_INSTALLER_FIELDS};
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Holds {
     Str,
+    /// A registry key: a string whose `/` is `\` on the way out, as in every
+    /// other registry key.
+    Path,
     /// `true` defines it and `false` does not: the setting **is** the define's
     /// existence — MUI2 asks `!ifdef` and never expands it — so there is no
     /// value to write and no third state to have.
@@ -561,7 +564,7 @@ pub(super) const FINISH_FIELDS: &[PageField] = &[
 /// shape that writes one is the shape that has written all three.
 pub(super) const REGISTRY_FIELDS: &[PageField] = &[
     field("root", "MUI_STARTMENUPAGE_REGISTRY_ROOT", Holds::Str),
-    field("key", "MUI_STARTMENUPAGE_REGISTRY_KEY", Holds::Str),
+    field("key", "MUI_STARTMENUPAGE_REGISTRY_KEY", Holds::Path),
     field("value", "MUI_STARTMENUPAGE_REGISTRY_VALUENAME", Holds::Str),
 ];
 

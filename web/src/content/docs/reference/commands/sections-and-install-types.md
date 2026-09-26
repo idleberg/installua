@@ -143,6 +143,35 @@ Only installer sections can remember. The compiler writes the header's lines:
 of `.onInit` and `MementoSectionSave` at the start of `.onInstSuccess`, which
 it writes itself when the block has no `onInstSuccess`.
 
+## One of several
+
+Sections the user picks between, as radio buttons: ticking one unticks the one
+that was ticked, and unticking it ticks it again. The first section listed is
+the one ticked at the start, so mark the others `optional`. Lowered through the
+`Sections.nsh` header that ships with NSIS.
+
+**Usage** a `radioButtons { <section>, … }` entry of `installer {}` or
+`uninstaller {}`, listing two or more of that block's sections
+
+```lua
+local small = section("Small", function() end)
+local large = section { "Large", optional = true, body = function() end }
+
+installer {
+	page.components {},
+	page.instFiles {},
+
+	small,
+	large,
+	radioButtons { small, large },
+}
+```
+
+The compiler writes the header's `StartRadioButtons`, `RadioButton` and
+`EndRadioButtons` at the start of `.onSelChange`, which it writes itself when
+the block has no `onSelChange`, and the starting section into a `Var` in
+`.onInit`.
+
 ## Reading and changing a section while it runs
 
 Your installer reaches a section through the handle `section(…)` gives back,

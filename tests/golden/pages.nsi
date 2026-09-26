@@ -43,7 +43,7 @@ Var __GENERATED_sm_menu
 !define MUI_STARTMENUPAGE_TEXT_TOP "Choose a Start Menu folder."
 !define MUI_STARTMENUPAGE_TEXT_CHECKBOX "Do not create shortcuts"
 !define MUI_STARTMENUPAGE_REGISTRY_ROOT "HKCU"
-!define MUI_STARTMENUPAGE_REGISTRY_KEY "Software/Pages"
+!define MUI_STARTMENUPAGE_REGISTRY_KEY "Software\Pages"
 !define MUI_STARTMENUPAGE_REGISTRY_VALUENAME "StartMenuFolder"
 !insertmacro MUI_PAGE_STARTMENU menu $__GENERATED_sm_menu
 Page custom mui.custom.create mui.custom.leave "Registration"

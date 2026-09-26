@@ -28,6 +28,7 @@ mod library;
 mod memento;
 mod multi_user;
 mod pages;
+mod radio;
 mod sig;
 mod x64;
 
@@ -1113,6 +1114,8 @@ fn lower_once(
         claims: BTreeMap::new(),
         callbacks: BTreeMap::new(),
         init_prelude: [Vec::new(), Vec::new()],
+        sel_prelude: [Vec::new(), Vec::new()],
+        radio_vars: Vec::new(),
         lang_strings: BTreeSet::new(),
         multi_user: None,
         memento: None,
@@ -1167,6 +1170,11 @@ struct Lowerer<'a, 'p> {
     /// `MUI_LANGDLL_DISPLAY` and `MUI_UNGETLANGUAGE`, which have to run before
     /// anything reads `$LANGUAGE` and so cannot wait for a body to ask for them.
     init_prelude: [Vec<ir::Instruction>; 2],
+    /// Lines the compiler owes each half's `.onSelChange`: the
+    /// `radioButtons {}` macros, which run before the author's own.
+    sel_prelude: [Vec<ir::Instruction>; 2],
+    /// The `Var` each `radioButtons {}` keeps its ticked section in.
+    radio_vars: Vec<String>,
     /// The `LangString` names `languages {}` declared, so `lang.greeting` is a
     /// resolved read rather than a `$(…)` nobody checked.
     lang_strings: BTreeSet<String>,
@@ -1302,6 +1310,7 @@ impl<'p> Lowerer<'_, 'p> {
         self.multi_user_pass();
         self.memento_pass();
         self.claim_pass();
+        self.radio_pass();
 
         for stmt in self.resolved.block.clone() {
             self.top_level(stmt);
@@ -1431,6 +1440,31 @@ impl<'p> Lowerer<'_, 'p> {
                 });
             }
         }
+        // `radioButtons {}`'s lines, in an `.onSelChange` of their own when the
+        // author wrote none.
+        for half in [Half::Installer, Half::Uninstaller] {
+            let prelude = std::mem::take(&mut self.sel_prelude[half.index()]);
+            if prelude.is_empty() {
+                continue;
+            }
+            let (body, _) = self.body_with(
+                Span::default(),
+                Some(half),
+                table::Place::Anywhere,
+                |lowerer| {
+                    for instruction in prelude {
+                        lowerer.emit(instruction);
+                    }
+                },
+            );
+            self.module.functions.push(ir::Function {
+                name: format!(
+                    "{}onSelChange",
+                    if half == Half::Installer { "." } else { "un." }
+                ),
+                body,
+            });
+        }
         // Globals in first-seen order, emitted before the first body that
         // touches them — which the field order in `ir::Module` already
         // guarantees.
@@ -1440,6 +1474,7 @@ impl<'p> Lowerer<'_, 'p> {
             .iter()
             .map(|global| global.name.clone())
             .collect();
+        self.module.vars.append(&mut self.radio_vars);
         // And one more `Var` per claimed control, because a handle outlives the
         // function that popped it (ruling 7). Only the claimed ones: a control
         // listed inline and bound to no `local` is addressed by nothing, so a
@@ -4660,8 +4695,13 @@ impl<'p> Lowerer<'_, 'p> {
         }
 
         match field.holds {
-            Holds::Str => {
+            Holds::Str | Holds::Path => {
                 if let Some(arg) = self.constant_arg(value, field.installua) {
+                    let arg = if matches!(field.holds, Holds::Path) {
+                        arg.into_path()
+                    } else {
+                        arg
+                    };
                     define(defines, undefines, field.define, Some(arg), field.cleared);
                 }
             }
@@ -5257,6 +5297,8 @@ impl<'p> Lowerer<'_, 'p> {
                 }
             }
             "group" => self.group(value, half, None),
+            // Lowered by [`Self::radio_pass`] before any body.
+            "radioButtons" => {}
             other if CALLBACKS[half.index()].contains(&other) => self.callback(value, half, other),
             // The other half's outcome, which NSIS spells differently.
             other if CALLBACKS[1 - half.index()].contains(&other) => {
@@ -5609,6 +5651,7 @@ impl<'p> Lowerer<'_, 'p> {
         // compiler has to write the callback itself.
         let prelude = match which {
             "onInit" => std::mem::take(&mut self.init_prelude[half.index()]),
+            "onSelChange" => std::mem::take(&mut self.sel_prelude[half.index()]),
             "onInstSuccess" if self.requires.headers.contains("Memento") => {
                 vec![ir::Instruction::new(
                     "!insertmacro",
@@ -6326,6 +6369,15 @@ impl<'p> Lowerer<'_, 'p> {
                 let lhs = self.constant_arg(lhs, what)?;
                 let rhs = self.constant_arg(rhs, what)?;
                 Some(lhs.concat(rhs))
+            }
+            // `lang.greeting`, `$(greeting)`: NSIS picks the text at run time,
+            // but the name is build-time, and a page text or a section's
+            // description is where a translated string is most often wanted.
+            Expr::Field { base, name, .. }
+                if matches!(&**base, Expr::Name(base) if base.text == "lang")
+                    && self.lang_strings.contains(&name.text) =>
+            {
+                Some(ir::Arg::var(format!("$({})", name.text)))
             }
             other => self.constant_string(other, what).map(ir::Arg::str),
         }
