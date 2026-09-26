@@ -71,9 +71,14 @@ run = [
 ]
 
 [tasks.check]
-description = "The three gates, in the order a failure is cheapest to read"
+description = "The gates, in the order a failure is cheapest to read"
 depends = "build:dll"
-run = ["cargo test", "mise run lint", "cargo fmt --check"]
+run = [
+  "cargo test",
+  "mise run lint",
+  "cargo fmt --check",
+  "cargo run -q -- check setup/install.lua",
+]
 
 # The two halves hk drives (see hk.pkl): `format` is its `fix`, `lint` its
 # `check`. Split out so the pre-commit hook and `check` cannot drift apart.
