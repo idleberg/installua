@@ -1,6 +1,6 @@
 [package]
 name = "installua"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Lua-shaped language that compiles to NSIS."
 authors = ["Jan T. Sott"]
 repository = "https://github.com/idleberg/installua"
