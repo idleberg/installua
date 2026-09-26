@@ -51,6 +51,25 @@ description = "Builds fixture DLL with a version resource"
 dir = "tests/fixtures"
 run = "python3 make-version-dll.py"
 
+[tasks.installer]
+description = "setup/installua-dev-windows-x64.exe — cross-compiles, then builds the installer"
+# The GNU target, because it cross-compiles with mingw-w64 and no Windows SDK.
+# Release CI builds the MSVC target on Windows instead.
+env = { CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "x86_64-w64-mingw32-gcc" }
+run = [
+  "rustup target add x86_64-pc-windows-gnu",
+  "cargo build --release --target x86_64-pc-windows-gnu",
+  # Stock NSIS ships no EnVar; the same download release.yml makes.
+  '''
+  plugins="$(makensis -HDRINFO | tr ',' '\n' | grep '^NSISDIR=' | cut -d= -f2)/Plugins/x86-unicode"
+  if [ ! -f "$plugins/EnVar.dll" ]; then
+    curl -sSLo target/EnVar.zip https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip
+    unzip -jo target/EnVar.zip Plugins/x86-unicode/EnVar.dll -d "$plugins"
+  fi
+  ''',
+  "cargo run -q -- build setup/install.lua -D BINARY=../target/x86_64-pc-windows-gnu/release/installua.exe",
+]
+
 [tasks.check]
 description = "The three gates, in the order a failure is cheapest to read"
 depends = "build:dll"
