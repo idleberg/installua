@@ -1,5 +1,8 @@
 # Plan
 
+Work for the 0.2.x patch releases: fixes and missing spellings, none of which
+changes what 0.2 ships.
+
 ## 1. Port the examples NSIS ships
 
 `tests/ports.rs` checks each port in `tests/ports/` against its original by
@@ -27,8 +30,16 @@ goes into Installua first, with its own golden, and the port follows.
 support. For each, decide whether ordinary code reaches it: if so, it is a
 missing feature, and it gets a spelling or a real diagnostic; if not, it stays.
 
+## 3. A field on a file handle names the wrong type
+
+`f.size` on a `fileOpen` handle is reported as a field of a control, with the
+control fields as the note. Files and windows share one `handle` type
+(`src/lower/handle.rs`), so the lowering cannot tell them apart. The fix is a
+fifth type rather than a check. `KNOWN` in `tests/positions.rs` holds its two
+cells, and a fix fails that test until they leave the list.
+
 ## Later: random programs
 
 Generate random well-typed programs from the grammar, compile them, and run
 `makensis -WX`. A panic, a generic `not-yet-implemented` or a `makensis` error
-is a finding. Worth it only once the two above are done.
+is a finding. Worth it only once the items above are done.
