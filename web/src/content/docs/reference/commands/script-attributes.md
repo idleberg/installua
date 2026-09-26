@@ -160,6 +160,7 @@ attributes {
 		keys = {
 			ProductName = "Example",
 			CompanyName = "Example Ltd",
+			FileDescription = "Example Setup",
 			FileVersion = "1.4.2",
 		},
 	},
