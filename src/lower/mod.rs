@@ -590,6 +590,9 @@ pub const GROUP_OPTIONS: &[&str] = &["expanded", "description"];
 /// The `versionInfo = { … }` fields, for the same reason.
 pub const VERSION_INFO_FIELDS: &[&str] = &["product", "file", "keys"];
 
+/// The keys `makensis` checks every `versionInfo` string table for.
+const VERSION_INFO_KEYS: &[&str] = &["FileVersion", "FileDescription", "LegalCopyright"];
+
 /// The field names, for the error that has to list them.
 const HANDLE_FIELDS: &[&str] = &[
     "selected",
@@ -2831,6 +2834,27 @@ impl<'p> Lowerer<'_, 'p> {
                         if let Some(arg) = self.constant_arg(value, &name.text) {
                             keys.push((name.text.clone(), arg));
                         }
+                    }
+                    // `makensis` wants these three in every string table, and
+                    // its warning 9100 (`Source/build.cpp`) names no line.
+                    let missing: Vec<&str> = VERSION_INFO_KEYS
+                        .iter()
+                        .copied()
+                        .filter(|key| {
+                            !fields.iter().any(|field| {
+                                matches!(field, TableField::Named { name, .. } if name.text == *key)
+                            })
+                        })
+                        .collect();
+                    if !fields.is_empty() && !missing.is_empty() {
+                        self.diags.push(
+                            Diagnostic::warning(
+                                Code::MissingAttribute,
+                                value.span(),
+                                format!("`keys` has no {}", list(&missing)),
+                            )
+                            .note("`makensis` warns without them, and `-WX` fails the build"),
+                        );
                     }
                     keys.sort_by(|a, b| a.0.cmp(&b.0));
                     for (key, arg) in keys {

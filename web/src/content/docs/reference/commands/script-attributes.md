@@ -150,6 +150,8 @@ installer {
 
 `VIProductVersion` is the four-part version Explorer shows on the Properties
 tab, `file` is `VIFileVersion` beside it, and `keys` are the free-form pairs.
+Any key name works, but `makensis` warns unless `FileVersion`,
+`FileDescription` and `LegalCopyright` are among them, and so does the compiler.
 
 **Usage** `versionInfo = { product = <string>, file = <string>, keys = { … } }`
 

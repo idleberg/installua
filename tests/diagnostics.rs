@@ -551,6 +551,29 @@ fn library_says_what_is_wrong() {
 }
 
 #[test]
+fn version_info_names_the_keys_makensis_wants() {
+    let source = |keys: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\", versionInfo = {{ product = \"1.0.0.0\", \
+             keys = {{ {keys} }} }} }}\n\
+             installer {{ section(\"Core\", function() end) }}"
+        )
+    };
+    let diags = compile(&source("ProductName = \"A\", FileVersion = \"1.0\""));
+    let missing: Vec<(Code, String)> = diags.iter().map(|d| (d.code, d.message.clone())).collect();
+    assert_eq!(
+        missing,
+        [(
+            Code::MissingAttribute,
+            "`keys` has no `FileDescription`, `LegalCopyright`".to_string()
+        )],
+    );
+    let all = "FileVersion = \"1.0\", FileDescription = \"A\", LegalCopyright = \"B\"";
+    assert!(compile(&source(all)).is_empty());
+    assert!(compile(&source("")).is_empty());
+}
+
+#[test]
 fn x64_says_what_is_wrong() {
     for (call, code) in [
         ("if runningX64(1) then end", Code::WrongArity),
