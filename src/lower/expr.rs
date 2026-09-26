@@ -177,12 +177,11 @@ impl BodyLowerer<'_, '_> {
             // rather than in `field_read` so that it concatenates like any
             // other piece; an unknown name falls through to `field_read`,
             // which is where the diagnostic lives.
-            Expr::Field { base, name, .. }
-                if matches!(&**base, Expr::Name(base) if base.text == "lang")
-                    && self.lang_strings.contains(&name.text) =>
+            field @ Expr::Field { .. }
+                if let Some(text) = super::languages::lang_ref(field, self.lang_strings) =>
             {
                 Some(Typed {
-                    arg: ir::Arg::var(format!("$({})", name.text)),
+                    arg: ir::Arg::var(text),
                     ty: Ty::Str,
                 })
             }

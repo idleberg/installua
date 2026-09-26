@@ -37,6 +37,7 @@ installer {
 
   section("Core", function()
     detailPrint(lang.greeting)
+    detailPrint(lang.builtin.Name)
     detailPrint(lang.folder .. ": " .. INSTDIR)
     setOutPath(INSTDIR)
     writeUninstaller(INSTDIR .. "/uninstall.exe")

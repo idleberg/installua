@@ -6375,11 +6375,10 @@ impl<'p> Lowerer<'_, 'p> {
             // `lang.greeting`, `$(greeting)`: NSIS picks the text at run time,
             // but the name is build-time, and a page text or a section's
             // description is where a translated string is most often wanted.
-            Expr::Field { base, name, .. }
-                if matches!(&**base, Expr::Name(base) if base.text == "lang")
-                    && self.lang_strings.contains(&name.text) =>
+            field @ Expr::Field { .. }
+                if let Some(text) = languages::lang_ref(field, &self.lang_strings) =>
             {
-                Some(ir::Arg::var(format!("$({})", name.text)))
+                Some(ir::Arg::var(text))
             }
             other => self.constant_string(other, what).map(ir::Arg::str),
         }

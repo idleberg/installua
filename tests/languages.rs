@@ -314,6 +314,22 @@ fn a_string_nothing_declares_is_refused() {
     assert!(errors[0].1.contains("nosuch"), "{errors:?}");
 }
 
+/// `lang.builtin` is NSIS's own `$(^…)` strings, so it is not a name to
+/// declare, nor a string to read, and a name under it is one NSIS has.
+#[test]
+fn the_builtin_strings_are_not_a_scripts_own() {
+    let errors = errors(&program(
+        "languages { locales = { English = { builtin = \"x\" } } }",
+        "detailPrint(lang.builtin) detailPrint(lang.builtin.name)",
+    ));
+    let codes: Vec<Code> = errors.iter().map(|(code, _)| *code).collect();
+    assert_eq!(
+        codes,
+        [Code::BadFieldValue, Code::UnknownField, Code::UnknownField],
+        "{errors:?}"
+    );
+}
+
 /// One block, like every other script-global declaration.
 #[test]
 fn a_second_block_names_the_first() {

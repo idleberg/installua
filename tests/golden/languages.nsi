@@ -35,6 +35,7 @@ LangString greeting ${LANG_PORTUGUESEBR} "Instalando o Polyglot"
 
 Section "Core"
   DetailPrint $(greeting)
+  DetailPrint $(^Name)
   DetailPrint "$(folder): $INSTDIR"
   SetOutPath $INSTDIR
   WriteUninstaller "$INSTDIR\uninstall.exe"

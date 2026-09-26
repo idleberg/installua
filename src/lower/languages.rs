@@ -277,6 +277,17 @@ impl Lowerer<'_, '_> {
                 );
                 continue;
             };
+            if name.text == "builtin" {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        name.span,
+                        "`builtin` is not a name for a language string",
+                    )
+                    .note("`lang.builtin` is where NSIS's own strings are, `lang.builtin.Name`"),
+                );
+                continue;
+            }
             let Some(ConstValue::Str(text)) = self.constant(value) else {
                 self.bad_value(
                     value.span(),
@@ -539,5 +550,129 @@ impl Lowerer<'_, '_> {
             "the names are the `.nlf` files in `Contrib/Language files`, and they are endonym-free: \
              `German`, not `Deutsch`",
         ));
+    }
+}
+
+/// NSIS's own language strings, `$(^Name)` and the rest, as `lang.builtin.Name`
+/// reads them: the table in `Source/lang.cpp`. Nothing declares them — every
+/// script has all of them, translated by the language file — so they sit one
+/// level down rather than among the names a script chose, the way NSIS marks
+/// them with `^`. That costs `builtin` as a name of one's own.
+pub(super) const BUILTIN: &[&str] = &[
+    "AcceptBtn",
+    "AgreeBtn",
+    "BackBtn",
+    "Branding",
+    "BrowseBtn",
+    "Byte",
+    "CancelBtn",
+    "CantWrite",
+    "ClickInstall",
+    "ClickNext",
+    "ClickUninstall",
+    "CloseBtn",
+    "Completed",
+    "CompletedSubCaption",
+    "ComponentsSubCaption",
+    "ComponentsSubText1",
+    "ComponentsSubText2",
+    "ComponentsText",
+    "ConfirmSubCaption",
+    "CopyDetails",
+    "CopyFailed",
+    "CopyTo",
+    "CouldNotLoad",
+    "CreatedUninstaller",
+    "CreateFolder",
+    "CreateShortcut",
+    "Custom",
+    "Delete",
+    "DeleteOnReboot",
+    "DirBrowseText",
+    "DirSubCaption",
+    "DirSubText",
+    "DirText",
+    "DontAcceptBtn",
+    "ErrorCreating",
+    "ErrorCreatingShortcut",
+    "ErrorDecompressing",
+    "ErrorRegistering",
+    "ErrorWriting",
+    "Exec",
+    "ExecShell",
+    "Extract",
+    "FileError",
+    "Font",
+    "FontSize",
+    "Giga",
+    "InstallBtn",
+    "InstallingSubCaption",
+    "InvalidOpcode",
+    "Kilo",
+    "Language",
+    "LicenseData",
+    "LicenseSubCaption",
+    "LicenseText",
+    "LicenseTextCB",
+    "LicenseTextRB",
+    "LogInstall",
+    "Mega",
+    "Name",
+    "NameDA",
+    "NextBtn",
+    "NoOLE",
+    "OutputFolder",
+    "Registering",
+    "RemoveFolder",
+    "Rename",
+    "RenameOnReboot",
+    "RTL",
+    "SetupCaption",
+    "ShowDetailsBtn",
+    "Skipped",
+    "SpaceAvailable",
+    "SpaceRequired",
+    "SymbolNotFound",
+    "UnCompletedSubCaption",
+    "UnComponentsSubCaption",
+    "UnComponentsSubText1",
+    "UnComponentsSubText2",
+    "UnComponentsText",
+    "UnDirBrowseText",
+    "UnDirSubCaption",
+    "UnDirSubText",
+    "UnDirText",
+    "UninstallBtn",
+    "UninstallCaption",
+    "UninstallingSubCaption",
+    "UninstallingSubText",
+    "UninstallingText",
+    "UnLicenseText",
+    "UnLicenseTextCB",
+    "UnLicenseTextRB",
+    "Unregistering",
+];
+
+/// `lang.greeting` or `lang.builtin.Name`, as the `$(…)` NSIS reads, when that
+/// string exists.
+pub(super) fn lang_ref(expr: &Expr, declared: &BTreeSet<String>) -> Option<String> {
+    let Expr::Field { base, name, .. } = expr else {
+        return None;
+    };
+    match &**base {
+        Expr::Name(base) if base.text == "lang" && declared.contains(&name.text) => {
+            Some(format!("$({})", name.text))
+        }
+        Expr::Field {
+            base,
+            name: builtin,
+            ..
+        } if matches!(&**base, Expr::Name(base) if base.text == "lang")
+            && builtin.text == "builtin"
+            && BUILTIN.contains(&name.text.as_str()) =>
+        {
+            Some(format!("$(^{})", name.text))
+        }
+        _ => None,
     }
 }

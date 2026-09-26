@@ -36,6 +36,26 @@ A read also works where the value has to be known while building, such as a
 section's `description` or a page's text: it is `$(name)`, and NSIS picks the
 locale when the installer runs.
 
+## Built-in language strings
+
+NSIS's own strings, the `$(^…)` ones such as `$(^Name)` and `$(^NameDA)`, are
+under `lang.builtin`. Every installer has all of them, translated by the
+language file, so none is declared. That is also why `builtin` is not a name a
+locale can declare.
+
+**Usage** `lang.builtin.<name>`, with the names from NSIS's `Source/lang.cpp`
+
+```lua
+attributes { name = "Example" }
+
+installer {
+	section("Core", function()
+		writeReg(HKLM, "Software/Microsoft/Windows/CurrentVersion/Uninstall/" .. lang.builtin.Name,
+			"DisplayName", lang.builtin.Name)
+	end),
+}
+```
+
 ## The language dialog
 
 `ask` is `MUI_LANGDLL_DISPLAY` and its settings. Present it and the compiler

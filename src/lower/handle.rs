@@ -320,6 +320,25 @@ impl BodyLowerer<'_, '_> {
             self.unknown_lang_string(field);
             return None;
         }
+        if let Expr::Field { base, name, .. } = base
+            && matches!(&**base, Expr::Name(base) if base.text == "lang")
+            && name.text == "builtin"
+        {
+            let mut diagnostic = Diagnostic::error(
+                Code::UnknownField,
+                field.span,
+                format!("`{}` is not one of NSIS's language strings", field.text),
+            );
+            if let Some(nearest) = super::languages::BUILTIN
+                .iter()
+                .find(|builtin| builtin.eq_ignore_ascii_case(&field.text))
+            {
+                diagnostic = diagnostic.note(format!("did you mean `{nearest}`?"));
+            }
+            self.diags
+                .push(diagnostic.note("the names are `$(^…)`'s, as `Source/lang.cpp` lists them"));
+            return None;
+        }
 
         match self.addressed(base, base.span())? {
             Addressed::Section(handle) => self.handle_read(&handle, field, dest),
@@ -364,7 +383,9 @@ impl BodyLowerer<'_, '_> {
             field.span,
             format!("`{}` is not a language string", field.text),
         );
-        diagnostic = if self.lang_strings.is_empty() {
+        diagnostic = if field.text == "builtin" {
+            diagnostic.note("it holds NSIS's own strings, one at a time: `lang.builtin.Name`")
+        } else if self.lang_strings.is_empty() {
             diagnostic.note(
                 "nothing declares one: `languages { locales = { English = { … } } }` is where                  they live",
             )
