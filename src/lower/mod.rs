@@ -24,6 +24,7 @@ mod fields;
 mod handle;
 mod insttype;
 mod languages;
+mod library;
 mod memento;
 mod multi_user;
 mod pages;

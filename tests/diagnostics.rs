@@ -506,6 +506,50 @@ fn memento_says_what_is_wrong() {
     }
 }
 
+#[test]
+fn library_says_what_is_wrong() {
+    let body = |call: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function() {call} end) }}"
+        )
+    };
+    for (call, code) in [
+        ("installLib(\"a.dll\")", Code::WrongArity),
+        (
+            "installLib(\"a.dll\", INSTDIR, { type = \"OCX\" })",
+            Code::BadFieldValue,
+        ),
+        (
+            "installLib(\"a.dll\", INSTDIR .. \"/a.dll\", { reboot = 1 })",
+            Code::BadFieldValue,
+        ),
+        (
+            "installLib(\"a.dll\", INSTDIR .. \"/a.dll\", { remove = true })",
+            Code::UnknownField,
+        ),
+        (
+            "installLib(INSTDIR, INSTDIR .. \"/a.dll\")",
+            Code::BadFieldValue,
+        ),
+        ("installLib(\"a.dll\", INSTDIR)", Code::BadFieldValue),
+        (
+            "uninstallLib(INSTDIR, { equalVersion = true })",
+            Code::UnknownField,
+        ),
+        (
+            "uninstallLib(INSTDIR, { reboot = true })",
+            Code::BadFieldValue,
+        ),
+        ("local x = uninstallLib(INSTDIR)", Code::TypeMismatch),
+    ] {
+        let source = body(call);
+        let diags = compile(&source);
+        let codes: Vec<Code> = diags.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [code], "{source}\n{}", diags.render("<test>"));
+    }
+}
+
 /// A value that failed is reported once, where it failed, and not again
 /// wherever it lands: a `local`, a global, a parameter, a `return`.
 #[test]

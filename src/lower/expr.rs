@@ -600,6 +600,7 @@ impl BodyLowerer<'_, '_> {
         match name.as_str() {
             "writeReg" => return self.write_reg(args, dest, span),
             "messageBox" => return self.message_box(args, dest, span),
+            "installLib" | "uninstallLib" => return self.library(&name, args, dest, span),
             "raw" => return self.raw(args, dest, span),
             // The anchored form, in the one place it means nothing: a body
             // already has a "here", and an anchor is a position *outside* every

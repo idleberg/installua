@@ -18,13 +18,12 @@ installua MUI coverage -- Modern UI 2, 255 names
 installua header coverage -- NSISDIR/Include, 31 headers
 
   exposed            5
-  lowering           4
+  lowering           5
   replaced           4
   rejected           7
-  todo              11
+  todo              10
 
 header todo:
-  Library                 `InstallLib`/`UnInstallLib` are behaviour, not a signature, so a lowering
   VB6RunTime              rides on `Library.nsh`, so it is classified once that lands
   Win/COM                 Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
   Win/Propkey             Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number

@@ -76,7 +76,7 @@ pub const ROWS: &[(&str, Class)] = &[
     ),
     (
         "Library",
-        Class::Todo("`InstallLib`/`UnInstallLib` are behaviour, not a signature, so a lowering"),
+        Class::Lowering("`installLib` and `uninstallLib`"),
     ),
     (
         "LogicLib",

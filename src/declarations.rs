@@ -291,7 +291,8 @@ impl std::fmt::Display for Problem {
 /// is. `Library.nsh` is the case — `SetOverwrite`, reference counting, the
 /// reboot flag and shared-DLL bookkeeping are not a signature, and a
 /// declaration that described only its parameter list would be a correct file
-/// documenting the wrong thing. Those are a compiler-owned lowering or nothing.
+/// documenting the wrong thing. Those are a compiler-owned lowering or nothing,
+/// and here they are one: `installLib`, in `lower/library.rs`.
 ///
 /// `FileFunc.getSize` predates the rule and does not quite meet it — its own
 /// comment says it is here because a byte count proved the `uint` lattice.

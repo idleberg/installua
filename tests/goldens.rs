@@ -27,6 +27,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("headers", &[]),
     ("include", &[]),
     ("languages", &[]),
+    ("library", &[]),
     ("memento", &[]),
     ("multiuser", &[]),
     ("multiuser-plain", &[]),
@@ -58,6 +59,8 @@ const TIER2_ONLY: &[(&str, &[Code])] = &[("thirdparty", &[])];
 /// contents do not matter to any assertion here, only that opening them works.
 const ASSETS: &[(&str, &[u8])] = &[
     ("LICENSE.txt", b"Terms.\n"),
+    // `InstallLib` reads its version while `makensis` runs; one with none is fine.
+    ("shared.dll", b"x"),
     ("check.bmp", include_bytes!("golden/assets/check.bmp")),
     // Under its real path too, because `build-time` reaches it through a
     // `glob`, and what a `glob` unrolls to is the path as written.
