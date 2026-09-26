@@ -473,7 +473,15 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
     // NSIS can read its own line number and cannot be told a different one.
     let makensis = std::env::var("MAKENSIS").unwrap_or_else(|_| "makensis".to_string());
     let source_name = input.display().to_string();
-    match installua::assemble::assemble(&output, &map, &source_name, diags.files(), &makensis) {
+    let base = options.base.clone().unwrap_or_default();
+    match installua::assemble::assemble(
+        &output,
+        &base,
+        &map,
+        &source_name,
+        diags.files(),
+        &makensis,
+    ) {
         Err(error) => {
             log::error(format!("cannot run `{makensis}`: {error}"));
             log::log(format!("the script was written to {}", output.display()));

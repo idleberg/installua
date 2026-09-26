@@ -227,26 +227,28 @@ pub struct Assembly {
 /// most common NSIS mistakes are all warning 6000.
 pub fn assemble(
     script: &Path,
+    base: &Path,
     map: &LineMap,
     source: &str,
     files: &Files,
     makensis: &str,
 ) -> std::io::Result<Assembly> {
-    // Relative `File` paths in the script resolve against the script, so
-    // `makensis` runs there. An empty parent means the script *is* in the
-    // current directory, and passing `""` as a working directory is an
-    // error rather than a no-op. Because the directory moves, the script
-    // has to be named relative to it -- a path like `dir/install.nsi` would
-    // otherwise be looked up as `dir/dir/install.nsi`.
-    let directory = match script.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent,
-        _ => Path::new("."),
+    // Relative paths in the source mean "beside the source" (`base`), and the
+    // script keeps them as written. `makensis` resolves them against its own
+    // working directory, and by default moves that to the script's, which is
+    // wrong as soon as `-o` writes the script elsewhere. So it runs in `base`
+    // with `-NOCD`, and the script is named absolutely, since it may not be
+    // under `base`. An empty `base` means the current directory, and `""` as
+    // a working directory is an error rather than a no-op.
+    let directory = if base.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        base
     };
-    let name = script.file_name().map_or(script, Path::new);
-
     let output = Command::new(makensis)
+        .arg("-NOCD")
         .arg("-WX")
-        .arg(name)
+        .arg(std::path::absolute(script)?)
         .current_dir(directory)
         .output()?;
 

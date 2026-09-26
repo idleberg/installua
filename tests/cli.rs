@@ -380,7 +380,7 @@ installer { page.instFiles {}, section(\"Core\", function() acme.install(\"$INST
     }
 
     /// `installua <args>`, run from `dir` and named no file.
-    fn run_in(dir: &Path, args: &[&str]) -> (bool, String) {
+    pub(super) fn run_in(dir: &Path, args: &[&str]) -> (bool, String) {
         let output = Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))
             .args(args)
             .current_dir(dir)
@@ -601,4 +601,29 @@ mod init {
             "`--force` left the file alone"
         );
     }
+}
+
+/// A relative path means "beside the source" even when `-o` writes the script
+/// somewhere else. `makensis` moved into the script's directory by default,
+/// so `page.license { file = "LICENSE.txt" }` was looked up beside the `.nsi`.
+#[test]
+fn build_resolves_paths_beside_the_source_under_o() {
+    if Command::new("makensis").arg("-VERSION").output().is_err() {
+        return;
+    }
+    let dir = std::env::temp_dir().join("installua-build-o");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).expect("create the scratch directory");
+    std::fs::create_dir_all(dir.join("out")).expect("create the scratch directory");
+    std::fs::write(dir.join("src/LICENSE.txt"), "license\n").expect("write the license");
+    std::fs::write(
+        dir.join("src/install.lua"),
+        "attributes { name = \"A\", outFile = \"a.exe\" }\n\
+         installer { page.license { file = \"LICENSE.txt\" }, page.instFiles {}, \
+         section(\"Core\", function() detailPrint(\"x\") end) }\n",
+    )
+    .expect("write the program");
+
+    let (passed, output) = monorepo::run_in(&dir, &["build", "src/install.lua", "-o", "out/a.nsi"]);
+    assert!(passed, "{output}");
 }
