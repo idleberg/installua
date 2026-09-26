@@ -114,7 +114,7 @@ pub const ROWS: &[(&str, Class)] = &[
     ),
     (
         "VB6RunTime",
-        Class::Todo("rides on `Library.nsh`, so it is classified once that lands"),
+        Class::Rejected("the VB6 runtime, which every Windows NSIS 3 targets already ships"),
     ),
     (
         "VPatchLib",

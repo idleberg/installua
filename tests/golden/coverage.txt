@@ -20,11 +20,10 @@ installua header coverage -- NSISDIR/Include, 31 headers
   exposed            5
   lowering           6
   replaced           4
-  rejected           7
-  todo               9
+  rejected           8
+  todo               8
 
 header todo:
-  VB6RunTime              rides on `Library.nsh`, so it is classified once that lands
   Win/COM                 Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
   Win/Propkey             Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
   Win/RestartManager      Windows constants beyond messages; not flat like `WinMessages`, since `WinCore` defines `HKLM` as a number
