@@ -47,7 +47,7 @@ attributes {
 | `SetDateSave`           | `dateSave`           | boolean                                                    |
 | `CRCCheck`              | `crcCheck`           | boolean                                                    |
 | `FileBufSize`           | `fileBufSize`        | int                                                        |
-| `SetOverwrite`          | `overwrite`          | `"on"` \| `"off"` \| `"try"` \| `"ifnewer"` \| `"ifdiff"`  |
+| `SetOverwrite`          | `overwrite`          | `"on"` \| `"off"` \| `"try"` \| `"ifnewer"` \| `"ifdiff"` — the default; `file`'s `overwrite` changes one call |
 | `AllowSkipFiles`        | `allowSkipFiles`     | boolean — the default; `file`'s `allowSkip` changes one call   |
 
 ```lua

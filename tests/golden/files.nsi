@@ -4,6 +4,7 @@ Unicode true
 
 Name "Files"
 OutFile "files-setup.exe"
+SetOverwrite ifnewer
 
 !insertmacro MUI_PAGE_INSTFILES
 
@@ -16,4 +17,9 @@ Section ""
   File /nonfatal "LICENSE.txt"
   AllowSkipFiles on
   File "LICENSE.txt"
+  AllowSkipFiles off
+  SetOverwrite off
+  File "LICENSE.txt"
+  SetOverwrite ifnewer
+  AllowSkipFiles on
 SectionEnd

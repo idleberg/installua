@@ -1067,10 +1067,11 @@ fn declaration(
                 .filter_map(|(name, flag)| Some(format!("{name}: {}", flag_type(flag)?))),
         )
         .collect();
-    // `AllowSkipFiles` around one `File`, which is no flag of `File`'s — see
-    // the lowering's `file_allow_skip`.
+    // `AllowSkipFiles` and `SetOverwrite` around one `File`, which are no
+    // flags of `File`'s — see the lowering's `file_states`.
     if spelling == "file" {
         options.push("allowSkip: boolean".to_string());
+        options.push("overwrite: \"on\"|\"off\"|\"try\"|\"ifnewer\"|\"ifdiff\"".to_string());
     }
     if !options.is_empty() {
         let _ = writeln!(out, "---@param options? {{ {} }}", options.join(", "));

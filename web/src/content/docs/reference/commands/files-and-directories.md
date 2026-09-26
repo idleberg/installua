@@ -18,7 +18,7 @@ otherwise.
 
 **Usage** `file(filespec, …[, { … }])` → nothing
 **Options** `recursive`, `exclude = { … }`, `keepAttributes`, `nonFatal`,
-`allowSkip`
+`allowSkip`, `overwrite`
 
 ```lua
 setOutPath(INSTDIR)
@@ -26,10 +26,12 @@ file("assets/icon.ico", { exclude = { "*.tmp", "*.log" } })
 ```
 
 `allowSkip` is `AllowSkipFiles` for this one call: `false` takes the Ignore
-button away when the target file is locked. NSIS's command holds for every
-`File` after it in the script, so the compiler writes it before this `File` and
-puts back the [`allowSkipFiles`](/reference/commands/script-attributes/)
-attribute after it.
+button away when the target file is locked. `overwrite` is `SetOverwrite` for
+this one call, `"on"`, `"off"`, `"try"`, `"ifnewer"` or `"ifdiff"`. NSIS's
+commands hold for every `File` after them in the script, so the compiler writes
+them before this `File` and puts back the
+[`allowSkipFiles` and `overwrite`](/reference/commands/script-attributes/)
+attributes after it.
 
 ## ReserveFile
 

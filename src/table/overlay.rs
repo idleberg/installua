@@ -1699,9 +1699,8 @@ pub const ROWS: &[Row] = &[
     // 1, and the only reason these four were not beside it is that nobody
     // looked at the group again after writing the reason.
     //
-    // The per-`file` override is a different feature and still absent: `file`
-    // has no `overwrite = …` yet. Withholding the installer-wide default until
-    // that exists would be withholding the common case for the rare one.
+    // The per-`file` override is a different feature: `file`'s `overwrite`
+    // option, which the lowering writes around its one `File`.
     attribute("SetCompress", "compress", Setting::Enum),
     // The first attribute to reach its own flags, and the row [`Setting::Flags`]
     // was written for: `compressor = { "lzma", solid = true }`. It had been the

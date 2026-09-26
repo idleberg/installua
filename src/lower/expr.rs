@@ -600,7 +600,13 @@ impl BodyLowerer<'_, '_> {
         match name.as_str() {
             "writeReg" => return self.write_reg(args, dest, span),
             "messageBox" => return self.message_box(args, dest, span),
-            "file" if allow_skip(args).is_some() => return self.file_allow_skip(call, dest),
+            "file"
+                if FILE_STATES
+                    .iter()
+                    .any(|s| file_option(args, s.option).is_some()) =>
+            {
+                return self.file_states(call, dest);
+            }
             "installLib" | "uninstallLib" => return self.library(&name, args, dest, span),
             "runningX64" | "wow64" | "nativeMachine" => {
                 let Some(dest) = dest else {
@@ -821,56 +827,66 @@ impl BodyLowerer<'_, '_> {
         }
     }
 
-    /// `file(…, { allowSkip = false })` — `AllowSkipFiles` for one call.
+    /// `file(…, { allowSkip = false, overwrite = "ifnewer" })` —
+    /// `AllowSkipFiles` and `SetOverwrite` for one call.
     ///
-    /// NSIS's `AllowSkipFiles` is build-time state that holds for every `File`
-    /// line after it in the script, and this language moves bodies around, so a
-    /// statement form would leak into whichever body the layout puts next. As an
-    /// option it is written before the one `File` and put back after it, to the
+    /// Both are build-time state that holds for every `File` line after it in
+    /// the script, and this language moves bodies around, so a statement form
+    /// would leak into whichever body the layout puts next. As options they are
+    /// written before the one `File` and put back after it, to the
     /// `attributes {}` value that every other `File` still sees.
-    fn file_allow_skip(&mut self, call: &Expr, dest: Option<&Slot>) -> Option<Ty> {
+    fn file_states(&mut self, call: &Expr, dest: Option<&Slot>) -> Option<Ty> {
         let Expr::Call { callee, args, span } = call else {
             return None;
         };
-        let value = allow_skip(args)?;
-        let Some(ConstValue::Bool(allow)) = self.constant(value) else {
-            self.bad_value(
-                value.span(),
-                "allowSkip",
-                "`true` or `false`",
-                "it is written as `AllowSkipFiles` at build time, so it cannot come from a register",
-            );
-            return None;
-        };
+        let mut changed = Vec::new();
+        for state in FILE_STATES {
+            let Some(value) = file_option(args, state.option) else {
+                continue;
+            };
+            let Some(want) = self.constant(value).as_ref().and_then(|v| state.word(v)) else {
+                self.bad_value(
+                    value.span(),
+                    state.option,
+                    state.wanted,
+                    &format!(
+                        "it is written as `{}` at build time, from a constant",
+                        state.command
+                    ),
+                );
+                return None;
+            };
+            let default = self.default_state(state);
+            if want != default {
+                changed.push((state.command, want, default));
+            }
+        }
         let mut args = args.clone();
         if let Some(Expr::Table { fields, .. }) = args.last_mut() {
-            fields.retain(
-                |field| !matches!(field, TableField::Named { name, .. } if name.text == "allowSkip"),
-            );
+            fields.retain(|field| {
+                !matches!(field, TableField::Named { name, .. }
+                    if FILE_STATES.iter().any(|s| s.option == name.text))
+            });
         }
         let rest = Expr::Call {
             callee: callee.clone(),
             args,
             span: *span,
         };
-        let default = self.default_allow_skip();
-        if allow == default {
-            return self.call(&rest, dest);
+        let set =
+            |command: &str, word: &str| ir::Instruction::new(command, vec![ir::Arg::raw(word)]);
+        for (command, want, _) in &changed {
+            self.emit(set(command, want));
         }
-        let set = |on: bool| {
-            ir::Instruction::new(
-                "AllowSkipFiles",
-                vec![ir::Arg::raw(if on { "on" } else { "off" })],
-            )
-        };
-        self.emit(set(allow));
         let ty = self.call(&rest, dest);
-        self.emit(set(default));
+        for (command, _, default) in changed.iter().rev() {
+            self.emit(set(command, default));
+        }
         ty
     }
 
-    /// `attributes { allowSkipFiles = … }`, or NSIS's default of on.
-    fn default_allow_skip(&self) -> bool {
+    /// The state's `attributes {}` field, or NSIS's default of `on`.
+    fn default_state(&self, state: &FileState) -> &'static str {
         let consts = &self.resolved.consts;
         self.resolved
             .block
@@ -883,20 +899,18 @@ impl BodyLowerer<'_, '_> {
                         return None;
                     };
                     fields.iter().find_map(|field| match field {
-                        TableField::Named { name, value } if name.text == "allowSkipFiles" => {
-                            match crate::resolve::fold(value, &|name| {
+                        TableField::Named { name, value } if name.text == state.attribute => {
+                            crate::resolve::fold(value, &|name| {
                                 consts.get(name).map(|c| c.value.clone())
-                            }) {
-                                Some(ConstValue::Bool(on)) => Some(on),
-                                _ => None,
-                            }
+                            })
+                            .and_then(|v| state.word(&v))
                         }
                         _ => None,
                     })
                 }
                 _ => None,
             })
-            .unwrap_or(true)
+            .unwrap_or("on")
     }
 
     /// Refuse a call NSIS would accept and then ignore.
@@ -3558,13 +3572,50 @@ fn result_sign(op: BinOp, lhs: &Ty, rhs: &Ty) -> Sign {
     }
 }
 
-/// The `allowSkip` entry of a `file` call's options table.
-fn allow_skip(args: &[Expr]) -> Option<&Expr> {
+/// A build-time state `file` sets for its one call: the option, the
+/// `attributes {}` field holding the installer-wide value, and the command.
+struct FileState {
+    option: &'static str,
+    attribute: &'static str,
+    command: &'static str,
+    wanted: &'static str,
+}
+
+const FILE_STATES: &[FileState] = &[
+    FileState {
+        option: "allowSkip",
+        attribute: "allowSkipFiles",
+        command: "AllowSkipFiles",
+        wanted: "`true` or `false`",
+    },
+    FileState {
+        option: "overwrite",
+        attribute: "overwrite",
+        command: "SetOverwrite",
+        wanted: "`\"on\"`, `\"off\"`, `\"try\"`, `\"ifnewer\"` or `\"ifdiff\"`",
+    },
+];
+
+impl FileState {
+    /// The command's argument for `value`, if it is one.
+    fn word(&self, value: &ConstValue) -> Option<&'static str> {
+        match (self.command, value) {
+            ("AllowSkipFiles", ConstValue::Bool(on)) => Some(if *on { "on" } else { "off" }),
+            ("SetOverwrite", ConstValue::Str(word)) => ["on", "off", "try", "ifnewer", "ifdiff"]
+                .into_iter()
+                .find(|w| w == word),
+            _ => None,
+        }
+    }
+}
+
+/// The `option` entry of a `file` call's options table.
+fn file_option<'a>(args: &'a [Expr], option: &str) -> Option<&'a Expr> {
     let Some(Expr::Table { fields, .. }) = args.last() else {
         return None;
     };
     fields.iter().find_map(|field| match field {
-        TableField::Named { name, value } if name.text == "allowSkip" => Some(value),
+        TableField::Named { name, value } if name.text == option => Some(value),
         _ => None,
     })
 }
