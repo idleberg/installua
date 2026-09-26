@@ -48,7 +48,7 @@ attributes {
 | `CRCCheck`              | `crcCheck`           | boolean                                                    |
 | `FileBufSize`           | `fileBufSize`        | int                                                        |
 | `SetOverwrite`          | `overwrite`          | `"on"` \| `"off"` \| `"try"` \| `"ifnewer"` \| `"ifdiff"`  |
-| `AllowSkipFiles`        | `allowSkipFiles`     | boolean                                                    |
+| `AllowSkipFiles`        | `allowSkipFiles`     | boolean — the default; `file`'s `allowSkip` changes one call   |
 
 ```lua
 attributes {

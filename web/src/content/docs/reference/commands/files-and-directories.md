@@ -17,12 +17,19 @@ output directory. A missing file is a build error unless `nonFatal` says
 otherwise.
 
 **Usage** `file(filespec, …[, { … }])` → nothing
-**Options** `recursive`, `exclude = { … }`, `keepAttributes`, `nonFatal`
+**Options** `recursive`, `exclude = { … }`, `keepAttributes`, `nonFatal`,
+`allowSkip`
 
 ```lua
 setOutPath(INSTDIR)
 file("assets/icon.ico", { exclude = { "*.tmp", "*.log" } })
 ```
+
+`allowSkip` is `AllowSkipFiles` for this one call: `false` takes the Ignore
+button away when the target file is locked. NSIS's command holds for every
+`File` after it in the script, so the compiler writes it before this `File` and
+puts back the [`allowSkipFiles`](/reference/commands/script-attributes/)
+attribute after it.
 
 ## ReserveFile
 

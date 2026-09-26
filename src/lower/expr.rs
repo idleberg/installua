@@ -600,6 +600,7 @@ impl BodyLowerer<'_, '_> {
         match name.as_str() {
             "writeReg" => return self.write_reg(args, dest, span),
             "messageBox" => return self.message_box(args, dest, span),
+            "file" if allow_skip(args).is_some() => return self.file_allow_skip(call, dest),
             "installLib" | "uninstallLib" => return self.library(&name, args, dest, span),
             "runningX64" | "wow64" | "nativeMachine" => {
                 let Some(dest) = dest else {
@@ -818,6 +819,84 @@ impl BodyLowerer<'_, '_> {
                 }
             },
         }
+    }
+
+    /// `file(…, { allowSkip = false })` — `AllowSkipFiles` for one call.
+    ///
+    /// NSIS's `AllowSkipFiles` is build-time state that holds for every `File`
+    /// line after it in the script, and this language moves bodies around, so a
+    /// statement form would leak into whichever body the layout puts next. As an
+    /// option it is written before the one `File` and put back after it, to the
+    /// `attributes {}` value that every other `File` still sees.
+    fn file_allow_skip(&mut self, call: &Expr, dest: Option<&Slot>) -> Option<Ty> {
+        let Expr::Call { callee, args, span } = call else {
+            return None;
+        };
+        let value = allow_skip(args)?;
+        let Some(ConstValue::Bool(allow)) = self.constant(value) else {
+            self.bad_value(
+                value.span(),
+                "allowSkip",
+                "`true` or `false`",
+                "it is written as `AllowSkipFiles` at build time, so it cannot come from a register",
+            );
+            return None;
+        };
+        let mut args = args.clone();
+        if let Some(Expr::Table { fields, .. }) = args.last_mut() {
+            fields.retain(
+                |field| !matches!(field, TableField::Named { name, .. } if name.text == "allowSkip"),
+            );
+        }
+        let rest = Expr::Call {
+            callee: callee.clone(),
+            args,
+            span: *span,
+        };
+        let default = self.default_allow_skip();
+        if allow == default {
+            return self.call(&rest, dest);
+        }
+        let set = |on: bool| {
+            ir::Instruction::new(
+                "AllowSkipFiles",
+                vec![ir::Arg::raw(if on { "on" } else { "off" })],
+            )
+        };
+        self.emit(set(allow));
+        let ty = self.call(&rest, dest);
+        self.emit(set(default));
+        ty
+    }
+
+    /// `attributes { allowSkipFiles = … }`, or NSIS's default of on.
+    fn default_allow_skip(&self) -> bool {
+        let consts = &self.resolved.consts;
+        self.resolved
+            .block
+            .iter()
+            .find_map(|stmt| match stmt {
+                Stmt::Call(call @ Expr::Call { args, .. })
+                    if call.callee_name() == Some("attributes") =>
+                {
+                    let [Expr::Table { fields, .. }] = args.as_slice() else {
+                        return None;
+                    };
+                    fields.iter().find_map(|field| match field {
+                        TableField::Named { name, value } if name.text == "allowSkipFiles" => {
+                            match crate::resolve::fold(value, &|name| {
+                                consts.get(name).map(|c| c.value.clone())
+                            }) {
+                                Some(ConstValue::Bool(on)) => Some(on),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    })
+                }
+                _ => None,
+            })
+            .unwrap_or(true)
     }
 
     /// Refuse a call NSIS would accept and then ignore.
@@ -3477,4 +3556,15 @@ fn result_sign(op: BinOp, lhs: &Ty, rhs: &Ty) -> Sign {
         _ if both_nonneg => Sign::NonNeg,
         _ => Sign::Unknown,
     }
+}
+
+/// The `allowSkip` entry of a `file` call's options table.
+fn allow_skip(args: &[Expr]) -> Option<&Expr> {
+    let Some(Expr::Table { fields, .. }) = args.last() else {
+        return None;
+    };
+    fields.iter().find_map(|field| match field {
+        TableField::Named { name, value } if name.text == "allowSkip" => Some(value),
+        _ => None,
+    })
 }

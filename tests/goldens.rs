@@ -24,6 +24,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("components", &[]),
     ("control-flow", &[]),
     ("dialog", &[]),
+    ("files", &[]),
     ("headers", &[]),
     ("include", &[]),
     ("languages", &[]),

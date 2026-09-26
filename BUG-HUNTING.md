@@ -96,8 +96,28 @@ issue. One-off, not a guard.
 
 **Started:** `tests/ports.rs` checks each port in `tests/ports/` against its
 original by `makensis -V4` trace: the effect lines have to match, and pages
-are left out because Installua only writes MUI2 pages. `example1` and
-`example2` port with no workaround.
+are left out because Installua only writes MUI2 pages. `example1`,
+`example2` and `primes` port with no workaround.
+
+**Rule:** a port that needs a missing feature or hits a bug waits. The fix
+goes into Installua first, and the port follows once it is in.
+
+Waiting on a fix:
+
+- **`one-section`:** callbacks. `installer {}` takes `onInit` and the three
+  MUI2 hooks, and nothing else: `.onSelChange`, `.onInstSuccess`,
+  `.onInstFailed`, `.onVerifyInstDir`, `.onGUIEnd`, `.onRebootFailed` and
+  their `un.` twins have no spelling. No census counts callbacks, so `todo 0`
+  never saw them.
+- **`silent`:** `file()` has no `/oname=`. The census keeps only the first
+  alternative of `File`'s syntax, so the rename form was never offered.
+- **`silent`:** `AllowSkipFiles` is only an `attributes {}` field, but NSIS
+  lets it change between `File` lines; the example turns it off halfway
+  through a section. — fixed: `file(…, { allowSkip = false })` writes it
+  around that one `File` and puts the attribute's value back (golden `files`).
+
+Not portable: `rtest` tests `GetLabelAddress` and `Call` through an
+address, both rejected.
 
 ### 3. A position matrix: every kind of value in every position
 

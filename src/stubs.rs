@@ -1060,13 +1060,18 @@ fn declaration(
     let fields = entry
         .fields()
         .map(|(field, param)| format!("{}: {}", field.name, lua_type(param)));
-    let options: Vec<String> = fields
+    let mut options: Vec<String> = fields
         .chain(
             entry
                 .flags()
                 .filter_map(|(name, flag)| Some(format!("{name}: {}", flag_type(flag)?))),
         )
         .collect();
+    // `AllowSkipFiles` around one `File`, which is no flag of `File`'s — see
+    // the lowering's `file_allow_skip`.
+    if spelling == "file" {
+        options.push("allowSkip: boolean".to_string());
+    }
     if !options.is_empty() {
         let _ = writeln!(out, "---@param options? {{ {} }}", options.join(", "));
         names.push("options".to_string());
