@@ -9,22 +9,41 @@
 //!
 //! Pages are dropped: the originals use classic `Page` lines and Installua
 //! only writes MUI2 pages, whose macros run with verbosity off and print
-//! nothing. Control flow is the goldens' job; this checks effects.
+//! nothing. Control flow is dropped too, and registers are renamed in order
+//! of first use, since both are the compiler's. Control flow is the goldens'
+//! job; this checks effects.
+//!
+//! The trace is in source order, not run order, so a port keeps the
+//! original's order of effects where a loop would allow either.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use installua::diag::Diagnostics;
 
-const PORTS: &[&str] = &["example1", "example2"];
+const PORTS: &[&str] = &["example1", "example2", "primes"];
 
 /// Trace lines that differ by design rather than by mistake.
 const DROPPED: &[&str] = &[
     "!",
+    "Processing default plugins",
+    " + ",
+    // The default, which the original says by saying nothing.
+    "Unicode: false",
+    "NSIS Modern User Interface",
+    // Pages.
     "Page: ",
     "UninstPage: ",
-    "Processing default plugins",
-    "NSIS Modern User Interface",
+    "DirText: ",
+    // Control flow.
+    "StrCpy ",
+    "StrCmp",
+    "IntOp: ",
+    "IntCmp",
+    "Goto: ",
+    "Call ",
+    "Return",
+    "Function",
 ];
 
 fn port(name: &str) -> String {
@@ -70,8 +89,9 @@ fn ports_do_what_the_originals_do() {
 
 /// The effect lines of one `makensis -V4` run, with an uninstaller section's
 /// `un.` prefix taken off: `Section "Uninstall"` is the same section. The
-/// attributes above the first section are sorted, because their order does
-/// nothing and Installua writes `Unicode` first.
+/// attributes above the first section are sorted and deduplicated, because
+/// their order does nothing and Installua writes `Unicode` first. A message
+/// box's `(on IDNO goto label)` is cut, because the label is the compiler's.
 fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
     let output = Command::new("makensis")
         .args(flags)
@@ -91,14 +111,54 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
         .skip(1)
         .take_while(|line| !line.starts_with("Processed "))
         .filter(|line| !line.trim().is_empty() && !DROPPED.iter().any(|p| line.starts_with(p)))
-        .map(|line| line.replacen("Section: \"un.", "Section: \"", 1) + "\n")
+        .map(|line| {
+            let line = line.replacen("Section: \"un.", "Section: \"", 1);
+            let line = line.split(" (on ").next().unwrap_or_default();
+            line.to_string() + "\n"
+        })
         .collect();
     let attributes = lines
         .iter()
         .position(|line| line.starts_with("Section: "))
         .unwrap_or(lines.len());
     lines[..attributes].sort();
-    lines.concat()
+    let mut lines = lines
+        .concat()
+        .lines()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    lines.dedup();
+    registers(&lines.join("\n"))
+}
+
+/// `$0`–`$9` and `$R0`–`$R9` renamed `r0`, `r1`, … in order of first use.
+fn registers(trace: &str) -> String {
+    let mut seen: Vec<&str> = Vec::new();
+    let mut out = String::new();
+    let mut rest = trace;
+    while let Some(at) = rest.find('$') {
+        out.push_str(&rest[..at]);
+        let tail = &rest[at..];
+        let len = if tail[1..].starts_with('R') { 3 } else { 2 };
+        let name = tail
+            .get(..len)
+            .filter(|n| n.as_bytes()[len - 1].is_ascii_digit());
+        match name {
+            Some(name) => {
+                let index = seen.iter().position(|s| *s == name).unwrap_or_else(|| {
+                    seen.push(name);
+                    seen.len() - 1
+                });
+                out.push_str(&format!("r{index}"));
+                rest = &tail[len..];
+            }
+            None => {
+                out.push('$');
+                rest = &tail[1..];
+            }
+        }
+    }
+    out + rest
 }
 
 /// `$NSISDIR/Examples` of the `makensis` in use.
