@@ -222,7 +222,7 @@ mod add_plugin_dir {
 
     /// The window, stated as the only thing that can state it: the whole head of
     /// the file. Above `Unicode` the directive would bind to the default target
-    /// and break every `unicode = false` build; below any call site it is too
+    /// and break under any `makensis` whose default is ANSI; below any call site it is too
     /// late for the lookup that call site does.
     #[test]
     fn the_line_sits_between_unicode_and_everything_else() {

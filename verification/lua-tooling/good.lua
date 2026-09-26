@@ -4,7 +4,6 @@
 attributes {
 	name = "Example",
 	outFile = "example.exe",
-	unicode = true,
 	requestExecutionLevel = "admin",
 	crcCheck = "force",
 	xpStyle = true,

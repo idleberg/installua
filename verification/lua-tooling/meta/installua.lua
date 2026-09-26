@@ -54,7 +54,6 @@
 ---@class (exact) installua.Attributes
 ---@field name string
 ---@field outFile string
----@field unicode? boolean
 ---@field compressor? string
 ---@field requestExecutionLevel? installua.ExecutionLevel
 ---@field crcCheck? installua.CrcCheck

@@ -16,7 +16,6 @@ local BLOCK <const> = 64
 attributes {
 	name = "Strings",
 	outFile = "strings.exe",
-	unicode = true,
 	requestExecutionLevel = "user",
 }
 

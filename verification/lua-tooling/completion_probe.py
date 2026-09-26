@@ -92,7 +92,7 @@ PROBES = [
         "field completion inside a block",
         "attributes {\n\t\n}\n",
         1, 1,
-        {"name", "outFile", "unicode", "crcCheck"},
+        {"name", "outFile", "compressor", "crcCheck"},
     ),
     (
         "alias member inside a string literal (nested table arg)",
