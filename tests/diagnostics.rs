@@ -421,6 +421,23 @@ fn multi_user_says_what_is_wrong() {
             ),
             Code::MissingAttribute,
         ),
+        // No `attributes { name }` to default the key from.
+        (
+            format!("{head}multiUser {{ executionLevel = \"admin\", remember = true }}"),
+            Code::MissingAttribute,
+        ),
+        (
+            format!("{head}multiUser {{ executionLevel = \"admin\", remember = 1 }}"),
+            Code::BadFieldValue,
+        ),
+        (
+            format!(
+                "{head}multiUser {{ executionLevel = \"admin\", \
+                 remember = {{ key = \"Software/App\" }}, \
+                 modeRegistry = {{ key = \"Software/App\", value = \"Mode\" }} }}"
+            ),
+            Code::BadFieldValue,
+        ),
         (
             format!(
                 "{head}multiUser {{ executionLevel = \"admin\" }}\n\

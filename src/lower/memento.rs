@@ -174,7 +174,7 @@ impl Lowerer<'_, '_> {
     }
 
     /// `attributes { name }`, when it is a build-time string.
-    fn product_name(&self) -> Option<String> {
+    pub(super) fn product_name(&self) -> Option<String> {
         let consts = &self.resolved.consts;
         self.resolved.block.iter().find_map(|stmt| match stmt {
             Stmt::Call(call @ Expr::Call { args, .. })

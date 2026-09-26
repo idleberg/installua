@@ -119,12 +119,16 @@ above the `!include`. The compiler also puts `MULTIUSER_INIT` and
 | `MULTIUSER_USE_PROGRAMFILES64`                           | `programFiles64 = true`                                     |
 | `MULTIUSER_INSTALLMODE_INSTDIR_REGISTRY_KEY` / `…_VALUENAME`  | `folderRegistry = { key = …, value = … }`              |
 | `MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_KEY` / `…_VALUENAME`  | `modeRegistry = { key = …, value = … }`                |
+| both pairs, and the lines that write them                | `remember = true` or `{ key = … }`                          |
 
-`executionLevel` is required. `folderRegistry` is where a previous install's
-folder is read from, and `modeRegistry` is a value whose presence under `HKCU`
-rather than `HKLM` means the last install was per-user. Write both under
-`SHCTX`, which is `HKLM` or `HKCU` by mode. The page that lets the user choose
-is [`page.installMode`](/reference/modern-ui/#multiuser_page_installmode).
+`executionLevel` is required. The page that lets the user choose is
+[`page.installMode`](/reference/modern-ui/#multiuser_page_installmode).
+
+The header reads the last install's mode and folder from the registry, but
+leaves writing them to the script. `remember` does both: the compiler writes
+`InstallMode` and `InstallDir` under `SHCTX` in `.onInstSuccess`, and deletes
+them in `un.onUninstSuccess`. The key is `Software\<name>` from
+`attributes { name }` unless `{ key = … }` names one.
 
 ```lua
 attributes { name = "Example", outFile = "example-setup.exe" }
@@ -133,16 +137,21 @@ multiUser {
 	executionLevel = "highest",
 	commandLine = true,
 	folder = "Example",
-	modeRegistry = { key = "Software/Example", value = "Installed" },
+	remember = true,
 }
 
 installer {
 	section("Core", function()
 		setOutPath(INSTDIR)
-		writeReg(SHCTX, "Software/Example", "Installed", 1)
 	end),
 }
 ```
+
+To write the values yourself, use `folderRegistry` and `modeRegistry` instead
+of `remember`. `folderRegistry` is where the folder is read from, and
+`modeRegistry` is a value whose presence under `HKCU` rather than `HKLM` means
+the last install was per-user. Write both under `SHCTX`, which is `HKLM` or
+`HKCU` by mode.
 
 What the header decided can be read while the installer runs, but not
 changed: the user picks the mode, on the page or on the command line.

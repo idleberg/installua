@@ -22,6 +22,12 @@
 //! - no second `RequestExecutionLevel`: the header writes one from
 //!   `executionLevel`, and an `attributes {}` one below it would win silently.
 //!
+//! - `remember`, the two registry pairs the header *reads* and leaves the
+//!   script to *write*: under one key, written in `.onInstSuccess` and taken
+//!   out again in `un.onUninstSuccess`, so the value the header looks for is
+//!   the value the installer wrote. By hand, a typo in either is a mode or a
+//!   folder silently forgotten.
+//!
 //! `MULTIUSER_MUI` is never written. All it does is `!include MUI2.nsh`, which
 //! the compiler already does first; the strings `page.installMode` needs are
 //! keyed on the page macro rather than on it.
@@ -41,6 +47,7 @@ const FIELDS: &[&str] = &[
     "programFiles64",
     "folderRegistry",
     "modeRegistry",
+    "remember",
 ];
 
 /// What the rest of the lowering needs to know about the block.
@@ -84,6 +91,7 @@ impl Lowerer<'_, '_> {
 
     fn multi_user(&mut self, fields: &[TableField], span: Span) {
         let mut all_users = None;
+        let mut remember = None;
         for field in fields {
             let TableField::Named { name, value } = field else {
                 self.bad_value(
@@ -123,6 +131,7 @@ impl Lowerer<'_, '_> {
                     "modeRegistry",
                     "MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY",
                 ),
+                "remember" => remember = self.remember_key(value, span),
                 other => {
                     let span = name.span;
                     self.diags.push(
@@ -156,6 +165,9 @@ impl Lowerer<'_, '_> {
             return;
         };
 
+        if let Some(key) = remember {
+            self.remember_mode(fields, key);
+        }
         self.requires.headers.insert("MultiUser".to_string());
         self.init_prelude[Half::Installer.index()].push(ir::Instruction::new(
             "!insertmacro",
@@ -266,6 +278,97 @@ impl Lowerer<'_, '_> {
             self.multi_user_define(&format!("{stem}_KEY"), Some(key));
             self.multi_user_define(&format!("{stem}_VALUENAME"), Some(name));
         }
+    }
+
+    /// `true` for `Software\<name>`, as `memento {}` defaults to, or
+    /// `{ key = … }`.
+    fn remember_key(&mut self, value: &Expr, span: Span) -> Option<ir::Arg> {
+        if let Expr::Table { fields, .. } = value
+            && let [TableField::Named { name, value }] = fields.as_slice()
+            && name.text == "key"
+        {
+            return self.constant_arg(value, "key").map(ir::Arg::into_path);
+        }
+        match self.constant(value) {
+            Some(ConstValue::Bool(false)) => None,
+            Some(ConstValue::Bool(true)) => {
+                let key = self
+                    .product_name()
+                    .map(|name| ir::Arg::str(format!("Software\\{name}")));
+                if key.is_none() {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::MissingAttribute,
+                            span,
+                            "the remembered mode and folder have no registry key",
+                        )
+                        .note("the default is `Software\\<name>`, from `attributes { name }`")
+                        .note("or write `remember = { key = \"Software/App\" }`"),
+                    );
+                }
+                key
+            }
+            _ => {
+                self.bad_value(
+                    value.span(),
+                    "remember",
+                    "a `bool` or `{ key = … }`",
+                    "it names the one registry key both values are kept under",
+                );
+                None
+            }
+        }
+    }
+
+    /// Both pairs under `key`, and the lines that keep them true.
+    fn remember_mode(&mut self, fields: &[TableField], key: ir::Arg) {
+        // Either pair written beside it is a second key for the same define.
+        for field in fields {
+            if let TableField::Named { name, .. } = field
+                && matches!(name.text.as_str(), "folderRegistry" | "modeRegistry")
+            {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        name.span,
+                        format!("`{}` beside `remember`", name.text),
+                    )
+                    .note("`remember` sets both registry pairs, so write one or the other"),
+                );
+                return;
+            }
+        }
+        let pairs = [
+            (
+                "MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY",
+                "InstallMode",
+                "$MultiUser.InstallMode",
+            ),
+            (
+                "MULTIUSER_INSTALLMODE_INSTDIR_REGISTRY",
+                "InstallDir",
+                "$INSTDIR",
+            ),
+        ];
+        let root = || ir::Arg::raw("SHCTX");
+        for (stem, value, read) in pairs {
+            self.multi_user_define(&format!("{stem}_KEY"), Some(key.clone()));
+            self.multi_user_define(&format!("{stem}_VALUENAME"), Some(ir::Arg::str(value)));
+            self.success_prelude[Half::Installer.index()].push(ir::Instruction::new(
+                "WriteRegStr",
+                vec![root(), key.clone(), ir::Arg::str(value), ir::Arg::var(read)],
+            ));
+            self.success_prelude[Half::Uninstaller.index()].push(ir::Instruction::new(
+                "DeleteRegValue",
+                vec![root(), key.clone(), ir::Arg::str(value)],
+            ));
+        }
+        // `/ifempty`: the key may be the author's too, `memento {}`'s is
+        // under it by default.
+        self.success_prelude[Half::Uninstaller.index()].push(ir::Instruction::new(
+            "DeleteRegKey",
+            vec![ir::Arg::raw("/ifempty"), root(), key],
+        ));
     }
 
     /// In the user's `!define` slot rather than MUI2's: the header reads these

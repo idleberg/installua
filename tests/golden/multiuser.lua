@@ -14,9 +14,9 @@ multiUser {
 	executionLevel = "highest",
 	commandLine = true,
 	folder = "Shared",
-	-- The uninstaller finds its mode again by this value: it is only written
-	-- under the name `CurrentUser` by a per-user install, below.
-	modeRegistry = { key = "Software/Shared", value = "CurrentUser" },
+	-- The mode and the folder, kept under `Software\Shared` so the next run
+	-- starts from them.
+	remember = true,
 }
 
 local docs = section { "Documentation",
@@ -40,7 +40,7 @@ installer {
 	section("Core", function()
 		setOutPath(INSTDIR)
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
-		writeReg(SHCTX, "Software/Shared", multiUser.installMode, "1")
+		detailPrint(multiUser.installMode)
 	end),
 
 	docs,

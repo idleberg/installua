@@ -4,7 +4,9 @@ Unicode true
 !define MULTIUSER_INSTALLMODE_COMMANDLINE
 !define MULTIUSER_INSTALLMODE_INSTDIR "Shared"
 !define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_KEY "Software\Shared"
-!define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_VALUENAME "CurrentUser"
+!define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_VALUENAME "InstallMode"
+!define MULTIUSER_INSTALLMODE_INSTDIR_REGISTRY_KEY "Software\Shared"
+!define MULTIUSER_INSTALLMODE_INSTDIR_REGISTRY_VALUENAME "InstallDir"
 !define MEMENTO_REGISTRY_ROOT SHCTX
 !define MEMENTO_REGISTRY_KEY "Software\Shared\Components"
 
@@ -31,7 +33,7 @@ OutFile "multiuser.exe"
 Section "Core"
   SetOutPath $INSTDIR
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  WriteRegStr SHCTX "Software\Shared" $MultiUser.InstallMode 1
+  DetailPrint $MultiUser.InstallMode
 SectionEnd
 
 !insertmacro MementoSectionEx "" "Documentation" docs SEC_docs
@@ -58,4 +60,12 @@ FunctionEnd
 
 Function .onInstSuccess
   !insertmacro MementoSectionSave
+  WriteRegStr SHCTX "Software\Shared" "InstallMode" $MultiUser.InstallMode
+  WriteRegStr SHCTX "Software\Shared" "InstallDir" $INSTDIR
+FunctionEnd
+
+Function un.onUninstSuccess
+  DeleteRegValue SHCTX "Software\Shared" "InstallMode"
+  DeleteRegValue SHCTX "Software\Shared" "InstallDir"
+  DeleteRegKey /ifempty SHCTX "Software\Shared"
 FunctionEnd

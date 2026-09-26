@@ -1113,6 +1113,7 @@ fn lower_once(
         callbacks: BTreeMap::new(),
         init_prelude: [Vec::new(), Vec::new()],
         sel_prelude: [Vec::new(), Vec::new()],
+        success_prelude: [Vec::new(), Vec::new()],
         radio_vars: Vec::new(),
         lang_strings: BTreeSet::new(),
         multi_user: None,
@@ -1170,6 +1171,9 @@ struct Lowerer<'a, 'p> {
     /// Lines the compiler owes each half's `.onSelChange`: the
     /// `radioButtons {}` macros, which run before the author's own.
     sel_prelude: [Vec<ir::Instruction>; 2],
+    /// Lines the compiler owes `.onInstSuccess` and `un.onUninstSuccess`:
+    /// `multiUser { remember }`'s registry writes and their removal.
+    success_prelude: [Vec<ir::Instruction>; 2],
     /// The `Var` each `radioButtons {}` keeps its ticked section in.
     radio_vars: Vec<String>,
     /// The `LangString` names `languages {}` declared, so `lang.greeting` is a
@@ -1401,26 +1405,40 @@ impl<'p> Lowerer<'_, 'p> {
                 body,
             });
         }
-        // `memento {}`'s save, in an `.onInstSuccess` of its own when the
-        // author wrote none. One they did write took it as its first line.
-        if let Some(span) = self.memento
-            && self.requires.headers.contains("Memento")
-            && !self.remembered.is_empty()
-            && !self.callbacks.contains_key(".onInstSuccess")
-        {
-            let (body, _) = self.body_with(
-                span,
-                Some(Half::Installer),
-                table::Place::Anywhere,
-                |lowerer| {
-                    lowerer.emit(ir::Instruction::new(
-                        "!insertmacro",
-                        vec![ir::Arg::raw("MementoSectionSave")],
-                    ));
-                },
-            );
+        // `memento {}`'s save and `multiUser { remember }`'s lines, in a
+        // success callback of their own when the author wrote none. One they
+        // did write took them as its first lines.
+        for half in [Half::Installer, Half::Uninstaller] {
+            let mut lines = Vec::new();
+            if half == Half::Installer
+                && self.memento.is_some()
+                && self.requires.headers.contains("Memento")
+                && !self.remembered.is_empty()
+            {
+                lines.push(ir::Instruction::new(
+                    "!insertmacro",
+                    vec![ir::Arg::raw("MementoSectionSave")],
+                ));
+            }
+            lines.extend(std::mem::take(&mut self.success_prelude[half.index()]));
+            let name = match half {
+                Half::Installer => ".onInstSuccess",
+                Half::Uninstaller => "un.onUninstSuccess",
+            };
+            if lines.is_empty()
+                || self.callbacks.contains_key(name)
+                || (half == Half::Uninstaller && self.uninstaller_span.is_none())
+            {
+                continue;
+            }
+            let span = self.memento.unwrap_or_default();
+            let (body, _) = self.body_with(span, Some(half), table::Place::Anywhere, |lowerer| {
+                for instruction in lines {
+                    lowerer.emit(instruction);
+                }
+            });
             self.module.functions.push(ir::Function {
-                name: ".onInstSuccess".to_string(),
+                name: name.to_string(),
                 body,
             });
         }
@@ -5659,11 +5677,16 @@ impl<'p> Lowerer<'_, 'p> {
                 lines
             }
             "onSelChange" => std::mem::take(&mut self.sel_prelude[half.index()]),
-            "onInstSuccess" if self.requires.headers.contains("Memento") => {
-                vec![ir::Instruction::new(
-                    "!insertmacro",
-                    vec![ir::Arg::raw("MementoSectionSave")],
-                )]
+            "onInstSuccess" | "onUninstSuccess" => {
+                let mut lines = Vec::new();
+                if which == "onInstSuccess" && self.requires.headers.contains("Memento") {
+                    lines.push(ir::Instruction::new(
+                        "!insertmacro",
+                        vec![ir::Arg::raw("MementoSectionSave")],
+                    ));
+                }
+                lines.extend(std::mem::take(&mut self.success_prelude[half.index()]));
+                lines
             }
             _ => Vec::new(),
         };
