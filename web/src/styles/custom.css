@@ -87,3 +87,7 @@ abbr[title] {
 .hero>img {
   width: min(60%, 16rem);
 }
+
+.social-icons:where(.astro-rk4qyfzk):after {
+  border-inline-end: 0;
+ }
