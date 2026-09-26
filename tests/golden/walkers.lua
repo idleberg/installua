@@ -25,7 +25,6 @@ local DIST <const> = "/app.conf.new"
 attributes {
 	name = "Walkers",
 	outFile = "walkers-setup.exe",
-	unicode = true,
 }
 
 installer {

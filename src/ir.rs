@@ -49,7 +49,7 @@ use crate::regs::Slot;
 #[derive(Clone, Debug, Default)]
 pub struct Module {
     /// `raw.head` text, above every line the compiler writes — including
-    /// [`Module::unicode`], which is the whole point of having it: `!system` and
+    /// `Unicode true`, which is the whole point of having it: `!system` and
     /// `!tempfile` produce a value the rest of the script reads, so they have to
     /// run before the rest of the script exists.
     ///
@@ -60,14 +60,12 @@ pub struct Module {
     /// declaration the compiler places — [`Module::plugin_dirs`] being the first
     /// concrete member of the second class.
     pub head: Vec<Instruction>,
-    /// Always emitted, first of the compiler's own lines, defaults true.
-    pub unicode: bool,
     /// `!addplugindir` lines, one per directory a called plugin was declared
-    /// in. Directly under [`Module::unicode`] and above everything else,
-    /// because an untagged `!addplugindir` binds to whichever target is current
-    /// *when the directive is processed* — a line above `Unicode` binds to the
-    /// default target and silently breaks every `unicode = false` build, and a
-    /// line below a call site is too late for the lookup that call site does.
+    /// in. Directly under `Unicode true` and above everything else, because an
+    /// untagged `!addplugindir` binds to whichever target is current *when the
+    /// directive is processed* — a line above `Unicode` binds to `makensis`'s
+    /// default target, which need not be the Unicode one, and a line below a
+    /// call site is too late for the lookup that call site does.
     /// See [`crate::lower::addplugindir`].
     pub plugin_dirs: Vec<Instruction>,
     pub defines: Vec<Define>,
@@ -138,10 +136,7 @@ pub struct Module {
 
 impl Module {
     pub fn new() -> Self {
-        Module {
-            unicode: true,
-            ..Module::default()
-        }
+        Module::default()
     }
 
     /// Every body in the module, for a caller that wants to assert an IR

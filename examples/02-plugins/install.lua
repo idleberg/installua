@@ -17,7 +17,6 @@ local system = plugin "System"
 attributes {
 	name = APP,
 	outFile = APP .. "-setup.exe",
-	unicode = true,
 	requestExecutionLevel = "admin",
 }
 

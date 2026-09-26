@@ -244,7 +244,8 @@ in five lines of [its own `.toml`](/reference/commands/plugins-and-headers/#decl
 | `SectionInstType`                        | a section's `installTypes`                              |
 | `SetPluginUnload`                        | — NSIS retired it                                       |
 | `SubSection` / `SubSectionEnd`           | `group(…)`                                              |
-| `Target`                                 | `cpu` and `unicode`                                     |
+| `Target`                                 | `cpu` — the charset is always Unicode                   |
+| `Unicode`                                | — always `true`, written first                          |
 | `UninstallExeName`                       | `writeUninstaller(…)`                                   |
 | `UnsafeStrCpy`                           | `=`                                                     |
 | `XPStyle`                                | — MUI2 emits it itself                                  |

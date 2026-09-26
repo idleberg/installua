@@ -11,7 +11,6 @@ the only one with no default.
 attributes {
 	name = "Example",
 	outFile = "Example-setup.exe",
-	unicode = true,
 	compressor = "lzma",
 	requestExecutionLevel = "admin",
 }
@@ -37,7 +36,6 @@ attributes {
 
 | NSIS                    | Installua            | Holds                                                      |
 | ----------------------- | -------------------- | ---------------------------------------------------------- |
-| `Unicode`               | `unicode`            | boolean — defaults `true`, always emitted first            |
 | `CPU`                   | `cpu`                | `"x86"` \| `"amd64"`                                       |
 | `SetCompressor`         | `compressor`         | `"zlib"` \| `"bzip2"` \| `"lzma"` — or that keyword in a table beside its flags, `{ "lzma", solid = true, final = true }` |
 | `SetCompressionLevel`   | `compressionLevel`   | int — read only when `compressor` is `"zlib"` or `"bzip2"` |

@@ -243,9 +243,8 @@ pub fn nearest(name: &str) -> Option<&'static str> {
 /// the same name shadows it as it shadows those. `WinCore.nsh` could not be
 /// read this way — it defines `HKLM` as a number.
 ///
-/// The nine `${_NSIS_DEFAW}` names, `LVM_GETITEMTEXT` and friends, are left
-/// out: which of the `A` and `W` twins they are depends on `unicode`, and the
-/// twins are here under their own names.
+/// The nine `${_NSIS_DEFAW}` names, `LVM_GETITEMTEXT` and friends, are their
+/// `W` twins, because the installer is always Unicode.
 const MESSAGES: &str = include_str!("../tables/winmessages-3.12.txt");
 
 fn messages() -> &'static [Constant] {
@@ -280,9 +279,9 @@ pub fn constants() -> impl Iterator<Item = &'static Constant> {
 ///
 /// Four shapes of `!define` carry a number — a literal, `/math ${X} + n`, an
 /// alias `${X}`, and any of those behind `/ifndef` — and the rest (`SYSSTRUCT_*`
-/// layouts, the `_NSIS_DEFAW` plumbing) are skipped. A reference to a name not
+/// layouts, the `_NSIS_DEFAW` macro itself) are skipped. A reference to a name not
 /// yet read is an error rather than a skip, so a reordered header cannot drop
-/// a name quietly.
+/// a name quietly. A `${_NSIS_DEFAW}` line is read as its `W` twin.
 pub fn scan_messages(root: &std::path::Path) -> Result<String, String> {
     let path = root.join("Include").join("WinMessages.nsh");
     let text =
@@ -291,6 +290,18 @@ pub fn scan_messages(root: &std::path::Path) -> Result<String, String> {
     for line in text.lines() {
         let code = line.split([';', '#']).next().unwrap_or_default();
         let mut tokens = code.split_whitespace().peekable();
+        // `${_NSIS_DEFAW} LVM_GETITEMTEXT` defines the name as its `A` or `W`
+        // twin by the target's charset, and an Installua installer is always
+        // Unicode, so it is the `W` one.
+        if tokens.next_if_eq(&"${_NSIS_DEFAW}").is_some() {
+            let Some(name) = tokens.next() else { continue };
+            let wide = values
+                .get(&format!("{name}W"))
+                .copied()
+                .ok_or(format!("`{name}` reads `{name}W` before it is defined"))?;
+            values.insert(name.to_string(), wide);
+            continue;
+        }
         if !tokens
             .next()
             .is_some_and(|t| t.eq_ignore_ascii_case("!define"))

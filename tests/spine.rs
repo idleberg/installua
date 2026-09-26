@@ -32,16 +32,13 @@ fn the_spine_matches_its_golden() {
     assert_eq!(build(&source), expected);
 }
 
-/// `Unicode` leads, and it leads even when nothing asked for it — a later `raw`
-/// then overrides it rather than being silently overridden, since NSIS takes
-/// the last one with no diagnostic either way.
+/// `Unicode true` leads, always — a later `raw` then overrides it rather than
+/// being silently overridden, since NSIS takes the last one with no diagnostic
+/// either way.
 #[test]
 fn unicode_is_always_first() {
     let output = build(r#"attributes { outFile = "a.exe" }"#);
     assert_eq!(output.lines().next(), Some("Unicode true"));
-
-    let output = build(r#"attributes { outFile = "a.exe", unicode = false }"#);
-    assert_eq!(output.lines().next(), Some("Unicode false"));
 }
 
 /// A string literal is data, never a template, so every `$` is doubled. `$5` is

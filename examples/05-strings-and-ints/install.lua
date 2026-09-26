@@ -20,7 +20,6 @@ local wordFunc = import "WordFunc"
 attributes {
 	name = APP,
 	outFile = APP .. "-setup.exe",
-	unicode = true,
 }
 
 -- "2.1.0" -> "2". Two off-by-one conversions meet here and cancel; see README.

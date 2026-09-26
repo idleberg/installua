@@ -46,9 +46,9 @@ The `32`/`64` suffix forces a view of the registry regardless of
 name: `WM_SETTEXT` · `WM_CLOSE` · `BM_SETCHECK` · `EM_LIMITTEXT` ·
 `PBM_SETPOS` · `SW_HIDE` · `HWND_BROADCAST` and about 730 more, for
 [`sendMessage`](/reference/commands/windows-and-controls/#getdlgitem--findwindow--iswindow--sendmessage).
-Each is its number in the output, so there is no `!include`. The nine whose value
-depends on `unicode` (`LVM_GETITEMTEXT`, `TCM_INSERTITEM`, …) are not defined
-bare; write `LVM_GETITEMTEXTW` or `LVM_GETITEMTEXTA`.
+Each is its number in the output, so there is no `!include`. The nine that NSIS
+picks by charset (`LVM_GETITEMTEXT`, `TCM_INSERTITEM`, …) are their `W` twin,
+because the installer is always Unicode; the `A` and `W` names are there too.
 
 ```lua
 setOutPath(PROGRAMFILES64 .. "/Example")

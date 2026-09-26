@@ -297,8 +297,8 @@ safe to promise while the rest of the spine is still settling.
 **What may go at an anchor** is text whose meaning is position-independent. Text
 whose meaning depends on what the compiler generated is a _declaration the
 compiler places_, not an anchor's business: `!addplugindir` written at `head`
-would land above `Unicode`, bind to the default target, and silently break every
-`unicode = false` build — so it is a slot the compiler owns, reached through
+would land above `Unicode` and bind to `makensis`'s default target, which need not
+be the Unicode one — so it is a slot the compiler owns, reached through
 `dir` on a [`[[plugin]]` declaration](#declaring-a-third-party-plugin-or-header).
 `$PLUGINSDIR` is the same rule from the other side, and it is diagnosed: the
 directory is made by an `InitPluginsDir` the compiler puts above the statement
@@ -492,8 +492,8 @@ compiler emits one `!addplugindir` for it, in the one position the directive is
 correct in: under the `Unicode` line and above every call site. You never write
 that line yourself, and there is no anchor that would let you — an untagged
 `!addplugindir` binds to whichever target is current when it is processed, so
-one written at the top of a source would bind to the default target and silently
-break every `unicode = false` build. Only a plugin the program actually calls
+one written at the top of a source would bind to `makensis`'s default target,
+which need not be the Unicode one. Only a plugin the program actually calls
 emits a line.
 
 Redeclaring one of the builtins is allowed and replaces it, so a count that

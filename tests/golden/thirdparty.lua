@@ -28,7 +28,6 @@ local startMenu = plugin "StartMenu"
 attributes {
 	name = "Third Party",
 	outFile = "thirdparty-setup.exe",
-	unicode = true,
 }
 
 installer {

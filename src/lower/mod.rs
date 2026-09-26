@@ -134,8 +134,6 @@ const BLOCK_OWNERS: &[&str] = &["installer", "uninstaller", "page"];
 /// round; a crash announces nothing, and a build that dies with no message is
 /// the one failure a user cannot act on.
 ///
-/// `unicode` is absent because it is not a line the lowering places: it sets a
-/// field the emitter reads first, so it is already ahead of everything here.
 /// Every field absent from this list ranks [`LATE`] and keeps the order it was
 /// written in, which a stable sort preserves.
 const ORDERED: &[(&str, u8)] = &[("cpu", 0), ("compressor", 1), ("brandingImage", 2)];
@@ -921,8 +919,8 @@ pub fn reserved(module: &mut ir::Module, graph: &callgraph::CallGraph) {
 ///
 /// **Not an anchored `raw`, and that is the rule rather than the exception.**
 /// A user writing this line at the top of their source would land it above
-/// `Unicode`, bind it to the default target, and silently break every
-/// `unicode = false` build. Text whose meaning depends on compiler-generated
+/// `Unicode`, bind it to `makensis`'s default target rather than the Unicode
+/// one, and lose the plugin wherever that default is ANSI. Text whose meaning depends on compiler-generated
 /// state is a declaration the compiler places; only position-independent text
 /// gets an anchor.
 pub fn addplugindir(module: &mut ir::Module, options: &crate::Options) {
@@ -1714,8 +1712,8 @@ impl<'p> Lowerer<'_, 'p> {
     /// that keeps this from selling the spine's guarantee back to the user:
     /// *text whose meaning is position-independent*. Text whose meaning depends
     /// on compiler-generated state is a declaration the compiler places —
-    /// `!addplugindir` written at `head` would land above `Unicode`, bind to the
-    /// default target and silently break every `unicode = false` build, so it is
+    /// `!addplugindir` written at `head` would land above `Unicode` and bind to
+    /// `makensis`'s default target rather than the Unicode one, so it is
     /// slot 1b and not an anchor. When a directive turns out to be
     /// position-sensitive, the answer is a slot.
     fn anchored(&mut self, anchor: &Name, call: &Expr) {
@@ -1856,21 +1854,9 @@ impl<'p> Lowerer<'_, 'p> {
             };
 
             match name.text.as_str() {
-                // The nested ones. `versionInfo` is hand-shaped — its members
-                // are ordered against each other and `keys` is a free map — and
-                // `unicode` emits nothing: it sets a field the emitter reads
-                // first, so a later `raw` can override it.
+                // The nested one. `versionInfo` is hand-shaped — its members
+                // are ordered against each other and `keys` is a free map.
                 "versionInfo" => self.version_info(value),
-                "unicode" => match self.constant(value) {
-                    Some(ConstValue::Bool(value)) => self.module.unicode = value,
-                    _ => self.bad_value(
-                        value.span(),
-                        "unicode",
-                        "a `bool`",
-                        "write `unicode = true`; NSIS's charset otherwise depends on how the \
-                         local `makensis` was built, which is why it is always emitted",
-                    ),
-                },
                 // Every other group is its rows and nothing else, so one
                 // function reads all of them — see [`Self::group`].
                 group if attribute_groups().contains(&group) => self.attribute_group(group, value),
@@ -1892,6 +1878,18 @@ impl<'p> Lowerer<'_, 'p> {
                                 "it belongs in `installer {}` — and in `uninstaller {}`, \
                                  which is the same field for the other half",
                             ),
+                        );
+                    }
+                    // Every port of an NSIS 3 script has `Unicode true`, so
+                    // it gets the reason rather than the list.
+                    None if other == "unicode" => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::UnknownField,
+                                name.span,
+                                "`unicode` is not an attribute",
+                            )
+                            .note("delete it — an Installua installer is always Unicode"),
                         );
                     }
                     None => {

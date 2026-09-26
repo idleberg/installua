@@ -16,7 +16,6 @@ local APP <const> = "Example3"
 attributes {
 	name = APP,
 	outFile = APP .. "-setup.exe",
-	unicode = true,
 }
 
 installer {

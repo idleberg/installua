@@ -127,9 +127,14 @@ half-converted `C:\App\bin/tools` comes from, and a command line, a plugin or th
 
 ## Charset, always written, always first
 
-`Unicode` is emitted unconditionally and defaults to `true`. NSIS's behaviour without it
-depends on how your `makensis` was built, which means the same script means two things on
-two machines — the thing this language exists to stop.
+`Unicode true` is emitted unconditionally, and there is no setting to change it. NSIS's
+behaviour without the line depends on how your `makensis` was built, which means the same
+script means two things on two machines — the thing this language exists to stop.
+
+There is no ANSI installer either. Every plugin NSIS 3 ships has a Unicode build, and a
+charset that could change would be one more thing every `!addplugindir` and every window
+message named by charset had to be kept in step with. A third-party plugin that only ever
+shipped an ANSI DLL is the cost.
 
 `Target` has no Installua spelling, because `Target` and `Unicode` are last-one-wins with
 each other and silently so. If you need it, `raw` gives it to you, and putting `Unicode`

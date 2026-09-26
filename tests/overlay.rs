@@ -36,7 +36,6 @@ fn program() -> String {
          attributes {\n\
          \tname = \"Overlay examples\",\n\
          \toutFile = \"examples.exe\",\n\
-         \tunicode = true,\n\
          \tbrandingImage = { edge = \"top\", size = \"20u\" },\n\
          }\n\n\
          local handle = section(\"Addressed\", function()\n\

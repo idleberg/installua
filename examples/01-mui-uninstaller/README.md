@@ -52,7 +52,7 @@ form rather than positional trailing `nil`s.
 `setOutPath` · `file` · `delete` · `rmDir` · `createDirectory` · `createShortcut` ·
 `writeUninstaller` · `messageBox` · `os.exit` (`Quit`)
 
-Attributes: `name` · `outFile` · `unicode` · `compressor` · `requestExecutionLevel` ·
+Attributes: `name` · `outFile` · `compressor` · `requestExecutionLevel` ·
 `versionInfo.product` · `versionInfo.keys` · `installDir` · `icon`
 
 Pages: `page.welcome` · `page.license` (`file`) · `page.directory` · `page.instFiles` ·

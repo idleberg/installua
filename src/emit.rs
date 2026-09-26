@@ -70,20 +70,19 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     // `Unicode` line still leads the output of every program that has no `head`.
     out.blank();
 
-    // 1. `Unicode` leads. A later `raw` then overrides it, rather than being
-    //    silently overridden by a `Unicode` the compiler emitted afterwards —
-    //    last one wins in NSIS, with no diagnostic either way.
-    out.line(
-        format!("Unicode {}", boolean(module.unicode)),
-        Origin::Emitted("Unicode"),
-    );
+    // 1. `Unicode true` leads, always — there is no ANSI installer. A later
+    //    `raw` then overrides it, rather than being silently overridden by a
+    //    `Unicode` the compiler emitted afterwards — last one wins in NSIS, with
+    //    no diagnostic either way.
+    out.line("Unicode true", Origin::Emitted("Unicode"));
 
     // 1b. `!addplugindir`, between the `Unicode` line and everything else. An
     //     untagged one binds to whichever target is current when the directive
     //     is processed — not to the DLL's charset, which `makensis` never reads,
-    //     and not lazily at the call site — so above slot 1 it would bind to the
-    //     default target and break every `unicode = false` build, and below any
-    //     call site it would be too late for the lookup that call site does.
+    //     and not lazily at the call site — so above slot 1 it would bind to
+    //     `makensis`'s default target, which need not be the Unicode one, and
+    //     below any call site it would be too late for the lookup that call
+    //     site does.
     //     That leaves exactly this window. It also gives slot 1's "a later `raw`
     //     overrides it" contract a second line depending on it: a `raw` that
     //     flips `Unicode` after this point desynchronises the target.
@@ -484,8 +483,4 @@ fn escape_into(out: &mut String, value: &str) {
             other => out.push(other),
         }
     }
-}
-
-fn boolean(value: bool) -> &'static str {
-    if value { "true" } else { "false" }
 }

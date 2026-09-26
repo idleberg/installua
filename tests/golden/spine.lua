@@ -8,7 +8,6 @@
 attributes {
 	name = "Spine",
 	outFile = "spine-setup.exe",
-	unicode = true,
 }
 
 installer {

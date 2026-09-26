@@ -402,8 +402,7 @@ pub enum Setting {
     /// - a flag left out is the flag written `false`, because NSIS's state
     ///   starts cleared (`build_compress_whole = false`) rather than remembered.
     Flags(&'static Setting),
-    /// Shaped by the block's own lowering instead: `unicode` sets a field of
-    /// the module rather than emitting a line, and `versionInfo` is a nested
+    /// Shaped by the block's own lowering instead: `versionInfo` is a nested
     /// table. The analogue of [`Offer::Handled`] one level up, and it carries
     /// the Lua type for the same reason — the stub generator has to describe a
     /// field it does not lower.

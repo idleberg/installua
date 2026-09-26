@@ -19,7 +19,6 @@ local VPatch = plugin "VPatch"
 attributes {
 	name = "Plugins",
 	outFile = "plugins-setup.exe",
-	unicode = true,
 }
 
 installer {

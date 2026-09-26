@@ -1,11 +1,11 @@
 installua coverage -- makensis v3.12, 276 commands
 
   exposed          106
-  attribute         68
+  attribute         67
   lowering-target   28
   language          14
   directive         36
-  rejected          24
+  rejected          25
   todo               0
 
 installua MUI coverage -- Modern UI 2, 255 names

@@ -1944,16 +1944,19 @@ pub const ROWS: &[Row] = &[
         "page.*.subCaption",
         Setting::Handled("string"),
     ),
-    // `Target x86-unicode` is `cpu` and `unicode` hyphenated together, and both
-    // of those are rows already. A third spelling would also be a second way to
-    // set `unicode`, which is not a line but a field the emitter reads before it
-    // writes anything — so the two rows below are the whole of it.
+    // `Target x86-unicode` is `cpu` and the charset hyphenated together, and the
+    // charset is not a choice here — so `cpu` is the whole of it.
     rejected(
         "Target",
-        "one word for `cpu` and `unicode`, which are separate settings here",
+        "one word for `cpu` and the charset, and the charset is always Unicode here",
     ),
     attribute("CPU", "cpu", Setting::Enum),
-    attribute("Unicode", "unicode", Setting::Handled("boolean")),
+    // Always `Unicode true`, written first by the emitter. NSIS 3's own plugins
+    // all ship a Unicode build; an ANSI-only third-party one is what the option
+    // was for, and one bool on the target is what
+    // every `!addplugindir` and every `${_NSIS_DEFAW}` name would otherwise
+    // have to be kept in step with.
+    rejected("Unicode", "an Installua installer is always Unicode"),
     rejected(
         "UninstallExeName",
         "NSIS retired it: write `writeUninstaller` from a section",

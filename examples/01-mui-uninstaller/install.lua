@@ -11,7 +11,6 @@ local REGKEY <const> = "Software/Microsoft/Windows/CurrentVersion/Uninstall/" ..
 attributes {
 	name = APP,
 	outFile = APP .. "-" .. VERSION .. "-setup.exe",
-	unicode = true,
 	compressor = "lzma",
 	requestExecutionLevel = "admin",
 	versionInfo = {

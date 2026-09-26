@@ -131,7 +131,11 @@ const CASES: &[(Code, &str)] = &[
         "attributes { outFile = \"a.exe\" }\nimport {}",
     ),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
-    (Code::BadFieldValue, r#"attributes { unicode = "yes" }"#),
+    (
+        Code::BadFieldValue,
+        r#"attributes { outFile = "a.exe", cpu = "arm" }"#,
+    ),
+    (Code::UnknownField, r#"attributes { unicode = true }"#),
     (
         Code::DuplicateBlock,
         "attributes { outFile = \"a.exe\" }\nattributes { name = \"b\" }",

@@ -17,7 +17,6 @@ local fileFunc = import "FileFunc"
 attributes {
 	name = APP,
 	outFile = APP .. "-setup.exe",
-	unicode = true,
 }
 
 -- Two outputs out of a header macro's three. The third is dropped, which the

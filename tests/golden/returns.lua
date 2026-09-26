@@ -13,7 +13,6 @@
 attributes {
 	name = "Returns",
 	outFile = "returns-setup.exe",
-	unicode = true,
 }
 
 -- Two outputs, both derived from one measurement. `string.len` is non-negative

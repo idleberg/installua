@@ -28,7 +28,6 @@ local CONF <const> = "/app.conf"
 attributes {
 	name = "Headers",
 	outFile = "headers-setup.exe",
-	unicode = true,
 }
 
 installer {

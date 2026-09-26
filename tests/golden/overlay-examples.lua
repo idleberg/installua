@@ -2,7 +2,6 @@
 attributes {
 	name = "Overlay examples",
 	outFile = "examples.exe",
-	unicode = true,
 	brandingImage = { edge = "top", size = "20u" },
 }
 
