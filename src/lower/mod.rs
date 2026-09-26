@@ -5296,7 +5296,11 @@ impl<'p> Lowerer<'_, 'p> {
                     self.module.sections.push(ir::SectionItem::Section(section));
                 }
             }
-            "group" => self.group(value, half, None),
+            "group" => {
+                if let Some(group) = self.group(value, half, None) {
+                    self.module.sections.push(ir::SectionItem::Group(group));
+                }
+            }
             // Lowered by [`Self::radio_pass`] before any body.
             "radioButtons" => {}
             other if CALLBACKS[half.index()].contains(&other) => self.callback(value, half, other),
@@ -5343,7 +5347,11 @@ impl<'p> Lowerer<'_, 'p> {
                     self.module.sections.push(ir::SectionItem::Section(section));
                 }
             }
-            DeferredKind::Group => self.group(value, half, Some(index)),
+            DeferredKind::Group => {
+                if let Some(group) = self.group(value, half, Some(index)) {
+                    self.module.sections.push(ir::SectionItem::Group(group));
+                }
+            }
             // The page goes where the block listed it, like every other entry:
             // the `local` decides nothing about page order either.
             DeferredKind::StartMenu => {
@@ -5567,6 +5575,10 @@ impl<'p> Lowerer<'_, 'p> {
             } = member
             {
                 self.claim(name, half, Site::Block);
+            } else if let TableField::Positional { value } = member
+                && value.callee_name() == Some("group")
+            {
+                self.claim_members(value, half);
             }
         }
     }
@@ -5689,14 +5701,17 @@ impl<'p> Lowerer<'_, 'p> {
     /// in it, and the only thing between the two NSIS lines is other sections.
     /// A block would promise otherwise.
     ///
-    /// One level deep. NSIS accepts nesting and MUI2's tree draws it, but a
-    /// nested group has no separate meaning to anything else — it is still a
-    /// flat run of sections with a heading — so the surface offers the level
-    /// that pays for itself and says so.
-    fn group(&mut self, value: &Expr, half: Half, index: Option<String>) {
+    /// A member may be a group itself, written inline or listed by its
+    /// `local`: NSIS nests them and MUI2's tree draws the levels.
+    fn group(
+        &mut self,
+        value: &Expr,
+        half: Half,
+        index: Option<String>,
+    ) -> Option<ir::SectionGroup> {
         let Expr::Call { args, .. } = value else {
             self.todo(value.span(), "this entry");
-            return;
+            return None;
         };
         // The short-and-table pair, the same as `section`'s: a short form for a
         // group with nothing to configure, and a table form whose array part is
@@ -5704,14 +5719,12 @@ impl<'p> Lowerer<'_, 'p> {
         let (name, options, members) = match args.as_slice() {
             [name, members @ Expr::Table { .. }] => (name, Vec::new(), members),
             [Expr::Table { fields, span }] => {
-                let Some(declared) = self.declaration(fields, *span, "group", "sections") else {
-                    return;
-                };
+                let declared = self.declaration(fields, *span, "group", "sections")?;
                 (declared.name, declared.options, declared.holds)
             }
             _ => {
                 self.todo(value.span(), "this `group` form");
-                return;
+                return None;
             }
         };
         let Expr::Table {
@@ -5725,12 +5738,10 @@ impl<'p> Lowerer<'_, 'p> {
                 "a group holds sections and nothing else: there is no body between \
                  `SectionGroup` and `SectionGroupEnd`",
             );
-            return;
+            return None;
         };
 
-        let Some(name) = self.constant_string(name, "group") else {
-            return;
-        };
+        let name = self.constant_string(name, "group")?;
         let mut expanded = false;
         let mut description = None;
         for (name, value) in options {
@@ -5774,28 +5785,26 @@ impl<'p> Lowerer<'_, 'p> {
                 self.todo(value.span(), "a named entry in a `group`'s sections");
                 continue;
             };
-            if value.callee_name() == Some("group") {
-                self.todo(value.span(), "a `group` inside a `group`");
-                continue;
-            }
             // A bare name: the group is listing a declaration, exactly as a
             // block does, and the claim rules are the same ones.
-            if let Expr::Name(member) = value {
+            let item = if let Expr::Name(member) = value {
                 let Some((declared, kind, index)) = self.listed(member) else {
                     continue;
                 };
                 if kind == DeferredKind::Group {
-                    self.todo(value.span(), "a `group` inside a `group`");
-                    continue;
+                    self.group(declared, half, Some(index))
+                        .map(ir::SectionItem::Group)
+                } else {
+                    self.section(declared, half, Some(index))
+                        .map(ir::SectionItem::Section)
                 }
-                if let Some(section) = self.section(declared, half, Some(index)) {
-                    sections.push(section);
-                }
-                continue;
-            }
-            if let Some(section) = self.section(value, half, None) {
-                sections.push(section);
-            }
+            } else if value.callee_name() == Some("group") {
+                self.group(value, half, None).map(ir::SectionItem::Group)
+            } else {
+                self.section(value, half, None)
+                    .map(ir::SectionItem::Section)
+            };
+            sections.extend(item);
         }
 
         // An empty group compiles to a heading with nothing under it, which is
@@ -5810,20 +5819,18 @@ impl<'p> Lowerer<'_, 'p> {
                 )
                 .note("a heading with nothing under it is not drawn"),
             );
-            return;
+            return None;
         }
 
-        self.module
-            .sections
-            .push(ir::SectionItem::Group(ir::SectionGroup {
-                name: format!("{}{name}", half.prefix()),
-                expanded,
-                // Set when the group was listed by name; a `group { … }` written
-                // inline in the block is addressed by nothing, so NSIS is asked
-                // to define nothing.
-                index_name: index,
-                sections,
-            }));
+        Some(ir::SectionGroup {
+            name: format!("{}{name}", half.prefix()),
+            expanded,
+            // Set when the group was listed by name; a `group { … }` written
+            // inline in the block is addressed by nothing, so NSIS is asked
+            // to define nothing.
+            index_name: index,
+            sections,
+        })
     }
 
     /// `index` is the define the caller has already earned for it — `Some` when

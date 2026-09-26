@@ -38,7 +38,8 @@ installer {
 ## SectionGroup / SectionGroupEnd
 
 Groups sections under one collapsible heading on the components page. Ticking
-the heading ticks the children. Takes `description` like a section does.
+the heading ticks the children. A group can hold groups too. Takes
+`description` like a section does.
 
 **Usage** `group(name, { <section>, … })`
 

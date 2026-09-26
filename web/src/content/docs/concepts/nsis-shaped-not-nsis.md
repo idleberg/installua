@@ -43,7 +43,7 @@ installer with wrong behaviour.
 | `Section` / `SectionEnd`                             | `section("Name", function() … end)`                                                                  |
 | `SetCompressor /SOLID lzma`                          | `compressor = { "lzma", solid = true }` — an attribute's flags go in a table with it, the way a call's do |
 | `Section /o`                                         | `section { "Name", optional = true, body = function() … end }` — options move the whole call into one table |
-| `SectionGroup`                                       | `group("Name", { … })` — a list of sections, not a body; nesting one is not yet implemented          |
+| `SectionGroup`                                       | `group("Name", { … })` — a list of sections and groups, not a body                                    |
 | `Function` / `FunctionEnd`                           | `func("name", function() … end)`                                                                     |
 | `Function .onInit`, `Function .onSelChange`, …       | `onInit(function() … end)` — the leading `.` is emitted, never written                               |
 | `Section un.Main`, `Function un.Foo`                 | declare them inside `uninstaller {}`; `un.` has no spelling at all                                   |

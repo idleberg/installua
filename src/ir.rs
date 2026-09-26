@@ -153,14 +153,11 @@ impl Module {
             .map(|f| (f.name.as_str(), &f.body))
             .collect::<Vec<_>>();
         let mut all = functions;
-        for item in &self.sections {
+        let mut items: Vec<&SectionItem> = self.sections.iter().rev().collect();
+        while let Some(item) = items.pop() {
             match item {
                 SectionItem::Section(section) => all.push((section.name.as_str(), &section.body)),
-                SectionItem::Group(group) => {
-                    for section in &group.sections {
-                        all.push((section.name.as_str(), &section.body));
-                    }
-                }
+                SectionItem::Group(group) => items.extend(group.sections.iter().rev()),
             }
         }
         all.into_iter()
@@ -174,16 +171,13 @@ impl Module {
             .iter_mut()
             .map(|f| (f.name.clone(), &mut f.body))
             .collect();
-        for item in &mut self.sections {
+        let mut items: Vec<&mut SectionItem> = self.sections.iter_mut().rev().collect();
+        while let Some(item) = items.pop() {
             match item {
                 SectionItem::Section(section) => {
                     all.push((section.name.clone(), &mut section.body))
                 }
-                SectionItem::Group(group) => {
-                    for section in &mut group.sections {
-                        all.push((section.name.clone(), &mut section.body));
-                    }
-                }
+                SectionItem::Group(group) => items.extend(group.sections.iter_mut().rev()),
             }
         }
         all
@@ -261,7 +255,8 @@ pub struct SectionGroup {
     /// See [`Section::index_name`]; a group is addressable for the same reason
     /// and by the same third word.
     pub index_name: Option<String>,
-    pub sections: Vec<Section>,
+    /// Sections, and groups nested under this one.
+    pub sections: Vec<SectionItem>,
 }
 
 #[derive(Clone, Debug)]

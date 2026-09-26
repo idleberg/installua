@@ -97,8 +97,9 @@ issue. One-off, not a guard.
 **Started:** `tests/ports.rs` checks each port in `tests/ports/` against its
 original by `makensis -V4` trace: the effect lines have to match, and pages
 are left out because Installua only writes MUI2 pages. `example1`,
-`example2`, `one-section`, `primes`, `silent` and the five `Modern UI/`
-examples port with no workaround.
+`example2`, `Memento`, `one-section`, `primes`, `silent` and the five
+`Modern UI/` examples port with no workaround. A line the original writes
+inside a macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
 
 **Rule:** a port that needs a missing feature or hits a bug waits. The fix
 goes into Installua first, and the port follows once it is in.
@@ -141,6 +142,15 @@ Waiting on a fix:
   `Software/…` beside every other key's `Software\…`. The `pages` golden
   had the bug written into it. The trace cannot see it, because MUI2's
   macros print nothing. — fixed (goldens `pages`, `languages`).
+
+- **`Memento`:** a group inside a group was `not-yet-implemented`, on
+  purpose: "one level deep". — fixed: a group holds groups, inline or by
+  `local` (golden `sections`).
+- **`Memento`:** open. `MementoSectionRestore` goes first in `.onInit`,
+  before the author's code; the original puts it last, after writing an
+  example state to the registry. Restore first, that state is written too
+  late to load. Restore last, an author's `x.selected = false` in `onInit` is
+  undone by the restore. The trace cannot see it: the restore is a macro.
 
 Not portable: `rtest` tests `GetLabelAddress` and `Call` through an
 address, both rejected.

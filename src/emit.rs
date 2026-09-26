@@ -171,33 +171,17 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
     //    calls, so nothing else about this order matters.
     for item in &module.sections {
         out.blank();
-        match item {
-            ir::SectionItem::Section(section) => section_block(&mut out, section, 0),
-            ir::SectionItem::Group(group) => {
-                let flag = if group.expanded { " /e" } else { "" };
-                let name = argument(&ir::Arg::str(group.name.clone()));
-                let index = index_word(group.index_name.as_deref());
-                out.line(
-                    format!("SectionGroup{flag} {name}{index}"),
-                    Origin::Emitted("SectionGroup"),
-                );
-                for (index, section) in group.sections.iter().enumerate() {
-                    if index > 0 {
-                        out.blank();
-                    }
-                    section_block(&mut out, section, 1);
-                }
-                out.line("SectionGroupEnd", Origin::Emitted("SectionGroupEnd"));
-            }
-        }
+        section_item(&mut out, item, 0);
     }
     // `Memento.nsh`'s end marker, once, after the last remembered section: it
     // closes the chain of functions each `MementoSectionEnd` opened.
-    let remembers = |section: &ir::Section| section.remember.is_some();
-    if module.sections.iter().any(|item| match item {
-        ir::SectionItem::Section(section) => remembers(section),
-        ir::SectionItem::Group(group) => group.sections.iter().any(remembers),
-    }) {
+    fn remembers(item: &ir::SectionItem) -> bool {
+        match item {
+            ir::SectionItem::Section(section) => section.remember.is_some(),
+            ir::SectionItem::Group(group) => group.sections.iter().any(remembers),
+        }
+    }
+    if module.sections.iter().any(remembers) {
         out.blank();
         out.line(
             "!insertmacro MementoSectionDone",
@@ -256,6 +240,31 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
 /// protect.
 fn index_word(index_name: Option<&str>) -> String {
     index_name.map_or_else(String::new, |name| format!(" {name}"))
+}
+
+fn section_item(out: &mut Out, item: &ir::SectionItem, depth: usize) {
+    let group = match item {
+        ir::SectionItem::Section(section) => return section_block(out, section, depth),
+        ir::SectionItem::Group(group) => group,
+    };
+    let indent = INDENT.repeat(depth);
+    let flag = if group.expanded { " /e" } else { "" };
+    let name = argument(&ir::Arg::str(group.name.clone()));
+    let index = index_word(group.index_name.as_deref());
+    out.line(
+        format!("{indent}SectionGroup{flag} {name}{index}"),
+        Origin::Emitted("SectionGroup"),
+    );
+    for (index, item) in group.sections.iter().enumerate() {
+        if index > 0 {
+            out.blank();
+        }
+        section_item(out, item, depth + 1);
+    }
+    out.line(
+        format!("{indent}SectionGroupEnd"),
+        Origin::Emitted("SectionGroupEnd"),
+    );
 }
 
 fn section_block(out: &mut Out, section: &ir::Section, depth: usize) {

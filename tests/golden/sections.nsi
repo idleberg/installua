@@ -22,6 +22,12 @@ SectionGroup "Tools" SEC_tools
   Section /o "Profiler" SEC_profiler
     DetailPrint "profiler"
   SectionEnd
+
+  SectionGroup "Tracing"
+    Section "Tracer"
+      DetailPrint "tracer"
+    SectionEnd
+  SectionGroupEnd
 SectionGroupEnd
 
 Section "Docs" SEC_docs

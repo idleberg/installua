@@ -34,7 +34,15 @@ local docs = section("Docs", function()
 	detailPrint("docs")
 end)
 
-local tools = group { "Tools", sections = { profiler } }
+-- A group holds groups too, written inline or listed by their `local`.
+local tools = group { "Tools", sections = {
+	profiler,
+	group("Tracing", {
+		section("Tracer", function()
+			detailPrint("tracer")
+		end),
+	}),
+} }
 
 installer {
 	installTypes = { "Full", "Minimal" },

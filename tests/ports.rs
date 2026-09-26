@@ -31,9 +31,22 @@ const PORTS: &[&str] = &[
     "Modern UI/MultiLanguage",
     "Modern UI/StartMenu",
     "Modern UI/WelcomeFinish",
+    "Memento",
     "one-section",
     "primes",
     "silent",
+];
+
+/// Lines one side writes inside a macro, where `-V4` prints nothing, and the
+/// other side writes in the open: taken out of the side that shows them.
+const HIDDEN: &[(&str, &str)] = &[
+    // `${If} ${Cmd} `MessageBox …``.
+    (
+        "Memento",
+        "MessageBox: 4: \"Would you like to load an example state?\"",
+    ),
+    // MUI2 writes it in `MUI_INTERFACE`, and refuses a second one.
+    ("Memento", "XPStyle: on"),
 ];
 
 /// Trace lines that differ by design rather than by mistake.
@@ -100,8 +113,17 @@ fn ports_do_what_the_originals_do() {
             .expect("copy the original");
         std::fs::write(directory.join("port.nsi"), port(name)).expect("write the port");
 
-        let original = trace(&directory, &file, &[]);
-        let ported = trace(&directory, "port.nsi", &["-WX"]);
+        let hidden: Vec<&str> = HIDDEN
+            .iter()
+            .filter(|(port, _)| port == name)
+            .map(|(_, line)| *line)
+            .collect();
+        let shown = |trace: String| {
+            let lines = trace.lines().filter(|line| !hidden.contains(line));
+            lines.collect::<Vec<_>>().join("\n")
+        };
+        let original = shown(trace(&directory, &file, &[]));
+        let ported = shown(trace(&directory, "port.nsi", &["-WX"]));
         let _ = std::fs::remove_dir_all(&directory);
         assert_eq!(ported, original, "{name}");
     }

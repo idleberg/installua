@@ -143,21 +143,18 @@ fn an_install_type_is_named_once() {
 }
 
 /// A heading with nothing under it is not drawn, so the two NSIS lines it
-/// becomes do nothing at all — and one level is what the surface offers, since
-/// a nested heading has no separate meaning to anything but the tree.
+/// become do nothing at all — at any depth.
 #[test]
-fn a_group_holds_at_least_one_section_and_no_group() {
+fn a_group_holds_at_least_one_section() {
     let raised = errors(&program("group(\"Tools\", {}),"));
     assert_eq!(raised.len(), 1, "{raised:?}");
     assert!(raised[0].1.contains("no sections"), "{raised:?}");
 
-    let raised = errors(&program(
-        "group(\"Tools\", { group(\"Inner\", { section(\"C\", function() end) }) }),",
-    ));
+    let raised = errors(&program("group(\"Tools\", { group(\"Inner\", {}) }),"));
     assert!(
         raised
             .iter()
-            .any(|(code, _)| *code == Code::NotYetImplemented),
+            .any(|(_, message)| message.contains("no sections")),
         "{raised:?}"
     );
 }
