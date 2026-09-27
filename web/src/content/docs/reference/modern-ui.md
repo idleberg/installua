@@ -8,7 +8,7 @@ description: The nine pages, the settings each one takes, and the block-level se
      `src/mui/rows.rs` and `src/lower/mod.rs`, so the entries are true as of the
      current tables. -->
 
-The MUI2 half of the [command reference](/reference/commands/): the nine pages,
+The MUI2 part of the [command reference](/reference/commands/): the nine pages,
 the settings on each, and the block-level settings that govern all of them.
 
 Installua targets MUI2 and nothing else. It writes every `!insertmacro` and
@@ -32,7 +32,8 @@ should appear.
 The nine pages: `welcome`, `license`, `components`, `directory`, `startMenu`,
 `instFiles`, `finish`, `confirm`, `installMode` — plus [`custom`](/reference/commands/windows-and-controls/).
 `confirm` is uninstaller-only, `startMenu` and `installMode` installer-only; the
-rest exist in both halves and are written by which block lists them.
+rest work in both the installer and the uninstaller, depending on which block
+lists them.
 
 A page can also be bound to a local and listed by name, which lets it live in
 an `include`d file: `local details = page.custom { … }`, then `details,` in the
@@ -166,7 +167,7 @@ installer {
 The page is installer-only, but `menu.folder` is **not**. MUI2 defines no
 `MUI_UNPAGE_STARTMENU`, so the uninstaller never ran a page and has nothing to
 read a variable from — it reads the folder back out of the registry instead.
-One spelling, two lowerings, and the block decides which:
+One name, compiled two different ways, and the block decides which:
 
 ```lua
 local menu = page.startMenu {
@@ -191,11 +192,12 @@ Two consequences. `registry` is what makes that read return the folder the user
 actually picked: without it `MUI_STARTMENU_GETFOLDER` falls back to
 `defaultFolder`, so an uninstaller for a program installed anywhere else removes
 a directory nobody created and leaves the real one behind. It is the field that
-makes the two halves agree, not decoration. And `menu.write` is the installer's
+makes the installer and the uninstaller agree, not decoration. And `menu.write` is the installer's
 alone — the uninstaller had no page and so never chose a folder to write back.
 
 A `menu.folder` read inside a `func` is refused rather than guessed: a `func`
-can be called from either half, the two lowerings are different code, and
+can be called from either the installer or the uninstaller, the two compile to
+different code, and
 picking wrong is silent because an empty variable copies without complaint.
 
 ### MUI_PAGE_INSTFILES
@@ -264,8 +266,8 @@ installer {
 
 ### Block-level MUI settings
 
-Written on `installer {}` or `uninstaller {}`, because their scope is the whole
-half rather than one page.
+Written on `installer {}` or `uninstaller {}`, because they apply to the whole
+installer or uninstaller rather than one page.
 
 Four of them are NSIS commands rather than MUI2 inventions — `checkBitmap` is
 `CheckBitmap`, `installColors` is `InstallColors`, `progressBar` is
@@ -314,7 +316,7 @@ they replace the dialog resources MUI2 picks from the settings you already set.
 `MUI_FINISHPAGE_ABORTWARNINGCHECK` · `MUI_INSTFILESPAGE_ABORTWARNING_TEXT` ·
 `MUI_INSTFILESPAGE_ABORTWARNING_SUBTEXT` · `MUI_LANGUAGEEX` ·
 `MUI_LICENSEPAGE_CHECKBOX_TEXT_ACCEPT` · `MUI_LICENSEPAGE_CHECKBOX_TEXT_DECLINE` —
-MUI 1 spellings that nothing in MUI2 reads.
+MUI 1 names that nothing in MUI2 reads.
 
 `MUI_FORCECLASSICCONTROLS` · `MUI_OPTIMIZE_ALWAYSLTR` ·
 `MUI_WELCOMEFINISHPAGE_BITMAP_NOSTRETCH` ·

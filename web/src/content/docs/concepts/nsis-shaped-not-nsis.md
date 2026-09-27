@@ -21,9 +21,9 @@ if string.lower(channel) == "beta" then end  --> StrCmp $0 "beta" …
 ```
 
 `StrCmp` is the one your fingers know, and it is _not_ what `==` gives you. Installua's `==`
-is Lua's `==`, which is case-sensitive, so it lowers to `StrCmpS`. The case-insensitive
-form is `string.lower(a) == string.lower(b)` and it costs nothing — the compiler peepholes
-it to a bare `StrCmp` with no `${StrCase}` and no temporary.
+is Lua's `==`, which is case-sensitive, so it compiles to `StrCmpS`. The case-insensitive
+form is `string.lower(a) == string.lower(b)` and it costs nothing — the compiler turns
+it into a bare `StrCmp` with no `${StrCase}` and no temporary.
 
 Getting this backwards is the one mistake in this document that produces a working
 installer with wrong behaviour.
@@ -46,7 +46,7 @@ installer with wrong behaviour.
 | `SectionGroup`                                       | `group("Name", { … })` — a list of sections and groups, not a body                                    |
 | `Function` / `FunctionEnd`                           | `func("name", function() … end)`                                                                     |
 | `Function .onInit`, `Function .onSelChange`, …       | `onInit(function() … end)` — the leading `.` is emitted, never written                               |
-| `Section un.Main`, `Function un.Foo`                 | declare them inside `uninstaller {}`; `un.` has no spelling at all                                   |
+| `Section un.Main`, `Function un.Foo`                 | declare them inside `uninstaller {}`; you never write `un.`                                          |
 | `LangString`                                         | the `languages {}` block, keyed locale-first; `un.` is applied for you where it helps                |
 | `!include "WinVer.nsh"`                              | nothing — `getWinVer("MAJOR")` is a real instruction since NSIS 3, and returns a number              |
 | `!include "FileFunc.nsh"`                            | `local fileFunc = import "FileFunc"`, then `fileFunc.driveSpace("C:/", "/D=F /S=M")`                 |
@@ -83,7 +83,7 @@ detailPrint("Installing to " .. INSTDIR .. "/bin")
 --> DetailPrint "Installing to $INSTDIR\bin"
 ```
 
-It looks more verbose and costs nothing: `..` lowers to a string template, so that is one
+It looks more verbose and costs nothing: `..` compiles to a string template, so that is one
 line and no registers. What you get back is that `INSTDR` is an **error in your editor**,
 where `$INSTDR` was a warning in a build log — if you read build logs.
 
@@ -136,7 +136,7 @@ charset that could change would be one more thing every `!addplugindir` and ever
 message named by charset had to be kept in step with. A third-party plugin that only ever
 shipped an ANSI DLL is the cost.
 
-`Target` has no Installua spelling, because `Target` and `Unicode` are last-one-wins with
+`Target` has no Installua equivalent, because `Target` and `Unicode` are last-one-wins with
 each other and silently so. If you need it, `raw` gives it to you, and putting `Unicode`
 first is what lets your `raw` line override it rather than the other way round.
 
@@ -148,7 +148,7 @@ your source means.
 
 ## Pages are MUI2, and only MUI2
 
-`PageEx`, `Page` and `UninstPage` have no Installua spelling. MUI2 is what gets generated.
+`PageEx`, `Page` and `UninstPage` have no Installua equivalent. MUI2 is what gets generated.
 
 The reason page settings group into a `page.<name> { … }` table rather than sitting loose is
 correctness, not tidiness: MUI2's settings are `!define`s that apply to _the next_
@@ -189,7 +189,7 @@ program with a dialog has the same include list as one without. See
 `raw [[ … ]]` emits verbatim at the position it appears. It is deliberately conspicuous,
 and it costs exactly what you would expect:
 
-- nothing is hoisted — position is load-bearing;
+- nothing is hoisted — its position matters;
 - **no local survives it** — raw NSIS can write any register (`System::Call '…i.r0'` does
   it from inside a string literal) and nothing in the AST records which, so values cross a
   `raw` block through a global;

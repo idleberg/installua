@@ -37,11 +37,11 @@ local code, output = nsExec.execToStack("cmd.exe /c ver", {
 ```
 
 `nsexec.c` reads its flags in a loop — `goto params` after each match — so the
-order a call site writes them in genuinely does not matter to the plugin. It
+order a call site writes them in does not matter to the plugin. It
 matters here anyway: emission follows the declaration, so two calls naming the
 same flags emit the same line.
 
-**A timeout is not an error the return value distinguishes by shape.** On one
+**A timeout is not a separate kind of return value.** On one
 the plugin pushes the string `"timeout"` where an exit code would be, and on a
 failure to launch, `"error"` — both in the same slot as a number, which is why
 the first output is a `string`.
@@ -113,7 +113,7 @@ value read is whatever was underneath.
 
 Declared anyway, on a line worth stating: this arity varies only on a Windows
 old enough to lack `InternetAutodial` — older than 98, or a 95 that never saw
-IE4. It is not the [tagged-output](/reference/plugins/tagged-outputs/) shape, which varies on an
+IE4. It is not a [tagged output](/reference/plugins/tagged-outputs/), which varies on an
 ordinary path and has a first value that says which; here there is no value at
 all to test, and the branch is unreachable on anything this century.
 
@@ -158,7 +158,7 @@ declaration order, which is what makes the call site's order free.
 
 `/TRANSLATE` and `/TRANSLATE2` stay undeclared. Each is a flag followed by eight
 or nine further positional strings — the localised progress texts — and that is
-not a shape `flags` can spell: a flag carries one value or none.
+not something `flags` can describe: a flag carries one value or none.
 
 ## Splash
 
@@ -201,8 +201,8 @@ install.
 is a mistake.
 
 `show` is declared in its **one-string form only**. Its real parameter list is
-`[/set id text]... text`, and a repeated flag pair is not a fixed arity; the
-format has no spelling for one, and inventing a trailing `any` would let a wrong
+`[/set id text]... text`, and a repeated flag pair is not a fixed arity; a
+`.toml` cannot describe one, and inventing a trailing `any` would let a wrong
 call through rather than catch it. The `/set` form is a `raw`.
 
 ## TypeLib
@@ -254,8 +254,8 @@ writes `advsplash::show`, and NSIS matches the namespace case-insensitively.
 
 ## StartMenu
 
-The custom page that asks which Start Menu folder to put shortcuts in, and the
-[tagged-output](/reference/plugins/tagged-outputs/) shape with the *unusual* polarity.
+The custom page that asks which Start Menu folder to put shortcuts in, and a
+[tagged output](/reference/plugins/tagged-outputs/) with the *unusual* polarity.
 
 | Method | Arguments | Returns |
 | ------ | --------- | ------- |
@@ -298,7 +298,7 @@ local outcome, folder = startMenu.select("Example", {
 -- StartMenu::Select /autoadd /lastused $INSTDIR "Example"
 ```
 
-The readme is unusually direct about why a table is the right surface here:
+The readme is unusually direct about why a table is the right fit here:
 *"the order of the switches doesn't matter but the required parameter must come
 after all of them"*. That is the declaration's job in one sentence — you name
 the flags in any order and it places them, ahead of the argument, every time.

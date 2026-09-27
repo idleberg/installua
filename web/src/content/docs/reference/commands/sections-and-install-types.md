@@ -187,7 +187,7 @@ installer {
 
 Sections the user picks between, as radio buttons: ticking one unticks the one
 that was ticked, and unticking it ticks it again. The first section listed is
-the one ticked at the start, so mark the others `optional`. Lowered through the
+the one ticked at the start, so mark the others `optional`. Compiled through the
 `Sections.nsh` header that ships with NSIS.
 
 **Usage** a `radioButtons { <section>, … }` entry of `installer {}` or

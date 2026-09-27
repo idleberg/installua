@@ -1,15 +1,15 @@
 ---
 title: Not available
-description: What has no Installua spelling, and what to write instead.
+description: What has no Installua equivalent, and what to write instead.
 ---
 
-Everything with no Installua spelling, and what to write instead. Nothing here
+Everything with no Installua equivalent, and what to write instead. Nothing here
 is pending: these are decisions.
 
 ## The `!` directives
 
 Installua has no preprocessor — the script _is_ a program — and 36 of the 37 `!`
-directives have no spelling here. They are not all out for the same reason,
+directives have no equivalent here. They are not all out for the same reason,
 though, so they are listed under the reason rather than in one heap. Only the
 first group is answered by "there is no preprocessor"; the rest are not
 preprocessing at all.
@@ -59,7 +59,7 @@ in 22 and `EnvVarUpdate.nsh` in 20, and `nsProcess` is declared here because of
 it. A `.toml` in your own project does the same thing without waiting for anyone,
 and a header you only reach through `raw` needs no declaration at all.
 
-**`!ifdef` used to ask whether a name exists has no spelling at all**, and that
+**`!ifdef` used to ask whether a name exists has no equivalent at all**, and that
 is the one place this group really does lose something. Every name here is
 declared: an undeclared one is an error, and a name that may or may not be
 supplied is a parameter.
@@ -121,7 +121,7 @@ flows anywhere and position is the whole of it, which is what an anchor is for:
 raw.tail [[ !finalize '"sign.exe" "%1"' ]]
 ```
 
-There is no Installua spelling because one would add nothing — the NSIS line
+There is no Installua equivalent because one would add nothing — the NSIS line
 already says exactly what it does, and `raw.tail` is the position it needs.
 
 ### `makensis`'s own output
@@ -154,7 +154,7 @@ That refuses the build the same way and does it from the declaration, so there
 is no guard to forget and nowhere to paste it wrongly.
 
 The general form — "this combination of settings makes no sense, stop" — has no
-spelling yet. It would be a top-level `error(…)` inside a build-time `if`, and
+equivalent yet. It would be a top-level `error(…)` inside a build-time `if`, and
 it waits for a real script that wants one.
 
 ### The one that is not out
@@ -166,7 +166,7 @@ ask for it.
 
 ## Written by the compiler, never by you
 
-These are real NSIS lines in the output — you just do not spell them. Listed
+These are real NSIS lines in the output — you just do not write them yourself. Listed
 here so a search for the NSIS name lands somewhere.
 
 | NSIS                                                                         | What writes it                                        |
@@ -200,8 +200,8 @@ that needs one goes.
 | Plugin          | Why not, and what to write instead                                                                                                                                                                                                                       |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Math`          | Its script string reads and writes `$0`–`$R9` **by name**, and the compiler owns the registers — a declaration would describe one string in and nothing out while the call quietly overwrote whatever the allocator had put there. Use the arithmetic operators. |
-| `BgImage`       | Every method returns a value only after `SetReturn on`, which makes the arity a **mode** rather than a signature — the one shape the format cannot carry.                                                                                                 |
-| `LangDLL`       | Reached through `languages { ask = … }`, which emits `MUI_LANGDLL_DISPLAY`. A second spelling for one dialog is worse than none.                                                                                                                          |
+| `BgImage`       | Every method returns a value only after `SetReturn on`, which makes the arity a **mode** rather than a signature — and a `.toml` cannot describe a mode.                                                                                                  |
+| `LangDLL`       | Reached through `languages { ask = … }`, which emits `MUI_LANGDLL_DISPLAY`. A second way to write one dialog is worse than none.                                                                                                                          |
 
 `InstallOptions` and `nsDialogs` are not in that list because they are not
 absences: the first is superseded by [`page.custom`](/reference/commands/windows-and-controls/) and the
@@ -218,11 +218,11 @@ in five lines of [its own `.toml`](/reference/commands/plugins-and-headers/#decl
 
 | Plugin                   | Scripts | Why not, and what to write instead                                                                                                                                                                                                                                                        |
 | ------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Registry`               | 40      | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, not a raw plugin call — and that form needs a trailing `${registry::Unload}`, which is behaviour rather than arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40.                                          |
-| `SimpleSC.getErrorMessage` | 61    | Takes its argument by `Push` rather than inline: `Push $code` / `SimpleSC::GetErrorMessage` / `Pop $msg`. `params` become the arguments written *after* `Plugin::Method`, so the format has no spelling for it. Three lines of `raw`.                                                        |
-| `LockedList`             | 0       | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature.                                                                                                                                                                             |
-| `Crypto`                 | 0       | Fails the *common* half of the rule outright.                                                                                                                                                                                                                                             |
-| `Nsis7z.extractWithCallback` | 5   | Not the register protocol the six `FileFunc`/`TextFunc` macros use — it pushes its two values on the stack. It stays out a step earlier than that: its second argument is the **address** of a function, `params` has no type for one, and `GetFunctionAddress` has no Lua spelling. See [the plugin reference](/reference/plugins/what-stays-out/#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
+| `Registry`               | 40      | Every scanned use is `${registry::…}`, the `Registry.nsh` macro form, not a raw plugin call — and that form needs a trailing `${registry::Unload}`, which is behaviour rather than arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40.                                         |
+| `SimpleSC.getErrorMessage` | 61    | Takes its argument by `Push` rather than inline: `Push $code` / `SimpleSC::GetErrorMessage` / `Pop $msg`. `params` become the arguments written *after* `Plugin::Method`, so a `.toml` has no way to describe it. Three lines of `raw`.                                                      |
+| `LockedList`             | 0       | It is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature.                                                                                                                                                                                      |
+| `Crypto`                 | 0       | No scanned script uses it.                                                                                                                                                                                                                                                                |
+| `Nsis7z.extractWithCallback` | 5   | Not the register protocol the six `FileFunc`/`TextFunc` macros use — it pushes its two values on the stack. It stays out a step earlier than that: its second argument is the **address** of a function, `params` has no type for one, and `GetFunctionAddress` has no Lua equivalent. See [the plugin reference](/reference/plugins/what-stays-out/#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
 | `nsJSON`                 | 3       | Its node path is a **variable number of positional strings** — one to four across 25 call sites — and `params` is a fixed list, so a declaration would have to pick a depth and miscount the `Pop`s at every other one. The repeated `/index` run its readme advertises turns out to appear in no script at all. See [the plugin reference](/reference/plugins/what-stays-out/#nsjsons-blocker-is-its-path-not-its-flags). |
 | `Inetc.post`             | 2       | Its POST body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch — and a `params` entry is emitted after the flags. `get`, `head` and `put` ship declared; only this entry point has an argument in front. |
 

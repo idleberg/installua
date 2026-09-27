@@ -1,6 +1,6 @@
 ---
 title: Commands
-description: Every NSIS command, grouped by what you are trying to do, with its Installua spelling.
+description: Every NSIS command, grouped by what you are trying to do, and how to write it in Installua.
 ---
 
 <!-- Hand-written. Not generated yet — see §"Generating this file".
@@ -9,10 +9,9 @@ description: Every NSIS command, grouped by what you are trying to do, with its 
      entries are true as of the current tables. -->
 
 
-The surface reference. Where `installua coverage` is a census — bucket counts
-over every NSIS command, answering _is it done_ — this one is a reference:
-things grouped by what a person is trying to do, each with a description, a
-signature and something you can paste.
+Every NSIS command, grouped by what you are trying to do, each with a
+description, a signature and something you can paste. For a count of which
+commands are supported, run `installua coverage`.
 
 **Reading an entry.** The heading is the NSIS or MUI2 name, because that is what
 you already know and what search engines have indexed. Everything under it is
@@ -46,7 +45,7 @@ pending — the `todo` bucket of both censuses is empty.
 | [Windows facts](/reference/commands/windows-facts/)                                   | what the machine is: version, shell folders, registry view                    |
 | [Plugins and headers](/reference/commands/plugins-and-headers/)                       | `plugin`, `import`, `raw`, declaring a third-party one                        |
 | [Constants](/reference/commands/constants/)                                           | `INSTDIR`, `PROGRAMFILES64`, `HKLM`, …                                        |
-| [Not available](/reference/commands/not-available/)                                   | what has no Installua spelling, and what to write instead                     |
+| [Not available](/reference/commands/not-available/)                                   | what has no Installua equivalent, and what to write instead                   |
 
 ---
 

@@ -3,7 +3,7 @@ title: Strings and numbers
 description: "`string.*`, arithmetic, comparison."
 ---
 
-Arithmetic and comparison are Lua operators, lowered onto `IntOp` and the
+Arithmetic and comparison are Lua operators, compiled to `IntOp` and the
 `*Cmp` family; width and sign are attributes of the type, so there is no
 `Int64Cmp` to write. There are no floats.
 
@@ -19,7 +19,7 @@ Arithmetic and comparison are Lua operators, lowered onto `IntOp` and the
 
 ## The string adapters
 
-Hand-written lowerings onto NSIS instructions and `StrFunc` macros — the
+Each compiles to NSIS instructions and `StrFunc` macros — the
 `${Using:StrFunc}` lines are collected and emitted for you.
 
 | Installua                                        | Notes                                 |

@@ -45,15 +45,15 @@ still yours to install, and the file here only supplies the count:
 | `SimpleFC`       | 24      | all 33 — ports, applications, ICMP types and advanced rules; `0` is success and `1` is failure |
 | `NScurl`         | —       | `.http`, `.wait`, `.query`, `.cancel`, `.md5`, `.sha1`, `.sha256`, `.escape`, `.unescape` — libcurl, and the one method whose flags trail |
 
-`NScurl` has no script count because it postdates the corpus. It ships on the
-same half of the rule `Nsis7z` does: eleven exports and no two push the same
+`NScurl` has no script count because it is newer than the scan. It ships for the
+same reason `Nsis7z` does, counts that are hard to guess: eleven exports and no two push the same
 number of values, two of them pushing none at all. Its counts were read out of
 `main.c`.
 
 `Nsis7z`'s count of 5 is not a typo. It ships on **arity** rather than
 popularity — two methods that push *nothing at all*, which is the one count no
-reader guesses — because the rule that governs this list puts the undiscoverable
-half first. Popularity only breaks the tie.
+reader guesses — because this list puts counts that are hard to guess
+first. Popularity only breaks the tie.
 
 `AccessControl` is the other end of the same rule. Twenty-three of its
 twenty-five methods push a number of values that depends on the outcome, which
@@ -94,14 +94,14 @@ provides that a fixed argument list can describe:
 | ------ | ------- | ------------- |
 | `FileFunc` | `getParameters`, `getOptions`, `getOptionsS`, `getParent`, `getFileName`, `getBaseName`, `getFileExt`, `getRoot`, `bannerTrimPath`, `getExeName`, `getExePath`, `getSize`, `driveSpace`, `getTime`, `getFileVersion`, `getFileAttributes`, `dirState`, `refreshShellIcons` | `getTime` returns **day, month, year, weekday, hour, minute, second** — seven strings, and a swapped pair is invisible at runtime. `dirState` is `-1` missing, `0` empty, `1` has files |
 | `Integration` | `unpinShortcut`, `notifyShellAssocChanged` | Both return **nothing**. Unpin before deleting the `.lnk`; notify after writing `HKCR` |
-| `WordFunc` | `wordFind`, `wordFind2X`, `wordFind3X`, `wordReplace`, `wordAdd`, `wordInsert`, `strFilter`, `versionCompare`, `versionConvert`, and the `S` half of the first seven | Every result is a `string`: the option argument decides whether the answer is a word or a count, so no narrower type is available |
+| `WordFunc` | `wordFind`, `wordFind2X`, `wordFind3X`, `wordReplace`, `wordAdd`, `wordInsert`, `strFilter`, `versionCompare`, `versionConvert`, and the `S` versions of the first seven | Every result is a `string`: the option argument decides whether the answer is a word or a count, so no narrower type is available |
 | `TextFunc` | `lineRead`, `lineSum`, `fileJoin`, `configRead`, `configReadS`, `configWrite`, `configWriteS`, `fileRecode`, `trimNewLines` | `fileJoin` and `fileRecode` return **nothing** — their result is the file. `trimNewLines` takes a string, not a path, despite what NSIS calls the argument |
 
-**The `S` names are the case-sensitive halves**, and NSIS ships each as its own
+**The `S` names are the case-sensitive versions**, and NSIS ships each as its own
 macro rather than as an option, so each is its own method here. Note which way
 round it is: the unsuffixed name is the case-**in**sensitive one, the opposite
 of [`==`](/reference/commands/strings-and-numbers/). That is not an inconsistency — `==` is
-case-sensitive because Lua's is, and `import` is the NSIS-shaped surface, where
+case-sensitive because Lua's is, and `import` follows NSIS, where
 the name you arrive with should be the one that works.
 
 **Six of them call back into the script**, and those are written as loops
@@ -207,7 +207,7 @@ be declared.** `params = [… , "callback"]` naming a macro that table does not
 know is an error rather than a guess. A register map written into a `.toml` by
 hand would compile, assemble, and hand a caller a directory where it asked for
 a file name, with no diagnostic possible from anywhere — and that is the one
-shape of mistake this compiler exists to prevent. `raw` remains for anyone who
+kind of mistake this compiler exists to prevent. `raw` remains for anyone who
 needs it and is willing to write `$R9` themselves.
 
 ## raw
@@ -257,8 +257,8 @@ local node = nsJSON.get(raw "/index 0 /index 1 /index 3", "$Doc")
 
 **Usage** `plugin.method(…, raw "…", …)` → the method's own outputs
 
-It is for the argument shape a `params` list cannot describe — most often a
-count the caller picks per call. However many words it spells, a spliced
+It is for an argument a `params` list cannot describe — most often a
+count the caller picks per call. However many words it contains, a spliced
 argument is **one** argument, so the position count and the number of `Pop`s
 after the line both remain the declaration's. That is the whole difference from
 writing the call in a `raw` block, where no `local` survives and the outputs
@@ -339,12 +339,12 @@ because `${StrCase} $0 "text" "L"` puts its destination _first_ and
 and guessing emits NSIS that looks right and is not.
 
 **The types** are `string`, `path`, `int`, `uint`, `int64`, `intptr`, `bool`,
-`handle` and `any`. `path` is an input spelling — a `string` whose `/` becomes
+`handle` and `any`. `path` is for inputs only — a `string` whose `/` becomes
 `\` on the way in — so it is rejected in `outputs`, where the callee has already
 written whatever it wrote. `uint` is worth reaching for on a count or a size:
 knowing a value cannot be negative is what elides the sign fixup on `//`.
 
-**`outputs` is the load-bearing line.** NSIS offers no way to ask a DLL how many
+**`outputs` is the line that matters most.** NSIS offers no way to ask a DLL how many
 values it pushes, so `local rc, out = …` is checked against this list and
 nothing else. A count that is too small unbalances the stack, with no diagnostic
 from NSIS or from anybody.
@@ -366,7 +366,7 @@ more = ["string"]                     # … these follow it
 
 Both lists are part of the Lua arity — `local ok, why = …` binds two — and the
 tail reads `""` (or `0`, for a numeric type) on the path where the plugin
-pushed nothing. `tagged` is a **list of literals** rather than a fixed spelling
+pushed nothing. `tagged` is a **list of literals** rather than one fixed value
 because the polarity is the plugin's to choose: `AccessControl` tags its
 failure, `StartMenu::Select` tags its *success*. The two are declared the same
 way and mean opposite things.
@@ -410,14 +410,14 @@ startMenu.select("Example", { lastused = INSTDIR, autoadd = true })
 not recognise as a flag becomes a positional argument without complaint.
 
 A flag with no `ty` **is** its value: the table field is `true` or `false`, and
-`false` writes nothing, because NSIS has no spelling for an off switch. It has
+`false` writes nothing, because NSIS has no way to write an off switch. It has
 to be a literal rather than a variable — the call line is assembled before
 anything runs, so nothing at runtime can decide whether a token was written.
 
-`ty` and `value` are one field in two halves, like `tagged` and `more`. `value`
+`ty` and `value` work together as one setting, like `tagged` and `more`. `value`
 is `joined` for `/TIMEOUT=5000` or `separate` for `/text "…"`, and the value
-itself is an ordinary expression, register and all: `/FLAGS=$R0` is a shape the
-corpus uses.
+itself is an ordinary expression, register and all: the scanned scripts use
+`/FLAGS=$R0`.
 
 The order flags are emitted in is the order they are **declared**, never the
 order the table names them: a table has no order, and two calls naming the same

@@ -34,10 +34,10 @@ Some values belong to the build, not to the source: a version number, a signing 
 
 ### Editor support out of the box
 
-`installua init` and `installua stubs` write the config and definition files your editor needs. With [lua-language-server](https://luals.github.io) you get completion, hover and go-to-definition across the whole API. The generated [selene](https://kampfkarren.github.io/selene/) config is the other half: the Lua names Installua doesn't support become lint errors that name their replacement.
+`installua init` and `installua stubs` write the config and definition files your editor needs. With [lua-language-server](https://luals.github.io) you get completion, hover and go-to-definition across the whole API. The generated [selene](https://kampfkarren.github.io/selene/) config adds linting on top: the Lua names Installua doesn't support become lint errors that name their replacement.
 
 ### Warnings are errors
 
-Builds run `makensis -WX`, so anything NSIS grumbles about stops the build. That sounds strict, and it is – but it means a green build is genuinely green, and you hear about a problem now rather than from a user later.
+Builds run `makensis -WX`, so anything NSIS grumbles about stops the build. That sounds strict, and it is – but it means a passing build has no warnings either, and you hear about a problem now rather than from a user later.
 
 

@@ -3,7 +3,7 @@ title: Flow, errors and messages
 description: Aborting, testing, telling the user.
 ---
 
-NSIS's `Goto`-and-label instructions have no spelling. `IfErrors`,
+NSIS's `Goto`-and-label instructions have no equivalent. `IfErrors`,
 `IfFileExists` and the rest are _predicates_ — they read as questions inside an
 ordinary `if`, and the compiler writes the labels.
 
@@ -17,7 +17,7 @@ ordinary `if`, and the compiler writes the labels.
 
 ## continue
 
-Skips to the next iteration of the innermost loop — the one jump you do spell,
+Skips to the next iteration of the innermost loop — the one jump you do write,
 because Lua has no `continue` and what 5.4 added to write the idiom is `goto`,
 which is [rejected](/concepts/lua-shaped-not-lua/). It wears a call's syntax and takes
 no arguments; it is a jump, so anything after it in the same block is dead.

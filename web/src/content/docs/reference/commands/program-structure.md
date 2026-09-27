@@ -5,7 +5,7 @@ description: The blocks a file is made of, and the declarations inside them.
 
 A file is a Lua program, read top to bottom, with no preprocessor. Declaration
 order does not matter: every top-level name is resolved before any body
-is lowered, so a `func` may call one declared below it.
+is compiled, so a `func` may call one declared below it.
 
 The order of the fields _inside_ `attributes {}` does not matter either, and for
 a different reason: NSIS has a handful of commands that refuse to run — or, in
@@ -31,7 +31,7 @@ end)
 ## .onInit / un.onInit
 
 The callback NSIS runs before anything is shown. Written _inside_ the block it
-belongs to, so the same spelling covers both halves and the `un.` prefix is the
+belongs to, so the same name works in both the installer and the uninstaller, and the `un.` prefix is the
 compiler's business.
 
 **Usage** `onInit(body)`, listed in `installer {}` or `uninstaller {}`
@@ -49,7 +49,7 @@ each takes a body with no arguments. The names are NSIS's without the `.`:
 | `.onRebootFailed` / `un.onRebootFailed`  | `onRebootFailed`                      | when `reboot()` could not restart              |
 
 The uninstaller's outcomes say `Uninst`, as NSIS does, and the installer's
-spelling in `uninstaller {}` is an error. `.onGUIInit`, `.onUserAbort` and
+name in `uninstaller {}` is an error. `.onGUIInit`, `.onUserAbort` and
 `.onMouseOverSection` are MUI2's; their entries are on
 [Pages and MUI](/reference/modern-ui/).
 
@@ -69,8 +69,8 @@ installer {
 
 `installer {}` holds the pages, sections and callbacks of the installer;
 `uninstaller {}` the same for the uninstaller, and writing one is what makes
-`writeUninstaller` legal. Both also carry the MUI settings whose scope is the
-whole half — see [Pages and MUI](/reference/modern-ui/).
+`writeUninstaller` legal. Both also carry the MUI settings that apply to the
+whole installer or uninstaller — see [Pages and MUI](/reference/modern-ui/).
 
 **Usage** `installer { … }`, `uninstaller { … }`
 
@@ -139,7 +139,7 @@ end
 
 A build-time constant the invocation may set. This is what replaces
 `!ifndef VERSION` / `!define VERSION "1.4.2"` / `!endif`, and `-D` is the same
-flag `makensis` spells the same way.
+flag `makensis` uses.
 
 **Usage** `local NAME <const> = param(name, default)` → the value, or
 `param(name)` for one the build cannot do without
@@ -155,10 +155,10 @@ $ installua build install.lua -D VERSION=2.0.0 -D SIGNED=true
 $ installua build install.lua --param VERSION=2.0.0 --param SIGNED=true
 ```
 
-`-D` is the spelling `makensis -D` teaches; `--param` is the same flag written
+`-D` is the flag `makensis` users already know; `--param` is the same flag written
 out. It is not `--define` or `--declare` because the source is what *declares* a
-parameter and the invocation is what *sets* one — a flag named for the declaring
-half would read as doing the thing the `unknown-param` error says it does not.
+parameter and the invocation is what *sets* one — a flag named for declaring
+would read as doing the thing the `unknown-param` error says it does not.
 
 Three things follow from the declaration being written in the source rather
 than passed only on the command line:
@@ -250,7 +250,7 @@ and a `<const>` declared below the `if` can be what decides it.
 The one thing to know is what "not taken" means: a declaration in the branch that
 was not taken is not part of the program at all. A `param` declared only there is
 not declared, so a `-D` for it is the same `unknown-param` error a misspelling
-gets — which is the honest answer, since in that configuration the program really
+gets — which is the correct answer, since in that configuration the program really
 does not have it.
 
 **Nothing of the conditional reaches the output.** It is not a directive the
@@ -262,7 +262,7 @@ any of this runs.
 
 ### Inside a section or a func
 
-The same `if` works in a body, with no separate spelling. When its condition
+The same `if` works in a body, with no separate syntax. When its condition
 folds, the compiler takes the branch there too: the losing side is dropped and
 no `StrCmp` or jump is emitted, which is what `!if` around a few instructions
 does in NSIS.

@@ -1,13 +1,13 @@
 ---
 title: Third-party plugins
-description: The plugins declared from their own source and a corpus of real scripts, and the methods left out.
+description: The plugins declared from their own source and a scan of real-world scripts, and the methods left out.
 ---
 
 Nine, eight of them chosen on a scan of 984 real-world scripts.
 
 ## EnVar
 
-Environment variables, 95 corpus scripts — the most-used third-party plugin here
+Environment variables, used in 95 scanned scripts — the most-used third-party plugin here
 that is uniform all the way through.
 Source: <https://github.com/GsNSIS/EnVar>.
 
@@ -55,7 +55,7 @@ URL in an environment variable wants `raw`.
 
 ## SimpleSC
 
-Windows services, 61 corpus scripts.
+Windows services, used in 61 scanned scripts.
 Source: <https://nsis.sourceforge.io/NSIS_Simple_Service_Plugin>.
 
 | Method | Arguments | Returns |
@@ -79,25 +79,25 @@ proof rather than an absence of counterexamples.
   first and only says whether the question could be asked; the answer is the
   *second* value. `local queried, running = …` — swapping those two names
   compiles, which is the whole reason the order is written down.
-- **`existsService` returns `0` for yes**, which reads backwards. One corpus
+- **`existsService` returns `0` for yes**, which reads backwards. One scanned
   script carries the comment `; <> 0 => service exists`, which has it wrong.
 - **`installService`'s binary is a `string`, not a `path`**, because it is a
-  command line: the corpus passes
+  command line: a scanned script passes
   `"$INSTDIR\bin\agent.exe -conf $\"$INSTDIR\conf\cli.conf$\""` there, and
   normalising slashes would rewrite the arguments too.
-- **Nothing here is optional.** Three corpus call sites pass fewer arguments
+- **Nothing here is optional.** Three calls in the scanned scripts pass fewer arguments
   than documented — `startService "$name"` with no timeout, for instance. A
   plugin reads a fixed number of items off the stack, so a short call reads
   whatever the script happened to leave there. Those are bugs in two scripts,
   not evidence of an optional tail.
 
-The twenty-odd further methods the page documents are left out on the *common*
-half of the rule: none has a corpus call site. Each is five lines in your own
+The twenty-odd further methods the page documents are left out because none is common:
+no scanned script calls them. Each is five lines in your own
 `.toml`.
 
 ### `SimpleSC.getErrorMessage` is not declarable
 
-Both of its corpus call sites read:
+Both calls to it in the scanned scripts read:
 
 ```nsis
 Push $0
@@ -106,13 +106,13 @@ Pop $0
 ```
 
 The error code goes in by **`Push`**, not as an inline argument. `params` become
-the arguments written after `Plugin::Method`, so the format has no spelling for
+the arguments written after `Plugin::Method`, so a `.toml` has no way to describe
 it. Write those three lines as `raw`. The documentation lists it as taking a
-parameter, which is what made the corpus the deciding source.
+parameter, which is why the scanned scripts decided it.
 
 ## Nsis7z
 
-7-Zip extraction, 5 corpus scripts.
+7-Zip extraction, used in 5 scanned scripts.
 Source: <https://nsis.sourceforge.io/Nsis7z_plug-in>.
 
 | Method | Arguments | Returns |
@@ -140,8 +140,8 @@ extracted, and `SetOverwrite` is not honoured.
 
 ## Inetc
 
-HTTP and FTP transfer, 46 corpus scripts — the second-most-used third-party
-plugin here, and the one with the widest flag surface.
+HTTP and FTP transfer, used in 46 scanned scripts — the second-most-used third-party
+plugin here, and the one with the most flags.
 Source: `Contrib/Inetc/inetc.cpp`, checked against
 <https://nsis.sourceforge.io/Inetc_plug-in>.
 
@@ -180,7 +180,7 @@ whatever the loop left.
 
 That is why it is [`terminator`](/reference/commands/plugins-and-headers/#declaring-a-third-party-plugin-or-header)
 in the declaration and not a flag. It is emitted on every call, and a call site
-can neither leave it off nor spell it.
+can neither leave it off nor write it.
 
 ### Eighteen flags
 
@@ -233,8 +233,8 @@ queue, and three hash helpers.
 Source: <https://github.com/negrutiu/nsis-nscurl>, `src/nscurl/main.c` for the
 exports and `curl.c` / `gui.c` for the parameter loops.
 
-Not in the corpus — it postdates it — and declared on the first half of the
-rule: eleven exports, each with its own push count, and no two alike.
+Newer than the scan, and declared because its counts are hard to guess:
+eleven exports, each with its own push count, and no two alike.
 
 | Method | Arguments | Returns |
 | ------ | --------- | ------- |
@@ -253,7 +253,7 @@ call site writes depends on the flag it set.
 
 `wait` and `cancel` push **nothing**. `wait` computes the same string `http`
 would push and drops it (`main.c:388`), which is why `/RETURN` is not declared
-there — it shapes a value nobody can read.
+there — it formats a value nobody can read.
 
 The third argument to `http` is the output file, or the literal `"Memory"` to
 keep the body in the queue for `query` to read back.
@@ -261,7 +261,7 @@ keep the body in the queue for `query` to read back.
 ### The flags come *after* the arguments here
 
 `CurlParseRequestParam` (`curl.c:369`) takes parameter 0 for the HTTP method, 1
-for the URL and 2 for the output path — **by index, not by shape** — and only
+for the URL and 2 for the output path — **by position, not by content** — and only
 starts matching `/SWITCH` tokens from the fourth. A leading `/SILENT` is
 therefore not a flag: it is the verb, and the request goes out asking a server
 for `SILENT`.
@@ -322,7 +322,7 @@ single token, and the plugin would take the *next* argument as its second value.
 There is no encoding for a multi-value flag, so there is no half-right version
 of these to ship.
 
-`echo` is out for the shape it is: a debugging export that pops however many
+`echo` is out because of what it is: a debugging export that pops however many
 strings you pushed. `enumerate` is out for the arity — it pushes one queue id
 per matching request under an empty-string sentinel, and `tagged` decides
 between two fixed counts, not between *n* of them.
@@ -337,13 +337,13 @@ a keyword by accident is the one way to reach them.
 The hash helpers take `path` rather than `string` for the same class of reason.
 `IDataParseParam` (`utils.c:1008`) guesses between a file and a literal by
 asking whether the path *exists*, and a `$PLUGINSDIR/tool.zip` written the way
-every other path in a source is written does not exist under that spelling — it
+every other path in a source is written does not exist when written that way — it
 would silently hash the text. Declaring the position a `path` normalises the
 separators first. Hashing a literal string with a `/` in it is what that costs.
 
 ## SimpleFC
 
-NSIS Simple Firewall, 24 corpus scripts. It drives `INetFwPolicy2`, so it reaches
+NSIS Simple Firewall, used in 24 scanned scripts. It drives `INetFwPolicy2`, so it reaches
 per-profile rules, direction, ports and ICMP types that
 [`nsisFirewallW`](#nsisfirewallw) cannot express, and it ships an ANSI **and** a Unicode build, both at 1.21, both named
 `SimpleFC.dll`. Source: `Source/SimpleFC.dpr`, and it is the first of these read from
@@ -410,11 +410,11 @@ raw: protocol is `6` for TCP and `17` for UDP, scope is `0` for all networks,
 IP version, profile, direction and action likewise. The readme's *Parameters*
 list is the mapping and is correct there. `advAddRule` takes fifteen of them in
 one call — the longest `params` in any declaration, and the one place where
-reading the emitted line back is genuinely easier than reading the Lua.
+reading the emitted line back is easier than reading the Lua.
 
 ## nsProcess
 
-Process control, 25 corpus scripts. The original worked example, and the only
+Process control, used in 25 scanned scripts. The original worked example, and the only
 one of these read from the plugin's own source.
 Source: <https://nsis.sourceforge.io/NsProcess_plugin>.
 
@@ -440,7 +440,7 @@ and the declaration calls `nsProcess::`, so it loads whichever DLL has that name
 
 ## nsisFirewallW
 
-nsisFirewall 1.2, 1 corpus script: add a program to the Windows Firewall
+nsisFirewall 1.2, used in 1 scanned script: add a program to the Windows Firewall
 exception list, or take it off again.
 Source: `nsisFirewall.cpp`, from <http://wiz0u.free.fr/prog/nsisFirewall/>.
 
@@ -462,7 +462,7 @@ of firewall profiles; [`SimpleFC`](#simplefc) is the one for anything more.
 
 ## AccessControl
 
-ACLs, 111 corpus scripts — the most-used third-party plugin in the corpus, and
+ACLs, used in 111 scanned scripts — the most-used third-party plugin in the scan, and
 all twenty-five of its methods are declared.
 
 **Source: `AccessControl.cpp`.** This is the plugin where the source had to
@@ -474,7 +474,7 @@ until the source was read a second time.
 
 ### Every method's arity
 
-Twenty-two of them are one shape. The mutators and the object readers route
+Twenty-two of them behave the same way. The mutators and the object readers route
 every diagnosed failure through `ABORT_s`/`ABORT_d`, which push a **description**
 and then jump to a cleanup that pushes `"error"` on top of it:
 
@@ -524,7 +524,7 @@ Pop $0 ; "error" on errors
 ```
 
 That is a happy-path example, and on the error path it leaks the description
-onto the stack. The corpus has the correct idiom, and it is the one Installua
+onto the stack. The scanned scripts have the correct idiom, and it is the one Installua
 now emits:
 
 ```nsis
@@ -560,10 +560,10 @@ So `NameToSid` is tagged like the other twenty-two, and `SidToName` is
 **uniform at two** — the arity does not vary at all, and the pair is
 `(domain, name)` on success and `("error", message)` on failure. The readme
 presents it as `Pop $Domain` / `Pop $Username`, which is right about the success
-path and silent about the other; both corpus call sites pop twice because both
+path and silent about the other; both calls in the scanned scripts pop twice because both
 assume the readme, and both are correct by accident.
 
-`getCurrentUserName` is the genuinely uniform one. It gives the bare account
+`getCurrentUserName` is the uniform one. It gives the bare account
 name without a domain (`GetUserName`, not `GetUserNameEx`) and never checks the
 result, so a failed lookup pushes an empty string rather than a sentinel — test
 emptiness, not equality.
@@ -586,7 +586,7 @@ accessControl.grantOnFile(INSTDIR, "(BU)", "FullAccess", { noinherit = true })
 -- AccessControl::GrantOnFile /noinherit $INSTDIR "(BU)" "FullAccess"
 ```
 
-The other eleven are the interesting half. `setFileOwner` and `setFileGroup`
+The other eleven behave differently. `setFileOwner` and `setFileGroup`
 reach `ChangeOwner`, which reads neither. `enableFileInheritance` and
 `disableFileInheritance` are worse than that: `ChangeInheritance` *does* read
 `noInherit`, but the dispatcher overwrites it with the enable-or-disable choice

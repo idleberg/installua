@@ -9,7 +9,7 @@ They're plain Markdown, so any agent that reads skill files can use them — Cla
 Code is what they were written against.
 
 They exist because both jobs go wrong in the same quiet way. An agent that knows
-NSIS will happily invent an Installua spelling that looks right and isn't, or
+NSIS will happily invent Installua syntax that looks right and isn't, or
 guess how many values a plugin pushes and be off by one. Neither mistake fails
 loudly. The skills replace the guess with a lookup.
 
@@ -21,10 +21,10 @@ The thing it gets right is that a port isn't a translation. An NSIS script is tw
 languages stacked — the preprocessor on top, the installer commands underneath —
 and Installua has no preprocessor at all, so `!define`, `!macro` and `!if` don't
 convert, they dissolve into constants, functions and ordinary `if`. The skill
-takes an inventory of the script first and tells you what shape the port will be
+takes an inventory of the script first and tells you what the port will involve
 before a line of Lua is written.
 
-It also enforces the rule that matters most: every command's spelling gets looked
+It also enforces the rule that matters most: every command's syntax gets looked
 up in the [command reference](/reference/commands/), never recalled. And it
 leaves `PORT NOTES` behind for the code that compiles but no longer behaves the
 same as the original — the leftovers nothing downstream will ever raise again.

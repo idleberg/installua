@@ -3,7 +3,7 @@ title: Files and directories
 description: Packing files in, and what happens to them on the target disk.
 ---
 
-The two halves of this group do different things at different times. `file`
+The two parts of this group do different things at different times. `file`
 packs a file from the **build** machine into the installer; everything else
 moves, copies or deletes files on the **target** machine while the installer
 runs. A path parameter takes forward slashes and normalises them on the way
@@ -45,7 +45,7 @@ file("config.default.ini", { outName = "config.ini" })
 ## ReserveFile
 
 Puts a file at the head of the data block, so it can be extracted before the
-rest. Reserving a **plugin** is the compiler's job and has no spelling: it works
+rest. Reserving a **plugin** is the compiler's job and needs no code: it works
 out which plugins `.onInit` can reach and writes `ReserveFile /plugin` itself.
 
 **Usage** `reserveFile(filespec, …[, { … }])` → nothing
@@ -64,7 +64,7 @@ setOutPath(INSTDIR)
 
 ## InitPluginsDir
 
-No spelling, and nothing to remember: any body that names `PLUGINSDIR` gets the
+Nothing to write and nothing to remember: any body that names `PLUGINSDIR` gets the
 line at the top of it, because `$PLUGINSDIR` expands to nothing until something
 creates it and NSIS never says so.
 

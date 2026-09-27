@@ -5,20 +5,20 @@ description: The plugin methods turned down on evidence, each for a reason about
 
 Turned down on evidence, and each for a reason about the **format** rather than
 about the plugin. All remain callable through `raw`, and any of them can be
-declared in five lines of your own `.toml` — where a shape the format cannot
-spell can often be handed to a `raw` **argument** instead, keeping the rest of
+declared in five lines of your own `.toml` — and an argument a `.toml` cannot
+describe can often be handed to a `raw` **argument** instead, keeping the rest of
 the declaration.
 
 | Plugin | Scripts | Why |
 | ------ | ------- | --- |
-| `Registry` | 40 | Every corpus use is `${registry::…}`, the `Registry.nsh` macro form, which needs a trailing `${registry::Unload}` — behaviour, not arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40. |
-| `nsJSON` | 3 | Its node path is a **variable number of positional strings** — one to four across the corpus — and `params` is a fixed list. [Below](/reference/plugins/what-stays-out/#nsjsons-blocker-is-its-path-not-its-flags). |
-| `Inetc.post` | 2 | Its body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch. A `params` entry is emitted after the flags, and there is no spelling for one that comes first. |
+| `Registry` | 40 | Every scanned use is `${registry::…}`, the `Registry.nsh` macro form, which needs a trailing `${registry::Unload}` — behaviour, not arity. `readReg`, `writeReg` and `deleteRegKey` already cover 38 of the 40. |
+| `nsJSON` | 3 | Its node path is a **variable number of positional strings** — one to four across the scanned scripts — and `params` is a fixed list. [Below](/reference/plugins/what-stays-out/#nsjsons-blocker-is-its-path-not-its-flags). |
+| `Inetc.post` | 2 | Its body is popped **before** the flag loop (`inetc.cpp:1369`), so it has to be written ahead of every switch. A `params` entry is emitted after the flags, and there is no way to write one that comes first. |
 | `SimpleSC.getErrorMessage` | 61 | Takes its argument by `Push` — [above](/reference/plugins/third-party-plugins/#simplescgeterrormessage-is-not-declarable). |
-| `Nsis7z.extractWithCallback` | 5 | Its second argument is a **function address**, and no `params` type spells one — [below](/reference/plugins/what-stays-out/#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
-| `LockedList` | 0 | Its surface is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature. |
+| `Nsis7z.extractWithCallback` | 5 | Its second argument is a **function address**, and no `params` type describes one — [below](/reference/plugins/what-stays-out/#nsis7zextractwithcallback-takes-an-address-not-a-callback). |
+| `LockedList` | 0 | It is a custom **page**, not a call. Declaring only the `Add*` setup calls would ship half a feature. |
 | `nsisunz.unzipToStack` | 2 | Pushes **one value per file in the archive**, so the arity is `1 + n` for an `n` nobody knows at compile time. [Below](/reference/plugins/what-stays-out/#nsisunz-is-the-worked-example-and-its-third-method-could-not-have-shipped). |
-| `Crypto` | 0 | Fails the *common* half of the rule outright. |
+| `Crypto` | 0 | No scanned script uses it. |
 
 `nsisunz`'s other two methods are declarable and stay undeclared anyway: the
 plugin is the worked example of one you declare yourself, in
@@ -27,7 +27,7 @@ plugin is the worked example of one you declare yourself, in
 
 ### nsisunz is the worked example, and its third method could not have shipped
 
-ZIP extraction, 21 corpus scripts. Source:
+ZIP extraction, used in 21 scanned scripts. Source:
 `nsisunz.cpp`, in the plugin's own distribution.
 
 Three exports over one function, and the count is what decides which:
@@ -38,7 +38,7 @@ void UnzipToLog(…)   { internal_unzip(1); }
 void UnzipToStack(…) { internal_unzip(2); }
 ```
 
-| Method | Corpus files | Arguments | Returns |
+| Method | Scanned files | Arguments | Returns |
 | ------ | ------------ | --------- | ------- |
 | `.unzip(zip, dest)` | 1 | `path`, `path` | `string` |
 | `.unzipToLog(zip, dest)` | 18 | `path`, `path` | `string` |
@@ -67,9 +67,9 @@ as it walks the archive (`nsisunz.cpp:418`):
 An empty string first, then one push per file, then the status last — so the
 Lua arity is `1 + n` for an `n` that is a property of the *archive*, not of the
 program. That is neither a number nor a `tagged`/`more` fork: `tagged` says
-*which* of two fixed shapes, and this has no fixed shape. It is
+*which* of two fixed lists of values, and this has no fixed list. It is
 [`nsJSON`'s problem](/reference/plugins/what-stays-out/#nsjsons-blocker-is-its-path-not-its-flags) on the output
-side, and the format has no spelling for either.
+side, and a `.toml` can describe neither.
 
 **The flags are otherwise a textbook case** — a leading loop, order-free, one
 bare switch and two valued ones (`nsisunz.cpp:300`):
@@ -84,8 +84,8 @@ while (buf[0] == '/') {
 }
 ```
 
-So `unzipToLog` would declare in a dozen lines and work. It stays out to keep
-the worked example honest, which is a decision about the documentation rather
+So `unzipToLog` would declare in a dozen lines and work. It stays out so that
+this page keeps one complete example of a plugin left out, which is a decision about the documentation rather
 than about the plugin — and the only entry in this file that is.
 
 **Why `unzipToLog` and not `unzip`.** The example named `unzip` for two
@@ -102,8 +102,8 @@ The recorded reason was the repeated, ordered flag run its readme advertises:
 nsJSON::Get /index 0 /index 1 /index 3 /index 0 /end
 ```
 
-A table has unique keys and no order, so that shape genuinely has no encoding
-here. But **no corpus script writes it** — 25 call sites across three files, and
+A table has unique keys and no order, so that form has no encoding
+here. But **no scanned script writes it** — 25 call sites across three files, and
 the repeated-`/index` form appears in none of them. It is a documentation
 example, not a usage.
 
@@ -121,8 +121,8 @@ would have to pick a depth and be wrong at every other one — and being wrong
 here is not a type error, it is a `Pop` count.
 
 Two of the 25 also interleave — `nsJSON::Get "assets" /index 0 "size" /end`
-puts a flag *between* two positionals, in an order the caller chose. That is the
-shape flags cannot carry, and it is a path query wearing flag syntax rather than
+puts a flag *between* two positionals, in an order the caller chose. Flags cannot
+express that: it is a path query written in flag syntax, not
 a flag list.
 
 Two further facts for whoever revisits this. `/tree`, `/value`, `/file` and
@@ -133,13 +133,13 @@ plugin either. And `/end` is mandatory for the reason it is mandatory on
 to prevent stack corruption"*, and this compiler's caller-saves are exactly the
 stack it would corrupt.
 
-A repetition spelling would not unlock this plugin. A variadic `params` tail
+A way to write repeated flags would not unlock this plugin. A variadic `params` tail
 would unlock 23 of the 25 sites, and is the thing to design if nsJSON is ever
 wanted.
 
 Until then it is `raw` — and this is the plugin the **raw argument** form was
 built for. Declare `get` with one `string` parameter in your own `.toml` and
-spell the whole path through it:
+pass the whole path through it:
 
 ```lua skip
 local node = nsJSON.get(raw "/index 0 /index 1 /index 3", "$Doc")
@@ -182,11 +182,11 @@ Nsis7z::ExtractWithCallback "Test.7z" $R9
 ```
 
 `params` has no type for an address, and `GetFunctionAddress` has no Lua
-spelling — it is a `todo` row that the compiler emits only for the nsDialogs
+equivalent — it is a `todo` row that the compiler emits only for the nsDialogs
 event handlers it generates itself, where the function's address exists in
 exactly one place. Declaring this method would mean giving a plugin argument the
-address of a user-written function, which is the surface that row exists to
-withhold.
+address of a user-written function, which is exactly what that row exists to
+prevent.
 
 Worth recording for whoever revisits it: the body **must** pop exactly two, and
 the plugin fires the callback once per progress tick. A body that pops one
@@ -194,7 +194,7 @@ leaves an int on the stack on every tick of every extraction.
 
 ### `/NOUNLOAD` belongs to nobody
 
-It is the most common flag in the corpus — **99 sites**, two and a half times
+It is the most common flag in the scanned scripts — **99 sites**, two and a half times
 the next one — and it is not in any `flags` list here, nor can a project put it
 in one.
 
@@ -212,7 +212,7 @@ still accepts the token, and warns only when it is written in the wrong place
 (`DW_PLUGIN_NOUNLOAD_PLACEMENT`) — the case where a plugin has a `/NOUNLOAD`
 parameter of its own is the one that warning exists to catch.
 
-So Installua emits none, offers no spelling for it, and treats unloading as the
+So Installua emits none, offers no way to write it, and treats unloading as the
 compiler's business the way it treats register allocation. The one visible
 consequence is [`nsProcess._Unload`](/reference/plugins/third-party-plugins/#nsprocess), which exists to release a DLL
 that was kept loaded and therefore has nothing to do here.

@@ -24,7 +24,7 @@ order.
 
 Every `params` and `outputs` list was read from the macro body in
 `NSISDIR/Include/*.nsh` and checked against the matching `Examples/*.nsi`, which
-is the file NSIS itself keeps honest.
+is the file NSIS itself keeps up to date.
 
 ## The `S` suffix, and which way round it is
 
@@ -34,9 +34,9 @@ methods here. The format has no flag that could join them, and inventing one
 would be inventing a parameter NSIS does not take.
 
 Note which way round it is: **the unsuffixed name is case-insensitive**, the
-opposite of `==`, which lowers to `StrCmpS`. That is not an inconsistency to
-fix. `==` is case-sensitive because Lua's `==` is, and `import` is the
-NSIS-shaped surface, where the name a reader arrives with is the one that should
+opposite of `==`, which compiles to `StrCmpS`. That is not an inconsistency to
+fix. `==` is case-sensitive because Lua's `==` is, and `import` follows
+NSIS, where the name a reader arrives with is the one that should
 work.
 
 ## Callbacks
@@ -68,11 +68,11 @@ something a loop body can say.
 | `.getRoot(path)` | `path` | `string` |
 | `.bannerTrimPath(path, width)` | `path`, `string` | `string` |
 
-All five splitters take `path` rather than `string`, and that is load-bearing
-rather than tidy: they split on `\` and nothing else, so a program that wrote
+All five splitters take `path` rather than `string`, and not for
+tidiness: they split on `\` and nothing else, so a program that wrote
 `INSTDIR .. "/lib/app.dll"` and got `string` here would be handed the whole
 thing back as if it had no parent at all. Their results are `string`, because
-`path` is an *input* spelling — it normalises on the way in, and what a macro
+`path` is for *inputs* only — it normalises on the way in, and what a macro
 already wrote is whatever it wrote.
 
 - `getBaseName` is the file name without its extension. The NSIS name says "base
@@ -122,7 +122,7 @@ Both are `for … in` loops, because both answer only "keep going" or "stop".
 `/M=*.tmp` a mask, `/S=1M-` a size bound, `/G=0` no recursion. The default walks
 everything under the path, recursively.
 
-**`locate` is the one macro with no other spelling in the language.** `glob`
+**`locate` is the one macro with no other way to write it in the language.** `glob`
 walks the *build* machine and unrolls before anything ships; `locate` walks the
 disk the installer is standing on.
 
@@ -162,7 +162,7 @@ wants the parts has `string.find` or `wordFind`.
 
 `getFileAttributes(path, "READONLY")` answers `"1"` or `"0"`, and
 `getFileAttributes(path, "ALL")` answers the whole list joined by `|`. One call
-with two return shapes chosen by a string, so `string` is the only honest type —
+with two kinds of result chosen by a string, so `string` is the only correct type —
 the same reason `versionCompare` is not an `int`.
 
 `dirState` answers `1` has files, `0` is empty, `-1` does not exist. Signed
@@ -265,7 +265,7 @@ one behaviour here a caller will not guess. A `string` and not four cases the
 compiler knows: it is the word the macro leaves in the register, and the error
 path leaves an empty one.
 
-`fileRecode` works in place and has only two spellings: `"OemToChar"` or
+`fileRecode` works in place and accepts only two values: `"OemToChar"` or
 `"CharToOem"`. Anything else sets the error flag, which is why the type is a
 `string` rather than something the declaration could narrow — the macro checks
 it at install time.
@@ -286,7 +286,7 @@ one option letter and with text under another — `wordFind(s, " ", "#")` counts
 words while `wordFind(s, " ", "+1")` returns one — and a type that depended on
 the *value* of an argument is not something a declaration can say.
 
-Each has an `S` twin that is the case-sensitive half; see
+Each has an `S` twin that is case-sensitive; see
 [the note above](#the-s-suffix-and-which-way-round-it-is).
 
 ## Finding and counting

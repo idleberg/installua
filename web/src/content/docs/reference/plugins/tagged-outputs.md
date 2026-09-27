@@ -57,7 +57,7 @@ relative jump is correct until a later pass inserts a line.
 
 **`tagged` is a list of literals, not the word "error".** The polarity is the
 plugin's to choose, and the two above chose opposite ones: a design that
-hardcoded the failure spelling would describe AccessControl and misdescribe
+hardcoded the failure value would describe AccessControl and misdescribe
 StartMenu by exactly one value, on every run that worked.
 
 A tail the caller does not bind is still popped. The plugin put it there; what

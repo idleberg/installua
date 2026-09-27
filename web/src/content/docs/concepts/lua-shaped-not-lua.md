@@ -32,18 +32,18 @@ follows from those four.
 | `pairs`, `ipairs`, `next`, `select`  | rejected                    | iteration is a whitelist: `lines(f)`, `glob(pat)`, and numeric `for`                                                                                           |
 | `goto`, `::label::`                  | rejected                    | Installua owns labels; `continue()` is the thing you actually wanted                                                                                           |
 | `local x <close>`                    | rejected                    | no runtime to close over                                                                                                                                       |
-| `#s` on a string                     | rejected                    | `StrLen` counts UTF-16 code units and Lua's `#` counts UTF-8 bytes — `"café"` is 4 against 5, `"日本語"` is 3 against 9. `string.len(s)` is the spelling       |
+| `#s` on a string                     | rejected                    | `StrLen` counts UTF-16 code units and Lua's `#` counts UTF-8 bytes — `"café"` is 4 against 5, `"日本語"` is 3 against 9. use `string.len(s)`                   |
 
 ## Things that are still here and mean something else
 
 | Lua               | Installua                                   | Note                                                                                                                                                                                              |
 | ----------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `==` on strings   | **case-sensitive**, and lowers to `StrCmpS` | this is Lua's meaning, and the reversal of NSIS's default. `string.lower(a) == string.lower(b)` is the case-insensitive form and costs nothing — it peepholes to a bare `StrCmp`                  |
+| `==` on strings   | **case-sensitive**, compiles to `StrCmpS`   | this is Lua's meaning, and the reversal of NSIS's default. `string.lower(a) == string.lower(b)` is the case-insensitive form and costs nothing — the compiler turns it into a bare `StrCmp`       |
 | `//` and `%`      | Lua's meaning, at a cost                    | NSIS truncates toward zero and takes the remainder's sign from the dividend. Installua emits a correction so `-7 // 2` is `-4` and `-7 % 2` is `1`, as Lua says. Elided when the sign is provable |
 | `a & b`, `a \| b` | as in Lua                                   |                                                                                                                                                                                                   |
-| `a ~ b`           | bitwise **xor**, as in Lua                  | NSIS spells xor `^`, so the spellings swap. This is why `^` cannot be quietly remapped                                                                                                            |
-| `a >> b`          | logical shift right, as in Lua              | emitted as NSIS's `>>>`. NSIS's arithmetic `>>` has no Lua spelling; reach for `raw`                                                                                                              |
-| `..`              | concatenation                               | **usually free.** It lowers to a string template, not a copy, so `INSTDIR .. "/bin"` is the literal text `"$INSTDIR\bin"` and occupies no register                                                |
+| `a ~ b`           | bitwise **xor**, as in Lua                  | NSIS writes xor as `^`, so the two symbols swap. This is why `^` cannot be quietly remapped                                                                                                       |
+| `a >> b`          | logical shift right, as in Lua              | emitted as NSIS's `>>>`. NSIS's arithmetic `>>` has no Lua equivalent; reach for `raw`                                                                                                            |
+| `..`              | concatenation                               | **usually free.** It compiles to a string template, not a copy, so `INSTDIR .. "/bin"` is the literal text `"$INSTDIR\bin"` and occupies no register                                              |
 | truthiness        | `bool` only                                 | see below                                                                                                                                                                                         |
 | declaration order | irrelevant                                  | see below                                                                                                                                                                                         |
 
@@ -73,7 +73,7 @@ what it means in Lua, silently, is exactly what this language exists to avoid.
 
 In Lua, `function f() end` is an ordered assignment and calling `f` above it is an error.
 Installua compiles rather than executes, so there is no build-time execution for an ordering
-rule to be _about_: every top-level name is resolved before any body is lowered, and the
+rule to be _about_: every top-level name is resolved before any body is compiled, and the
 emitter puts each kind of output where NSIS needs it.
 
 Write your functions in whatever order reads best. The output's order is not yours to
@@ -83,7 +83,7 @@ choose.
 
 The rule is that a reader must never have to guess which machine a line runs on.
 
-| Spelling                                                     | Runs                                                       |
+| Written as                                                   | Runs                                                       |
 | ------------------------------------------------------------ | ---------------------------------------------------------- |
 | ordinary code                                                | install time, on the user's machine                        |
 | `local X <const> = …`, and any `if` over one                 | build time, folded away — `X` becomes `${X}` in the output |
