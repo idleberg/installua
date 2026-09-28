@@ -127,6 +127,49 @@ fn a_parameter_shadows_the_constant_it_is_named_like() {
     assert_eq!(build(SHADOWING, &[("RESOURCES", "x")]), expected("x"));
 }
 
+/// `c and x or y` folds by Lua's rule, so a parameter can pick a value. With
+/// `ON` true that is `true and x` and `v or y`; false, it is `false and x` and
+/// `false or y`. `ON and false or "y"` is `"y"` either way, as in Lua.
+#[test]
+fn and_or_picks_a_value_at_build_time() {
+    const PICKING: &str = "local ON <const> = param(\"ON\", true)\n\
+                           local PICK <const> = ON and \"yes\" or \"no\"\n\
+                           local TRAP <const> = ON and false or \"y\"\n\
+                           local LEFT <const> = \"v\" or \"y\"\n\
+                           attributes { name = PICK, outFile = \"b.exe\" }\n\
+                           installer { page.instFiles {}, section { ON and \"Shown\" or \"\", \
+                           body = function()\n\
+                           detailPrint(TRAP)\n\
+                           detailPrint(LEFT)\n\
+                           end } }\n";
+    let expected = |on: u8, pick: &str, title: &str| {
+        format!(
+            "Unicode true\n\
+             \n\
+             !define ON {on}\n\
+             !define PICK \"{pick}\"\n\
+             !define TRAP \"y\"\n\
+             !define LEFT \"v\"\n\
+             \n\
+             !include \"MUI2.nsh\"\n\
+             \n\
+             Name \"${{PICK}}\"\n\
+             OutFile \"b.exe\"\n\
+             \n\
+             !insertmacro MUI_PAGE_INSTFILES\n\
+             \n\
+             !insertmacro MUI_LANGUAGE \"English\"\n\
+             \n\
+             Section \"{title}\"\n  \
+             DetailPrint \"${{TRAP}}\"\n  \
+             DetailPrint \"${{LEFT}}\"\n\
+             SectionEnd\n"
+        )
+    };
+    assert_eq!(build(PICKING, &[]), expected(1, "yes", "Shown"));
+    assert_eq!(build(PICKING, &[("ON", "false")]), expected(0, "no", ""));
+}
+
 /// The `-D` name and the local are two different things, and are not required
 /// to agree: the string is an interface to whatever runs the build, and the
 /// local is the program's own name for the value.

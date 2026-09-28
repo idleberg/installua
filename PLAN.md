@@ -249,28 +249,13 @@ and a page's `controls`.
 - `tests/branches.rs` keeps `undefined-name` for a misspelt entry.
 - Update the "Build-time if" docs in `reference/commands/program-structure.md`.
 
-### 5.8 `c and x or y` does not fold to a value
+### 5.8 `c and x or y` does not fold to a value — fixed
 
-```lua
-local ON <const> = param("ON", true)
-attributes { name = "b", outFile = "b.exe" }
-installer { page.instFiles {}, section { ON and "Shown" or "", body = function() end } }
-```
-
-**Now:** `error[bad-field-value]: section wants a compile-time value`. `fold`
-in `src/resolve.rs:1310` folds `and` and `or` only when both sides are `Bool`,
-so Lua's usual `cond and a or b` choice never folds.
-
-**Fix:** add arms that follow Lua's rules when the left side is a folded
-`Bool`: `true and x` gives `x`, `false and x` gives `false`, `false or y`
-gives `y`, and `v or y` gives `v` when `v` is anything but `false`. Only
-build-time folding changes. The runtime rule that a condition must be a `bool`
-stays.
-
-**Verify:**
-- The repro emits `Section "Shown"`, and `-D ON=false` emits `Section ""`.
-- Unit tests in `resolve.rs` for all four arms, plus one showing that
-  `cond and false or y` gives `y` (Lua's own trap, documented, not fixed).
+`fold` in `src/resolve.rs` now folds `and` and `or` by Lua's rule, where
+`false` is the only falsy value: the left side decides, and the right is folded
+only when it does not. A runtime `and`/`or` still wants `bool`s. Covered by
+`and_or_picks_a_value_at_build_time` in `tests/params.rs`, including Lua's
+`c and false or y` trap.
 
 ### 5.9 `System.call` needs the whole signature at build time
 

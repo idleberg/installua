@@ -1358,6 +1358,27 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
             _ => None,
         },
 
+        // `and` and `or` fold by Lua's rule, where the only falsy value left is
+        // `false`, so `c and x or y` picks a value at build time. That makes
+        // `c and false or y` give `y`, Lua's own trap, kept rather than fixed.
+        // The right side is never folded when the left decides, as Lua never
+        // evaluates it. A runtime `and`/`or` still wants `bool`s, see
+        // `logical_value`.
+        Expr::Binary {
+            op: op @ (BinOp::And | BinOp::Or),
+            lhs,
+            rhs,
+            ..
+        } => {
+            let lhs = fold(lhs, lookup)?;
+            let falsy = lhs == ConstValue::Bool(false);
+            if falsy == (*op == BinOp::And) {
+                Some(lhs)
+            } else {
+                fold(rhs, lookup)
+            }
+        }
+
         Expr::Binary { op, lhs, rhs, .. } => {
             let (lhs, rhs) = (fold(lhs, lookup)?, fold(rhs, lookup)?);
             match (op, &lhs, &rhs) {
@@ -1383,12 +1404,6 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
                 }
                 (op, ConstValue::Int(a), ConstValue::Int(b)) => {
                     integer(*op, *a, *b).map(ConstValue::Int)
-                }
-                (BinOp::And, ConstValue::Bool(a), ConstValue::Bool(b)) => {
-                    Some(ConstValue::Bool(*a && *b))
-                }
-                (BinOp::Or, ConstValue::Bool(a), ConstValue::Bool(b)) => {
-                    Some(ConstValue::Bool(*a || *b))
                 }
                 (BinOp::Eq, a, b) => Some(ConstValue::Bool(a == b)),
                 (BinOp::Ne, a, b) => Some(ConstValue::Bool(a != b)),
