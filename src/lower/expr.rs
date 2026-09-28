@@ -130,16 +130,19 @@ impl BodyLowerer<'_, '_> {
                 }),
                 Some(Binding::Reported) => None,
                 None => {
-                    if let Some(constant) = builtins::constant_named(&name.text) {
-                        return Some(Typed {
-                            arg: constant.arg(),
-                            ty: constant.ty,
-                        });
-                    }
+                    // The program's own `<const>` first: a `local RESOURCES
+                    // <const>` shadows `$RESOURCES` as any `local` shadows a
+                    // global, where the other order read Windows' folder.
                     if let Some(constant) = self.resolved.consts.get(&name.text) {
                         return Some(Typed {
                             ty: constant.value.ty(),
                             arg: ir::Arg::constant(&name.text, constant.value.text()),
+                        });
+                    }
+                    if let Some(constant) = builtins::constant_named(&name.text) {
+                        return Some(Typed {
+                            arg: constant.arg(),
+                            ty: constant.ty,
                         });
                     }
                     if self.resolved.global(&name.text) {

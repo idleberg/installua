@@ -90,39 +90,13 @@ The init lines now come after the attributes: slots 4 and 5 swapped in
 `Function` and `SetCompressor` refuses to follow one. Tested by the
 `compressor` golden (tiers 2 and 3); example 05 moved its two lines by hand.
 
-### 5.2 A `param` named like an NSIS constant silently becomes the constant
+### 5.2 A `param` named like an NSIS constant silently becomes the constant — fixed
 
-```lua
-local RESOURCES <const> = param("RESOURCES", "assets")
-attributes { name = "b", outFile = "b.exe" }
-installer { page.instFiles {}, section("s", function() detailPrint(RESOURCES) end) }
-```
-
-**Now:**
-- It builds with no diagnostic, emitting both `!define RESOURCES "assets"` and
-  `DetailPrint $RESOURCES`. The installer prints Windows' resources folder, not
-  the parameter.
-- `-D RESOURCES=…` is accepted and has no effect.
-- In PimpBot, `file(RESOURCES .. "/*")` packed from `$RESOURCES\*`. The same
-  applies to `FONTS`, `TEMP`, `DESKTOP` and every other name in `CONSTANTS`
-  (`src/builtins.rs`).
-
-**Expected:** the doc on the message constants in `src/builtins.rs` already
-states the rule: "a `local` of the same name shadows it as it shadows those".
-A `local … <const>`, `param` or not, should shadow the built-in. Every read of
-`RESOURCES` then emits `${RESOURCES}`.
-
-**Where:** name resolution checks the built-ins before the top-level `<const>`s.
-Find the lookup that resolves a bare name to `constants()` and give the
-program's own declarations precedence. If shadowing a built-in is judged too
-risky, the alternative is a hard error at the declaration that names the
-built-in. It must not stay silent.
-
-**Verify:**
-- The repro emits `DetailPrint "${RESOURCES}"`.
-- A second case with `-D RESOURCES=x` emits `x`.
-- Add both to `tests/params.rs`.
-- Check that a plain `RESOURCES` read with no local still emits `$RESOURCES`.
+A top-level `<const>` now shadows a built-in constant. The body lookup in
+`src/lower/expr.rs` and the attribute lookup (`constant_arg` in
+`src/lower/mod.rs`) check the program's consts before `constant_named`.
+Tested by `a_parameter_shadows_the_constant_it_is_named_like` in
+`tests/params.rs`, with and without `-D`; `TEMP` undeclared still reads `$TEMP`.
 
 ### 5.3 Functions no one calls fail the build
 

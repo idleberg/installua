@@ -90,6 +90,43 @@ fn a_parameter_may_be_declared_below_its_use() {
     assert!(output.contains("OutFile \"${NAME}\""), "{output}");
 }
 
+/// A parameter named like an NSIS constant shadows it, in a body and in an
+/// attribute, as any `local` shadows a global. The built-in used to win, so
+/// `RESOURCES` read Windows' resources folder and `-D RESOURCES=…` did nothing.
+/// `TEMP`, not declared, still reads the built-in.
+#[test]
+fn a_parameter_shadows_the_constant_it_is_named_like() {
+    const SHADOWING: &str = "local RESOURCES <const> = param(\"RESOURCES\", \"assets\")\n\
+                             attributes { name = RESOURCES, outFile = \"b.exe\" }\n\
+                             installer { page.instFiles {}, section(\"s\", function()\n\
+                             detailPrint(RESOURCES)\n\
+                             detailPrint(TEMP)\n\
+                             end) }\n";
+    let expected = |value: &str| {
+        format!(
+            "Unicode true\n\
+             \n\
+             !define RESOURCES \"{value}\"\n\
+             \n\
+             !include \"MUI2.nsh\"\n\
+             \n\
+             Name \"${{RESOURCES}}\"\n\
+             OutFile \"b.exe\"\n\
+             \n\
+             !insertmacro MUI_PAGE_INSTFILES\n\
+             \n\
+             !insertmacro MUI_LANGUAGE \"English\"\n\
+             \n\
+             Section \"s\"\n  \
+             DetailPrint \"${{RESOURCES}}\"\n  \
+             DetailPrint $TEMP\n\
+             SectionEnd\n"
+        )
+    };
+    assert_eq!(build(SHADOWING, &[]), expected("assets"));
+    assert_eq!(build(SHADOWING, &[("RESOURCES", "x")]), expected("x"));
+}
+
 /// The `-D` name and the local are two different things, and are not required
 /// to agree: the string is an interface to whatever runs the build, and the
 /// local is the program's own name for the value.

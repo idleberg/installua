@@ -6377,11 +6377,12 @@ impl<'p> Lowerer<'_, 'p> {
     fn constant_arg(&mut self, expr: &Expr, what: &str) -> Option<ir::Arg> {
         match expr {
             Expr::Name(name) => {
-                if let Some(constant) = crate::builtins::constant_named(&name.text) {
-                    return Some(constant.arg());
-                }
+                // A `<const>` shadows a built-in here too, as in a body.
                 if let Some(value) = self.resolved.consts.get(&name.text) {
                     return Some(ir::Arg::constant(&name.text, value.value.text()));
+                }
+                if let Some(constant) = crate::builtins::constant_named(&name.text) {
+                    return Some(constant.arg());
                 }
                 self.constant_string(expr, what).map(ir::Arg::str)
             }
