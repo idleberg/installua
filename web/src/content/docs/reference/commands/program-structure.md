@@ -266,6 +266,11 @@ level once the branch is taken. Resolution stays order-free across it: a section
 declared inside a branch can be listed by an `installer {}` written outside it,
 and a `<const>` declared below the `if` can be what decides it.
 
+That includes a `local`, which stays visible after the `end` as Lua's would not.
+`lua-language-server` follows Lua and reports each later use as `undefined-global`,
+so to pick a value write `local X <const> = c and a or b` instead, which folds the
+same way — see [truthiness](/concepts/lua-shaped-not-lua/#truthiness-is-bool-and-nothing-else).
+
 The one thing to know is what "not taken" means: a declaration in the branch that
 was not taken is not part of the program at all. A `param` declared only there is
 not declared, so a `-D` for it is the same `unknown-param` error a misspelling

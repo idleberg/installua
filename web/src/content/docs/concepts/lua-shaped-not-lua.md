@@ -46,6 +46,7 @@ follows from those four.
 | `..`              | concatenation                               | **usually free.** It compiles to a string template, not a copy, so `INSTDIR .. "/bin"` is the literal text `"$INSTDIR\bin"` and occupies no register                                              |
 | truthiness        | `bool` only                                 | see below                                                                                                                                                                                         |
 | declaration order | irrelevant                                  | see below                                                                                                                                                                                         |
+| a `local` in a top-level `if` | visible after `end`          | a build-time `if` is not a scope: its branch **is** the top level once taken. `lua-language-server` scopes it as Lua does and reports `undefined-global` at each use below the `end`. To pick a value, write `local X <const> = c and a or b` — see below |
 | `include`         | `dofile`'s shape, at build time             | a top-level `local` is its file's own. A file shares names with `return { name = name }` and the includer reads them as `m.name` after `local m = include "…"`. Two files may declare the same top-level name; the `.nsi` suffixes all but the first |
 
 ## Truthiness is `bool` and nothing else
@@ -69,6 +70,19 @@ and `lua-language-server` says nothing either way. A construct that means the op
 what it means in Lua, silently, is exactly what this language exists to avoid.
 
 `a or b` where both are `bool` is fine, and is the one place a boolean lands in a register.
+
+At build time the rule is Lua's own, because there `false` is the only falsy value left.
+So `c and a or b` picks a value, and is how a `<const>` depends on a `param`:
+
+```lua
+local TYPE <const> = param("TYPE", "avs")
+local PLUGIN_NAME <const> = TYPE == "avs" and "AVS" or "MilkDrop"
+```
+
+Lua's trap comes with it: `c and false or b` is `b` whatever `c` is. Prefer this to
+declaring `PLUGIN_NAME` in each branch of an `if`, which the compiler accepts but
+`lua-language-server` cannot follow. Keep the `if` for statements — `attributes`,
+`installer`, sections.
 
 ## Everything hoists, so there are no ordering rules to learn
 

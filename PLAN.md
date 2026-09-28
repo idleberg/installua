@@ -353,42 +353,15 @@ If implementing:
 `src/project.rs` collects the sources: `installua.toml`'s programs plus their
 `include`s, or a recursive walk without one. Tested in `tests/stubs.rs`.
 
-### 5.13 A declaration inside a build-time `if` is invisible to lua-language-server
+### 5.13 A declaration inside a build-time `if` is invisible to lua-language-server — fixed
 
-`program-structure.md` ("Build-time if") says a branch's contents are ordinary
-top-level declarations. A `local` declared inside the branch can therefore be
-used after its `end`, which is not how Lua scopes locals. LuaLS follows Lua:
-
-```lua
-local TYPE <const> = param("TYPE", "avs")
-if TYPE == "avs" then
-	local PLUGIN_NAME <const> = "AVS"
-else
-	local PLUGIN_NAME <const> = "MilkDrop"
-end
-attributes { name = PLUGIN_NAME, outFile = "b.exe" }
-installer { page.instFiles {}, section("s", function() end) }
-```
-
-**Now:** `installua check` passes. LuaLS reports `unused-local` for both
-`PLUGIN_NAME`s and `undefined-global` for the one in `attributes`. PimpBot
-hits this for its plugin name and extension and for each stand-in in §5.7.
-No form of the program satisfies both tools: the Lua-scoped
-`local PLUGIN_NAME <const> = TYPE == "avs" and "AVS" or "MilkDrop"` is §5.8.
-
-**Fix:** keep the compiler's semantics and make the two tools agree:
-- Once §5.8 lands, make `cond and a or b` the documented way to pick a value,
-  and keep the branch form for statements (`attributes`, `installer`, sections).
-- Add the scoping difference to `concepts/lua-shaped-not-lua.md`, along with
-  what LuaLS reports for it.
-- Maybe: have `project_meta` stub each name declared inside a top-level branch
-  as a global. That hides `undefined-global` but not `unused-local`, so only
-  do it if the docs alone aren't enough.
-
-**Verify:**
-- After §5.8, the `and`/`or` form of the repro passes both `installua check`
-  and `lua-language-server --check`.
-- `tests/docs.rs` passes with the new paragraph.
+A `local` declared in a top-level branch stays visible after `end`, and LuaLS,
+scoping as Lua does, reports `undefined-global` at each later use. With §5.8,
+`local X <const> = c and a or b` picks the value in a form both tools accept.
+`concepts/lua-shaped-not-lua.md` documents it (a table row and the truthiness
+section), and `program-structure.md`'s "Build-time if" points there. The
+`project_meta` stub was not needed. Verified with `installua check` plus
+`lua-language-server --check` on the and/or repro (no problems).
 
 ### 5.14 A top-level `local` leaks out of the file that declares it — fixed
 
