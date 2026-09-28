@@ -170,6 +170,11 @@ const CASES: &[(Code, &str)] = &[
         Code::IncludeForm,
         "attributes { outFile = \"a.exe\" }\ninclude(1)",
     ),
+    // `private.lua` declares `SECRET` and does not return it.
+    (
+        Code::NotInScope,
+        "include \"private.lua\"\nattributes { outFile = SECRET }",
+    ),
     (
         Code::ParamForm,
         "attributes { outFile = \"a.exe\" }\nlocal V <const> = param()",
@@ -278,6 +283,10 @@ fn compile_with(source: &str, params: BTreeMap<String, String>) -> Diagnostics {
         (
             "other.lua".to_string(),
             "func(\"helper\", function() detailPrint(\"hi\") end)\n".to_string(),
+        ),
+        (
+            "private.lua".to_string(),
+            "local SECRET <const> = \"a.exe\"\n".to_string(),
         ),
     ]);
     let options = installua::Options {

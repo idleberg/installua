@@ -261,6 +261,10 @@ pub enum Code {
     /// readable without running anything, which is the staging rule and not a
     /// parser limitation.
     IncludeForm,
+    /// A top-level `local` read in a file other than the one that declares it,
+    /// or a `local m = include` read as anything but `m.name`. A chunk's
+    /// `local` is its own in Lua, and a file shares a name by returning it.
+    NotInScope,
 
     // -- build parameters
     /// A `param(…)` written somewhere it cannot mean anything: inside a body,
@@ -357,6 +361,7 @@ impl Code {
         Code::IncludeNotFound,
         Code::IncludeCycle,
         Code::IncludeForm,
+        Code::NotInScope,
         Code::ParamForm,
         Code::UnknownParam,
         Code::MissingParam,
@@ -409,6 +414,7 @@ impl Code {
             Code::IncludeNotFound => "include-not-found",
             Code::IncludeCycle => "include-cycle",
             Code::IncludeForm => "include-form",
+            Code::NotInScope => "not-in-scope",
             Code::ParamForm => "param-form",
             Code::UnknownParam => "unknown-param",
             Code::MissingParam => "missing-param",

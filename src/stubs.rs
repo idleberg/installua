@@ -667,11 +667,12 @@ fn declarations() -> String {
          function func(name, body) end\n\n\
          ---@param body fun()\n\
          function onInit(body) end\n\n\
-         -- Source layout, not a module system: the file's declarations are\n\
-         -- merged into this one and nothing is emitted. The names it\n\
-         -- contributes come from `project.lua` beside this file, since\n\
-         -- `lua-language-server` cannot follow the merge itself.\n\
+         -- Source layout: the file's declarations are merged into this one\n\
+         -- and nothing is emitted. Its `func`s and globals come from\n\
+         -- `project.lua` beside this file; its top-level `local`s are its own,\n\
+         -- and the ones it returns are read through `local m = include \"…\"`.\n\
          ---@param path string\n\
+         ---@return table\n\
          function include(path) end\n\n\
          -- A build parameter: a `<const>` the invocation may set with\n\
          -- `installua build … -D NAME=VALUE`. Only ever the whole initialiser of\n\

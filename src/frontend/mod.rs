@@ -14,6 +14,7 @@
 
 pub mod include;
 pub mod lift;
+mod scope;
 pub mod strings;
 
 use crate::ast::Program;

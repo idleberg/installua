@@ -1,8 +1,7 @@
 -- One file's worth of shared text, and the `func` that prints it.
 --
--- Nothing here is exported, because there is nothing to export from: the
--- declarations are spliced into the program that named this file, which is
--- what makes `include` source layout rather than a module system.
+-- Nothing here is returned, because nothing needs to be: `BANNER` is only read
+-- in this file, and a `func` is program-wide already.
 
 local BANNER <const> = "Assembled"
 

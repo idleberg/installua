@@ -6,11 +6,12 @@
 -- file would have had.
 --
 -- `strings.lua` declares a `func` that `sections.lua` calls, and this file
--- lists the sections both of them declare. Three files, and no ordering rule
--- between them beyond the one Lua already has for a `local`.
+-- lists the sections `sections.lua` returns. A `func` is program-wide, as its
+-- name is a string; a `local` is its file's own, as in Lua, so the sections
+-- come through the table that file returns.
 
 include "include/strings.lua"
-include "include/sections.lua"
+local sections = include "include/sections.lua"
 
 attributes {
   name = "Assembled",
@@ -22,6 +23,6 @@ installer {
   page.directory {},
   page.instFiles {},
 
-  core,
-  docs,
+  sections.core,
+  sections.docs,
 }

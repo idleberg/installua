@@ -112,7 +112,19 @@ impl Lifter<'_> {
                 })
             }
 
-            lua::Stmt::LocalAssignment(local) => Some(self.local(local, span)),
+            lua::Stmt::LocalAssignment(local) => {
+                let local = self.local(local, span);
+                if self.depth > 1
+                    && let Stmt::Local { values, .. } = &local
+                    && values
+                        .iter()
+                        .any(|value| value.callee_name() == Some("include"))
+                {
+                    self.nested_include(span);
+                    return None;
+                }
+                Some(local)
+            }
 
             lua::Stmt::FunctionCall(call) => {
                 let call = Stmt::Call(self.function_call(call, span)?);
@@ -127,16 +139,7 @@ impl Lifter<'_> {
                 if self.depth > 1
                     && matches!(&call, Stmt::Call(expr) if expr.callee_name() == Some("include"))
                 {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::IncludeForm,
-                            span,
-                            "`include` is a top-level statement",
-                        )
-                        .note("it merges another file's declarations into this one, so it cannot depend on anything decided at install time")
-                        .note("a top-level `if` is no exception: files are merged in the frontend, and the branch is taken later, in resolution")
-                       .note("move it to the top of the file; declarations are order-free"),
-                    );
+                    self.nested_include(span);
                     return None;
                 }
                 Some(call)
@@ -234,6 +237,19 @@ impl Lifter<'_> {
     /// `local x = …`, and `local X <const> = …`, which is a different language
     /// feature wearing the same syntax: build-time, `!define`d, never a
     /// register.
+    fn nested_include(&mut self, span: Span) {
+        self.diags.push(
+            Diagnostic::error(
+                Code::IncludeForm,
+                span,
+                "`include` is a top-level statement",
+            )
+            .note("it merges another file's declarations into this one, so it cannot depend on anything decided at install time")
+            .note("a top-level `if` is no exception: files are merged in the frontend, and the branch is taken later, in resolution")
+            .note("move it to the top of the file; declarations are order-free"),
+        );
+    }
+
     fn local(&mut self, local: &lua::LocalAssignment, span: Span) -> Stmt {
         let mut is_const = false;
         for attribute in local.attributes().flatten() {

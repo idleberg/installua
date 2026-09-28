@@ -36,8 +36,9 @@ rest work in both the installer and the uninstaller, depending on which block
 lists them.
 
 A page can also be bound to a local and listed by name, which lets it live in
-an `include`d file: `local details = page.custom { … }`, then `details,` in the
-block.
+an `include`d file: `local details = page.custom { … }` and
+`return { details = details }` there, then `local pages = include "…"` and
+`pages.details,` in the block.
 
 ```lua
 installer {

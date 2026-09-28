@@ -196,6 +196,10 @@ fn a_block_declared_twice_across_files_is_still_a_duplicate() {
 
 /// A `<const>` is a `!define`, so a second one was `makensis`'s error on the
 /// output — and across files the included value was silently lost first.
+///
+/// Across files Lua would accept it, since each `local` is its own file's. The
+/// splice keeps one namespace, so this is refused rather than renamed; see
+/// `src/frontend/scope.rs`.
 #[test]
 fn a_const_declared_twice_is_a_duplicate() {
     let program =
@@ -358,4 +362,151 @@ fn a_source_with_no_directory_says_so() {
     let rendered = diags.render("<source>");
     assert!(diags.contains(Code::IncludeNotFound), "{rendered}");
     assert!(rendered.contains("did not come from a file"), "{rendered}");
+}
+
+const INSTALL: &str =
+    "installer { page.instFiles {}, section(\"s\", function() detailPrint(COLOR) end) }";
+
+/// Lua's rule, put back on top of the splice: a chunk's `local` is its own.
+#[test]
+fn a_local_is_private_to_its_file() {
+    let rendered = fails(
+        &format!("{ATTRIBUTES}include \"colors.lua\"\n{INSTALL}"),
+        &[("colors.lua", "local COLOR <const> = \"red\"")],
+        Code::NotInScope,
+    );
+    assert!(rendered.contains("colors.lua:1:7"), "{rendered}");
+}
+
+/// And Lua's way to share one: the file returns it, the includer binds the
+/// file and reads through the binding. The output is the one-file program's.
+#[test]
+fn a_returned_name_is_read_through_the_binding() {
+    let output = build(
+        &format!(
+            "{ATTRIBUTES}local colors = include \"colors.lua\"\n\
+             installer {{ page.instFiles {{}}, section(\"s\", function() detailPrint(colors.COLOR) end) }}"
+        ),
+        &[(
+            "colors.lua",
+            "local COLOR <const> = \"red\"\nreturn { COLOR = COLOR }",
+        )],
+    );
+    assert!(output.contains("!define COLOR \"red\""), "{output}");
+    assert!(output.contains("DetailPrint \"${COLOR}\""), "{output}");
+}
+
+/// A section from another file, listed in a block: the case `include` exists
+/// for, and the one a bare name used to cover.
+#[test]
+fn a_returned_section_is_listed_through_the_binding() {
+    let output = build(
+        &format!(
+            "{ATTRIBUTES}local parts = include \"parts.lua\"\n\
+             installer {{ page.instFiles {{}}, parts.core }}"
+        ),
+        &[(
+            "parts.lua",
+            "local core = section(\"Core\", function() end)\nreturn { core = core }",
+        )],
+    );
+    assert!(output.contains("Section \"Core\""), "{output}");
+}
+
+/// A file included from two places is loaded once, and both bindings read it.
+#[test]
+fn two_files_may_bind_the_same_file() {
+    build(
+        &format!(
+            "{ATTRIBUTES}local colors = include \"colors.lua\"\ninclude \"b.lua\"\n\
+             installer {{ page.instFiles {{}}, section(\"s\", function() detailPrint(colors.COLOR) end) }}"
+        ),
+        &[
+            (
+                "colors.lua",
+                "local COLOR <const> = \"red\"\nreturn { COLOR = COLOR }",
+            ),
+            (
+                "b.lua",
+                "local c = include \"colors.lua\"\n\
+                 func(\"shout\", function() detailPrint(c.COLOR) end)",
+            ),
+        ],
+    );
+}
+
+#[test]
+fn a_name_the_file_does_not_return_is_refused() {
+    let rendered = fails(
+        &format!(
+            "{ATTRIBUTES}local colors = include \"colors.lua\"\n\
+             installer {{ page.instFiles {{}}, section(\"s\", function() detailPrint(colors.SHADE) end) }}"
+        ),
+        &[(
+            "colors.lua",
+            "local COLOR <const> = \"red\"\nreturn { COLOR = COLOR }",
+        )],
+        Code::NotInScope,
+    );
+    assert!(rendered.contains("SHADE = SHADE"), "{rendered}");
+}
+
+/// The binding is a build-time namespace, as `import`'s is: nothing to pass.
+#[test]
+fn the_binding_is_not_a_value() {
+    fails(
+        &format!("{ATTRIBUTES}local colors = include \"colors.lua\"\ninstaller {{ colors }}"),
+        &[("colors.lua", "return {}")],
+        Code::NotInScope,
+    );
+}
+
+/// A body's own `local` shadows the binding, as any Lua `local` does.
+#[test]
+fn a_body_local_shadows_the_binding() {
+    build(
+        &format!(
+            "{ATTRIBUTES}local colors = include \"colors.lua\"\n\
+             installer {{ page.instFiles {{}}, section(\"s\", function()\n\
+             local colors = \"x\"\ndetailPrint(colors)\nend) }}"
+        ),
+        &[("colors.lua", "return {}")],
+    );
+}
+
+#[test]
+fn a_file_returns_only_its_own_names() {
+    fails(
+        &format!("{ATTRIBUTES}include \"colors.lua\"\n{INSTALL}\nlocal COLOR <const> = \"red\""),
+        &[("colors.lua", "return { COLOR = COLOR }")],
+        Code::NotInScope,
+    );
+    fails(
+        &format!("{ATTRIBUTES}include \"colors.lua\""),
+        &[("colors.lua", "return { COLOR = \"red\" }")],
+        Code::IncludeForm,
+    );
+    fails(
+        &format!("{ATTRIBUTES}include \"colors.lua\""),
+        &[("colors.lua", "return 1")],
+        Code::IncludeForm,
+    );
+}
+
+#[test]
+fn include_binds_one_name() {
+    fails(
+        &format!("{ATTRIBUTES}local a, b = include \"colors.lua\""),
+        &[("colors.lua", "return {}")],
+        Code::IncludeForm,
+    );
+    fails(
+        &format!(
+            "{ATTRIBUTES}installer {{ section(\"Core\", function()\n\
+             local colors = include \"colors.lua\"\n\
+             end), }}"
+        ),
+        &[("colors.lua", "return {}")],
+        Code::IncludeForm,
+    );
 }

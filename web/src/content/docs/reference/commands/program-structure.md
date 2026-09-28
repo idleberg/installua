@@ -111,15 +111,32 @@ gitDescribe = ""
 
 ## !include
 
-Source layout, not a module system: the named file's declarations are merged
-into this one and nothing is emitted. A path is relative to the file
-that names it.
+Source layout: the named file's declarations are merged into this one and
+nothing is emitted. A path is relative to the file that names it.
 
-**Usage** `include(path)` → nothing
+A `func` and a global are program-wide, so an included file's are usable
+anywhere. A top-level `local` is not: as in Lua, it belongs to the file that
+declares it. A file shares one by returning it, and the including file binds
+the file to a name and reads through it:
+
+**Usage** `include(path)` → nothing, or `local m = include(path)` → the file's
+returned names, read as `m.name`
 
 ```lua skip
-include "lib/shortcuts.lua"
+-- lib/colors.lua
+local VALID <const> = "D8EABD"
+local settings = page.custom { … }
+return { VALID = VALID, settings = settings }
+
+-- install.lua
+local colors = include "lib/colors.lua"
+installer { colors.settings }
 ```
+
+The returned table exists only at build time, and holds only names the file
+declares at its top level. Two files may not declare the same top-level
+`local`, even though each is private to its file: the files are still merged
+into one program, and the name would be declared twice.
 
 ## glob
 

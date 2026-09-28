@@ -7,13 +7,19 @@
 //! staging conflation this language forbids — a reader must always be able to
 //! tell which stage a line belongs to.
 //!
-//! What this pass is not: a module system. There is no search path, no export
-//! list, no `return` value and no separately-compilable unit — the latter is
+//! What this pass is not: a module system in the separately-compiled sense.
+//! There is no search path and no unit that compiles on its own — the latter is
 //! out for good, because clobber sets are whole-program. A file is spliced into
 //! the top-level block of the file that named it, and everything downstream
 //! sees one tree. That is what makes the merge free: resolution is already
 //! order-free, so a `func` in one file and its caller in another need no
 //! ordering rule between them either.
+//!
+//! What it does take from Lua is the *scoping*. A top-level `local` belongs to
+//! its file, and a file shares one as a Lua module would, `return { name = name }`
+//! read through `local m = include "…"` as `m.name`. This pass records both
+//! halves in [`Modules`]; [`scope`] enforces the rule and rewrites `m.name` to
+//! the bare name, so the tree downstream is unchanged.
 //!
 //! Three things a path may not do, all for the same reason — it has to be
 //! readable without running anything:
@@ -27,29 +33,25 @@
 //! file — a compile failure where NSIS would have given a build failure, which
 //! is the whole point of the merge being free.
 //!
-//! **Automatic namespacing is the rejected fix**, and stays rejected for three
-//! reasons. The names are *NSIS-visible*: `Function yolo` is a real symbol,
-//! called from `raw`, read in `makensis` output and diffed in hand-written
-//! goldens, so renaming it behind the author's back breaks the one promise
-//! `include` makes. Encapsulation needs values, and this language has none —
-//! Lua's own answer is `local s = require("strings")` returning a table, which
-//! needs first-class functions, which is ruled out because parameter types come
-//! from call sites; namespacing without values is mangling in a module's
-//! clothes. And the collision is already caught precisely, so a silent rename
-//! would replace a good diagnostic with none.
+//! **Automatic namespacing is the rejected fix**, and stays rejected: the
+//! names are *NSIS-visible*. `Function yolo` is a real symbol, called from
+//! `raw`, read in `makensis` output and diffed in hand-written goldens, so
+//! renaming it behind the author's back breaks the one promise `include` makes.
+//! A `func` is named by a string, so Lua has no scope to give it anyway — which
+//! is also why the returned table carries only `local`s. The collision is
+//! caught precisely, and a silent rename would replace a good diagnostic with
+//! none.
 //!
-//! If modularity is ever asked for, the shape to build is opt-in and
-//! author-chosen — `include("strings.lua", { prefix = "str" })`, emitting
-//! `Function str.yolo`. NSIS accepts `.` in a function name, the output stays
-//! readable, and nothing is renamed that the author did not name. Same
-//! principle as a plugin declaration's flags: a human decides, never the
-//! compiler.
+//! The returned table never exists at run time, which is how this squares with
+//! a language that has no table values: it is a build-time namespace, the same
+//! kind of binding `local fileFunc = import "FileFunc"` makes.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::ast::{Block, Expr, Program, Stmt};
+use crate::ast::{Block, Expr, Name, Program, Stmt, TableField};
 use crate::diag::{Code, Diagnostic, Diagnostics, Span};
+use crate::frontend::scope;
 use crate::{Options, frontend};
 
 /// Where an included file's text comes from.
@@ -109,9 +111,31 @@ pub fn load(source: &str, options: &Options, diags: &mut Diagnostics) -> Option<
         options,
         diags,
         stack: vec![root],
+        modules: Modules::default(),
     };
     expander.expand(&mut program.block, 0);
+    let modules = expander.modules;
+    scope::check(&mut program.block, &modules, diags);
     Some(program)
+}
+
+/// What the splice leaves behind for [`scope`]: which file each
+/// `local m = include "…"` names, and what each file's `return { … }` exports.
+///
+/// Recorded here because this is the last pass that can see either — the
+/// `local` and the `return` are both gone from the tree it hands on.
+#[derive(Default)]
+pub(crate) struct Modules {
+    pub bindings: Vec<Binding>,
+    /// Keyed by file id. Each entry is `key = name`: `m.key` reads `name`.
+    pub exports: BTreeMap<u32, Vec<(Name, Name)>>,
+}
+
+/// `local m = include "…"`: `name` is `m`, bound in the file its span names,
+/// and `target` is the file it reads through.
+pub(crate) struct Binding {
+    pub name: Name,
+    pub target: u32,
 }
 
 /// The walk itself, distinct from the [`Loader`] a caller configures.
@@ -121,6 +145,7 @@ struct Expander<'a, 'b> {
     /// The chain of files currently being expanded, which is what makes a cycle
     /// nameable rather than merely detectable.
     stack: Vec<String>,
+    modules: Modules,
 }
 
 impl Expander<'_, '_> {
@@ -133,17 +158,63 @@ impl Expander<'_, '_> {
         let dir = directory(&self.name(file));
         let mut out = Vec::with_capacity(block.len());
         for stmt in std::mem::take(block) {
+            if let Stmt::Return { values, span } = &stmt {
+                self.exports(values, *span, file);
+                continue;
+            }
             match self.include(&stmt) {
                 Seen::Other => out.push(stmt),
                 Seen::Malformed => {}
-                Seen::Path(path, span) => {
-                    if let Some(mut included) = self.file(&path, &dir, span) {
-                        out.append(&mut included);
+                Seen::Path(path, span, binding) => {
+                    let (target, mut included) = self.file(&path, &dir, span);
+                    out.append(&mut included);
+                    if let (Some(name), Some(target)) = (binding, target) {
+                        self.modules.bindings.push(Binding { name, target });
                     }
                 }
             }
         }
         *block = out;
+    }
+
+    /// A top-level `return`, which is how a file says what an including file
+    /// may read — Lua's own module shape, `return { name = name }`.
+    ///
+    /// Only names, and only as a table: the table never exists at run time. It
+    /// is read here and gone, the same kind of binding `import` makes, so a
+    /// value in it would have nowhere to live.
+    fn exports(&mut self, values: &[Expr], span: Span, file: u32) {
+        let fields = match values {
+            [Expr::Table { fields, .. }] => fields,
+            _ => {
+                self.error(
+                    Code::IncludeForm,
+                    span,
+                    "a file returns a table of its own names",
+                    &["write `return { name = name, … }`; an including file reads them as `m.name`"],
+                );
+                return;
+            }
+        };
+        let mut exports = Vec::new();
+        for field in fields {
+            match field {
+                TableField::Named {
+                    name,
+                    value: Expr::Name(value),
+                } => exports.push((name.clone(), value.clone())),
+                _ => self.error(
+                    Code::IncludeForm,
+                    field.span(),
+                    "each entry of a returned table is `key = name`",
+                    &[
+                        "the table is read at build time, so it can only hand on names this file \
+                       declares",
+                    ],
+                ),
+            }
+        }
+        self.modules.exports.insert(file, exports);
     }
 
     /// The path an `include` statement names, when the statement is one.
@@ -153,8 +224,30 @@ impl Expander<'_, '_> {
     /// answer, and letting it fall through to resolution would produce
     /// "`include` is not a function", which is true and unhelpful.
     fn include(&mut self, stmt: &Stmt) -> Seen {
-        let Stmt::Call(call) = stmt else {
-            return Seen::Other;
+        let (call, binding) = match stmt {
+            Stmt::Call(call) => (call, None),
+            Stmt::Local {
+                names,
+                is_const,
+                values,
+                span,
+            } if values
+                .iter()
+                .any(|value| value.callee_name() == Some("include")) =>
+            {
+                let ([name], [call], false) = (names.as_slice(), values.as_slice(), is_const)
+                else {
+                    self.error(
+                        Code::IncludeForm,
+                        *span,
+                        "`include` binds one name",
+                        &["write `local m = include \"other.lua\"`, then read its names as `m.name`"],
+                    );
+                    return Seen::Malformed;
+                };
+                (call, Some(name.clone()))
+            }
+            _ => return Seen::Other,
         };
         if call.callee_name() != Some("include") {
             return Seen::Other;
@@ -163,7 +256,7 @@ impl Expander<'_, '_> {
             return Seen::Other;
         };
         match args.as_slice() {
-            [Expr::Str(literal)] => Seen::Path(literal.value.clone(), literal.span),
+            [Expr::Str(literal)] => Seen::Path(literal.value.clone(), literal.span, binding),
             [] => {
                 self.error(
                     Code::IncludeForm,
@@ -199,9 +292,17 @@ impl Expander<'_, '_> {
         }
     }
 
-    /// Loads one file and returns its top-level statements, already expanded.
-    fn file(&mut self, path: &str, dir: &str, span: Span) -> Option<Block> {
+    /// Loads one file and returns its id and top-level statements, already
+    /// expanded. The id comes back for a file already loaded too, with no
+    /// statements, since a second `local m = include` still binds `m`.
+    fn file(&mut self, path: &str, dir: &str, span: Span) -> (Option<u32>, Block) {
         let key = normalize(&join(dir, path));
+        let block = self.load(path, &key, span).unwrap_or_default();
+        (self.diags.files().find(&key), block)
+    }
+
+    fn load(&mut self, path: &str, key: &str, span: Span) -> Option<Block> {
+        let key = key.to_string();
 
         // A file included twice is included once — the same set semantics
         // `import` has, and for the same reason: a declaration merged twice is
@@ -276,7 +377,8 @@ enum Seen {
     Other,
     /// An `include` that was reported here. Dropped, not kept.
     Malformed,
-    Path(String, Span),
+    /// The path, and the name a `local m = include` binds it to.
+    Path(String, Span, Option<Name>),
 }
 
 /// The directory part of a key, `""` for a file at the root.
