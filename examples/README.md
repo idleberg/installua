@@ -145,8 +145,9 @@ goldens actually use:
 1. `Unicode` — first, so a later `raw` overrides it rather than being silently overridden
 2. `!define`s, in source order
 3. `!include`s
-4. `${Using:StrFunc}` and other init lines
-5. attributes, in overlay order
+4. attributes, in overlay order
+5. `${Using:StrFunc}` and other init lines — after the attributes, because each one writes
+   a `Function` and `SetCompressor` refuses to follow one
 6. MUI `!define`s, page macros, `MUI_LANGUAGE`
 7. `Var`s
 8. functions

@@ -16,8 +16,10 @@
 //!   2. `!define`s, in source order — the preprocessor is textual and strictly
 //!      sequential, unlike everything below it
 //!   3. `!include`s
-//!   4. header init lines (`${Using:StrFunc}`)
-//!   5. attributes, in overlay order
+//!   4. attributes, in overlay order
+//!   5. header init lines (`${Using:StrFunc}`) — after the attributes, because
+//!      each writes a `Function`, and `SetCompressor` after one is `makensis`'s
+//!      "can't change compressor after data already got compressed"
 //!   6. `Var`s — before the pages and not merely before the bodies, because
 //!      `page.directory { variable = … }` puts one in a `DirVar` and NSIS
 //!      refuses a variable it has not seen declared
@@ -38,7 +40,7 @@
 //!      (`!packhdr`, `!finalize`, `!uninstfinalize`) whose position does not
 //!      matter, given a slot where it visibly does not
 //!
-//! Phase 1 filled 1, 5 and 9; Phase 2 adds 6 and 10. The rest exist empty,
+//! Phase 1 filled 1, 4 and 9; Phase 2 adds 6 and 10. The rest exist empty,
 //! because a widening is a smaller change than a reordering.
 
 use crate::cfg;
@@ -70,8 +72,8 @@ pub struct Module {
     pub plugin_dirs: Vec<Instruction>,
     pub defines: Vec<Define>,
     pub includes: Vec<String>,
-    pub inits: Vec<Instruction>,
     pub attributes: Vec<Instruction>,
+    pub inits: Vec<Instruction>,
     /// Globals, declared by assignment, collected during lowering and emitted
     /// before anything that names one — which is the pages as well as the
     /// bodies, since `DirVar` takes a variable rather than a value.

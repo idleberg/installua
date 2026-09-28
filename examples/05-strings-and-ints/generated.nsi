@@ -10,12 +10,12 @@ Unicode true
 !include "StrFunc.nsh"
 !include "WordFunc.nsh"
 
-${Using:StrFunc} StrCase
-${Using:StrFunc} StrLoc
-
 Name "${APP}"
 OutFile "${APP}-setup.exe"
 InstallDir "$PROGRAMFILES64\${APP}"
+
+${Using:StrFunc} StrCase
+${Using:StrFunc} StrLoc
 
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES

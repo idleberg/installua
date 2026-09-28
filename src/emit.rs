@@ -100,11 +100,12 @@ pub fn emit_mapped(module: &ir::Module) -> (String, LineMap) {
             .map(|header| format!("!include {}", argument(&ir::Arg::str(header.clone())))),
     );
 
-    // 4. Header init lines.
-    out.section("StrFunc init", module.inits.iter().map(line));
-
-    // 5. Attributes, in overlay order.
+    // 4. Attributes, in overlay order.
     out.section("attribute", module.attributes.iter().map(line));
+
+    // 5. Header init lines — below the attributes, because each one writes a
+    //    `Function` and `SetCompressor` refuses to follow one.
+    out.section("StrFunc init", module.inits.iter().map(line));
 
     // 6. `Var`s. A `Var` used before it is declared is a hard error in NSIS,
     //    unlike a `Function`, which is why these are collected rather than

@@ -83,34 +83,12 @@ case when it changes a message, and a Tier-3 `makensis -WX` build when the bug
 was that `makensis` rejected the output. `mise run check` passes at the end of
 each one.
 
-### 5.1 `${Using:StrFunc}` is emitted above `SetCompressor`
+### 5.1 `${Using:StrFunc}` is emitted above `SetCompressor` — fixed
 
-Any program that sets a compressor and uses `string.lower`, `string.upper` or
-`string.find` fails to build. Installua reports the failure as its own bug.
-
-```lua
-attributes { name = "b", outFile = "b.exe", compressor = { "lzma", solid = true } }
-installer { page.instFiles {}, section("s", function() detailPrint(string.lower(INSTDIR)) end) }
-```
-
-**Now:** `makensis` stops with `can't change compressor after data already got
-compressed or header already changed!`, followed by `this is a compiler bug`.
-`${Using:StrFunc} StrCase` defines a function, which changes the header, and
-it is emitted before `SetCompressor`.
-
-**Cause:** the spine in `src/ir.rs` (the module doc, slots 4 and 5) puts header
-init lines before attributes. `ORDERED` in `src/lower/mod.rs:139` only orders
-attributes among themselves.
-
-**Fix:** emit the `${Using:StrFunc}` lines (`src/lower/mod.rs:1558`) after the
-attributes, or at least after the `ORDERED` ones (`cpu`, `compressor`,
-`brandingImage`). Then update the slot list in `src/ir.rs` and the reason
-written beside it.
-
-**Verify:**
-- The repro builds.
-- Add a golden that sets `compressor` and calls `string.lower`, and build it at Tier 3.
-- Search the existing goldens for `Using:StrFunc` and check they still pass `makensis -WX`.
+The init lines now come after the attributes: slots 4 and 5 swapped in
+`src/ir.rs` and `src/emit.rs`, since each `${Using:StrFunc}` writes a
+`Function` and `SetCompressor` refuses to follow one. Tested by the
+`compressor` golden (tiers 2 and 3); example 05 moved its two lines by hand.
 
 ### 5.2 A `param` named like an NSIS constant silently becomes the constant
 
