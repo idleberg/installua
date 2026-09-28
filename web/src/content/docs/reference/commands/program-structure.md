@@ -28,6 +28,10 @@ func("majorOf", function(version)
 end)
 ```
 
+A `func` nothing calls is left out of the script and not checked, so a library
+of them can be included by a program that uses only some. A call from a `raw`
+block counts: any word of its text that names a `func` keeps it.
+
 ## .onInit / un.onInit
 
 The callback NSIS runs before anything is shown. Written _inside_ the block it

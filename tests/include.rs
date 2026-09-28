@@ -69,6 +69,63 @@ fn an_included_func_is_callable() {
     assert!(output.contains("Call greet"), "{output}");
 }
 
+/// A library the program uses part of. What nothing reaches is not written —
+/// `makensis -WX` fails on an unreferenced `Function` — and not type-checked,
+/// so `newer`'s parameters, which no call site types, are no error either.
+/// `chain` is reached only from `helper`, which nothing reaches; `byraw` only
+/// from a `raw` block's text; `fromleave` only from a page's `leave`.
+#[test]
+fn a_func_nothing_reaches_is_left_out() {
+    let output = build(
+        &format!(
+            "{ATTRIBUTES}include \"helpers.lua\"\n\
+             installer {{\n\
+             page.directory {{ leave = function() fromleave() end }},\n\
+             page.instFiles {{}},\n\
+             section(\"Core\", function() raw [[ Call byraw ]] end),\n\
+             }}"
+        ),
+        &[(
+            "helpers.lua",
+            "func(\"helper\", function() chain() end)\n\
+             func(\"chain\", function() detailPrint(\"chain\") end)\n\
+             func(\"newer\", function(a, b) return a < b end)\n\
+             func(\"byraw\", function() detailPrint(\"raw\") end)\n\
+             func(\"fromleave\", function() detailPrint(\"leave\") end)\n",
+        )],
+    );
+    assert_eq!(
+        output,
+        "Unicode true\n\
+         \n\
+         !include \"MUI2.nsh\"\n\
+         \n\
+         OutFile \"a.exe\"\n\
+         \n\
+         !define MUI_PAGE_CUSTOMFUNCTION_LEAVE \"mui.directory.leave\"\n\
+         !insertmacro MUI_PAGE_DIRECTORY\n\
+         !insertmacro MUI_PAGE_INSTFILES\n\
+         \n\
+         !insertmacro MUI_LANGUAGE \"English\"\n\
+         \n\
+         Section \"Core\"\n\
+         \x20 Call byraw\n\
+         SectionEnd\n\
+         \n\
+         Function byraw\n\
+         \x20 DetailPrint \"raw\"\n\
+         FunctionEnd\n\
+         \n\
+         Function fromleave\n\
+         \x20 DetailPrint \"leave\"\n\
+         FunctionEnd\n\
+         \n\
+         Function mui.directory.leave\n\
+         \x20 Call fromleave\n\
+         FunctionEnd\n"
+    );
+}
+
 /// Order-freeness survives the merge, in the direction that has no Lua excuse:
 /// the `include` is written *below* the call that needs it.
 #[test]

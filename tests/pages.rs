@@ -1376,7 +1376,8 @@ fn a_folder_read_in_a_func_has_no_half_to_decide_it() {
         "attributes { outFile = \"a.exe\", name = \"a\" }\n\
          local menu = page.startMenu {}\n\
          func(\"where\", function() return menu.folder end)\n\
-         installer { menu, page.instFiles {} }\n",
+         installer { menu, page.instFiles {},\n\
+         section(\"Core\", function() detailPrint(where()) end) }\n",
     );
     assert!(
         raised

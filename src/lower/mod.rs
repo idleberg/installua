@@ -788,20 +788,30 @@ pub fn lower(
     //    scratch collector: their diagnostics are about a type table that was
     //    still incomplete, so reporting them would be reporting the compiler's
     //    intermediate state to the user.
+    //
+    //    The same rounds settle which `func`s nothing reaches
+    //    ([`callgraph::unreachable`]). One left out is not lowered at all, so
+    //    its body is never type-checked and its call sites type no callee —
+    //    which is why the set rides the fixpoint rather than being cut from the
+    //    finished module.
+    let funcs: BTreeSet<&str> = resolved.functions.keys().map(String::as_str).collect();
     let mut inferred = Inferred::seed(resolved);
+    let mut dead = BTreeSet::new();
     let mut failed = Default::default();
     for _ in 0..MAX_ROUNDS {
         let mut scratch = Diagnostics::new();
-        let mut round = lower_once(resolved, options, &mut scratch, &inferred).1;
+        let (module, mut round) = lower_once(resolved, options, &mut scratch, &inferred, &dead);
         failed = std::mem::take(&mut round.failed);
-        if round == inferred {
+        let unreached = callgraph::unreachable(&module, &funcs);
+        if round == inferred && unreached == dead {
             break;
         }
         inferred = round;
+        dead = unreached;
     }
     inferred.failed = failed;
 
-    let (mut module, _) = lower_once(resolved, options, diags, &inferred);
+    let (mut module, _) = lower_once(resolved, options, diags, &inferred, &dead);
 
     // 2. Registers. Every body is allocated before any call site is filled in,
     //    because a clobber set is a fact about *physical* registers and there
@@ -1091,6 +1101,7 @@ fn lower_once(
     options: &crate::Options,
     diags: &mut Diagnostics,
     known: &Inferred,
+    dead: &BTreeSet<String>,
 ) -> (ir::Module, Inferred) {
     let mut lowerer = Lowerer {
         diags,
@@ -1126,6 +1137,7 @@ fn lower_once(
         minted: 0,
         un_hooks: Vec::new(),
         requires: Requirements::default(),
+        dead,
     };
     lowerer.program();
     lowerer.finish()
@@ -1212,6 +1224,8 @@ struct Lowerer<'a, 'p> {
     /// What the program needs included and initialised. Collected during
     /// lowering and emitted at the top, which is the only order that works.
     requires: Requirements,
+    /// The `func`s the previous round found nothing reaches, left unlowered.
+    dead: &'a BTreeSet<String>,
 }
 
 /// The collect-then-emit pass the headers and `StrFunc` adapters ask for.
@@ -6185,6 +6199,9 @@ impl<'p> Lowerer<'_, 'p> {
             return;
         };
         let _ = keyword;
+        if self.dead.contains(&name.value) {
+            return;
+        }
 
         let body = self.body(
             block,

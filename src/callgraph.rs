@@ -79,6 +79,76 @@ pub fn build(module: &ir::Module) -> CallGraph {
     }
 }
 
+/// The `func`s nothing reaches, which [`crate::lower::lower`] then leaves out.
+///
+/// **`makensis -WX` makes this a correctness pass, not a size one.** An
+/// uncalled `Function` is `warning 6010: install function "…" not referenced`,
+/// and a library of `func`s — the reason `include` exists — would fail the
+/// build of every program that does not call all of them. A body nothing runs
+/// is not type-checked either: its parameters are typed by call sites, and
+/// with none they are `unknown`.
+///
+/// **The roots are every body the compiler made rather than the user named**:
+/// the sections, and every function that is not a `func` — a callback, a page
+/// or control hook, a walker body. NSIS calls those by a name the compiler
+/// wrote, so none of them needs a caller here.
+///
+/// **A `raw` block's words count as calls.** `Call helper` and
+/// `GetFunctionAddress $0 helper` are text the compiler does not read, so any
+/// word of it that names a `func` keeps that `func`. Over-keeping costs a
+/// function a `-WX` build might then warn about; under-keeping is an
+/// `unknown function` from `makensis`, and the author has no way to say
+/// "keep it" but to write a call.
+pub fn unreachable(module: &ir::Module, funcs: &BTreeSet<&str>) -> BTreeSet<String> {
+    let bodies: BTreeMap<&str, &crate::cfg::Body> = module
+        .functions
+        .iter()
+        .map(|function| (function.name.as_str(), &function.body))
+        .collect();
+    let named = |lines: &[ir::Instruction]| -> Vec<String> {
+        lines
+            .iter()
+            .flat_map(|line| line.name.split_whitespace())
+            .map(|word| word.trim_matches(|c| matches!(c, '"' | '\'' | '`')))
+            .filter(|word| funcs.contains(word))
+            .map(str::to_string)
+            .collect()
+    };
+
+    let functions = module.functions.len();
+    let mut queue: Vec<&crate::cfg::Body> = module
+        .bodies()
+        .enumerate()
+        .filter(|(index, (name, _))| *index >= functions || !funcs.contains(name))
+        .map(|(_, (_, body))| body)
+        .collect();
+    let mut reached: BTreeSet<String> = named(&module.head).into_iter().collect();
+    reached.extend(named(&module.tail));
+    queue.extend(reached.iter().filter_map(|name| bodies.get(name.as_str())));
+    while let Some(body) = queue.pop() {
+        for site in &body.calls {
+            let callees = match &site.kind {
+                ir::CallKind::Opaque { lines, raw: true } => named(lines),
+                _ => vec![site.callee.clone()],
+            };
+            for callee in callees {
+                if let Some(callee_body) = bodies.get(callee.as_str())
+                    && funcs.contains(callee.as_str())
+                    && reached.insert(callee)
+                {
+                    queue.push(callee_body);
+                }
+            }
+        }
+    }
+
+    funcs
+        .iter()
+        .filter(|name| !reached.contains(**name))
+        .map(|name| name.to_string())
+        .collect()
+}
+
 impl CallGraph {
     /// The clobber-set fixpoint (step 3).
     ///

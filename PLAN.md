@@ -98,63 +98,18 @@ A top-level `<const>` now shadows a built-in constant. The body lookup in
 Tested by `a_parameter_shadows_the_constant_it_is_named_like` in
 `tests/params.rs`, with and without `-D`; `TEMP` undeclared still reads `$TEMP`.
 
-### 5.3 Functions no one calls fail the build
+### 5.3 Functions no one calls fail the build — fixed
 
-A `func` in an `include`d library that this program never calls is still
-emitted. `makensis` answers with `warning 6010: install function "helper" not
-referenced`, which fails under `-WX`. This makes a shared library of `func`s,
-the reason `include` exists, unusable unless every program calls every function.
+`callgraph::unreachable` walks from every body the compiler made (sections,
+callbacks, page and control hooks, walker bodies) and treats any word of a
+`raw` block that names a `func` as a call. The set rides the `lower` fixpoint,
+so a dropped `func` is never lowered at all. Tested by
+`a_func_nothing_reaches_is_left_out` in `tests/include.rs`.
 
-```lua
-attributes { name = "b", outFile = "b.exe" }
-func("helper", function() detailPrint("never called") end)
-installer { page.instFiles {}, section("s", function() end) }
-```
+### 5.4 Parameters of an uncalled `func` are typed `unknown` — fixed
 
-**Now:** `error[makensis]: warning 6010: install function "helper" not
-referenced - zeroing code (40-42) out`.
-
-**Fix:** drop functions that nothing reaches. `src/callgraph.rs` already builds
-the graph. The roots are:
-- the sections
-- the callbacks (`onInit` and the others)
-- page and control callbacks (`pre`, `show`, `leave`, `onClick`, `onChange`)
-- walker bodies
-- `page.finish { run = { call = … } }`
-
-One case needs a decision: a `func` named only inside `raw` (`Call helper`,
-`GetFunctionAddress`). Either scan `raw` text for the name and keep the
-function, or document that such a function has to be reached from Lua too.
-Scanning is the kinder choice.
-
-**Verify:**
-- The repro builds and its `.nsi` has no `Function helper`.
-- A golden where `raw [[ Call helper ]]` is the only caller keeps the function.
-- `tests/callgraph`-style unit coverage for a function reached only through
-  another unreachable function (both dropped) and one reached only from a page
-  `leave` (kept).
-
-### 5.4 Parameters of an uncalled `func` are typed `unknown`
-
-This has the same root as 5.3. Parameter types come only from call sites, so a
-function with none has `unknown` parameters, and the body then fails to type-check.
-
-```lua
-attributes { name = "b", outFile = "b.exe" }
-func("newer", function(a, b) return a < b end)
-installer { page.instFiles {}, section("s", function() end) }
-```
-
-**Now:** `error[type-mismatch]: this compares a unknown with a unknown`.
-
-**Fix:** if 5.3 drops unreachable functions before they are type-checked, this
-goes away with it. If functions are dropped only at emit time, skip the type
-diagnostics for bodies the call graph cannot reach, since nothing will run them.
-
-**Verify:**
-- The repro builds.
-- `tests/diagnostics.rs` still reports the mismatch when one caller passes a
-  string and the other an int.
+Fell out of 5.3: an unreached `func` is not lowered, so its body is not
+type-checked. `newer` in `a_func_nothing_reaches_is_left_out` is the repro.
 
 ### 5.5 `execShell` refuses the `runas` verb
 
