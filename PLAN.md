@@ -143,38 +143,13 @@ and accepts a runtime piece only as an argument's value: after a space, before
 `,` or `)`. The explicit `outputs` count was not needed. Tests in
 `tests/declarations.rs`, `system_call`.
 
-### 5.10 `glob`: no recursion, and its error names the wrong path
+### 5.10 `glob`: no recursion, and its error names the wrong path — fixed
 
-```lua
-attributes { name = "b", outFile = "b.exe" }
-installer { page.instFiles {}, section("s", function()
-	for p in glob("assets/**/*.txt") do file(p) end
-end) }
-```
-
-**Now:** `error[bad-field-value]: glob cannot read "": No such file or
-directory`. There are two problems:
-- `src/lower/mod.rs:7296` prints `base.display()`, the source's directory,
-  which is empty when the source sits in the working directory. It should
-  print `base.join(directory)`, the folder it actually tried.
-- `**` is taken as a literal folder name, so a glob cannot walk subfolders or
-  yield folders.
-
-PimpBot needs the folder names at build time for the settings page's
-preset-folder list. The package's subfolders are only known then.
-
-**Fix:**
-- Fix the message first, which is one line.
-- Then decide whether `glob` grows `**` (walk subfolders) and a way to ask for
-  directories, e.g. a trailing `/` in the pattern. The doc comment on `fn glob`
-  (`src/lower/mod.rs:8035`) says anything larger belongs to `BUILD.system`,
-  which does not exist (see 5.11). So either grow `glob` or build that.
-
-**Verify:**
-- The repro's message names `assets/**`.
-- If `**` lands: a golden globbing `assets/**/*.txt` over a two-level fixture,
-  with paths returned in a stable order, and `glob("assets/*/")` yielding
-  `assets/sub`.
+The error now names the folder it could not read, as written. `glob` takes
+`**` for any depth of folders and a trailing `/` for folders instead of files,
+with wildcards in any segment; see `fn glob` in `src/lower/mod.rs` and
+`tests/glob.rs`. `BUILD.system` (5.11) is still open, but `glob` no longer
+waits on it.
 
 ### 5.11 The docs promise a `BUILD` namespace that does not exist
 

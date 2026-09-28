@@ -158,6 +158,14 @@ for path in glob("assets/docs/*.pdf") do
 end
 ```
 
+A pattern is folders separated by `/`. In any of them, `*` matches any run of
+characters and `?` matches one. `**` stands for any number of folders, none
+included, so `assets/**/*.txt` finds every `.txt` below `assets` and
+`assets/**` every file. A pattern ending in `/` yields folders instead of
+files: `glob("presets/*/")` gives `presets/classic`, `presets/modern` and so
+on. The paths come back sorted, relative to the source file, as you would have
+written them.
+
 ## param
 
 A build-time constant the invocation may set. This is what replaces

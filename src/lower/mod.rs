@@ -7311,12 +7311,12 @@ impl BodyLowerer<'_, '_> {
 
         let mut matches = match glob(&base, &pattern) {
             Ok(matches) => matches,
-            Err(error) => {
+            Err((folder, error)) => {
                 self.diags.push(
                     Diagnostic::error(
                         Code::BadFieldValue,
                         span,
-                        format!("`glob` cannot read `{}`: {error}", base.display()),
+                        format!("`glob` cannot read `{folder}`: {error}"),
                     )
                     .note("the pattern is resolved against the source file's directory"),
                 );
@@ -8047,34 +8047,102 @@ impl BodyLowerer<'_, '_> {
 
 /// The build-machine half of `for … in glob(…)`.
 ///
-/// Deliberately not a dependency: the pattern language is one directory and one
-/// filename with `*` and `?` in it, which is what the compile-time surface
-/// exposes and what the five programs use. Anything larger is a shell's job,
-/// and `BUILD.system` is where a shell belongs.
+/// Deliberately not a dependency: the pattern language is `/`-separated
+/// segments with `*` and `?` in them, `**` for any depth of folders, and a
+/// trailing `/` to ask for folders instead of files. That is what the
+/// compile-time surface exposes; anything larger is a shell's job, and
+/// `BUILD.system` is where a shell belongs.
 ///
 /// Paths come back **as the source would have written them**, with `/` and
 /// relative to the source's directory, so the emitter's path handling applies
 /// to a globbed file exactly as it does to a written one.
-fn glob(base: &std::path::Path, pattern: &str) -> std::io::Result<Vec<String>> {
-    let (directory, name) = match pattern.rsplit_once('/') {
-        Some((directory, name)) => (directory, name),
-        None => ("", pattern),
+///
+/// The error carries the folder that could not be read, as written, since the
+/// source's directory alone is empty for a source in the working directory.
+fn glob(base: &std::path::Path, pattern: &str) -> Result<Vec<String>, (String, std::io::Error)> {
+    let (pattern, folders) = match pattern.strip_suffix('/') {
+        Some(pattern) => (pattern, true),
+        None => (pattern, false),
     };
-
+    let mut segments: Vec<&str> = pattern.split('/').collect();
+    // `assets/**` means everything under `assets`, not nothing.
+    if segments.last() == Some(&"**") {
+        segments.push("*");
+    }
     let mut out = Vec::new();
-    for entry in std::fs::read_dir(base.join(directory))? {
-        let entry = entry?;
-        let file = entry.file_name().to_string_lossy().into_owned();
-        if !matches_pattern(&file, name) || entry.path().is_dir() {
+    glob_walk(base, "", &segments, folders, &mut out)?;
+    Ok(out)
+}
+
+/// One segment of [`glob`] against the folder `prefix` names.
+///
+/// A segment with no wildcard is joined rather than listed, so `..` works and
+/// a missing folder is an error rather than no matches. `**` descends without
+/// following links, because a link back up is a loop.
+fn glob_walk(
+    base: &std::path::Path,
+    prefix: &str,
+    segments: &[&str],
+    folders: bool,
+    out: &mut Vec<String>,
+) -> Result<(), (String, std::io::Error)> {
+    let join = |name: &str| {
+        if prefix.is_empty() {
+            name.to_string()
+        } else {
+            format!("{prefix}/{name}")
+        }
+    };
+    let [segment, rest @ ..] = segments else {
+        return Ok(());
+    };
+    if !rest.is_empty() && *segment != "**" && !segment.contains(['*', '?']) {
+        return glob_walk(base, &join(segment), rest, folders, out);
+    }
+
+    let read = |error| {
+        (
+            if prefix.is_empty() {
+                ".".to_string()
+            } else {
+                prefix.to_string()
+            },
+            error,
+        )
+    };
+    let mut entries = Vec::new();
+    for entry in std::fs::read_dir(base.join(prefix)).map_err(read)? {
+        let entry = entry.map_err(read)?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        entries.push((
+            name,
+            entry.path().is_dir(),
+            entry.file_type().map_err(read)?.is_dir(),
+        ));
+    }
+
+    if *segment == "**" {
+        glob_walk(base, prefix, rest, folders, out)?;
+        for (name, _, real_dir) in &entries {
+            if *real_dir {
+                glob_walk(base, &join(name), segments, folders, out)?;
+            }
+        }
+        return Ok(());
+    }
+    for (name, is_dir, _) in entries {
+        if !matches_pattern(&name, segment) {
             continue;
         }
-        out.push(if directory.is_empty() {
-            file
-        } else {
-            format!("{directory}/{file}")
-        });
+        if !rest.is_empty() {
+            if is_dir {
+                glob_walk(base, &join(&name), rest, folders, out)?;
+            }
+        } else if is_dir == folders {
+            out.push(join(&name));
+        }
     }
-    Ok(out)
+    Ok(())
 }
 
 /// `*` matches any run, `?` matches one character, everything else is literal.
