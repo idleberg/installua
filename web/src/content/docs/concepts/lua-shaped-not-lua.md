@@ -46,7 +46,7 @@ follows from those four.
 | `..`              | concatenation                               | **usually free.** It compiles to a string template, not a copy, so `INSTDIR .. "/bin"` is the literal text `"$INSTDIR\bin"` and occupies no register                                              |
 | truthiness        | `bool` only                                 | see below                                                                                                                                                                                         |
 | declaration order | irrelevant                                  | see below                                                                                                                                                                                         |
-| `include`         | `dofile`'s shape, at build time             | a top-level `local` is its file's own. A file shares names with `return { name = name }` and the includer reads them as `m.name` after `local m = include "…"`. Unlike Lua, two files may not declare the same top-level name |
+| `include`         | `dofile`'s shape, at build time             | a top-level `local` is its file's own. A file shares names with `return { name = name }` and the includer reads them as `m.name` after `local m = include "…"`. Two files may declare the same top-level name; the `.nsi` suffixes all but the first |
 
 ## Truthiness is `bool` and nothing else
 

@@ -453,72 +453,71 @@ No form of the program satisfies both tools: the Lua-scoped
   and `lua-language-server --check`.
 - `tests/docs.rs` passes with the new paragraph.
 
-### 5.14 A top-level `local` leaks out of the file that declares it
+### 5.14 A top-level `local` leaks out of the file that declares it — fixed
 
-`include` splices a file into the one that names it, so a top-level `local` in
-`lib/common.lua` is in scope in every file that includes it. Lua scopes a
-`local` to its chunk, and so does LuaLS:
+A top-level `local` is private to its file; a file shares one with
+`return { name = name }`, read as `m.name` after `local m = include "…"`.
+`src/frontend/scope.rs` checks it and rewrites `m.name` to the bare name, so
+`resolve` and `lower` are unchanged. Tested in `tests/include.rs` and the
+`include` golden; PimpBot migrated, its four fixture `.nsi` byte-identical.
 
-```text
-lib/common.lua       local COLOR_VALID <const> = "D8EABD"
-packages/a/install.lua
-                     include "../../lib/common.lua"
-                     installer { page.instFiles {}, section("s", function() detailPrint(COLOR_VALID) end) }
-```
-
-**Now:** `installua check` passes, and LuaLS reports `undefined-global` for
-`COLOR_VALID` in `install.lua`, plus `unused-local` in `common.lua` when that
-file never uses the name. The same happens to a page, section or control bound
-with `local` in one file and listed in another. PimpBot has 7 such names:
-`COLOR_VALID`, `COLOR_INVALID`, `HEADER_BACKGROUND`, `HEADER_TEXT`,
-`apePlugins`, `avsSettingsPage` and `fileFunc`.
-
-**Expected:** a top-level `local` is private to its file. A file shares names
-the way a Lua module does, by returning a table, and the includer binds it:
-
-```lua
--- lib/common.lua
-local COLOR_VALID <const> = "D8EABD"
-return { COLOR_VALID = COLOR_VALID }
-
--- packages/a/install.lua
-local common = include "../../lib/common.lua"
-detailPrint(common.COLOR_VALID)
-```
-
-The table never exists at run time. It is a build-time namespace, the same
-kind of binding `local fileFunc = import "FileFunc"` already makes. Paths stay
-relative to the including file. `func`s, globals and `param` names stay
-program-wide: `func("name", …)` names its function in a string, and a bare
-assignment is a Lua global either way.
-
-**Where:**
-- `src/frontend/include.rs`: accept `local m = include "…"` and a top-level
-  `return { name = name, … }` in an included file. Rewrite the module doc,
-  which rejects this shape because "encapsulation needs values"; `import`
-  namespaces already show it doesn't.
-- `src/resolve.rs`: key consts, namespaces and deferred declarations by
-  (file, name). `Span` already carries the file. An included file's `return`
-  becomes a namespace in the including file.
-- `src/lower/`: every name lookup takes the file of the span it reads from.
-- `!define` names: two files may now declare the same const, so the emitted
-  name has to stay unique.
-- Docs: `reference/commands/program-structure.md` (`!include`) and
-  `concepts/lua-shaped-not-lua.md`.
-
-**Verify:**
-- The repro fails with a scope error until it uses `common.COLOR_VALID`, then
-  passes `installua check` and `lua-language-server --check`.
-- `tests/golden/include.lua` rewritten to the returned-table form.
-- Two files declaring the same `local X <const>` both compile, and each reads
-  its own value.
-- Migrate PimpBot's 8 `include` lines.
+Two files may declare the same top-level `local`: the scope pass renames every
+copy but the lowest file's (`COLOR` in file 1 → `COLOR_1`), so a program
+without a collision emits what it did before. Ceiling: the suffix reaches the
+`.nsi`, and a `raw` string spelling the unsuffixed name reads the other file's.
 
 ### 5.15 A duplicate `local … <const>` passes `check` and fails the build — fixed
 
 `const_twice` in `src/resolve.rs` reports the second declaration as
 `duplicate-block`, naming the first, within one file or across `include`s.
-Tested in `tests/include.rs`. After §5.14 it has to become per file.
+Tested in `tests/include.rs`. Per file since §5.14's rename: across files the
+two are separate names.
+
+### 5.16 A top-level `local` is visible above its declaration
+
+`concepts/lua-shaped-not-lua.md` ("Everything hoists") makes the top level
+order-free: every top-level name is resolved before any body is compiled. That
+holds for `func`s, whose names are strings, but it also holds for `local`s, and
+Lua scopes a `local` from its declaration down:
+
+```lua
+attributes { name = "b", outFile = "b.exe" }
+local random = checkbox {
+	"Switch every", x = 8, y = 8, width = 56, height = 13,
+	onClick = function() interval.enabled = random.checked end,
+}
+local interval = number { x = 70, y = 8, width = 20, height = 13 }
+installer {
+	page.custom { "Options", controls = { random, interval } },
+	page.instFiles {},
+	section("s", function() end),
+}
+```
+
+**Now:** `installua check` passes. LuaLS reports `undefined-global` for
+`interval` in the `onClick` (and for `random` inside its own initialiser,
+which Lua does not yet see either). PimpBot hits this in
+`pages/avs-settings/page.lua`: `settingsRandom`'s `onClick` reads
+`settingsInterval`, declared below it.
+
+**Expected:** open. Two controls that refer to each other are a real need, so
+declaring in order is not enough on its own. Options:
+- Lua's own answer: a forward declaration, `local interval` with no value,
+  then `interval = number { … }` below. Today a top-level `local` with no
+  value is `not-yet-implemented` ("has nowhere to live"), so this means
+  accepting it as a declaration whose one later assignment is its value.
+  Then read-before-declaration becomes an error, as in Lua.
+- Keep hoisting for `local`s and say in the docs that LuaLS reports it.
+- A control's callback could be set after both exist
+  (`random.onClick = function() … end`), which reads in Lua order without a
+  forward declaration. I have not checked whether this compiles today.
+
+`func`s stay hoisted either way: their name is a string, so Lua has nothing to
+say about their order.
+
+**Verify:** whichever option: the repro in its fixed form passes both
+`installua check` and `lua-language-server --check`, a `tests/diagnostics.rs`
+case for a read above the declaration, and PimpBot's `page.lua` migrated.
 
 ## Later: random programs
 

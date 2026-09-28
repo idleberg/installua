@@ -134,9 +134,11 @@ installer { colors.settings }
 ```
 
 The returned table exists only at build time, and holds only names the file
-declares at its top level. Two files may not declare the same top-level
-`local`, even though each is private to its file: the files are still merged
-into one program, and the name would be declared twice.
+declares at its top level. Two files may each declare a top-level `local` of
+the same name, and each reads its own. The files are merged into one script,
+though, so every file but the first spells its copy with a suffix in the
+`.nsi` (`!define COLOR_1`, `SEC_core_2`). A `raw` string in that file that
+spells the unsuffixed NSIS name reads the other file's.
 
 ## glob
 

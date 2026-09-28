@@ -197,25 +197,46 @@ fn a_block_declared_twice_across_files_is_still_a_duplicate() {
 /// A `<const>` is a `!define`, so a second one was `makensis`'s error on the
 /// output — and across files the included value was silently lost first.
 ///
-/// Across files Lua would accept it, since each `local` is its own file's. The
-/// splice keeps one namespace, so this is refused rather than renamed; see
-/// `src/frontend/scope.rs`.
 #[test]
 fn a_const_declared_twice_is_a_duplicate() {
-    let program =
-        "installer { page.instFiles {}, section(\"s\", function() detailPrint(COLOR) end) }";
     fails(
         &format!(
-            "{ATTRIBUTES}local COLOR <const> = \"red\"\nlocal COLOR <const> = \"blue\"\n{program}"
+            "{ATTRIBUTES}local COLOR <const> = \"red\"\nlocal COLOR <const> = \"blue\"\n\
+             installer {{ page.instFiles {{}}, section(\"s\", function() detailPrint(COLOR) end) }}"
         ),
         &[],
         Code::DuplicateBlock,
     );
-    fails(
-        &format!("{ATTRIBUTES}include \"more.lua\"\nlocal COLOR <const> = \"blue\"\n{program}"),
-        &[("more.lua", "local COLOR <const> = \"red\"")],
-        Code::DuplicateBlock,
+}
+
+/// Across files it is two names, as in Lua: each file reads its own. The second
+/// file's is renamed `COLOR_1` on the way to the one namespace, so the output is
+/// that of the program written with the renamed spelling by hand — and the
+/// export carries the renamed one too.
+#[test]
+fn a_local_of_one_name_in_two_files_is_two_locals() {
+    let more = "local COLOR <const> = \"red\"\n\
+                local paint = section(\"more\", function() detailPrint(COLOR) end)\n\
+                return { paint = paint }";
+    let split = build(
+        &format!(
+            "{ATTRIBUTES}local more = include \"more.lua\"\nlocal COLOR <const> = \"blue\"\n\
+             installer {{ page.instFiles {{}}, more.paint, \
+             section(\"s\", function() detailPrint(COLOR) end) }}"
+        ),
+        &[("more.lua", more)],
     );
+    let whole = build(
+        &format!(
+            "{ATTRIBUTES}local COLOR_1 <const> = \"red\"\n\
+             local paint = section(\"more\", function() detailPrint(COLOR_1) end)\n\
+             local COLOR <const> = \"blue\"\n\
+             installer {{ page.instFiles {{}}, paint, \
+             section(\"s\", function() detailPrint(COLOR) end) }}"
+        ),
+        &[],
+    );
+    assert_eq!(split, whole);
 }
 
 /// The other half of the same reason: a note that points at a *second* place

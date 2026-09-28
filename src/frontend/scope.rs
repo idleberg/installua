@@ -10,12 +10,19 @@
 //!
 //! The splice stays, and so does its one namespace. `m.name` is rewritten here
 //! to the bare name it exports, so `resolve` and `lower` go on seeing the tree
-//! they always saw and neither learns what a file is. The price is that two
-//! files still cannot each declare a top-level `local` of the same name — that
-//! is `duplicate-block`, a program Lua would accept and this refuses. Refusing
-//! a valid program with a diagnostic is the lesser fault; accepting one Lua
-//! would reject was the bug. Lifting it means keying resolution by file, and
-//! a `!define` name per file.
+//! they always saw and neither learns what a file is. Two files that each
+//! declare a top-level `local` of one name would meet in that namespace, so the
+//! pass renames all but the first: `core` in file 2 becomes `core_2`, at its
+//! declaration, at every read in its file and in what that file exports. The
+//! first is the lowest file id, so the root keeps its names, and a name no
+//! other file declares is never touched — a program without a collision emits
+//! exactly what it did before this existed.
+//!
+//! This is the namespacing [`include`](super::include) rejects for a `func`,
+//! and the difference is Lua's: a `func` is named by a string and has no scope
+//! to be renamed within, a `local` has one. The rename still reaches the
+//! `.nsi` (`!define core_2`, `SEC_core_2`), so a `raw` string in the second
+//! file that spells the NSIS name reads the first file's.
 //!
 //! Only top-level `local`s are file-scoped. A `func` is named by a string and a
 //! bare assignment is a global, so both are program-wide in Lua as well.
@@ -41,7 +48,9 @@ pub(crate) fn check(block: &mut Block, modules: &Modules, diags: &mut Diagnostic
         })
         .collect();
 
-    let mut exports: BTreeMap<u32, HashMap<&str, &Name>> = BTreeMap::new();
+    let renames = renames(&top);
+
+    let mut exports: BTreeMap<u32, HashMap<&str, String>> = BTreeMap::new();
     for (file, entries) in &modules.exports {
         let table = exports.entry(*file).or_default();
         for (key, value) in entries {
@@ -56,7 +65,10 @@ pub(crate) fn check(block: &mut Block, modules: &Modules, diags: &mut Diagnostic
                 );
                 continue;
             }
-            table.insert(key.text.as_str(), value);
+            let spelling = renames
+                .get(&(*file, value.text.as_str()))
+                .unwrap_or(&value.text);
+            table.insert(key.text.as_str(), spelling.clone());
         }
     }
 
@@ -64,6 +76,7 @@ pub(crate) fn check(block: &mut Block, modules: &Modules, diags: &mut Diagnostic
         top: &top,
         aliases: &aliases,
         exports: &exports,
+        renames: &renames,
         scopes: Vec::new(),
         diags,
     };
@@ -98,6 +111,25 @@ fn declared(block: &Block, top: &mut HashMap<String, Vec<Span>>) {
     }
 }
 
+/// The new spelling of every top-level `local` some lower-numbered file
+/// declares too, keyed by the file that declares it and its own spelling.
+fn renames(top: &HashMap<String, Vec<Span>>) -> HashMap<(u32, &str), String> {
+    let mut renames = HashMap::new();
+    for (name, spans) in top {
+        let mut files: Vec<u32> = spans.iter().map(|span| span.file).collect();
+        files.sort_unstable();
+        files.dedup();
+        for file in files.into_iter().skip(1) {
+            let mut spelling = format!("{name}_{file}");
+            while top.contains_key(&spelling) {
+                spelling.push('_');
+            }
+            renames.insert((file, name.as_str()), spelling);
+        }
+    }
+    renames
+}
+
 fn declares(top: &HashMap<String, Vec<Span>>, name: &str, file: u32) -> bool {
     top.get(name)
         .is_some_and(|spans| spans.iter().any(|span| span.file == file))
@@ -106,7 +138,8 @@ fn declares(top: &HashMap<String, Vec<Span>>, name: &str, file: u32) -> bool {
 struct Walk<'a> {
     top: &'a HashMap<String, Vec<Span>>,
     aliases: &'a HashMap<(u32, &'a str), u32>,
-    exports: &'a BTreeMap<u32, HashMap<&'a str, &'a Name>>,
+    exports: &'a BTreeMap<u32, HashMap<&'a str, String>>,
+    renames: &'a HashMap<(u32, &'a str), String>,
     /// Body scopes only. The top level is order-free, so it is `top` and not a
     /// scope that fills as the walk goes.
     scopes: Vec<HashSet<String>>,
@@ -128,8 +161,9 @@ impl Walk<'_> {
                 for value in values {
                     self.expr(value);
                 }
-                if let Some(scope) = self.scopes.last_mut() {
-                    scope.extend(names.iter().map(|name| name.text.clone()));
+                match self.scopes.last_mut() {
+                    Some(scope) => scope.extend(names.iter().map(|name| name.text.clone())),
+                    None => names.iter_mut().for_each(|name| self.rename(name)),
                 }
             }
             Stmt::Assign {
@@ -147,6 +181,13 @@ impl Walk<'_> {
                 ..
             } => {
                 self.expr(cond);
+                // A top-level branch is top level, as `declared` counts it.
+                if self.scopes.is_empty() {
+                    for stmt in then_block.iter_mut().chain(else_block.iter_mut().flatten()) {
+                        self.stmt(stmt);
+                    }
+                    return;
+                }
                 self.block(then_block, HashSet::new());
                 if let Some(block) = else_block {
                     self.block(block, HashSet::new());
@@ -203,7 +244,7 @@ impl Walk<'_> {
             {
                 Some(exported) => {
                     *expr = Expr::Name(Name {
-                        text: exported.text.clone(),
+                        text: exported.clone(),
                         span,
                     });
                 }
@@ -272,7 +313,13 @@ impl Walk<'_> {
             .copied()
     }
 
-    fn name(&mut self, name: &Name) {
+    fn rename(&self, name: &mut Name) {
+        if let Some(spelling) = self.renames.get(&(name.span.file, name.text.as_str())) {
+            name.text = spelling.clone();
+        }
+    }
+
+    fn name(&mut self, name: &mut Name) {
         if self.alias(name).is_some() {
             self.diags.push(
                 Diagnostic::error(
@@ -294,6 +341,7 @@ impl Walk<'_> {
             return;
         };
         if spans.iter().any(|span| span.file == name.span.file) {
+            self.rename(name);
             return;
         }
         self.diags.push(
