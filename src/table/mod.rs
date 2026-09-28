@@ -812,6 +812,7 @@ fn join() -> Vec<Instruction> {
                     Param {
                         shape: Shape {
                             req: shape.req || annotation.is_some_and(|a| a.required),
+                            open: shape.open || annotation.is_some_and(|a| a.open),
                             ..*shape
                         },
                         ty,

@@ -1354,9 +1354,8 @@ impl BodyLowerer<'_, '_> {
         // let the `hotkey` row's members be wrong for as long as they were — a
         // set the compiler never reads cannot be caught by compiling anything.
         //
-        // An empty list is `execShell`'s verb, which is `Kind::Enum` for its
-        // completions and has no members in the snapshot to close it with. And
-        // only a literal is checked: a register holds its text until install
+        // An open list is `execShell`'s verb, whose members are only the
+        // completions: any registered verb works. And only a literal is checked: a register holds its text until install
         // time, which is the same reason [`Self::fits`] stops at `Ty`.
         let closed = matches!(param.kind, table::Kind::Enum | table::Kind::Flags)
             && !param.open()

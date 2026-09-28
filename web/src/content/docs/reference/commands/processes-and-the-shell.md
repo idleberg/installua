@@ -12,6 +12,10 @@ description: "`exec`, shortcuts, DLLs, reboot."
 | `ExecShell`     | `execShell(verb, file[, { parameters, showMode, invokeIdList }])`      |
 | `ExecShellWait` | `execShellWait(verb, file[, { parameters, showMode, invokeIdList }])` |
 
+A `verb` is any the shell has registered for the file, not only the `open` and
+`print` that `makensis -CMDHELP` lists: `"runas"` starts it elevated, and `""`
+is the file's default verb.
+
 ```lua
 local code = execWait('"' .. INSTDIR .. '/setup-driver.exe" /S')
 if code ~= 0 then abort("driver setup failed") end

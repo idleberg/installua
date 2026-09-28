@@ -1348,6 +1348,32 @@ fn an_optional_position_is_reached_by_name_and_fills_the_ones_before_it() {
     );
 }
 
+/// `ExecShell`'s verb is any verb the shell has registered, not the two
+/// `-CMDHELP` lists: `runas` is how an installer asks for elevation, and `""` is
+/// the default verb.
+#[test]
+fn a_shell_verb_is_not_limited_to_open_and_print() {
+    let mut diags = Diagnostics::new();
+    let source = "attributes { outFile = \"a.exe\" }\n\
+                  installer { section(\"Core\", function()\n\
+                  execShell(\"runas\", EXEPATH)\n\
+                  execShell(\"\", \"https://example.invalid\")\n\
+                  end), }";
+    let out = installua::build(source, &mut diags)
+        .unwrap_or_else(|| panic!("{}", diags.render("<test>")));
+    assert_eq!(
+        out,
+        "Unicode true\n\
+         \n\
+         OutFile \"a.exe\"\n\
+         \n\
+         Section \"Core\"\n  \
+         ExecShell \"runas\" $EXEPATH\n  \
+         ExecShell \"\" \"https://example.invalid\"\n\
+         SectionEnd\n"
+    );
+}
+
 /// The other half of the options table: the flags, which were never positions.
 #[test]
 fn a_flag_is_reached_by_name_and_placed_by_the_table() {

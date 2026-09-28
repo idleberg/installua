@@ -52,6 +52,8 @@ pub struct Ann {
     pub field: Option<Field>,
     /// Required although `-CMDHELP` brackets it. See [`required`].
     pub required: bool,
+    /// Open although `-CMDHELP` lists members. See [`open`].
+    pub open: bool,
 }
 
 pub struct Row {
@@ -101,6 +103,7 @@ const fn ann(ty: Ty, kind: Kind) -> Ann {
         fill: None,
         field: None,
         required: false,
+        open: false,
     }
 }
 
@@ -112,6 +115,16 @@ const fn ann(ty: Ty, kind: Kind) -> Ann {
 const fn required(ty: Ty, kind: Kind) -> Ann {
     Ann {
         required: true,
+        ..ann(ty, kind)
+    }
+}
+
+/// A position whose `-CMDHELP` members are examples rather than the whole set.
+/// They stay, as the completions a stub offers, but a value outside them is
+/// not an error. `ExecShell`'s `verb=(open|print)` is the one: see its row.
+const fn open(ty: Ty, kind: Kind) -> Ann {
+    Ann {
+        open: true,
         ..ann(ty, kind)
     }
 }
@@ -869,12 +882,17 @@ pub const ROWS: &[Row] = &[
     // target — a path, a URL, or a registered document. Win32 takes `/` as a
     // separator, so `INSTDIR .. "/readme.txt"` still opens; a URL put through
     // that rewrite becomes `https:\\…` and does not.
+    //
+    // `verb` is [`open`] although `-CMDHELP` prints `verb=(open|print)`. That
+    // list understates it: NSIS hands the verb to `ShellExecuteEx`, so any
+    // registered verb works — `runas`, the common one, elevates — and `""` is
+    // the default verb. `ExecShellWait` prints no list to depart from.
     exposed(
         "ExecShell",
         "execShell",
         &[
             toggle("invokeIdList", "/INVOKEIDLIST"),
-            ann(Ty::Str, Kind::Enum),
+            open(Ty::Str, Kind::Enum),
             ann(Ty::Str, Kind::Value),
             filled(Ty::Str, Kind::Value, "parameters", "\"\""),
             opt(Ty::Str, Kind::Enum, "showMode"),

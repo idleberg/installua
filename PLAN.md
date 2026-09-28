@@ -111,36 +111,10 @@ so a dropped `func` is never lowered at all. Tested by
 Fell out of 5.3: an unreached `func` is not lowered, so its body is not
 type-checked. `newer` in `a_func_nothing_reaches_is_left_out` is the repro.
 
-### 5.5 `execShell` refuses the `runas` verb
+### 5.5 `execShell` refuses the `runas` verb — fixed
 
-```lua
-attributes { name = "b", outFile = "b.exe" }
-installer { page.instFiles {}, section("s", function() execShell("runas", EXEPATH) end) }
-```
-
-**Now:** `error[bad-field-value]: runas is not a verb`, with the note `the
-values are open, print`.
-
-**Cause:** the enum comes from `-CMDHELP`
-(`tables/cmdhelp-3.12.txt:62`, `verb=(open|print)`), which understates the
-real set. `ExecShell` passes the verb straight to `ShellExecuteEx`, so any
-registered verb works: `runas` (elevation, the common use), `edit`,
-`explore`, `find`, `openas`, `properties`, `printto`. The empty string means
-the default verb.
-
-**Fix:** in the `ExecShell` and `ExecShellWait` rows in
-`src/table/overlay.rs:872`, change `verb` from `Kind::Enum` to `Kind::Value`,
-or widen the enum to the documented Windows verbs. Put a comment beside it
-saying why this row departs from the `-CMDHELP` snapshot, the way the
-`GetDLLVersionLocal` row explains its own departure. Update the `stubs.rs`
-enum (`src/stubs.rs:1458`) and the docs entry in
-`reference/commands/processes-and-the-shell.md` to match.
-
-**Verify:**
-- The repro emits `ExecShell "runas" "$EXEPATH"` and builds.
-- A golden with `execShell("", url)` builds too.
-- `tests/census.rs` and `tests/overlay.rs` still pass. Expect the census to need
-  a note for the departure.
+The overlay can now mark a position `open`: its `-CMDHELP` members stay as
+completions, and any value passes. `ExecShell`'s verb is the one such position.
 
 ### 5.6 `sendMessage` cannot broadcast
 
