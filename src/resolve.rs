@@ -18,7 +18,7 @@
 //! `Var` and `!include` are hard errors when used early, and a mis-ordered
 //! `!define` is a *warning* that silently ships the wrong string.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::ast::*;
 use crate::builtins;
@@ -216,6 +216,15 @@ pub struct Resolved<'a> {
     /// Those names in source order, so that "never claimed" is reported where
     /// it was written rather than alphabetically.
     pub deferred_order: Vec<String>,
+    /// Top-level `local`s declared only in branches that were not taken.
+    ///
+    /// Everything optional in an installer is an entry in a block's list, and a
+    /// list cannot hold an `if`. So a block may list a name whose declaration the
+    /// build left out, and lowering drops that entry rather than reporting it:
+    /// `if LICENSE ~= "" then local license = page.license { … } end` followed
+    /// by `installer { license, … }`. A name declared nowhere is not in here, so
+    /// a misspelt entry is still an error.
+    pub untaken: BTreeSet<String>,
     pub functions: BTreeMap<String, Func<'a>>,
     /// In first-seen order, because `Var` declarations are emitted in it and
     /// the goldens are diffed.
@@ -555,6 +564,7 @@ fn consts<'a>(
 ) {
     let mut pending: Vec<Pending> = Vec::new();
     let mut items: Vec<Item> = program.block.iter().map(Item::unseen).collect();
+    let mut untaken = BTreeSet::new();
 
     loop {
         for item in &mut items {
@@ -570,7 +580,7 @@ fn consts<'a>(
 
         fold_pending(&mut pending, resolved, options, diags);
 
-        if !select(&mut items, resolved, diags) {
+        if !select(&mut items, resolved, &mut untaken, diags) {
             break;
         }
     }
@@ -590,6 +600,14 @@ fn consts<'a>(
             Item::Cond { .. } => None,
         })
         .collect();
+
+    // A name the taken program declares as well is that declaration, not a
+    // dropped one: it is listed, or reported, as any other.
+    let mut taken = BTreeSet::new();
+    for stmt in &resolved.block {
+        locals(std::slice::from_ref(*stmt), &mut taken);
+    }
+    resolved.untaken = untaken.difference(&taken).cloned().collect();
 
     // Source order, read off the selected top level rather than accumulated as
     // the rounds learned things: a `<const>` inside a build-time `if` is
@@ -685,7 +703,12 @@ impl<'a> Item<'a> {
 /// An `elseif` needs no case of its own: the frontend has already desugared it
 /// into a nested `If` in the else branch, so it arrives here as a `Cond` inside
 /// the block this one splices in, and the next round decides it.
-fn select(items: &mut Vec<Item>, resolved: &Resolved, diags: &mut Diagnostics) -> bool {
+fn select(
+    items: &mut Vec<Item>,
+    resolved: &Resolved,
+    untaken: &mut BTreeSet<String>,
+    diags: &mut Diagnostics,
+) -> bool {
     let mut taken = false;
     let mut out: Vec<Item> = Vec::with_capacity(items.len());
     for item in std::mem::take(items) {
@@ -713,14 +736,38 @@ fn select(items: &mut Vec<Item>, resolved: &Resolved, diags: &mut Diagnostics) -
             not_bool(cond, &value, diags);
             continue;
         };
-        let block = match value {
-            true => Some(then_block),
-            false => else_block,
+        let (block, lost) = match value {
+            true => (Some(then_block), else_block),
+            false => (else_block, Some(then_block)),
         };
+        if let Some(lost) = lost {
+            locals(lost, untaken);
+        }
         out.extend(block.into_iter().flatten().map(Item::unseen));
     }
     *items = out;
     taken
+}
+
+/// Every `local` a block declares at its own level, including inside the `if`s
+/// in it: the ones a branch not taken would have declared.
+fn locals(block: &[Stmt], into: &mut BTreeSet<String>) {
+    for stmt in block {
+        match stmt {
+            Stmt::Local { names, .. } => into.extend(names.iter().map(|n| n.text.clone())),
+            Stmt::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                locals(then_block, into);
+                if let Some(else_block) = else_block {
+                    locals(else_block, into);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// A build-time `if` on something that is not a `bool`. The wording is the

@@ -122,45 +122,11 @@ completions, and any value passes. `ExecShell`'s verb is the one such position.
 `HWND_*`, as a handle; `sendMessage(5, …)` is still an error. Covered by
 `send_message_broadcasts_through_hwnd_broadcast` in `tests/overlay.rs`.
 
-### 5.7 An entry cannot be left out of a block's list at build time
+### 5.7 An entry cannot be left out of a block's list at build time — fixed
 
-Everything optional in an installer is an entry in `installer {}`'s list: a
-license page only when there is a license, an APE section only when that APE
-ships. There is one `installer {}` (`duplicate-block`), a list cannot contain
-an `if`, and a name declared only in the branch not taken does not exist:
-
-```lua
-local LICENSE <const> = param("LICENSE", "")
-attributes { name = "b", outFile = "b.exe" }
-if LICENSE ~= "" then
-	local licensePage = page.license { file = LICENSE }
-end
-installer { licensePage, page.instFiles {}, section("s", function() end) }
-```
-
-**Now:** `error[unknown-field]: licensePage is not a section or a group`.
-PimpBot declares a stand-in in the `else` branch:
-- a hidden empty `section { "", … }` for each of 21 APEs, a fonts section and a
-  settings section
-- a `page.custom { pre = abort }` for the license page
-
-Those stand-ins still reach the `.nsi`.
-
-**Proposed fix:** in a block's list, a bare name that is declared *only* in
-branches that were not taken is dropped, not reported. A name declared nowhere
-is still `undefined-name`, so misspellings are still caught. The resolver
-already knows the untaken branches (`Resolved`, "with every build-time `if`
-replaced by the branch it took"). Keep the list of names untaken branches
-declared, and consult it where the `Site::Block` diagnostic is raised
-(`src/lower/mod.rs:491`). The same rule should apply inside `group(…)`'s list
-and a page's `controls`.
-
-**Verify:**
-- The repro builds with and without `-D LICENSE=…`, and without it the `.nsi`
-  has no license page.
-- A golden where a `group` lists one kept and one dropped section.
-- `tests/branches.rs` keeps `undefined-name` for a misspelt entry.
-- Update the "Build-time if" docs in `reference/commands/program-structure.md`.
+The resolver keeps `Resolved::untaken`, the `local`s declared only in branches
+not taken, and the claim pass drops a list entry naming one. A misspelt entry is
+still `unknown-field`. Tests in `tests/branches.rs`, `a_list_may_name_what_was_left_out`.
 
 ### 5.8 `c and x or y` does not fold to a value — fixed
 

@@ -281,6 +281,22 @@ not declared, so a `-D` for it is the same `unknown-param` error a misspelling
 gets — which is the correct answer, since in that configuration the program really
 does not have it.
 
+A block's list cannot hold an `if`, so to leave out a page or a section, declare
+it in the branch and list it as usual. When the branch is not taken, the entry is
+dropped rather than reported, and the same goes for a `group`'s sections and a
+page's `controls`. A name declared in no branch at all is still an error, so a
+misspelling is caught either way:
+
+```lua
+local LICENSE <const> = param("LICENSE", "")
+
+if LICENSE ~= "" then
+	local licensePage = page.license { file = LICENSE }
+end
+
+installer { licensePage, page.instFiles {}, section("Core", function() end) }
+```
+
 **Nothing of the conditional reaches the output.** It is not a directive the
 compiler emits and then orders against everything else — it is a branch the
 compiler takes, before a single line is bucketed. The emitted script is

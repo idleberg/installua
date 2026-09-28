@@ -344,3 +344,70 @@ mod the_condition_folds {
         assert!(output.contains("Section \"Core64\""), "{output}");
     }
 }
+
+/// A block's list cannot hold an `if`, so what the build leaves out is an entry
+/// naming a declaration the branch not taken would have made. That entry lowers
+/// to nothing.
+mod a_list_may_name_what_was_left_out {
+    use super::*;
+
+    const LICENSED: &str = "local LICENSE <const> = param(\"LICENSE\", \"\")\n\
+                            attributes { name = \"b\", outFile = \"b.exe\" }\n\
+                            if LICENSE ~= \"\" then\n\
+                              local licensePage = page.license { file = LICENSE }\n\
+                            end\n\
+                            installer { licensePage, page.instFiles {}, section(\"s\", function() end) }\n";
+
+    #[test]
+    fn a_page_the_build_left_out() {
+        assert_eq!(
+            build(LICENSED, &[]),
+            "Unicode true\n\n!define LICENSE \"\"\n\n!include \"MUI2.nsh\"\n\n\
+             Name \"b\"\nOutFile \"b.exe\"\n\n!insertmacro MUI_PAGE_INSTFILES\n\n\
+             !insertmacro MUI_LANGUAGE \"English\"\n\nSection \"s\"\nSectionEnd\n"
+        );
+    }
+
+    #[test]
+    fn the_same_page_when_the_build_keeps_it() {
+        assert_eq!(
+            build(LICENSED, &[("LICENSE", "l.txt")]),
+            "Unicode true\n\n!define LICENSE \"l.txt\"\n\n!include \"MUI2.nsh\"\n\n\
+             Name \"b\"\nOutFile \"b.exe\"\n\n!insertmacro MUI_PAGE_LICENSE \"${LICENSE}\"\n\
+             !insertmacro MUI_PAGE_INSTFILES\n\n\
+             !insertmacro MUI_LANGUAGE \"English\"\n\nSection \"s\"\nSectionEnd\n"
+        );
+    }
+
+    /// A group's sections are the block's list one level down.
+    #[test]
+    fn a_group_keeps_one_and_drops_one() {
+        let source = "local EXTRAS <const> = param(\"EXTRAS\", false)\n\
+                      attributes { name = \"b\", outFile = \"b.exe\" }\n\
+                      local core = section(\"Core\", function() end)\n\
+                      if EXTRAS then\n\
+                        local extra = section(\"Extra\", function() end)\n\
+                      end\n\
+                      installer { group(\"All\", { core, extra }) }\n";
+        assert_eq!(
+            build(source, &[]),
+            "Unicode true\n\n!define EXTRAS 0\n\nName \"b\"\nOutFile \"b.exe\"\n\n\
+             SectionGroup \"All\"\n  Section \"Core\" SEC_core\n  SectionEnd\nSectionGroupEnd\n"
+        );
+    }
+
+    /// Declared nowhere is not left out, so a misspelling is still reported.
+    #[test]
+    fn a_misspelt_entry_is_still_an_error() {
+        let diags = errors(
+            "local EXTRAS <const> = param(\"EXTRAS\", false)\n\
+             attributes { name = \"b\", outFile = \"b.exe\" }\n\
+             if EXTRAS then\n\
+               local extra = section(\"Extra\", function() end)\n\
+             end\n\
+             installer { extar }\n",
+        );
+        let messages: Vec<_> = diags.iter().map(|d| d.message.clone()).collect();
+        assert_eq!(messages, ["`extar` is not a section or a group"]);
+    }
+}

@@ -5460,6 +5460,11 @@ impl<'p> Lowerer<'_, 'p> {
             .get(&name.text)
             .map(|d| (d.kind, d.value))
         else {
+            // Declared only in a branch the build did not take: the entry is
+            // what that branch left out, and it lowers to nothing.
+            if self.resolved.untaken.contains(&name.text) {
+                return;
+            }
             self.diags.push(
                 Diagnostic::error(
                     Code::UnknownField,
