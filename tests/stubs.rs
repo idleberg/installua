@@ -852,3 +852,48 @@ mod merge {
         assert_eq!(merge_extensions("[]"), Merge::Unrecognised);
     }
 }
+
+/// The PLAN 5.12 repro: a `func` in `lib/`, included from `packages/a/`, is in
+/// `project.lua` under its own path — whether the workspace lists the program
+/// or there is no `installua.toml` to read.
+#[test]
+fn a_func_below_the_root_reaches_the_project_meta() {
+    let root = std::env::temp_dir().join(format!("installua-stubs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for dir in ["lib", "packages/a", ".installua/meta"] {
+        std::fs::create_dir_all(root.join(dir)).unwrap();
+    }
+    let write = |path: &str, text: &str| std::fs::write(root.join(path), text).unwrap();
+    write("lib/common.lua", "func(\"runWinamp\", function() end)\n");
+    write(
+        "packages/a/install.lua",
+        "include \"../../lib/common.lua\"\n",
+    );
+    // Generated stubs are sources to nothing, and must not be read as one.
+    write(
+        ".installua/meta/project.lua",
+        "func(\"stale\", function() end)\n",
+    );
+    // A Wine prefix's `dosdevices/z:` is `/`: a walk that follows it never ends.
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&root, root.join("lib/loop")).unwrap();
+
+    let names = |sources: &[(String, String)]| -> Vec<String> {
+        sources.iter().map(|(name, _)| name.clone()).collect()
+    };
+    let expected = "-- lib/common.lua\nfunction runWinamp() end\n\n";
+
+    let walked = installua::project::sources(&root);
+    assert_eq!(names(&walked), ["lib/common.lua", "packages/a/install.lua"]);
+    assert!(stubs::project_meta(&walked).ends_with(expected));
+
+    write(
+        "installua.toml",
+        "[[project]]\nentry = \"packages/a/install.lua\"\n",
+    );
+    let listed = installua::project::sources(&root);
+    assert_eq!(names(&listed), ["lib/common.lua", "packages/a/install.lua"]);
+    assert!(stubs::project_meta(&listed).ends_with(expected));
+
+    let _ = std::fs::remove_dir_all(&root);
+}

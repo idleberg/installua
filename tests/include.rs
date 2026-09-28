@@ -194,6 +194,26 @@ fn a_block_declared_twice_across_files_is_still_a_duplicate() {
     );
 }
 
+/// A `<const>` is a `!define`, so a second one was `makensis`'s error on the
+/// output — and across files the included value was silently lost first.
+#[test]
+fn a_const_declared_twice_is_a_duplicate() {
+    let program =
+        "installer { page.instFiles {}, section(\"s\", function() detailPrint(COLOR) end) }";
+    fails(
+        &format!(
+            "{ATTRIBUTES}local COLOR <const> = \"red\"\nlocal COLOR <const> = \"blue\"\n{program}"
+        ),
+        &[],
+        Code::DuplicateBlock,
+    );
+    fails(
+        &format!("{ATTRIBUTES}include \"more.lua\"\nlocal COLOR <const> = \"blue\"\n{program}"),
+        &[("more.lua", "local COLOR <const> = \"red\"")],
+        Code::DuplicateBlock,
+    );
+}
+
 /// The other half of the same reason: a note that points at a *second* place
 /// has to name that place's file too.
 ///

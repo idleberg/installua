@@ -857,6 +857,9 @@ fn declare<'a>(
     }
 
     for (index, name) in names.iter().enumerate() {
+        if const_twice(resolved, pending, name, diags) {
+            continue;
+        }
         match values.get(index) {
             Some(value) => match initialiser(value, diags) {
                 Initialiser::Value(value) => pending.push(Pending {
@@ -937,6 +940,40 @@ fn declare<'a>(
             ),
         }
     }
+}
+
+/// Whether this `<const>` name is already bound, reported if it is.
+///
+/// Lua would let a second `local` shadow the first, but a `<const>` is a
+/// `!define`, and `makensis` refuses a name defined twice — so letting this
+/// through turns a line the author can fix into a build failure on the output.
+/// Checked against `pending` as well as `consts`, because the first may not
+/// have folded yet: folding is a fixpoint, not source order.
+fn const_twice(
+    resolved: &Resolved,
+    pending: &[Pending],
+    name: &Name,
+    diags: &mut Diagnostics,
+) -> bool {
+    let previous = resolved.consts.get(&name.text).map(|c| c.span).or_else(|| {
+        pending
+            .iter()
+            .find(|p| p.name.text == name.text)
+            .map(|p| p.name.span)
+    });
+    let Some(previous) = previous else {
+        return false;
+    };
+    diags.push(
+        Diagnostic::error(
+            Code::DuplicateBlock,
+            name.span,
+            format!("`{}` is declared more than once", name.text),
+        )
+        .note_at("the first one is at", previous)
+        .note("a `<const>` is a `!define`, and NSIS defines a name once"),
+    );
+    true
 }
 
 /// Whether this `-D` name is already a parameter, reported if it is.

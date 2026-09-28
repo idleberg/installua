@@ -201,6 +201,91 @@ pub fn declaration_dirs(dir: &Path) -> (Vec<PathBuf>, Vec<Problem>) {
     (dirs, problems)
 }
 
+/// Every source `installua stubs` reads from `dir`, as `(name, text)` with
+/// `name` slash-separated and relative to the directory it was found from.
+///
+/// With an `installua.toml`, that is each project's entry and everything it
+/// `include`s, found by the same walk a compile does — so a file is listed
+/// exactly when some build reads it, wherever in the tree it sits. Without one
+/// there are no entries to start from, and every `.lua` under `dir` is the
+/// nearest guess; hidden directories are skipped, `.installua` among them,
+/// since the stubs themselves live there, and so are symlinked ones.
+///
+/// A file that cannot be read, and an `include` that names nothing, are left
+/// out rather than reported: `installua check` is where a user hears about
+/// those, and stubs that refused to generate would fail the editor over one
+/// file that is mid-edit.
+pub fn sources(dir: &Path) -> Vec<(String, String)> {
+    let (workspace, _) = find(dir);
+    let (base, names) = match workspace.filter(|workspace| !workspace.projects.is_empty()) {
+        Some(workspace) => {
+            let names = workspace
+                .projects
+                .iter()
+                .flat_map(|project| included(&workspace, project))
+                .collect();
+            (workspace.dir, names)
+        }
+        None => {
+            let mut names = std::collections::BTreeSet::new();
+            walk(dir, "", &mut names);
+            (dir.to_path_buf(), names)
+        }
+    };
+    names
+        .into_iter()
+        .filter_map(|name: String| {
+            let text = std::fs::read_to_string(under(&base, &name)).ok()?;
+            Some((name, text))
+        })
+        .collect::<std::collections::BTreeMap<_, _>>()
+        .into_iter()
+        .collect()
+}
+
+/// `project`'s entry and every file it includes, relative to the workspace.
+///
+/// The loader's file table is the list: it keys each file relative to the
+/// entry's directory, and joining that directory back on makes the key
+/// relative to the workspace instead.
+fn included(workspace: &Workspace, project: &Project) -> Vec<String> {
+    let path = workspace.entry(project);
+    let Ok(source) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let mut diags = crate::diag::Diagnostics::new();
+    crate::frontend::include::load(&source, &crate::Options::for_file(&path), &mut diags);
+    let dir = Path::new(&project.entry)
+        .parent()
+        .map(|dir| dir.to_string_lossy().to_string())
+        .unwrap_or_default();
+    (0..)
+        .map_while(|file| diags.files().name(file))
+        .map(|key| crate::frontend::include::normalize(&format!("{dir}/{key}")))
+        .collect()
+}
+
+/// Every `.lua` under `dir`, keyed by its path below the walk's start.
+fn walk(dir: &Path, prefix: &str, names: &mut std::collections::BTreeSet<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let path = entry.path();
+        let key = format!("{prefix}{name}");
+        // Not through a symlinked directory: a Wine prefix's `dosdevices/z:`
+        // is `/`, and following it walks the whole disk.
+        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            if !name.starts_with('.') {
+                walk(&path, &format!("{key}/"), names);
+            }
+        } else if path.extension().is_some_and(|ext| ext == "lua") {
+            names.insert(key);
+        }
+    }
+}
+
 /// `rest` under `dir`, without the `./` a join onto `.` or `` would put in
 /// front of every path the CLI prints.
 fn under(dir: &Path, rest: &str) -> PathBuf {

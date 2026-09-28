@@ -941,33 +941,9 @@ fn stubs(root: &Path) -> Stop {
         return Err(ExitCode::from(2));
     }
 
-    let mut sources: Vec<(String, String)> = Vec::new();
-    match std::fs::read_dir(root) {
-        Ok(entries) => {
-            let mut paths: Vec<PathBuf> = entries
-                .flatten()
-                .map(|entry| entry.path())
-                .filter(|path| path.extension().is_some_and(|ext| ext == "lua"))
-                .collect();
-            paths.sort();
-            for path in paths {
-                if let Ok(source) = std::fs::read_to_string(&path) {
-                    // The bare file name: the generated comment is read beside
-                    // the project it describes, and an absolute path there is
-                    // one more thing that changes when the checkout moves.
-                    let name = path
-                        .file_name()
-                        .map(|name| name.to_string_lossy().to_string())
-                        .unwrap_or_else(|| path.display().to_string());
-                    sources.push((name, source));
-                }
-            }
-        }
-        Err(error) => {
-            log::error(format!("cannot read {}: {error}", root.display()));
-            return Err(ExitCode::from(2));
-        }
-    }
+    // Every file a build reads, wherever it sits: a `func` in `lib/` that the
+    // stubs never saw is an `undefined-global` in the file that calls it.
+    let sources = installua::project::sources(root);
 
     // The project's own declarations, so a third-party plugin is typed in the
     // editor by the same file that makes it compile. A malformed one stops the

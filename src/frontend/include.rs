@@ -302,7 +302,7 @@ fn join(dir: &str, path: &str) -> String {
 /// file to exist, which is exactly the case this table has to name when it does
 /// not — and it resolves symlinks, so two spellings of one path would key
 /// differently depending on how the project was checked out.
-fn normalize(path: &str) -> String {
+pub(crate) fn normalize(path: &str) -> String {
     let path = path.replace('\\', "/");
     let mut parts: Vec<&str> = Vec::new();
     for part in path.split('/') {

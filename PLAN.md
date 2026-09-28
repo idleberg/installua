@@ -411,38 +411,10 @@ If implementing:
 - Implemented: a golden per function and a Tier-3 build.
 - Removed: `tests/docs.rs` passes and nothing in `web/` mentions `BUILD.`.
 
-### 5.12 `installua stubs` misses every source outside the project root
+### 5.12 `installua stubs` misses every source outside the project root — fixed
 
-`installua stubs` builds `.installua/meta/project.lua` from only the `*.lua`
-files sitting directly in the root (`read_dir(root)` in `fn stubs`,
-`src/main.rs:944`). The directory walk doesn't recurse, and `installua.toml`'s
-programs and their `include`s are never read. PimpBot keeps everything under
-`packages/`, `lib/` and `pages/`, so its `project.lua` is only the header.
-
-```text
-lib/common.lua       func("runWinamp", function() end)
-packages/a/install.lua
-                     include "../../lib/common.lua"
-                     installer { page.instFiles {}, section("s", function() runWinamp() end) }
-```
-
-**Now:** `project.lua` declares nothing, and lua-language-server reports every
-`func` as `undefined-global` wherever it is called, even in the file that
-declares it. `func("name", …)` only names the function in a string, and
-`function name() end` is `error[function-statement]`, so the generated stubs
-are the only way LuaLS learns these names.
-
-**Fix:** collect sources from the programs `installua.toml` lists plus
-everything they `include`, reusing the include resolution `check` already does.
-Without an `installua.toml`, walk the root recursively and skip `.installua/`
-and hidden directories.
-
-**Verify:**
-- For the repro, `project.lua` declares `runWinamp` with a `-- lib/common.lua`
-  comment, and `lua-language-server --check` reports no `undefined-global` for it.
-- A test for `project_meta` over a nested source list.
-- Regenerate PimpBot's stubs and confirm its `func` names no longer show up as
-  undefined.
+`src/project.rs` collects the sources: `installua.toml`'s programs plus their
+`include`s, or a recursive walk without one. Tested in `tests/stubs.rs`.
 
 ### 5.13 A declaration inside a build-time `if` is invisible to lua-language-server
 
@@ -480,6 +452,73 @@ No form of the program satisfies both tools: the Lua-scoped
 - After §5.8, the `and`/`or` form of the repro passes both `installua check`
   and `lua-language-server --check`.
 - `tests/docs.rs` passes with the new paragraph.
+
+### 5.14 A top-level `local` leaks out of the file that declares it
+
+`include` splices a file into the one that names it, so a top-level `local` in
+`lib/common.lua` is in scope in every file that includes it. Lua scopes a
+`local` to its chunk, and so does LuaLS:
+
+```text
+lib/common.lua       local COLOR_VALID <const> = "D8EABD"
+packages/a/install.lua
+                     include "../../lib/common.lua"
+                     installer { page.instFiles {}, section("s", function() detailPrint(COLOR_VALID) end) }
+```
+
+**Now:** `installua check` passes, and LuaLS reports `undefined-global` for
+`COLOR_VALID` in `install.lua`, plus `unused-local` in `common.lua` when that
+file never uses the name. The same happens to a page, section or control bound
+with `local` in one file and listed in another. PimpBot has 7 such names:
+`COLOR_VALID`, `COLOR_INVALID`, `HEADER_BACKGROUND`, `HEADER_TEXT`,
+`apePlugins`, `avsSettingsPage` and `fileFunc`.
+
+**Expected:** a top-level `local` is private to its file. A file shares names
+the way a Lua module does, by returning a table, and the includer binds it:
+
+```lua
+-- lib/common.lua
+local COLOR_VALID <const> = "D8EABD"
+return { COLOR_VALID = COLOR_VALID }
+
+-- packages/a/install.lua
+local common = include "../../lib/common.lua"
+detailPrint(common.COLOR_VALID)
+```
+
+The table never exists at run time. It is a build-time namespace, the same
+kind of binding `local fileFunc = import "FileFunc"` already makes. Paths stay
+relative to the including file. `func`s, globals and `param` names stay
+program-wide: `func("name", …)` names its function in a string, and a bare
+assignment is a Lua global either way.
+
+**Where:**
+- `src/frontend/include.rs`: accept `local m = include "…"` and a top-level
+  `return { name = name, … }` in an included file. Rewrite the module doc,
+  which rejects this shape because "encapsulation needs values"; `import`
+  namespaces already show it doesn't.
+- `src/resolve.rs`: key consts, namespaces and deferred declarations by
+  (file, name). `Span` already carries the file. An included file's `return`
+  becomes a namespace in the including file.
+- `src/lower/`: every name lookup takes the file of the span it reads from.
+- `!define` names: two files may now declare the same const, so the emitted
+  name has to stay unique.
+- Docs: `reference/commands/program-structure.md` (`!include`) and
+  `concepts/lua-shaped-not-lua.md`.
+
+**Verify:**
+- The repro fails with a scope error until it uses `common.COLOR_VALID`, then
+  passes `installua check` and `lua-language-server --check`.
+- `tests/golden/include.lua` rewritten to the returned-table form.
+- Two files declaring the same `local X <const>` both compile, and each reads
+  its own value.
+- Migrate PimpBot's 8 `include` lines.
+
+### 5.15 A duplicate `local … <const>` passes `check` and fails the build — fixed
+
+`const_twice` in `src/resolve.rs` reports the second declaration as
+`duplicate-block`, naming the first, within one file or across `include`s.
+Tested in `tests/include.rs`. After §5.14 it has to become per file.
 
 ## Later: random programs
 
