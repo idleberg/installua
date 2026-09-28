@@ -1998,6 +1998,63 @@ impl BodyLowerer<'_, '_> {
         }
     }
 
+    /// How many `.s` a `System.call` signature holds, counted in the pieces of
+    /// it that fold.
+    ///
+    /// Passing a runtime value is the ordinary use of `System::Call`, and the
+    /// count does not need the whole string — only its shape. So a runtime
+    /// piece is accepted where it can only be a value: after a type and its
+    /// space, and before the `,` or `)` that ends the argument. Anywhere else
+    /// it could be carrying a `.s` of its own, or completing one split across
+    /// it (`"t ." .. x .. "s"`), and the count would be wrong without a word.
+    /// `Err` is the span to blame.
+    fn signature_outputs(&self, signature: &Expr) -> Result<usize, Span> {
+        fn pieces<'e>(expr: &'e Expr, into: &mut Vec<&'e Expr>) {
+            match expr {
+                Expr::Binary {
+                    op: BinOp::Concat,
+                    lhs,
+                    rhs,
+                    ..
+                } => {
+                    pieces(lhs, into);
+                    pieces(rhs, into);
+                }
+                _ => into.push(expr),
+            }
+        }
+        if let Some(value) = self.constant(signature) {
+            return Ok(value.text().matches(".s").count());
+        }
+        let mut all = Vec::new();
+        pieces(signature, &mut all);
+
+        // The folded text between runtime pieces, with the span of the runtime
+        // piece that ended each run.
+        let mut runs = vec![(String::new(), None)];
+        for piece in all {
+            match self.constant(piece) {
+                Some(value) => runs.last_mut().unwrap().0.push_str(&value.text()),
+                None => {
+                    runs.last_mut().unwrap().1 = Some(piece.span());
+                    runs.push((String::new(), None));
+                }
+            }
+        }
+        for pair in runs.windows(2) {
+            let ((before, Some(at)), (after, _)) = (&pair[0], &pair[1]) else {
+                continue;
+            };
+            if !before.ends_with(' ') || !after.starts_with([',', ')']) {
+                return Err(*at);
+            }
+        }
+        Ok(runs
+            .iter()
+            .map(|(text, _)| text.matches(".s").count())
+            .sum())
+    }
+
     /// `nsExec.execToStack(cmd)` — the first of the three opaque callees.
     ///
     /// A plugin takes its arguments **inline** and leaves its outputs on the
@@ -2084,22 +2141,28 @@ impl BodyLowerer<'_, '_> {
         // one value. That is as far as the signature is read — narrowing the
         // clobber set from the rest of it is a later optimisation.
         let outputs: Vec<Ty> = if entry.nsis == "System::Call" {
-            let signature = self.constant(&args[0]).map(|value| value.text());
-            let Some(signature) = signature else {
-                self.diags.push(
-                    Diagnostic::error(
-                        Code::BadFieldValue,
-                        span,
-                        "`System.call` needs a build-time signature",
-                    )
-                    .note(
-                        "the number of values it leaves on the stack is the number of `.s` in the \
-                         signature, and a runtime string cannot be counted",
-                    ),
-                );
-                return None;
+            let count = match self.signature_outputs(&args[0]) {
+                Ok(count) => count,
+                Err(at) => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::BadFieldValue,
+                            at,
+                            "`System.call` needs a build-time signature",
+                        )
+                        .note(
+                            "the number of values it leaves on the stack is the number of `.s` in \
+                             the signature, and a runtime string cannot be counted",
+                        )
+                        .note(
+                            "a runtime value can stand for one argument's value, as in \
+                             `\"i \" .. id .. \",\"` — between a type and the `,` or `)` after it",
+                        ),
+                    );
+                    return None;
+                }
             };
-            vec![Ty::Str; signature.matches(".s").count()]
+            vec![Ty::Str; count]
         } else {
             // A tagged method's tail is part of its Lua arity, not a second
             // shape: `local ok, why = accessControl.grantOnFile(…)` binds two

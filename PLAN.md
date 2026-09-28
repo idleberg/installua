@@ -136,35 +136,12 @@ only when it does not. A runtime `and`/`or` still wants `bool`s. Covered by
 `and_or_picks_a_value_at_build_time` in `tests/params.rs`, including Lua's
 `c and false or y` trap.
 
-### 5.9 `System.call` needs the whole signature at build time
+### 5.9 `System.call` needs the whole signature at build time — fixed
 
-```lua
-local system = plugin "System"
-attributes { name = "b", outFile = "b.exe" }
-installer { page.instFiles {}, section("s", function()
-	local id = "26"
-	local path = system.call("shell32::SHGetSpecialFolderPath(p 0, t .s, i " .. id .. ", i 0)")
-	detailPrint(path)
-end) }
-```
-
-**Now:** `error[bad-field-value]: System.call needs a build-time signature`
-(`src/lower/expr.rs:2091`). The output count is only needed from the parts of
-the signature that are known at build time, but the whole string is refused as
-soon as one argument is a runtime value. Passing a runtime value is the normal
-use of `System::Call`. PimpBot falls back to `raw` and a global.
-
-**Fix:** when the signature is a concatenation, count `.s` in its literal
-pieces and accept the call if every runtime piece sits in an argument's value
-position. A simpler alternative is an explicit count, `system.call(sig, {
-outputs = 1 })`, required whenever the signature does not fold. The explicit
-count is easier to get right and easier to document.
-
-**Verify:**
-- The repro emits `System::Call 'shell32::…(p 0, t .s, i $0, i 0)'` and a
-  single `Pop`.
-- A wholly runtime signature without `outputs` still gets today's error, with
-  a note pointing at `outputs`.
+`signature_outputs` in `src/lower/expr.rs` counts `.s` in the folded pieces
+and accepts a runtime piece only as an argument's value: after a space, before
+`,` or `)`. The explicit `outputs` count was not needed. Tests in
+`tests/declarations.rs`, `system_call`.
 
 ### 5.10 `glob`: no recursion, and its error names the wrong path
 

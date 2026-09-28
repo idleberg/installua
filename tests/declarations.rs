@@ -843,3 +843,82 @@ fn a_terminator_that_is_not_a_switch_is_refused() {
         "{found:?}"
     );
 }
+
+/// `System.call`'s count is the `.s` in its signature, and passing a runtime
+/// value is the ordinary use of `System::Call` — so the signature only has to
+/// fold where a `.s` could be.
+mod system_call {
+    use installua::diag::Diagnostics;
+
+    fn program(signature: &str) -> String {
+        format!(
+            "attributes {{ outFile = \"a.exe\", name = \"a\" }}\n\
+             local system = plugin \"System\"\n\
+             installer {{\n\
+               section(\"Core\", function()\n\
+                 local id = \"26\"\n\
+                 local path = system.call({signature})\n\
+                 detailPrint(path)\n\
+               end),\n\
+             }}\n"
+        )
+    }
+
+    /// The call and what follows it, down to the `DetailPrint`.
+    fn call(signature: &str) -> Vec<String> {
+        let output = super::build(&program(signature));
+        let lines: Vec<String> = output.lines().map(|line| line.trim().to_string()).collect();
+        let start = lines
+            .iter()
+            .position(|line| line.starts_with("System::Call"))
+            .expect("the call is emitted");
+        lines[start..start + 3].to_vec()
+    }
+
+    fn messages(signature: &str) -> Vec<String> {
+        let mut diags = Diagnostics::new();
+        installua::build_with(&program(signature), &super::options(), &mut diags);
+        diags.iter().map(|d| d.message.clone()).collect()
+    }
+
+    #[test]
+    fn a_runtime_value_in_an_arguments_value_is_counted_around() {
+        assert_eq!(
+            call(r#""shell32::SHGetSpecialFolderPath(p 0, t .s, i " .. id .. ", i 0)""#),
+            [
+                "System::Call \"shell32::SHGetSpecialFolderPath(p 0, t .s, i $0, i 0)\"",
+                "Pop $0",
+                "DetailPrint $0",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_runtime_value_that_closes_the_signature_is_a_value_too() {
+        assert_eq!(
+            call(r#""kernel32::GetEnvironmentVariable(t .s, i " .. id .. ")""#),
+            [
+                "System::Call \"kernel32::GetEnvironmentVariable(t .s, i $0)\"",
+                "Pop $0",
+                "DetailPrint $0",
+            ]
+        );
+    }
+
+    /// Anywhere but a value it could carry a `.s` of its own, or finish one.
+    #[test]
+    fn a_runtime_value_that_could_hold_a_dot_s_is_refused() {
+        assert_eq!(
+            messages(r#""shell32::F(t ." .. id .. ", i 0)""#),
+            ["`System.call` needs a build-time signature"]
+        );
+    }
+
+    #[test]
+    fn a_wholly_runtime_signature_is_refused() {
+        assert_eq!(
+            messages("id"),
+            ["`System.call` needs a build-time signature"]
+        );
+    }
+}

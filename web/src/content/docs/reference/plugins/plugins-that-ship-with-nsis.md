@@ -86,8 +86,16 @@ installer {
 **The one entry whose count is not in its declaration.** `outputs` is empty on
 purpose: `System::Call`'s output count lives in its signature, one per `.s`, and
 the lowering counts them there ([`src/lower/expr.rs`](../src/lower/expr.rs)).
-That also means the signature has to be a build-time constant — a runtime string
-cannot be counted, and is refused rather than guessed.
+So the parts of the signature that could hold a `.s` have to be known at build
+time. A runtime value may stand for an argument's value, between its type and
+the `,` or `)` after it:
+
+```lua skip
+local path = system.call("shell32::SHGetSpecialFolderPath(p 0, t .s, i " .. csidl .. ", i 0)")
+```
+
+Anywhere else it could carry a `.s` of its own, so it is refused rather than
+guessed, and so is a signature that is a runtime string throughout.
 
 Parsing the rest of the signature, which would narrow the clobber set from
 "everything", is deferred.
