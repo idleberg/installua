@@ -1374,6 +1374,41 @@ fn a_shell_verb_is_not_limited_to_open_and_print() {
     );
 }
 
+/// `HWND_BROADCAST` is a handle, so a font install can tell every window;
+/// a bare integer in the same place is still refused.
+#[test]
+fn send_message_broadcasts_through_hwnd_broadcast() {
+    let source = |hwnd: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n\
+             sendMessage({hwnd}, WM_FONTCHANGE, 0, 0, {{ timeout = 5000 }})\n\
+             end), }}"
+        )
+    };
+    let mut diags = Diagnostics::new();
+    let out = installua::build(&source("HWND_BROADCAST"), &mut diags)
+        .unwrap_or_else(|| panic!("{}", diags.render("<test>")));
+    assert_eq!(
+        out,
+        "Unicode true\n\
+         \n\
+         OutFile \"a.exe\"\n\
+         \n\
+         Section \"Core\"\n  \
+         SendMessage 65535 29 0 0 /TIMEOUT=5000\n\
+         SectionEnd\n"
+    );
+
+    let mut diags = Diagnostics::new();
+    installua::build(&source("5"), &mut diags);
+    let messages: Vec<_> = diags.iter().map(|d| d.message.clone()).collect();
+    assert_eq!(
+        messages,
+        ["`sendMessage` wants a handle, and this is a int"]
+    );
+}
+
 /// The other half of the options table: the flags, which were never positions.
 #[test]
 fn a_flag_is_reached_by_name_and_placed_by_the_table() {

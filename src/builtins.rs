@@ -245,6 +245,10 @@ pub fn nearest(name: &str) -> Option<&'static str> {
 ///
 /// The nine `${_NSIS_DEFAW}` names, `LVM_GETITEMTEXT` and friends, are their
 /// `W` twins, because the installer is always Unicode.
+///
+/// `HWND_BROADCAST` is the one that is not a message: it is the window
+/// `SendMessage` posts to every top-level window through, so it is a handle,
+/// and a plain integer there stays an error. It is the header's only `HWND_*`.
 const MESSAGES: &str = include_str!("../tables/winmessages-3.12.txt");
 
 fn messages() -> &'static [Constant] {
@@ -257,7 +261,9 @@ fn messages() -> &'static [Constant] {
             .map(|(name, value)| Constant {
                 installua: name,
                 nsis: value,
-                ty: if value.starts_with('-') {
+                ty: if name == "HWND_BROADCAST" {
+                    Ty::Handle
+                } else if value.starts_with('-') {
                     Ty::int()
                 } else {
                     Ty::nonneg()

@@ -116,27 +116,11 @@ type-checked. `newer` in `a_func_nothing_reaches_is_left_out` is the repro.
 The overlay can now mark a position `open`: its `-CMDHELP` members stay as
 completions, and any value passes. `ExecShell`'s verb is the one such position.
 
-### 5.6 `sendMessage` cannot broadcast
+### 5.6 `sendMessage` cannot broadcast — fixed
 
-```lua
-attributes { name = "b", outFile = "b.exe" }
-installer { page.instFiles {}, section("s", function()
-	sendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0, { timeout = 5000 })
-end) }
-```
-
-**Now:** `error[type-mismatch]: sendMessage wants a handle, and this is a int`.
-`HWND_BROADCAST` comes from `tables/winmessages-3.12.txt` like every message
-name, so `messages()` in `src/builtins.rs` types it `nonneg`.
-
-**Fix:** type the `HWND_*` pseudo-handles (`HWND_BROADCAST`, `HWND_TOPMOST`,
-`HWND_BOTTOM` and any others in the table) as `Ty::Handle` when parsing
-`MESSAGES`. The alternative is to let the `sendMessage` hwnd position accept an
-int. Typing them as handles is narrower and keeps `sendMessage(5, …)` an error.
-
-**Verify:**
-- The repro emits `SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000` and builds.
-- `tests/handles.rs` keeps refusing a plain integer.
+`messages()` in `src/builtins.rs` types `HWND_BROADCAST`, the header's only
+`HWND_*`, as a handle; `sendMessage(5, …)` is still an error. Covered by
+`send_message_broadcasts_through_hwnd_broadcast` in `tests/overlay.rs`.
 
 ### 5.7 An entry cannot be left out of a block's list at build time
 

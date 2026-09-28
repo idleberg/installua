@@ -49,6 +49,8 @@ name: `WM_SETTEXT` · `WM_CLOSE` · `BM_SETCHECK` · `EM_LIMITTEXT` ·
 Each is its number in the output, so there is no `!include`. The nine that NSIS
 picks by charset (`LVM_GETITEMTEXT`, `TCM_INSERTITEM`, …) are their `W` twin,
 because the installer is always Unicode; the `A` and `W` names are there too.
+`HWND_BROADCAST` is a handle rather than a number, so it goes where
+`sendMessage` wants a window and reaches every top-level one.
 
 ```lua
 setOutPath(PROGRAMFILES64 .. "/Example")
