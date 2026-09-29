@@ -30,7 +30,7 @@ wiki page:
 | `AdvSplash` | `.show` — Splash plus fades and a transparent colour                                        |
 | `StartMenu` | `.select`, `.init`, `.show` — the folder follows `"success"`, and only then                 |
 
-And eight third-party plugins, seven of them on the evidence of a scan of 984
+And ten third-party plugins, eight of them on the evidence of a scan of 984
 real-world scripts. These are **declarations, not bundled DLLs** — the plugin is
 still yours to install, and the file here only supplies the count:
 
@@ -44,6 +44,8 @@ still yours to install, and the file here only supplies the count:
 | `Nsis7z`         | 5       | `.extract`, `.extractWithDetails` — neither pushes anything at all                          |
 | `SimpleFC`       | 24      | all 33 — ports, applications, ICMP types and advanced rules; `0` is success and `1` is failure |
 | `NScurl`         | —       | `.http`, `.wait`, `.query`, `.cancel`, `.md5`, `.sha1`, `.sha256`, `.escape`, `.unescape` — libcurl, and the one method whose flags trail |
+| `nsisFirewallW`  | 1       | `.addAuthorizedApplication`, `.removeAuthorizedApplication` — the Unicode build, under its own DLL name |
+| `WAInfo`         | —       | all 8 — Winamp's directories, version, default plugins and skin; `.locateWinampRunningProcess`, `.closeWinampRunningProcess` |
 
 `NScurl` has no script count because it is newer than the scan. It ships for the
 same reason `Nsis7z` does, counts that are hard to guess: eleven exports and no two push the same

@@ -298,6 +298,10 @@ impl std::fmt::Display for Problem {
 /// comment says it is here because a byte count proved the `uint` lattice.
 /// It stays because it is now documented and called; the rule is what the
 /// *next* entry is measured against.
+///
+/// `WAInfo` is that first half at its limit: the plugin is closed-source, so
+/// its counts were read out of the shipped DLL's disassembly, and a project
+/// would otherwise have to repeat that or trust the author's examples.
 const SHIPPED: &[(&str, &str)] = &[
     (
         "AccessControl.toml",
@@ -331,6 +335,7 @@ const SHIPPED: &[(&str, &str)] = &[
     ("TypeLib.toml", include_str!("declarations/TypeLib.toml")),
     ("UserInfo.toml", include_str!("declarations/UserInfo.toml")),
     ("VPatch.toml", include_str!("declarations/VPatch.toml")),
+    ("WAInfo.toml", include_str!("declarations/WAInfo.toml")),
     ("WordFunc.toml", include_str!("declarations/WordFunc.toml")),
     (
         "nsDialogs.toml",

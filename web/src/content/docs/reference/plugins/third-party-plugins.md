@@ -3,7 +3,7 @@ title: Third-party plugins
 description: The plugins declared from their own source and a scan of real-world scripts, and the methods left out.
 ---
 
-Nine, eight of them chosen on a scan of 984 real-world scripts.
+Ten, eight of them chosen on a scan of 984 real-world scripts.
 
 ## EnVar
 
@@ -459,6 +459,58 @@ installer at all.
 `int` rather than `uint`. `name` is the title the rule gets in the firewall's
 control panel. The plugin uses the older `INetFwMgr` interface and knows nothing
 of firewall profiles; [`SimpleFC`](#simplefc) is the one for anything more.
+
+## WAInfo
+
+Winamp's directories, version, default plugins and skin, and the running
+process — for installing a Winamp plugin, skin or language pack into the right
+place. Not chosen on the scan: it ships because Winamp and NSIS come from the
+same house.
+Source: none. WAInfo 2.1 is freeware without source, from
+<https://www.pawelporwisz.pl/nsis/plugins/WAInfo/WAInfo.php>.
+
+| Method | Arguments | Returns |
+| ------ | --------- | ------- |
+| `.getWinampInformation(dir, what)` | `path`, `string` | a path, `0`/`1`, or `"error"` |
+| `.getWinampVersionInfo(dir, what)` | `path`, `string` | the field, or `"error"` |
+| `.getWinampPluginInformation(dir, kind, what)` | `path`, `string`, `string` | the field, or `"error"` |
+| `.getWinampComponentInformation(dir, what)` | `path`, `string` | the name, or `"error"` |
+| `.setWinampDefaultComponentName(dir, kind, name)` | `path`, `string`, `string` | `"0"` success, `"1"` failure, or `"error"` |
+| `.locateWinampRunningProcess(dir)` | `path` | `1` running, `0` not (`uint`) |
+| `.closeWinampRunningProcess(dir)` | `path` | `0` closed, `1` failed (`uint`) |
+| `.getPluginInfo()` | — | the plugin's own name and version |
+
+**Read from the DLL, since there is no source to read.** Each export makes
+exactly one call to the Delphi `PushString` and no branch skips it, so every
+method pushes one value on every path. Its `PopString` calls match the argument
+counts on the author's page. `"error"` is that one value, never a second one
+underneath, which is why none of these needs [`tagged`](/reference/plugins/tagged-outputs/).
+`getPluginInfo` is not on the author's page at all; only the bundled
+`WAInfoDemo.nsi` calls it.
+
+`dir` is the Winamp installation directory, and `""` means the one Winamp's
+uninstall key points at. A portable Winamp is passed by its path. `what` and
+`kind` are the author's keywords, such as `"PluginsDir"`, `"VISDir"`, `"VIS"`,
+`"Skin"` or `"VersionMajor"`, and they are copied into the line as written.
+
+`setWinampDefaultComponentName` returns `"0"` on success and `"1"` on failure.
+The author's prose has these swapped, which is a typo: every one of the
+examples tests `"0"` as success. It stays `string` because `"error"` is a
+third answer.
+
+The archive has `Win32/Release/WAInfo.dll` and `Win64/Release/WAInfo.dll`, both
+Unicode. Put the one matching your `makensis` target into
+`Plugins/x86-unicode` or `Plugins/amd64-unicode`, or add a `dir` in a project
+copy of the declaration.
+
+```lua
+local waInfo = plugin "WAInfo"
+
+local visDir = waInfo.getWinampInformation("", "VISDir")
+if waInfo.locateWinampRunningProcess("") == 1 then
+	waInfo.closeWinampRunningProcess("")
+end
+```
 
 ## AccessControl
 

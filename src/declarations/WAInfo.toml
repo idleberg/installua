@@ -1,0 +1,59 @@
+# WAInfo, third-party: <https://www.pawelporwisz.pl/nsis/plugins/WAInfo/WAInfo.php>.
+#
+# See docs/plugin-reference.md.
+
+[[plugin]]
+name = "WAInfo"
+method = "getWinampInformation"
+nsis = "WAInfo::GetWinampInformation"
+params = ["path", "string"]
+outputs = ["string"]
+
+[[plugin]]
+name = "WAInfo"
+method = "getWinampVersionInfo"
+nsis = "WAInfo::GetWinampVersionInfo"
+params = ["path", "string"]
+outputs = ["string"]
+
+[[plugin]]
+name = "WAInfo"
+method = "getWinampPluginInformation"
+nsis = "WAInfo::GetWinampPluginInformation"
+params = ["path", "string", "string"]
+outputs = ["string"]
+
+[[plugin]]
+name = "WAInfo"
+method = "getWinampComponentInformation"
+nsis = "WAInfo::GetWinampComponentInformation"
+params = ["path", "string"]
+outputs = ["string"]
+
+[[plugin]]
+name = "WAInfo"
+method = "setWinampDefaultComponentName"
+nsis = "WAInfo::SetWinampDefaultComponentName"
+params = ["path", "string", "string"]
+outputs = ["string"]
+
+[[plugin]]
+name = "WAInfo"
+method = "locateWinampRunningProcess"
+nsis = "WAInfo::LocateWinampRunningProcess"
+params = ["path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "WAInfo"
+method = "closeWinampRunningProcess"
+nsis = "WAInfo::CloseWinampRunningProcess"
+params = ["path"]
+outputs = ["uint"]
+
+[[plugin]]
+name = "WAInfo"
+method = "getPluginInfo"
+nsis = "WAInfo::GetPluginInfo"
+params = []
+outputs = ["string"]
