@@ -102,11 +102,11 @@ The rule is that a reader must never have to guess which machine a line runs on.
 | ------------------------------------------------------------ | ---------------------------------------------------------- |
 | ordinary code                                                | install time, on the user's machine                        |
 | `local X <const> = …`, and any `if` over one                 | build time, folded away — `X` becomes `${X}` in the output |
-| `BUILD.system(…)`, `BUILD.getDllVersion(…)`, `BUILD.echo(…)` | build time, as a side effect on your machine               |
+| `MAKENSIS.system(…)`, `MAKENSIS.getDllVersion(…)`, `MAKENSIS.echo(…)` | build time, as a side effect on your machine |
 | `for p in glob("assets/*.txt")`                              | build time, unrolled                                       |
 | `import "FileFunc"`, `include "strings/de.lua"`              | build time                                                 |
 
-`print` is the trap worth naming: it is `detailPrint` at install time and `BUILD.echo` at
+`print` is the trap worth naming: it is `detailPrint` at install time and `MAKENSIS.echo` at
 build time, and they are **two different names** on purpose.
 
 ## The standard library, in one table

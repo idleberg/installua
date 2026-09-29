@@ -166,6 +166,40 @@ files: `glob("presets/*/")` gives `presets/classic`, `presets/modern` and so
 on. The paths come back sorted, relative to the source file, as you would have
 written them.
 
+## !echo / !system / !getdllversion
+
+Side effects on the **build** machine, written where the call stands and run by
+`makensis` when it reaches that line. The `MAKENSIS.` in front is how you tell
+them apart from code that runs on the user's machine.
+
+| NSIS             | Installua                                                    |
+| ---------------- | ------------------------------------------------------------ |
+| `!echo`          | `MAKENSIS.echo(message)`                                     |
+| `!system`        | `MAKENSIS.system(command)` → `int` (the exit code)           |
+| `!getdllversion` | `MAKENSIS.getDllVersion(path)` → `int`, `int`, `int`, `int` |
+
+```lua skip
+MAKENSIS.echo("building " .. VERSION)
+local status = MAKENSIS.system("git diff --quiet")
+local major, minor = MAKENSIS.getDllVersion("bin/app.dll")
+detailPrint("app " .. major .. "." .. minor)
+```
+
+The argument has to be known while building: a literal, a `<const>` or
+`NSISDIR`. It is a `!` line's text, so a `$` in a literal reaches the command
+as written: `MAKENSIS.system("echo $HOME")` gets the shell's `$HOME`.
+
+An answer is an ordinary value at install time, carrying a fact from the build
+machine. It is never a `<const>`, so a build-time `if` cannot branch on it.
+Where that is what you need, run the command before the build and pass the
+result in as a [`param`](#param).
+
+`MAKENSIS.system` returns the exit code on every platform. Off Windows,
+`makensis` returns the wait status (`exit 3` reads 768), and the compiler shifts
+it back. `MAKENSIS.getDllVersion` returns major, minor, release and build. A
+file without a version resource reads as four zeros, because plugins often ship
+without one. A missing file stops the build.
+
 ## param
 
 A build-time constant the invocation may set. This is what replaces

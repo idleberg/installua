@@ -8,7 +8,7 @@ is pending: these are decisions.
 
 ## The `!` directives
 
-Installua has no preprocessor — the script _is_ a program — and 36 of the 37 `!`
+Installua has no preprocessor — the script _is_ a program — and 33 of the 37 `!`
 directives have no equivalent here. They are not all out for the same reason,
 though, so they are listed under the reason rather than in one heap. Only the
 first group is answered by "there is no preprocessor"; the rest are not
@@ -66,16 +66,16 @@ supplied is a parameter.
 
 ### Computed while building
 
-`!appendfile` · `!appendmemfile` · `!delfile` · `!execute` · `!getdllversion` ·
-`!gettlbversion` · `!makensis` · `!searchparse` · `!searchreplace` · `!system` ·
-`!tempfile`
+`!appendfile` · `!appendmemfile` · `!delfile` · `!execute` · `!gettlbversion` ·
+`!makensis` · `!searchparse` · `!searchreplace` · `!tempfile`
 
 These run a program or read a file while the installer is being built, and hand
 the answer back to the script as a `!define`. Installua cannot catch that
-answer — a [`raw.head`](/reference/commands/plugins-and-headers/#rawhead-and-rawtail) block can run the command, but
-the value it produces has no way to become a name your program reads. Giving it
-one would mean running things at build time, which is what order-free resolution
-costs.
+answer as a `<const>`: a `<const>` is folded before `makensis` runs anything,
+and making it wait would mean running things at build time, which is what
+order-free resolution costs. `!system` and `!getdllversion` are the exception
+in part: [`MAKENSIS.system` and `MAKENSIS.getDllVersion`](/reference/commands/program-structure/#echo--system--getdllversion)
+catch the answer as an install-time value, which a build-time `if` cannot read.
 
 So the work moves to whatever runs the build, and the value arrives as a `-D`:
 
@@ -103,8 +103,9 @@ A [parameter with no default](/reference/commands/program-structure/#a-parameter
 makes this complete rather than hopeful: a wrapper that forgets to pass the
 value fails the build instead of shipping a default nobody chose.
 
-If you only want the side effect and never the value, `raw.head` runs it as
-written:
+If you only want the side effect and never the value,
+[`MAKENSIS.system`](/reference/commands/program-structure/#echo--system--getdllversion)
+runs it where it stands, and `raw.head` runs it above everything:
 
 ```lua
 raw.head [[ !system 'echo building' ]]
@@ -136,7 +137,7 @@ invocation, not about staging.
 
 ### Build-time messages
 
-`!assert` · `!echo` · `!error` · `!warning`
+`!assert` · `!error` · `!warning`
 
 The common one is the guard that stops a build when a value was not supplied:
 

@@ -3,8 +3,9 @@
 --
 -- `param` with each defaulted type, a top-level `if` taken on one of them, a
 -- `glob` unrolled against the directory this file lives in, and `raw.head` /
--- `raw.tail` landing either side of the script. Nothing here has a runtime
--- reading, so what the `.nsi` shows is which branch won.
+-- `raw.tail` landing either side of the script, and the three `MAKENSIS.*`
+-- side effects written where they stand. What the `.nsi` shows is mostly which
+-- branch won; the rest is the two `MAKENSIS` answers copied into registers.
 --
 -- `raw.head` lands above the `!define`s a `param` becomes, so it is the one
 -- place in a script where `${NAME}` is not defined yet.
@@ -28,6 +29,10 @@ installer {
 			file(path)
 		end
 		detailPrint("build " .. BUILD + 1)
+		MAKENSIS.echo("building " .. NAME)
+		local status = MAKENSIS.system([[test -n "$HOME"]])
+		local major, minor = MAKENSIS.getDllVersion("shared.dll")
+		detailPrint("status " .. status .. ", shared " .. major .. "." .. minor)
 		stamp()
 		if SIGNED then
 			detailPrint("this line never reaches the .nsi")

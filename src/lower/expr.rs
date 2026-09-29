@@ -664,6 +664,11 @@ impl BodyLowerer<'_, '_> {
             }
             _ => {}
         }
+        if let Some(method) = name.strip_prefix("MAKENSIS.") {
+            let dests: Vec<Slot> = dest.cloned().into_iter().collect();
+            let types = self.makensis_call(method, args, &dests, span)?;
+            return types.first().copied();
+        }
 
         // `docs.installTypes("Full")` — the read half of a section's install
         // types, and the one field in the surface that is called rather than
@@ -2936,6 +2941,9 @@ impl BodyLowerer<'_, '_> {
             return None;
         };
         let name = callee_path(callee)?;
+        if let Some(method) = name.strip_prefix("MAKENSIS.") {
+            return self.makensis_call(method, args, dests, *span);
+        }
         if let Some((base, method)) = name.split_once('.')
             && self.resolved.namespaces.contains_key(base)
         {

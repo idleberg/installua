@@ -148,36 +148,20 @@ and accepts a runtime piece only as an argument's value: after a space, before
 The error now names the folder it could not read, as written. `glob` takes
 `**` for any depth of folders and a trailing `/` for folders instead of files,
 with wildcards in any segment; see `fn glob` in `src/lower/mod.rs` and
-`tests/glob.rs`. `BUILD.system` (5.11) is still open, but `glob` no longer
-waits on it.
+`tests/glob.rs`.
 
-### 5.11 The docs promise a `BUILD` namespace that does not exist
+### 5.11 The docs promise a `BUILD` namespace that does not exist — fixed
 
-`concepts/lua-shaped-not-lua.md:90` lists `BUILD.system(…)`,
-`BUILD.getDllVersion(…)` and `BUILD.echo(…)` as running at build time. Line 94
-calls `BUILD.echo` the build-time `print`. Nothing implements them:
-
-```lua
-attributes { name = "b", outFile = "b.exe" }
-installer { page.instFiles {}, section("s", function() BUILD.echo("hi") end) }
-```
-
-**Now:** `error[undefined-name]: BUILD is not defined`. The doc comment on
-`fn glob` points at `BUILD.system` as well.
-
-**Fix:** either implement them or take them out of the docs and the comment.
-
-If implementing:
-- `BUILD.echo` is `!echo`.
-- `BUILD.system` is `!system`, with its exit code available through `!system`'s
-  second argument.
-- `BUILD.getDllVersion` is `!getdllversion`. It must not fail on a file without
-  a version resource the way `GetDLLVersionLocal` does. Use `/noerrors` and
-  return zeros, because APEs and other plugins often ship without one.
-
-**Verify:**
-- Implemented: a golden per function and a Tier-3 build.
-- Removed: `tests/docs.rs` passes and nothing in `web/` mentions `BUILD.`.
+Implemented as `MAKENSIS.echo`, `MAKENSIS.system` and `MAKENSIS.getDllVersion`
+(renamed from `BUILD`), in `src/lower/makensis.rs`. Each is its `!` line where
+the call stands, and an answer is caught as an install-time value, never a
+`<const>`. Two corrections to the plan: `!system` returns a wait status off
+Windows (`exit 3` reads 768), so it is shifted unless `NSIS_WIN32_MAKENSIS`; and
+3.12's `!getdllversion` does not fail on a file without a version resource, it
+defines `""`, so there is no `/noerrors` (that flag only silences a missing
+file) and `IntOp … + 0` turns `""` into 0. Tested in the `build-time` golden,
+tiers 2 and 3. Ceiling: a `$` in a literal is left alone only when the literal
+is the direct argument; inside a `..` it still warns, as it does for `raw`.
 
 ### 5.12 `installua stubs` misses every source outside the project root — fixed
 

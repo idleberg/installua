@@ -105,5 +105,5 @@ the source states out loud. Applied three times.
 **Staging**:
 Which machine a line runs on. Three visibly different spellings: install-time (ordinary
 control flow), build-time-folded (`<const>` conditions), and build-machine side effects
-(`BUILD.*`). A language whose reader cannot tell which `if` runs when is the trap this
+(`MAKENSIS.*`). A language whose reader cannot tell which `if` runs when is the trap this
 design exists to avoid.

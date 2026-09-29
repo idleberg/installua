@@ -25,6 +25,7 @@ mod handle;
 mod insttype;
 mod languages;
 mod library;
+mod makensis;
 mod memento;
 mod multi_user;
 mod pages;
@@ -8051,7 +8052,7 @@ impl BodyLowerer<'_, '_> {
 /// segments with `*` and `?` in them, `**` for any depth of folders, and a
 /// trailing `/` to ask for folders instead of files. That is what the
 /// compile-time surface exposes; anything larger is a shell's job, and
-/// `BUILD.system` is where a shell belongs.
+/// `MAKENSIS.system` is where a shell belongs.
 ///
 /// Paths come back **as the source would have written them**, with `/` and
 /// relative to the source's directory, so the emitter's path handling applies

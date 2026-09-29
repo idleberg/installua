@@ -644,9 +644,14 @@ impl Lifter<'_> {
                     // the block is read. Missing this is not a cosmetic bug —
                     // it is the line that keeps `$` from being escaped inside a
                     // block nobody is supposed to have touched.
+                    //
+                    // `MAKENSIS.system("echo $HOME")` too: its text is a `!`
+                    // line's, and there a `$` reaches the shell as written.
                     let verbatim = match &acc {
                         Expr::Name(name) => name.text == "raw",
-                        Expr::Field { base, .. } => base.name() == Some("raw"),
+                        Expr::Field { base, .. } => {
+                            matches!(base.name(), Some("raw" | "MAKENSIS"))
+                        }
                         _ => false,
                     };
                     Expr::Call {

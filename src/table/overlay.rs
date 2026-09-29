@@ -409,16 +409,28 @@ const fn staging(nsis: &'static str) -> Row {
 
 /// Runs something while building and hands the answer back as a `!define`.
 ///
-/// Out for a reason of its own: nothing in this language can *catch* that
-/// answer. A `raw.head` block runs the command, but the value it produces has
-/// no way to become a name a program reads — and inventing one would be
-/// build-time execution, which is the thing order-free resolution costs.
+/// Out for a reason of its own: nothing in this language can catch that
+/// answer **as a `<const>`**. A `<const>` folds before `makensis` has run
+/// anything, and making it wait would be build-time execution, which is the
+/// thing order-free resolution costs.
 ///
 /// So the work moves to whatever runs the build, and the value arrives as
 /// `-D NAME=…`. A `param` with no default is what makes that complete rather
 /// than hopeful: a wrapper that forgets to pass it fails the build instead of
 /// shipping a default nobody chose.
 const fn computed(nsis: &'static str) -> Row {
+    directive(nsis)
+}
+
+/// A build-machine side effect spelled `MAKENSIS.*`: `!system` is
+/// `MAKENSIS.system`, `!getdllversion` is `MAKENSIS.getDllVersion`, `!echo` is
+/// `MAKENSIS.echo`. Still a directive row, because nothing about it is an
+/// instruction; the spelling is hand-lowered in `lower/makensis.rs`.
+///
+/// What [`computed`] says cannot be caught as a `<const>` is caught here as
+/// an install-time value instead: the `!define` is copied into a register on
+/// the next line, which needs nothing folded late.
+const fn build_machine(nsis: &'static str) -> Row {
     directive(nsis)
 }
 
@@ -2215,7 +2227,7 @@ pub const ROWS: &[Row] = &[
     hook("!packhdr"),
     hook("!finalize"),
     hook("!uninstfinalize"),
-    computed("!system"),
+    build_machine("!system"),
     computed("!execute"),
     computed("!makensis"),
     staging("!addincludedir"),
@@ -2228,7 +2240,7 @@ pub const ROWS: &[Row] = &[
     staging("!define"),
     staging("!undef"),
     staging("!else"),
-    message("!echo"),
+    build_machine("!echo"),
     message("!warning"),
     message("!error"),
     message("!assert"),
@@ -2244,7 +2256,7 @@ pub const ROWS: &[Row] = &[
     computed("!delfile"),
     computed("!appendfile"),
     computed("!appendmemfile"),
-    computed("!getdllversion"),
+    build_machine("!getdllversion"),
     computed("!gettlbversion"),
     computed("!searchparse"),
     computed("!searchreplace"),

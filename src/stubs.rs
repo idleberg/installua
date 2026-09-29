@@ -723,6 +723,22 @@ fn declarations() -> String {
          function raw.head(text) end\n\n\
          ---@param text string Below everything: `!packhdr`, `!finalize`, `!uninstfinalize`.\n\
          function raw.tail(text) end\n\n\
+         -- The build machine's side effects, each a `!` line `makensis` runs\n\
+         -- where the call stands. An answer is an install-time value holding a\n\
+         -- build-time fact, never a `<const>`.\n\
+         MAKENSIS = {}\n\n\
+         ---@param message string `!echo`.\n\
+         function MAKENSIS.echo(message) end\n\n\
+         ---@param command string `!system`.\n\
+         ---@return integer exitCode\n\
+         function MAKENSIS.system(command) end\n\n\
+         -- Zeros for a file with no version resource; a missing file stops the build.\n\
+         ---@param path string `!getdllversion`.\n\
+         ---@return integer major\n\
+         ---@return integer minor\n\
+         ---@return integer release\n\
+         ---@return integer build\n\
+         function MAKENSIS.getDllVersion(path) end\n\n\
          ---@param options string|table\n\
          ---@return string\n\
          function messageBox(options) end\n\n\
@@ -1436,6 +1452,9 @@ const LANGUAGE: &[(&str, &str)] = &[
     // to say about `raw.middle`.
     ("raw.head", "      - type: string\n"),
     ("raw.tail", "      - type: string\n"),
+    ("MAKENSIS.echo", "      - type: string\n"),
+    ("MAKENSIS.system", "      - type: string\n"),
+    ("MAKENSIS.getDllVersion", "      - type: string\n"),
     // Lua's own names, kept as casts. Listed because there is no `base:` to
     // inherit them from.
     ("tostring", "      - type: any\n"),
