@@ -103,3 +103,18 @@ fn a_missing_folder_is_named_in_the_error() {
         ["`glob` cannot read `nope`: No such file or directory (os error 2)"]
     );
 }
+
+/// A `-D` directory is usually absolute, and its leading `/` is the root rather
+/// than an empty folder name in front of the first one.
+#[cfg(unix)]
+#[test]
+fn an_absolute_pattern_starts_at_the_root() {
+    let root = std::env::temp_dir()
+        .join(format!("installua-glob-absolute-{}", std::process::id()))
+        .display()
+        .to_string();
+    assert_eq!(
+        paths("absolute", &format!("{root}/assets/*.txt")),
+        [format!("{root}/assets/a.txt")]
+    );
+}

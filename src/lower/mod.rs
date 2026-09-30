@@ -1308,7 +1308,15 @@ impl<'p> Lowerer<'_, 'p> {
             .resolved
             .block
             .iter()
-            .filter(|stmt| matches!(stmt, Stmt::Assign { .. }))
+            .filter(|stmt| match stmt {
+                // `x = section { … }` below a `local x` is that local's value,
+                // held by `resolve` as any declaration is.
+                Stmt::Assign { targets, .. } => !matches!(
+                    targets.as_slice(),
+                    [Expr::Name(name)] if self.resolved.deferred.contains_key(&name.text)
+                ),
+                _ => false,
+            })
             .map(|stmt| (*stmt).clone())
             .collect();
 
@@ -8065,13 +8073,19 @@ fn glob(base: &std::path::Path, pattern: &str) -> Result<Vec<String>, (String, s
         Some(pattern) => (pattern, true),
         None => (pattern, false),
     };
+    // An absolute pattern starts at the root: split, its first segment is
+    // empty, and joining that onto nothing would drop the `/`.
+    let (root, pattern) = match pattern.strip_prefix('/') {
+        Some(pattern) => ("/", pattern),
+        None => ("", pattern),
+    };
     let mut segments: Vec<&str> = pattern.split('/').collect();
     // `assets/**` means everything under `assets`, not nothing.
     if segments.last() == Some(&"**") {
         segments.push("*");
     }
     let mut out = Vec::new();
-    glob_walk(base, "", &segments, folders, &mut out)?;
+    glob_walk(base, root, &segments, folders, &mut out)?;
     Ok(out)
 }
 
@@ -8091,7 +8105,7 @@ fn glob_walk(
         if prefix.is_empty() {
             name.to_string()
         } else {
-            format!("{prefix}/{name}")
+            format!("{}/{name}", prefix.trim_end_matches('/'))
         }
     };
     let [segment, rest @ ..] = segments else {

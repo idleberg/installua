@@ -198,51 +198,27 @@ without a collision emits what it did before. Ceiling: the suffix reaches the
 Tested in `tests/include.rs`. Per file since §5.14's rename: across files the
 two are separate names.
 
-### 5.16 A top-level `local` is visible above its declaration
+### 5.16 A top-level `local` is visible above its declaration — fixed
 
-`concepts/lua-shaped-not-lua.md` ("Everything hoists") makes the top level
-order-free: every top-level name is resolved before any body is compiled. That
-holds for `func`s, whose names are strings, but it also holds for `local`s, and
-Lua scopes a `local` from its declaration down:
+Lua's rule, and Lua's answer. A top-level `local` is in scope from its
+declaration down: a read above it is `undefined-name` ("`x` is read above its
+declaration"), reported by the globals walk in `src/resolve.rs`, which already
+bound each `local` after its initialiser. `local a, b` with no value is a
+forward declaration, and a later top-level `a = <section/group/page/control>`
+is its value; one nothing assigns is the old "nowhere to live" error. `func`s
+stay hoisted.
 
-```lua
-attributes { name = "b", outFile = "b.exe" }
-local random = checkbox {
-	"Switch every", x = 8, y = 8, width = 56, height = 13,
-	onClick = function() interval.enabled = random.checked end,
-}
-local interval = number { x = 70, y = 8, width = 20, height = 13 }
-installer {
-	page.custom { "Options", controls = { random, interval } },
-	page.instFiles {},
-	section("s", function() end),
-}
-```
+The repro's fixed form (`local random, interval`, then both assigned) passes
+`installua check`, `makensis -WX` and `lua-language-server --check` with no
+problems; the unfixed form gets the same two positions from both tools.
+Case in `tests/diagnostics.rs`. Two things read above their declaration and
+moved: `tests/ports/modern-ui/startmenu.lua`'s `StartMenuFolder`, and
+`tests/params.rs`'s parameter-below-its-use test, now a rejection.
 
-**Now:** `installua check` passes. LuaLS reports `undefined-global` for
-`interval` in the `onClick` (and for `random` inside its own initialiser,
-which Lua does not yet see either). PimpBot hits this in
-`pages/avs-settings/page.lua`: `settingsRandom`'s `onClick` reads
-`settingsInterval`, declared below it.
-
-**Expected:** open. Two controls that refer to each other are a real need, so
-declaring in order is not enough on its own. Options:
-- Lua's own answer: a forward declaration, `local interval` with no value,
-  then `interval = number { … }` below. Today a top-level `local` with no
-  value is `not-yet-implemented` ("has nowhere to live"), so this means
-  accepting it as a declaration whose one later assignment is its value.
-  Then read-before-declaration becomes an error, as in Lua.
-- Keep hoisting for `local`s and say in the docs that LuaLS reports it.
-- A control's callback could be set after both exist
-  (`random.onClick = function() … end`), which reads in Lua order without a
-  forward declaration. I have not checked whether this compiles today.
-
-`func`s stay hoisted either way: their name is a string, so Lua has nothing to
-say about their order.
-
-**Verify:** whichever option: the repro in its fixed form passes both
-`installua check` and `lua-language-server --check`, a `tests/diagnostics.rs`
-case for a read above the declaration, and PimpBot's `page.lua` migrated.
+PimpBot's `pages/avs-settings/page.lua` is migrated (`local settingsRandom,
+settingsInterval` above both), and every `mise run build` profile passes.
+`avs-full` also needed a `glob` fix found on the way: an absolute pattern lost
+its leading `/` (`tests/glob.rs`, `an_absolute_pattern_starts_at_the_root`).
 
 ## Later: random programs
 
