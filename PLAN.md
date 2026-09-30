@@ -315,15 +315,22 @@ stdlib table in `concepts/lua-shaped-not-lua.md`.
 PimpBot's `for _ = 1, seconds do sleep(1000) end` workaround can become
 `sleep(math.max(seconds, 0) * 1000)`.
 
-### 5.23 Smaller gaps met on the way
+### 5.23 Smaller gaps met on the way — fixed
 
-- `string.sub(s, -1)` is `not-yet-implemented`. It is already scheduled and
-  counted, but it is the usual way to write "last character", so it came up
-  in the first real program. PimpBot writes `string.sub(s, string.len(s))`.
-- `os.exit()` in `.onInit` exits with error level 2, which is what NSIS's
-  `Quit` does there, but nothing on `flow-errors-and-messages.md` says so. A
-  `/help` or `/flush` that quits needs `setErrorLevel(0)` first, and the page
-  should say that.
+- `string.sub` takes a negative constant index. `i = -k` is `StrCpy`'s offset
+  `-k`, `j = -k` a `maxlen` of `-(k - 1)`, and `j = -1` the empty "to the end";
+  `i = 0` reads as `1`, where it used to become offset `-1`, the last character.
+  A negative `i` with a positive or non-constant `j` stays `not-yet-implemented`,
+  since the length would be needed, and a negative `i` reaching before the start
+  gives `""` where Lua clamps: both in the doc comment and on
+  `strings-and-numbers.md`. `strings` has the first golden for `string.sub`, and
+  every case was run under Wine.
+- `flow-errors-and-messages.md` says that `os.exit()` in `onInit` exits with 2
+  and that `setErrorLevel(0)` goes first when that is not an error. Checked
+  under Wine.
+
+PimpBot writes `string.sub(server, -1)`, and its `/help` in `pack` now exits
+with 0.
 
 ## Later: random programs
 

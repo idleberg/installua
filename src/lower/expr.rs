@@ -2579,6 +2579,15 @@ impl BodyLowerer<'_, '_> {
     /// where Lua takes two 1-based positions, so `start = i - 1` and `maxlen =
     /// j - i + 1`. Both fold when the indices are constants, which is the case
     /// every program in the five actually writes.
+    ///
+    /// A negative constant counts from the end, as in Lua, and so do a
+    /// negative `startoffset` and `maxlen`: `i = -k` *is* offset `-k`, and `j =
+    /// -k` cuts `k - 1` characters off the end, except `-1`, which cuts none
+    /// and is spelled as the empty "to the end". Two cases stay open. A negative
+    /// `i` with a positive `j` needs the length, which is not a constant. And a
+    /// negative `i` past the start is `""` in NSIS where Lua clamps it to `1`:
+    /// `string.sub("ab", -3)` is `"ab"` in Lua and empty here. `-1`, the one
+    /// programs write, cannot run past the start of anything.
     fn string_sub(&mut self, args: &[Expr], dest: &Slot, span: Span) -> Option<Ty> {
         let (subject, from, to) = match args {
             [subject, from] => (subject, from, None),
@@ -2586,14 +2595,25 @@ impl BodyLowerer<'_, '_> {
             _ => return self.wrong_arity("string.sub", 3, args.len(), span),
         };
 
-        for index in [Some(from), to] {
-            let Some(index) = index else { continue };
-            if let Some(ConstValue::Int(value)) = self.constant(index)
-                && value < 0
-            {
-                self.todo(index.span(), "a negative `string.sub` index");
-                return None;
-            }
+        // Lua reads `i = 0` as `1`, and NSIS would read offset `-1` as the last
+        // character.
+        let from_constant = match self.constant(from) {
+            Some(ConstValue::Int(0)) => Some(1),
+            Some(ConstValue::Int(value)) => Some(value),
+            _ => None,
+        };
+        let to_constant = match to.and_then(|to| self.constant(to)) {
+            Some(ConstValue::Int(value)) => Some(value),
+            _ => None,
+        };
+        if let (Some(from_value), Some(to), Some(0..) | None) = (from_constant, to, to_constant)
+            && from_value < 0
+        {
+            self.todo(
+                to.span(),
+                "a negative `string.sub` start without a negative end",
+            );
+            return None;
         }
 
         let subject = self.value(subject)?;
@@ -2602,8 +2622,9 @@ impl BodyLowerer<'_, '_> {
 
         // `i - 1`, folded when `i` is a constant, which is the common case and
         // the one that keeps the output a single line.
-        let start = match self.constant(from) {
-            Some(ConstValue::Int(value)) => ir::Arg::int(value - 1),
+        let start = match from_constant {
+            Some(value) if value < 0 => ir::Arg::int(value),
+            Some(value) => ir::Arg::int(value - 1),
             _ => {
                 let slot = self.claim_temp(span);
                 self.emit(ir::Instruction::new(
@@ -2626,15 +2647,15 @@ impl BodyLowerer<'_, '_> {
             Some(to) => {
                 let to_value = self.value(to)?;
                 self.require_int(&to_value, span)?;
-                match (self.constant(from), self.constant(to)) {
-                    (Some(ConstValue::Int(from)), Some(ConstValue::Int(to))) => {
-                        ir::Arg::int(to - from + 1)
-                    }
+                match (from_constant, to_constant) {
+                    (_, Some(-1)) => ir::Arg::str(""),
+                    (_, Some(to)) if to < 0 => ir::Arg::int(to + 1),
+                    (Some(from), Some(to)) => ir::Arg::int(to - from + 1),
                     // `maxlen` is `j - (i - 1)`, and `i = 1` — the overwhelming
                     // case, since Lua strings start there — makes the
                     // subtraction `- 0`. Emitting it would be a line whose only
                     // effect is to be read by somebody wondering what it does.
-                    (Some(ConstValue::Int(1)), _) => to_value.arg,
+                    (Some(1), _) => to_value.arg,
                     _ => {
                         let slot = self.claim_temp(span);
                         self.emit(ir::Instruction::new(

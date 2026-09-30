@@ -26,6 +26,16 @@ __GENERATED_find_1_hit:
 __GENERATED_find_2_hit:
   IntOp $0 $0 + 1
   DetailPrint $0
+  StrCpy $0 "installua" 3 1
+  DetailPrint $0
+  StrCpy $0 "installua" "" -1
+  DetailPrint $0
+  StrCpy $0 "installua" -1 1
+  DetailPrint $0
+  StrCpy $0 "installua" -1 -3
+  DetailPrint $0
+  StrCpy $0 "installua" 3 0
+  DetailPrint $0
   ReadEnvStr $0 "DELAY"
   StrCpy $1 $0
   IntCmp $1 0 __GENERATED_abs_3_done 0 __GENERATED_abs_3_done

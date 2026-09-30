@@ -15,6 +15,22 @@ ordinary `if`, and the compiler writes the labels.
 | `Return` | `return`                                                |
 | `Quit`   | `os.exit()`                                             |
 
+`os.exit()` in `onInit` ends the process with exit code 2, NSIS's "aborted by
+the script", before any page is shown. An `onInit` that quits because there is
+nothing left to do, or because it has answered a `/help` switch, calls
+`setErrorLevel(0)` first.
+
+```lua
+installer {
+	onInit(function()
+		if fileExists(INSTDIR .. "/app.exe") then
+			setErrorLevel(0)
+			os.exit()
+		end
+	end),
+}
+```
+
 ## continue
 
 Skips to the next iteration of the innermost loop — the one jump you do write,
