@@ -920,13 +920,15 @@ pub fn reserved(module: &mut ir::Module, graph: &callgraph::CallGraph) {
 /// cannot call Foo::Bar` at compile time if this pass copied `reserved`'s
 /// reachability walk.
 ///
-/// **Absolutised, because `makensis` resolves a relative plugin directory
-/// against its own working directory** — which [`crate::assemble`] sets to the
-/// emitted script's parent, not the project root the declaration was written
-/// against. With no base to resolve against (an in-memory compile, which has no
-/// project root by definition) the path goes out as written: a caller that
-/// handed the compiler a string and no directory has already said the file
-/// system is not involved.
+/// **Relative to the source, like every other path the output names.**
+/// [`crate::assemble`] runs `makensis` in `base`, so that is what a relative
+/// directory resolves against. A declaration read from disk arrives absolute
+/// (see [`crate::declarations::PluginMethod::dir`]), because the folder it was
+/// written against may be a workspace root two levels up; this turns it back
+/// into a path from `base`, so the output is the same wherever the build ran
+/// from and holds no machine's home directory. One written relative already is
+/// relative to the source and goes out as written, and so does everything when
+/// there is no base (an in-memory compile, which has no folder at all).
 ///
 /// **Not an anchored `raw`, and that is the rule rather than the exception.**
 /// A user writing this line at the top of their source would land it above
@@ -946,7 +948,7 @@ pub fn addplugindir(module: &mut ir::Module, options: &crate::Options) {
     for plugin in called {
         for dir in options.declarations.plugin_dirs(plugin) {
             let path = match &options.base {
-                Some(base) => base.join(dir),
+                Some(base) => from(base, std::path::Path::new(dir)),
                 None => std::path::PathBuf::from(dir),
             };
             dirs.insert(path.display().to_string());
@@ -957,6 +959,50 @@ pub fn addplugindir(module: &mut ir::Module, options: &crate::Options) {
         .into_iter()
         .map(|dir| ir::Instruction::new("!addplugindir", vec![ir::Arg::str(dir)]))
         .collect();
+}
+
+/// `target` as a path from `base`, lexically. A relative `target` is already
+/// one; an absolute one with no root in common (another drive) stays absolute.
+fn from(base: &std::path::Path, target: &std::path::Path) -> std::path::PathBuf {
+    use std::path::{Component, PathBuf};
+    fn normal(path: &std::path::Path) -> Vec<Component<'_>> {
+        let mut parts = Vec::new();
+        for part in path.components() {
+            match part {
+                Component::CurDir => {}
+                Component::ParentDir if matches!(parts.last(), Some(Component::Normal(_))) => {
+                    parts.pop();
+                }
+                _ => parts.push(part),
+            }
+        }
+        parts
+    }
+    let here = if base.as_os_str().is_empty() {
+        std::path::Path::new(".")
+    } else {
+        base
+    };
+    let Ok(base) = std::path::absolute(here) else {
+        return target.to_path_buf();
+    };
+    if target.is_relative() {
+        return target.to_path_buf();
+    }
+    let (base, target) = (normal(&base), normal(target));
+    let common = base.iter().zip(&target).take_while(|(a, b)| a == b).count();
+    if common == 0 {
+        return target.iter().collect();
+    }
+    let mut path: PathBuf = base[common..]
+        .iter()
+        .map(|_| Component::ParentDir)
+        .collect();
+    path.extend(&target[common..]);
+    if path.as_os_str().is_empty() {
+        path.push(".");
+    }
+    path
 }
 
 /// The NSIS spelling of `$PLUGINSDIR`.

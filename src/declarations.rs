@@ -202,8 +202,13 @@ pub struct PluginMethod {
     /// spells it `/end` and `InetBgDL` spells it `/END`, and nothing here
     /// guesses at a plugin's case.
     pub terminator: Option<String>,
-    /// Where the DLL lives, when it is not in `NSISDIR/Plugins`. Relative to
-    /// the project root; [`crate::lower::addplugindir`] absolutises it.
+    /// Where the DLL lives, when it is not in `NSISDIR/Plugins`. Written
+    /// relative to the folder holding the `.installua/` the file sits in —
+    /// the workspace root for a shared one — and absolute once
+    /// [`Declarations::load_all`] has read it. A file handed to
+    /// [`Declarations::parse`] has no folder, so its `dir` stays as written and
+    /// means "beside the source". [`crate::lower::addplugindir`] emits either
+    /// relative to the source.
     ///
     /// **The one field that is about a file rather than a signature**, and it
     /// has to be: a plugin outside `NSISDIR` is unreachable otherwise, and both
@@ -458,10 +463,23 @@ impl Declarations {
             .collect();
         paths.sort();
 
+        // A `dir` is written against the folder holding `.installua/`, which
+        // for a workspace's file is not the program's. Absolute from here on,
+        // so that nothing downstream has to remember which folder that was.
+        let root = dir.parent().and_then(Path::parent).unwrap_or(Path::new(""));
+
         for path in paths {
             let name = path.display().to_string();
             match std::fs::read_to_string(&path) {
-                Ok(text) => self.parse_within(&name, &text, &mut scope, problems),
+                Ok(text) => {
+                    for mut record in parse::records(&name, &text, problems) {
+                        record.dir = record.dir.map(|written| {
+                            std::path::absolute(root.join(&written))
+                                .map_or(written, |path| path.display().to_string())
+                        });
+                        self.insert(record, &mut scope, problems);
+                    }
+                }
                 Err(error) => problems.push(Problem {
                     file: name,
                     line: 0,

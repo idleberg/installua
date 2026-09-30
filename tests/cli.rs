@@ -379,6 +379,73 @@ installer { page.instFiles {}, section(\"Core\", function() acme.install(\"$INST
         assert!(!passed, "an undeclared plugin call compiled:\n{output}");
     }
 
+    /// A workspace declaration's `dir` is written against the workspace, and
+    /// the output names it from the program — the same line whichever folder
+    /// the build ran from. It used to be joined onto the program's folder, as
+    /// typed on the command line, so it was right only from that folder.
+    #[test]
+    fn a_workspace_plugin_dir_is_the_same_from_anywhere() {
+        let root = std::env::temp_dir().join("installua-monorepo-dir");
+        let _ = std::fs::remove_dir_all(&root);
+        let project = root.join("installers/pro");
+        let declarations = root.join(".installua/declarations");
+        let plugins = root.join("plugins/x86-unicode");
+        for dir in [&project, &declarations, &plugins] {
+            std::fs::create_dir_all(dir).expect("create the checkout");
+        }
+        std::fs::write(root.join("installua.toml"), "").expect("write the workspace");
+        std::fs::write(
+            declarations.join("vendored.toml"),
+            "[[plugin]]\nname = \"Vendored\"\nmethod = \"exec\"\n\
+             nsis = \"Vendored::Exec\"\nparams = [\"string\"]\noutputs = []\n\
+             dir = \"plugins/x86-unicode\"\n",
+        )
+        .expect("write the declaration");
+        std::fs::write(
+            project.join("install.lua"),
+            "attributes { name = \"A\", outFile = \"a.exe\" }\n\
+             local vendored = plugin \"Vendored\"\n\
+             installer { page.instFiles {}, section(\"Core\", function() vendored.exec(\"x\") end) }\n",
+        )
+        .expect("write the program");
+
+        let line = |dir: &Path, file: &str| {
+            let (passed, output) = run_in(dir, &["emit", "--stdout", file]);
+            assert!(passed, "{output}");
+            output
+                .lines()
+                .find(|line| line.starts_with("!addplugindir"))
+                .unwrap_or_else(|| panic!("no `!addplugindir`:\n{output}"))
+                .to_string()
+        };
+        let expected = "!addplugindir \"../../plugins/x86-unicode\"";
+        assert_eq!(line(&root, "installers/pro/install.lua"), expected);
+        assert_eq!(line(&project, "install.lua"), expected);
+
+        // Tier 3: `makensis` finds the DLL along that line. Any real plugin
+        // will do under another name, since the name is all it looks up.
+        let Some(nsis) = Command::new("makensis")
+            .arg("-HDRINFO")
+            .output()
+            .ok()
+            .and_then(|output| {
+                String::from_utf8_lossy(&output.stdout)
+                    .split(',')
+                    .find_map(|entry| entry.trim().strip_prefix("NSISDIR=").map(PathBuf::from))
+            })
+        else {
+            eprintln!("skipping tier 3: `makensis` is not installed");
+            return;
+        };
+        std::fs::copy(
+            nsis.join("Plugins/x86-unicode/nsExec.dll"),
+            plugins.join("Vendored.dll"),
+        )
+        .expect("copy a plugin");
+        let (passed, output) = run_in(&root, &["build", "installers/pro/install.lua"]);
+        assert!(passed, "{output}");
+    }
+
     /// `installua <args>`, run from `dir` and named no file.
     pub(super) fn run_in(dir: &Path, args: &[&str]) -> (bool, String) {
         let output = Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))

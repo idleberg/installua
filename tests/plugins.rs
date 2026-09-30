@@ -228,7 +228,7 @@ mod add_plugin_dir {
     fn the_line_sits_between_unicode_and_everything_else() {
         let output = build_declared(&vendored("z.extract(\"a.7z\")"), VENDORED);
         assert!(
-            output.starts_with("Unicode true\n\n!addplugindir \"/project/vendor/plugins\"\n"),
+            output.starts_with("Unicode true\n\n!addplugindir \"vendor/plugins\"\n"),
             "{output}"
         );
     }
@@ -283,6 +283,22 @@ mod add_plugin_dir {
             &toml,
         );
         assert_eq!(output.matches("!addplugindir").count(), 1, "{output}");
+    }
+
+    /// A directory read from disk arrives absolute, and goes out as a path from
+    /// the source: `makensis` runs in the source's folder, and an absolute
+    /// line would put one machine's home directory in the output.
+    #[test]
+    fn an_absolute_dir_goes_out_relative_to_the_source() {
+        let toml = VENDORED.replace("\"vendor/plugins\"", "\"/plugins/x86-unicode\"");
+        let (options, _) = options(&toml, Some(PathBuf::from("/project/packages/backup")));
+        let mut diags = Diagnostics::new();
+        let output = installua::build_with(&vendored("z.extract(\"a.7z\")"), &options, &mut diags)
+            .expect("compiles");
+        assert!(
+            output.contains("!addplugindir \"../../../plugins/x86-unicode\"\n"),
+            "{output}"
+        );
     }
 
     /// With no base there is no project root to resolve against, and a caller

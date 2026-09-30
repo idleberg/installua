@@ -234,42 +234,24 @@ Found on the way: `string.sub(v, 1, dot - 1)` with `dot == 0` is
 -1)` is the whole string. A negative index known only at run time is not
 converted.
 
-### 5.18 A declaration's `dir` is resolved against the program, not the declaration
+### 5.18 A declaration's `dir` is resolved against the program, not the declaration — fixed
 
-Found vendoring `nxs.dll` into PimpBot (`.installua/declarations/nxs.toml`,
-`dir = "plugins/x86-unicode"`, the workspace marked by an `installua.toml` at
-the repository root, and the program at `packages/backup/backup.lua`).
+`Declarations::absorb` (`src/declarations.rs`) now joins a loaded `dir` onto
+the folder holding its `.installua/` and makes it absolute. `addplugindir`
+(`src/lower/mod.rs`) turns it back into a path from `base`, which is where
+`assemble` runs `makensis`. A `dir` given to `Declarations::parse`, which has
+no folder, is relative to the source and goes out as written. So the output
+is the same from any working directory, and it holds no absolute path. The
+comments on `PluginMethod::dir` and `addplugindir` say so.
+`tests/cli.rs`, `a_workspace_plugin_dir_is_the_same_from_anywhere`, builds a
+workspace declaration from the root and from the program's folder. Both get
+`!addplugindir "../../plugins/x86-unicode"`, and the build passes Tier 3 with
+a copy of `nsExec.dll` in that folder. `tests/plugins.rs` now expects
+`vendor/plugins` instead of `/project/vendor/plugins`. `plugins-and-headers.md`
+says what `dir` is relative to.
 
-**Now:** two things go wrong in `addplugindir` (`src/lower/mod.rs`).
-`base.join(dir)` joins the dir onto the **program's** folder, so a workspace
-declaration comes out as `packages/backup/plugins/x86-unicode`. And `base` is
-the path as typed on the command line, relative to the shell's working
-directory, while every other emitted path (`MUI_ICON "..\..\ui\…"`) is
-relative to the source file, which is where `makensis` resolves them. So the
-line is right only when the build runs from the program's own folder. The doc
-comment on `Declaration::dir` says "relative to the project root" and
-"absolutises it", and the code does neither.
-
-**Should:** resolve `dir` against the folder holding the
-`.installua/declarations/` the declaration came from (the workspace root for a
-shared one), and emit it the way the other paths are emitted, relative to the
-source file.
-
-**Why it looks fixed:** `9500dff` added `dir`, and `e4319ee` fixed makensis
-looking up the script path again after moving into the script's folder. That
-fix was for the `.nsi` path, not `!addplugindir`. The `dir` tests in
-`tests/plugins.rs` pass an absolute base (`/project`) with the declaration
-beside the program, so neither a base typed relative to the shell nor a
-workspace declaration is exercised. Reproduced with a release build of
-`e0d9a9d`. `src/declarations.rs` has to remember which folder each
-declaration was read from.
-
-**Check:** `tests/declarations.rs`, with a workspace declaration used by a
-program two folders down, built from the workspace root and from the program's
-folder. Both must emit the same `!addplugindir` and pass Tier 3.
-
-**Workaround in PimpBot:** `dir = "../../plugins/x86-unicode"`, and the
-`build:backup` task runs from `packages/backup`.
+PimpBot can drop its workaround: `dir = "plugins/x86-unicode"`, built from
+anywhere.
 
 ### 5.19 `installua stubs` writes a selene std that selene cannot read
 

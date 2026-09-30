@@ -489,8 +489,10 @@ must begin with `/`, because a token that does not is one the plugin will read
 as an argument — a fixed trailing argument belongs in `params`.
 
 **`dir` is for a DLL that does not live in `NSISDIR/Plugins`** — a plugin
-vendored into your own repository. It is relative to the project root, and the
-compiler emits one `!addplugindir` for it, in the one position the directive is
+vendored into your own repository. It is relative to the folder holding the
+`.installua/` the declaration sits in, so a workspace's shared declaration
+names a path from the workspace root. The compiler emits one `!addplugindir`
+for it, as a path from your source, in the one position the directive is
 correct in: under the `Unicode` line and above every call site. You never write
 that line yourself, and there is no anchor that would let you — an untagged
 `!addplugindir` binds to whichever target is current when it is processed, so
