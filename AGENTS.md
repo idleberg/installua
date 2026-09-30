@@ -27,10 +27,12 @@ source ─frontend─▶ AST ─resolve─▶ symbols ─lower─▶ CFG ─allo
   before anything reads one.
 - `lower` and `alloc` are whole-program fixpoints: parameter types come from
   call sites, clobber sets propagate over the call graph's SCC condensation.
-- Those two together are what makes the language order-free. Resolve alone is
-  not enough for a `func`: it records params, block and span but no types, so a
-  call above a declaration only knows the callee's *signature* once the `lower`
+- Those two together are what makes a `func` order-free. Resolve alone is not
+  enough for one: it records params, block and span but no types, so a call
+  above a declaration only knows the callee's *signature* once the `lower`
   fixpoint has met in the middle.
+- A `local` is not order-free: it is in scope from its declaration down, as in
+  Lua, because that is what `lua-language-server` checks.
 
 ## Conventions
 

@@ -3,9 +3,10 @@ title: Program structure
 description: The blocks a file is made of, and the declarations inside them.
 ---
 
-A file is a Lua program, read top to bottom, with no preprocessor. Declaration
-order does not matter: every top-level name is resolved before any body
-is compiled, so a `func` may call one declared below it.
+A file is a Lua program, read top to bottom, with no preprocessor. A `func` is
+visible everywhere: every one is resolved before any body is compiled, so a
+`func` may call one declared below it. A `local` is Lua's, in scope from its
+declaration down — see [what hoists](/concepts/lua-shaped-not-lua/#a-func-hoists-a-local-does-not).
 
 The order of the fields _inside_ `attributes {}` does not matter either, and for
 a different reason: NSIS has a handful of commands that refuse to run — or, in
@@ -268,8 +269,7 @@ give it a default and let the type do the work.
 
 `param(…)` is a **declaration**, so it stands alone as the whole initialiser of
 a top-level `local … <const>` — not inside a body, and not composed into a
-larger expression. Compose one line further down instead, which costs nothing
-since resolution is order-free:
+larger expression. Compose one line further down instead:
 
 ```lua
 local VERSION <const> = param("VERSION", "1.4.2")
@@ -308,9 +308,8 @@ It also has to be a `bool`, for the same reason a runtime condition does.
 **Whatever the branch holds is an ordinary top-level declaration.** Sections,
 `func`s, `attributes`, `<const>`s, `param`s, globals, `raw.head` / `raw.tail` —
 there is no second set of rules, because the selected statements *are* the top
-level once the branch is taken. Resolution stays order-free across it: a section
-declared inside a branch can be listed by an `installer {}` written outside it,
-and a `<const>` declared below the `if` can be what decides it.
+level once the branch is taken: a section declared inside a branch can be listed
+by an `installer {}` written after it.
 
 That includes a `local`, which stays visible after the `end` as Lua's would not.
 `lua-language-server` follows Lua and reports each later use as `undefined-global`,

@@ -13,9 +13,10 @@
 //! source ─frontend─▶ AST ─resolve─▶ symbols ─lower─▶ CFG ─alloc─▶ registers ─layout─▶ IR ─emit─▶ .nsi
 //! ```
 //!
-//! The language is order-free — it can be, because Installua compiles rather
-//! than executing Lua at build time, so there is no evaluation order for a
-//! declaration to have to precede. `resolve` running to completion before any
+//! A `func` is order-free — it can be, because Installua compiles rather than
+//! executing Lua at build time, so there is no evaluation order for a
+//! declaration to have to precede. A `local` keeps Lua's scope, from its
+//! declaration down, because that is what `lua-language-server` checks. `resolve` running to completion before any
 //! body is lowered is half of what buys that: it makes every top-level *name*
 //! exist before anything reads one. It is only half, because a `func` is more
 //! than a name. Resolve records its params, block and span and no types at all,

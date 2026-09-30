@@ -1,17 +1,21 @@
-//! Order-free name resolution.
+//! Name resolution: order-free for a `func`, Lua's order for a `local`.
 //!
 //! Every top-level name is resolved before any body is lowered, so a section on
-//! line 3 can call a `func` declared on line 300 and read a `<const>` defined
-//! below it. That is possible only because Installua **compiles** rather than
-//! transliterates: there is no build-time execution for an ordering rule to be
-//! about, so the order things appear in the source is decoupled from the order
-//! they appear in the output.
+//! line 3 can call a `func` declared on line 300. That is possible only because
+//! Installua **compiles** rather than transliterates: there is no build-time
+//! execution for an ordering rule to be about, so the order things appear in
+//! the source is decoupled from the order they appear in the output.
 //!
 //! It is worth being deliberate that this diverges from Lua, which does not
 //! hoist — `function greet() end` is sugar for an assignment executed in order,
-//! and calling `greet()` above it is a runtime error in real Lua. Order-free is
-//! the honest model for a compiled language and it costs one row in the
-//! "Lua-shaped, not Lua" table.
+//! and calling `greet()` above it is a runtime error in real Lua. A `func`'s
+//! name is a string, though, so no Lua tool has an opinion on its order.
+//!
+//! A `local` is different: `lua-language-server` scopes it from its
+//! declaration down, and reports a read above that as an undefined global. So
+//! the compiler does too ([`globals`]), and a `local` with no value is Lua's
+//! forward declaration when a declaration below gives it one ([`declare`]).
+//! Hoisting a `local` would compile programs the editor calls broken.
 //!
 //! NSIS itself is inconsistent about this, which is why hoisting is the
 //! compiler's job rather than the user's: `Function`/`Call` resolves late,
@@ -226,6 +230,9 @@ pub struct Resolved<'a> {
     /// a misspelt entry is still an error.
     pub untaken: BTreeSet<String>,
     pub functions: BTreeMap<String, Func<'a>>,
+    /// Top-level `local x` with no value, waiting for the `x = …` below that
+    /// gives it one. See [`declare`].
+    forward: BTreeMap<String, Span>,
     /// In first-seen order, because `Var` declarations are emitted in it and
     /// the goldens are diffed.
     pub globals: Vec<Global>,
@@ -249,7 +256,7 @@ pub fn resolve<'a>(
     consts(program, &mut resolved, options, diags);
     unknown_params(&resolved, options, diags);
     top_level(&mut resolved, diags);
-    globals(&mut resolved);
+    globals(&mut resolved, diags);
     resolved
 }
 
@@ -585,6 +592,19 @@ fn consts<'a>(
         }
     }
 
+    // A forward declaration nothing gave a value to. Only a declaration can
+    // take one — anything else at the top level has no install-time code to
+    // run in — so this is the same rejection `local x = …` gets.
+    let forward = std::mem::take(&mut resolved.forward);
+    for (name, span) in forward {
+        if !resolved.deferred.contains_key(&name) {
+            diags.push(nowhere(span).note(format!(
+                "`local {name}` above and `{name} = section {{ … }}` below is a forward \
+                 declaration, for a section, group, page or control"
+            )));
+        }
+    }
+
     // Every `if` still standing: nothing folded its condition, and no later
     // round can, since the fixpoint has run out of new constants to learn.
     for item in &items {
@@ -828,6 +848,21 @@ fn declare<'a>(
     options: &crate::Options,
     diags: &mut Diagnostics,
 ) {
+    // `local interval` and, below it, `interval = number { … }`: Lua's
+    // forward declaration, and the only way two controls whose callbacks read
+    // each other can both be in scope where they are read. The assignment is
+    // the declaration's value, so it is held exactly as `local x = …` is.
+    if let Stmt::Assign {
+        targets, values, ..
+    } = stmt
+        && let ([Expr::Name(name)], [value]) = (targets.as_slice(), values.as_slice())
+        && resolved.forward.contains_key(&name.text)
+        && let Some(kind) = deferred_kind(value)
+    {
+        defer(resolved, name, kind, value, diags);
+        return;
+    }
+
     let Stmt::Local {
         names,
         is_const,
@@ -837,6 +872,13 @@ fn declare<'a>(
     else {
         return;
     };
+
+    if !is_const && values.is_empty() {
+        for name in names {
+            resolved.forward.insert(name.text.clone(), name.span);
+        }
+        return;
+    }
 
     // `local fileFunc = import "FileFunc"` is not a value binding at all —
     // it names a namespace, which is why it is the one non-`<const>`
@@ -856,50 +898,12 @@ fn declare<'a>(
         && let ([name], [value]) = (names.as_slice(), values.as_slice())
         && let Some(kind) = deferred_kind(value)
     {
-        if let Some(previous) = resolved.deferred.get(&name.text) {
-            diags.push(
-                Diagnostic::error(
-                    Code::DuplicateBlock,
-                    *span,
-                    format!("`{}` is declared more than once", name.text),
-                )
-                .note_at("the first one is at", previous.span)
-                .note("resolution is order-free, so there is no later one that wins"),
-            );
-            return;
-        }
-        resolved.deferred_order.push(name.text.clone());
-        resolved.deferred.insert(
-            name.text.clone(),
-            Deferred {
-                kind,
-                value,
-                span: name.span,
-            },
-        );
+        defer(resolved, name, kind, value, diags);
         return;
     }
 
     if !is_const {
-        diags.push(
-            Diagnostic::error(
-                Code::NotYetImplemented,
-                *span,
-                "a `local` at the top level has nowhere to live",
-            )
-            .note(
-                "there is no install-time code outside a section or a `func`, so a register \
-                 here would never be written",
-            )
-            .note(
-                "write `local X <const> = …` for a build-time value, or assign to a bare \
-                 name for a global",
-            )
-            .note(
-                "`local x = section { … }` is the other one: it names a section for a block \
-                 to list and for install-time code to address",
-            ),
-        );
+        diags.push(nowhere(*span));
         return;
     }
 
@@ -987,6 +991,58 @@ fn declare<'a>(
             ),
         }
     }
+}
+
+/// A top-level `local` that is not a declaration, a namespace or a `<const>`.
+fn nowhere(span: Span) -> Diagnostic {
+    Diagnostic::error(
+        Code::NotYetImplemented,
+        span,
+        "a `local` at the top level has nowhere to live",
+    )
+    .note(
+        "there is no install-time code outside a section or a `func`, so a register \
+         here would never be written",
+    )
+    .note(
+        "write `local X <const> = …` for a build-time value, or assign to a bare \
+         name for a global",
+    )
+    .note(
+        "`local x = section { … }` is the other one: it names a section for a block \
+         to list and for install-time code to address",
+    )
+}
+
+/// Holds a section, group, page or control for the block that lists it.
+fn defer<'a>(
+    resolved: &mut Resolved<'a>,
+    name: &'a Name,
+    kind: DeferredKind,
+    value: &'a Expr,
+    diags: &mut Diagnostics,
+) {
+    if let Some(previous) = resolved.deferred.get(&name.text) {
+        diags.push(
+            Diagnostic::error(
+                Code::DuplicateBlock,
+                name.span,
+                format!("`{}` is declared more than once", name.text),
+            )
+            .note_at("the first one is at", previous.span)
+            .note("a block lists it by name, so the name has to mean one thing"),
+        );
+        return;
+    }
+    resolved.deferred_order.push(name.text.clone());
+    resolved.deferred.insert(
+        name.text.clone(),
+        Deferred {
+            kind,
+            value,
+            span: name.span,
+        },
+    );
 }
 
 /// Whether this `<const>` name is already bound, reported if it is.
@@ -1206,9 +1262,24 @@ fn namespace(value: &Expr, diags: &mut Diagnostics) -> Option<Namespace> {
 
 /// Pass 1c: globals. A bare assignment declares one, and it can happen anywhere
 /// — inside a section, inside a `func` — so this walks every body.
-fn globals(resolved: &mut Resolved<'_>) {
+///
+/// The same walk reports a top-level `local` read above its declaration. The
+/// walk binds each `local` *after* its initialiser, which is Lua's scope, so
+/// a top-level name that is not bound yet where it is read is one Lua would
+/// read as a global — and `lua-language-server` reports as undefined. Hoisting
+/// would compile it, and a program whose editor says it is broken is not one
+/// anybody trusts.
+fn globals(resolved: &mut Resolved<'_>, diags: &mut Diagnostics) {
     let mut scopes: Vec<HashSet<String>> = vec![HashSet::new()];
-    let mut found: Vec<Global> = Vec::new();
+    let mut top = BTreeSet::new();
+    for stmt in &resolved.block {
+        locals(std::slice::from_ref(*stmt), &mut top);
+    }
+    let mut found = Found {
+        globals: Vec::new(),
+        top,
+        early: Vec::new(),
+    };
     // The selected top level, so a global assigned only inside a branch that
     // was not taken never gets a `Var`.
     let block = resolved.block.clone();
@@ -1216,13 +1287,43 @@ fn globals(resolved: &mut Resolved<'_>) {
     for stmt in block {
         scan_stmt(stmt, &mut scopes, &mut found, resolved);
     }
-    resolved.globals = found;
+    for name in found.early {
+        let later = match resolved.deferred.contains_key(&name.text) {
+            true => format!(
+                "write `local {0}` above this, and give it its value below: `{0} = …`",
+                name.text
+            ),
+            false => "move the declaration above this".to_string(),
+        };
+        diags.push(
+            Diagnostic::error(
+                Code::UndefinedName,
+                name.span,
+                format!("`{}` is read above its declaration", name.text),
+            )
+            .note(
+                "a `local` is in scope from its declaration down, as in Lua — only a `func` \
+                 is visible everywhere",
+            )
+            .note(later),
+        );
+    }
+    resolved.globals = found.globals;
+}
+
+/// What [`globals`] collects on its walk.
+struct Found {
+    globals: Vec<Global>,
+    /// Every `local` the selected top level declares.
+    top: BTreeSet<String>,
+    /// Reads of one of those before its declaration, in source order.
+    early: Vec<Name>,
 }
 
 fn scan_block(
     block: &Block,
     scopes: &mut Vec<HashSet<String>>,
-    found: &mut Vec<Global>,
+    found: &mut Found,
     resolved: &Resolved<'_>,
 ) {
     scopes.push(HashSet::new());
@@ -1235,7 +1336,7 @@ fn scan_block(
 fn scan_stmt(
     stmt: &Stmt,
     scopes: &mut Vec<HashSet<String>>,
-    found: &mut Vec<Global>,
+    found: &mut Found,
     resolved: &Resolved<'_>,
 ) {
     match stmt {
@@ -1256,16 +1357,20 @@ fn scan_stmt(
                 scan_expr(value, scopes, found, resolved);
             }
             for target in targets {
+                // `interval.enabled = …` reads `interval`.
+                if !matches!(target, Expr::Name(_)) {
+                    scan_expr(target, scopes, found, resolved);
+                }
                 if let Expr::Name(name) = target
                     && !bound(scopes, &name.text)
-                    && !found.iter().any(|g| g.name == name.text)
+                    && !found.globals.iter().any(|g| g.name == name.text)
                     && builtins::constant_named(&name.text).is_none()
                     // `currentInstType = "Minimal"` is `SetCurInstType`, not a
                     // slot to allocate.
                     && !builtins::owned(&name.text)
                     && !resolved.consts.contains_key(&name.text)
                 {
-                    found.push(Global {
+                    found.globals.push(Global {
                         name: name.text.clone(),
                         span: name.span,
                     });
@@ -1338,7 +1443,7 @@ fn scan_stmt(
 fn scan_expr(
     expr: &Expr,
     scopes: &mut Vec<HashSet<String>>,
-    found: &mut Vec<Global>,
+    found: &mut Found,
     resolved: &Resolved<'_>,
 ) {
     match expr {
@@ -1371,7 +1476,12 @@ fn scan_expr(
             scan_expr(rhs, scopes, found, resolved);
         }
         Expr::Unary { operand, .. } => scan_expr(operand, scopes, found, resolved),
-        Expr::Number { .. } | Expr::Str(_) | Expr::Bool { .. } | Expr::Name(_) => {}
+        Expr::Name(name) => {
+            if found.top.contains(&name.text) && !bound(scopes, &name.text) {
+                found.early.push(name.clone());
+            }
+        }
+        Expr::Number { .. } | Expr::Str(_) | Expr::Bool { .. } => {}
     }
 }
 

@@ -15,6 +15,10 @@ languages {
 	},
 }
 
+local StartMenuFolder = page.startMenu {
+	registry = { root = "HKCU", key = "Software/Modern UI Test", value = "Start Menu Folder" },
+}
+
 local SecDummy = section { "Dummy Section",
 	description = lang.DESC_SecDummy,
 	body = function()
@@ -26,10 +30,6 @@ local SecDummy = section { "Dummy Section",
 			createShortcut(SMPROGRAMS .. "/" .. StartMenuFolder.folder .. "/Uninstall.lnk", INSTDIR .. "/Uninstall.exe")
 		end)
 	end,
-}
-
-local StartMenuFolder = page.startMenu {
-	registry = { root = "HKCU", key = "Software/Modern UI Test", value = "Start Menu Folder" },
 }
 
 installer {

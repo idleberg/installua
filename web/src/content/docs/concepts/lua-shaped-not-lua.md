@@ -84,15 +84,35 @@ declaring `PLUGIN_NAME` in each branch of an `if`, which the compiler accepts bu
 `lua-language-server` cannot follow. Keep the `if` for statements — `attributes`,
 `installer`, sections.
 
-## Everything hoists, so there are no ordering rules to learn
+## A `func` hoists, a `local` does not
 
 In Lua, `function f() end` is an ordered assignment and calling `f` above it is an error.
 Installua compiles rather than executes, so there is no build-time execution for an ordering
-rule to be _about_: every top-level name is resolved before any body is compiled, and the
-emitter puts each kind of output where NSIS needs it.
+rule to be _about_: every `func` is resolved before any body is compiled, and the emitter
+puts each kind of output where NSIS needs it. Write your functions in whatever order reads
+best. The output's order is not yours to choose.
 
-Write your functions in whatever order reads best. The output's order is not yours to
-choose.
+A `local` keeps Lua's rule: it is in scope from its declaration down. Reading one above
+that is an error, the same one `lua-language-server` reports as `undefined-global`. When
+two controls' callbacks read each other, or one reads itself, declare the names first, as
+in Lua:
+
+```lua
+local random, interval
+random = checkbox {
+	"Switch every", x = 8, y = 8, width = 56, height = 13,
+	onClick = function() interval.enabled = random.checked end,
+}
+interval = number { x = 70, y = 8, width = 20, height = 13 }
+
+installer {
+	page.custom { "Options", controls = { random, interval } },
+	page.instFiles {},
+}
+```
+
+The assignment below is the declaration's value. It works for what a block or a page lists
+by name: a section, a group, a page or a control.
 
 ## Two stages, and you can always tell which
 
@@ -148,7 +168,7 @@ works in a path position, but is left as written in a string you store — see
 
 **`x = 1` with no `local` declares a global**, exactly as in Lua — and emits `Var x`. All
 assignments to one global must agree on type, and a conflict names every site, because
-"the first one" is meaningless when everything hoists.
+"the first one" is meaningless when any body may assign it.
 
 **Recursion works, and has a cliff.** About 1300 frames under wine, and then the process
 dies _silently_ — no dialog, no log line, no error level. The compiler warns on unbounded

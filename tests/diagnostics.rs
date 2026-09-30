@@ -399,6 +399,55 @@ fn an_undefined_base_is_undefined() {
     }
 }
 
+/// A top-level `local` is in scope from its declaration down, as in Lua, so a
+/// callback that reads a control declared below it is an error — the one
+/// `lua-language-server` reports as an undefined global. Lua's forward
+/// declaration is the fix, and a forward declaration nothing assigns has
+/// nowhere to live.
+#[test]
+fn a_local_is_in_scope_from_its_declaration_down() {
+    const PAGE: &str = "installer {\n\
+         page.custom { \"Options\", controls = { random, interval } },\n\
+         page.instFiles {},\n\
+         section(\"s\", function() end),\n\
+         }\n";
+    let messages = |top: &str| {
+        let diags = compile(&format!(
+            "attributes {{ outFile = \"a.exe\" }}\n{top}{PAGE}"
+        ));
+        diags.iter().map(|d| d.message.clone()).collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        messages(
+            "local random = checkbox { \"Every\", y = 0, height = 12,\n\
+             onClick = function() interval.enabled = random.checked end }\n\
+             local interval = number { y = 20, height = 12 }\n"
+        ),
+        [
+            "`random` is read above its declaration",
+            "`interval` is read above its declaration",
+        ]
+    );
+    assert_eq!(
+        messages(
+            "local random, interval\n\
+             random = checkbox { \"Every\", y = 0, height = 12,\n\
+             onClick = function() interval.enabled = random.checked end }\n\
+             interval = number { y = 20, height = 12 }\n"
+        ),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        messages(
+            "local random, interval, never\n\
+             random = checkbox { \"Every\", y = 0, height = 12 }\n\
+             interval = number { y = 20, height = 12 }\n"
+        ),
+        ["a `local` at the top level has nowhere to live"]
+    );
+}
+
 /// `multiUser {}`'s rejections, each alone: the one diagnostic and nothing
 /// after it.
 #[test]

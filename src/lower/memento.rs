@@ -59,7 +59,9 @@ impl Lowerer<'_, '_> {
             );
         }
         let remember = self.resolved.block.iter().find_map(|stmt| match stmt {
-            Stmt::Local { values, .. } => values.iter().find_map(first_remember),
+            Stmt::Local { values, .. } | Stmt::Assign { values, .. } => {
+                values.iter().find_map(first_remember)
+            }
             Stmt::Call(call) => first_remember(call),
             _ => None,
         });

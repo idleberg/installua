@@ -246,7 +246,7 @@ impl Lifter<'_> {
             )
             .note("it merges another file's declarations into this one, so it cannot depend on anything decided at install time")
             .note("a top-level `if` is no exception: files are merged in the frontend, and the branch is taken later, in resolution")
-            .note("move it to the top of the file; declarations are order-free"),
+            .note("move it to the top level of the file, above what reads it"),
         );
     }
 

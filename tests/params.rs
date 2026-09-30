@@ -76,18 +76,18 @@ fn a_define_replaces_the_default() {
     assert!(!output.contains("1.4.2"), "{output}");
 }
 
-/// Order-free, like every other top-level name: the parameter is declared below
-/// the block that reads it, and the worklist in `resolve` closes over it.
+/// A parameter is a `local`, so it is in scope from its declaration down, as
+/// in Lua. Read above it, `lua-language-server` sees an undefined global, and
+/// so does the compiler.
 #[test]
-fn a_parameter_may_be_declared_below_its_use() {
-    let output = build(
+fn a_parameter_read_above_its_declaration_is_rejected() {
+    let diags = errors(
         "attributes { name = \"a\", outFile = NAME }\n\
          local NAME <const> = param(\"NAME\", \"a.exe\")\n\
          installer { section(\"Core\", function() end) }\n",
         &[("NAME", "b.exe")],
     );
-    assert!(output.contains("!define NAME \"b.exe\""), "{output}");
-    assert!(output.contains("OutFile \"${NAME}\""), "{output}");
+    assert!(diags.contains(Code::UndefinedName), "{diags:?}");
 }
 
 /// A parameter named like an NSIS constant shadows it, in a body and in an
