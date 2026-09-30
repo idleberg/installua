@@ -37,6 +37,26 @@ func("majorOf", function(version)
 end)
 ```
 
+## The math adapters
+
+NSIS has no instruction for these, so each compiles to a compare and a branch.
+They matter for the type as much as the value: a check like `if n > 0` does not
+make `n` non-negative for the positions that need one, such as `sleep`, and
+these are how a script says so.
+
+| Installua                          | Non-negative when                  |
+| ---------------------------------- | ---------------------------------- |
+| `math.abs(n)` → `int`              | always                             |
+| `math.max(a, b, …)` → `int`        | any argument is, so `math.max(n, 0)` |
+| `math.min(a, b, …)` → `int`        | every argument is                  |
+
+```lua
+func("pause", function(ini)
+	local seconds = tonumber(readIniStr(ini, "Settings", "Autoclose"))
+	sleep(math.max(seconds, 0) * 1000)
+end)
+```
+
 ## Casts
 
 Every NSIS value is already a string, so `tostring` and `tonumber` emit no code.

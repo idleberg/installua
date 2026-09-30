@@ -710,6 +710,9 @@ impl BodyLowerer<'_, '_> {
             "string.sub" | "string.find" | "string.lower" | "string.upper" | "string.format" => {
                 return self.string_adapter(&name, args, dest, span);
             }
+            "math.abs" | "math.max" | "math.min" => {
+                return self.math_adapter(&name, args, dest, span);
+            }
             "tostring" | "tonumber" if self.is_cast(&name) => {
                 return self.cast(&name, args, dest, span);
             }
@@ -2654,6 +2657,152 @@ impl BodyLowerer<'_, '_> {
             vec![ir::Arg::dest(dest.clone()), subject.arg, length, start],
         ));
         Some(Ty::Str)
+    }
+
+    /// `math.abs`, `math.max` and `math.min` — the other hand-written kind.
+    ///
+    /// NSIS has no instruction for any of them, and they are here less for the
+    /// value than for the type: the range check is not flow-sensitive, so
+    /// `if n > 0 then sleep(n) end` still refuses `n`, and these are how a
+    /// script states the fact instead. `math.abs(n)` is non-negative, so is
+    /// `math.max(n, 0)`, and `math.min` is when every argument is.
+    fn math_adapter(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        dest: Option<&Slot>,
+        span: Span,
+    ) -> Option<Ty> {
+        let owned;
+        let dest = match dest {
+            Some(dest) => dest,
+            None => {
+                owned = self.claim_temp(span);
+                &owned
+            }
+        };
+        let dest_arg = ir::Arg::slot(dest.clone());
+
+        if name == "math.abs" {
+            let [argument] = args else {
+                return self.wrong_arity(name, 1, args.len(), span);
+            };
+            // Copied first and negated in place, so `x = math.abs(x)` reads `x`
+            // once, before anything writes it.
+            let ty = self.value_into(argument, dest)?;
+            self.require_int(
+                &Typed {
+                    arg: dest_arg.clone(),
+                    ty,
+                },
+                span,
+            )?;
+            let n = self.body.construct();
+            let negative = self.fresh(format!("abs_{n}_negative"));
+            let done = self.fresh(format!("abs_{n}_done"));
+            self.terminate(
+                Terminator::Branch {
+                    test: Test::Int {
+                        op: CmpOp::Lt,
+                        lhs: dest_arg.clone(),
+                        rhs: ir::Arg::int(0),
+                        family: cfg::IntFamily::Int,
+                    },
+                    then_block: negative,
+                    else_block: done,
+                },
+                negative,
+            );
+            self.emit(ir::Instruction::new(
+                "IntOp",
+                vec![
+                    ir::Arg::dest(dest.clone()),
+                    ir::Arg::int(0),
+                    ir::Arg::raw("-"),
+                    dest_arg,
+                ],
+            ));
+            self.terminate(Terminator::Jump(done), done);
+            return Some(Ty::nonneg());
+        }
+
+        if args.len() < 2 {
+            self.diags.push(Diagnostic::error(
+                Code::WrongArity,
+                span,
+                format!(
+                    "`{name}` takes at least 2 arguments, and {} were given",
+                    args.len()
+                ),
+            ));
+            return None;
+        }
+        let mut values = Vec::with_capacity(args.len());
+        for argument in args {
+            let value = self.value(argument)?;
+            self.require_int(&value, argument.span())?;
+            values.push(value);
+        }
+        let nonneg = |value: &Typed| {
+            value
+                .ty
+                .as_int()
+                .is_some_and(|int| int.sign == Sign::NonNeg)
+        };
+        let ty = if name == "math.max" && values.iter().any(nonneg)
+            || name == "math.min" && values.iter().all(nonneg)
+        {
+            Ty::nonneg()
+        } else {
+            Ty::int()
+        };
+        let op = if name == "math.max" {
+            CmpOp::Gt
+        } else {
+            CmpOp::Lt
+        };
+
+        // Kept in a scratch register and copied out at the end, because `dest`
+        // may be a later argument — `x = math.max(0, x)` — and writing the
+        // first one there would clobber it before it is compared.
+        let best = self.claim_temp(span);
+        let best_arg = ir::Arg::slot(best.clone());
+        let mut values = values.into_iter();
+        let first = values.next().expect("at least two");
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(best.clone()), first.arg],
+        ));
+        let mut best_ty = first.ty;
+        for value in values {
+            let n = self.body.construct();
+            let take = self.fresh(format!("{}_{n}_take", &name[5..]));
+            let next = self.fresh(format!("{}_{n}_next", &name[5..]));
+            self.terminate(
+                Terminator::Branch {
+                    test: Test::Int {
+                        op,
+                        lhs: value.arg.clone(),
+                        rhs: best_arg.clone(),
+                        family: cfg::IntFamily::of(value.ty.join(best_ty)),
+                    },
+                    then_block: take,
+                    else_block: next,
+                },
+                take,
+            );
+            self.emit(ir::Instruction::new(
+                "StrCpy",
+                vec![ir::Arg::dest(best.clone()), value.arg],
+            ));
+            self.terminate(Terminator::Jump(next), next);
+            best_ty = best_ty.join(value.ty);
+        }
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(dest.clone()), best_arg],
+        ));
+        Some(ty)
     }
 
     /// `tostring` and `tonumber` — not shadowed by a `func`, a `local` or a

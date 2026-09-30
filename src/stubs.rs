@@ -1509,6 +1509,15 @@ const LANGUAGE: &[(&str, &str)] = &[
         "string.format",
         "      - type: string\n      - type: number\n",
     ),
+    ("math.abs", "      - type: number\n"),
+    (
+        "math.max",
+        "      - type: number\n      - type: number\n      - type: \"...\"\n        required: false\n",
+    ),
+    (
+        "math.min",
+        "      - type: number\n      - type: number\n      - type: \"...\"\n        required: false\n",
+    ),
     ("ipairs", "      - type: table\n"),
     ("continue", ""),
     // `HAND_SHAPED`, for the reason given there: a text or a table.

@@ -301,21 +301,19 @@ skill's `REFERENCE.md`.
 PimpBot's `nxs.toml` can now declare `show` and `update` instead of the `raw`
 workaround its comment describes.
 
-### 5.22 A value proven positive by an `if` is still "not known to be non-negative"
+### 5.22 A value proven positive by an `if` is still "not known to be non-negative" — fixed
 
-```lua
-local seconds = tonumber(readIniStr(ini, "Settings", "Autoclose"))
-if seconds > 0 then
-	sleep(seconds * 1000)   -- error[type-mismatch]: not known to be non-negative
-end
-```
+The range check stays flow-insensitive; the adapters `CONTEXT.md` listed now
+ship, so the fact can be stated. `math.abs(n)` is non-negative, `math.max(…)`
+is when any argument is, `math.min(…)` when every one is — so
+`sleep(math.max(seconds, 0) * 1000)` compiles. Each lowers to a compare and a
+branch (`math_adapter` in `src/lower/expr.rs`); `max`/`min` keep a scratch
+register so `dest` may be a later argument. The selene std lists all three.
+Golden: `strings`. Docs: `reference/commands/strings-and-numbers.md` and the
+stdlib table in `concepts/lua-shaped-not-lua.md`.
 
-The range check is not flow-sensitive, which is fine, but there is also no way
-to state the fact. `CONTEXT.md` lists `math.abs`/`max`/`min` as adapters, and
-`math` is an undefined name in 0.2.0. Either the adapters ship (and
-`math.abs(x)` counts as non-negative), or `CONTEXT.md` stops listing them.
-
-**Workaround in PimpBot:** `for _ = 1, seconds do sleep(1000) end`.
+PimpBot's `for _ = 1, seconds do sleep(1000) end` workaround can become
+`sleep(math.max(seconds, 0) * 1000)`.
 
 ### 5.23 Smaller gaps met on the way
 
