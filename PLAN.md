@@ -261,17 +261,31 @@ retired-instruction rows, so the apostrophe in the `pairs` message is `''`.
 checks every single-quoted scalar in the generated `.yml`, with no YAML
 dependency and no selene. selene 0.31 reads the std again.
 
-### 5.20 selene 0.31 cannot parse `<const>`, whatever the std says
+### 5.20 selene 0.31 cannot parse `<const>`, whatever the std says — fixed
 
-After a hand-fix for 5.19, `selene` reports a parse error at every `<const>`:
-about a hundred in PimpBot's existing files, which pass `installua check`. The
-std's `lua_versions: [lua54]` does not change it, and a two-line file with
-`local X <const> = 1` shows the same. So the lint step the docs and
-`installua init` set up does not run on real Installua source.
+It can: the published binary is built for Lua 5.1, and the one
+`cargo install selene --features selene-lib/lua54` builds (`mise run
+install:selene`, and what the docs already say) parses `<const>`. It reports
+0 parse errors on PimpBot.
 
-**To find out:** whether a selene build or version exists that parses Lua 5.4
-attributes. If none does, the docs should stop presenting selene as part of
-the workflow until one does.
+Running it then showed 412 errors on PimpBot, nearly all the std's:
+
+- a `func` is named by a string and selene follows no `include`, so every call
+  to one and every global was `undefined_variable`. `selene_std` now takes the
+  project's sources and lists both, from the walk `project_meta` uses
+  (`project_names`);
+- `string.sub`, `.find`, `.lower`, `.upper`, `.format`, `ipairs` and
+  `continue` were missing, and are in `LANGUAGE`;
+- `messageBox` was generated in its NSIS shape, two strings, so every
+  `messageBox { … }` was a wrong arity. It is hand-shaped here as in the meta;
+- `selene.toml` allows `unscoped_variables`: a global is the language's.
+
+What is left on PimpBot is 72 errors and 67 warnings, all its own: locals
+bound in a top-level `if` (`local fonts = section {…}` in each branch), which
+the docs already say both linters report, unused variables, and one
+`if_same_then_else`. PimpBot's `selene.toml` predates the
+`unscoped_variables` line and needs it by hand, or `installua init --force`, since `init`
+does not overwrite one otherwise.
 
 ### 5.21 A plugin that needs `/NOUNLOAD` cannot be declared
 

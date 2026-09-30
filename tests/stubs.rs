@@ -659,11 +659,51 @@ fn a_source_that_does_not_parse_contributes_nothing_and_fails_nothing() {
 }
 
 #[test]
+fn the_selene_std_declares_what_a_project_and_the_language_declare() {
+    // selene follows no `include` and reads `func("kib", …)` as a call, not a
+    // definition: without these every use of either is `undefined_variable`.
+    let source = "\
+        func(\"kib\", function(bytes) return bytes // 1024 end)\n\
+        state = \"fresh-install\"\n";
+    let std = stubs::selene_std(&[("strings.lua".to_string(), source.to_string())]);
+
+    assert!(
+        std.contains("\n  kib:\n    args:\n      - type: any\n  "),
+        "{std}"
+    );
+    assert!(
+        std.contains("\n  state:\n    property: full-write\n"),
+        "{std}"
+    );
+
+    // The adapters and the iterator, which no table row generates.
+    for name in [
+        "string.sub",
+        "string.find",
+        "string.lower",
+        "string.upper",
+        "string.format",
+        "ipairs",
+        "continue",
+    ] {
+        assert!(std.contains(&format!("\n  {name}:\n")), "`{name}`: {std}");
+    }
+
+    // A text or a table, once: the NSIS shape's two strings would make every
+    // `messageBox { … }` a wrong-arity error.
+    assert_eq!(std.matches("\n  messageBox:\n").count(), 1, "{std}");
+    assert!(
+        std.contains("\n  messageBox:\n    args:\n      - type: any\n  "),
+        "{std}"
+    );
+}
+
+#[test]
 fn the_selene_std_names_a_replacement_for_every_rejection() {
     // Warnings are failures, as a lint: `deprecated = "deny"` in selene.toml
     // makes the replacement text a failure rather than advice, so a rejection
     // with no replacement is a lint that only says no.
-    let std = stubs::selene_std();
+    let std = stubs::selene_std(&[]);
     for name in ["require", "pcall", "print", "pairs", "math.floor"] {
         let entry = std
             .split(&format!("\n  {name}:\n"))
@@ -690,7 +730,7 @@ fn every_quoted_scalar_in_the_selene_std_is_well_formed() {
     // A bare `'` inside a single-quoted YAML scalar ends it, and selene then
     // refuses the whole file. Nothing in `check` runs selene, so this is where
     // the next apostrophe in a message is caught.
-    let std = stubs::selene_std();
+    let std = stubs::selene_std(&[]);
     for line in std.lines() {
         let Some(start) = line.find('\'') else {
             continue;
@@ -707,7 +747,7 @@ fn every_quoted_scalar_in_the_selene_std_is_well_formed() {
 
 #[test]
 fn the_selene_std_and_the_stub_agree_about_what_exists() {
-    let std = stubs::selene_std();
+    let std = stubs::selene_std(&[]);
     let meta = meta();
 
     for entry in table::table().iter().filter(|entry| {

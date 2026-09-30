@@ -972,7 +972,7 @@ fn stubs(root: &Path) -> Stop {
         ),
         (
             root.join(".installua/installua.yml"),
-            installua::stubs::selene_std(),
+            installua::stubs::selene_std(&sources),
         ),
     ];
 

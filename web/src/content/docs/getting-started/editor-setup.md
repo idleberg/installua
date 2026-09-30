@@ -31,4 +31,6 @@ One caveat: the published selene binary is built for Lua 5.1, which can't parse 
 cargo install selene --features selene-lib/lua54
 ```
 
+selene reads one file at a time, so the std `installua stubs` writes also lists your project's own `func`s and globals. Run `installua stubs` again after adding one, as you would for the language server.
+
 selene is optional. Skip it and everything still compiles – you just lose the friendly nudge when you reach for a Lua feature that isn't there.
