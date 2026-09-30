@@ -56,6 +56,9 @@ An adapter that materialised the 1-based value first would emit `IntOp $1 $1 + 1
 instructions — otherwise the most idiomatic string expression in the language carries two
 dead instructions.
 
+The compiler does not fold them yet, and a miss now adds a `StrCmp` too: `${StrLoc}` writes
+`""`, which `string.find` turns into `0` by way of `-1` before the `+1`.
+
 ## The type lattice lands on `unknown` zero times
 
 This was the lattice's open empirical question. Across all five programs, every value

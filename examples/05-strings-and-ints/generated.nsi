@@ -70,6 +70,9 @@ SectionEnd
 Function majorOf
   Pop $0
   ${StrLoc} $1 $0 "." ">"
+  StrCmp $1 "" 0 __GENERATED_find_0_hit
+  StrCpy $1 -1
+__GENERATED_find_0_hit:
   IntOp $1 $1 + 1
   IntOp $1 $1 - 1
   StrCpy $0 $0 $1 0

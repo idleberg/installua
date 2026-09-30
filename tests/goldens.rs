@@ -40,6 +40,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("radio-buttons", &[]),
     ("returns", &[Code::DeepRecursion]),
     ("sections", &[]),
+    ("strings", &[]),
     ("walkers", &[]),
 ];
 

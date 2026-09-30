@@ -220,6 +220,126 @@ settingsInterval` above both), and every `mise run build` profile passes.
 `avs-full` also needed a `glob` fix found on the way: an absolute pattern lost
 its leading `/` (`tests/glob.rs`, `an_absolute_pattern_starts_at_the_root`).
 
+### 5.17 `string.find` returns 1 when the needle is absent — fixed
+
+A miss is `0`. After `${StrLoc}`, a `StrCmp` on `""` sets the slot to `-1`
+before the `+ 1` (`src/lower/expr.rs`, `"string.find"`), and the comment there
+now says so. Golden `tests/golden/strings.{lua,nsi}` has a hit at 1, a later
+hit and a miss, and passes Tier 3. `examples/05-strings-and-ints` gained the
+same three lines. The migration table in `concepts/lua-shaped-not-lua.md` has
+the row, and `strings-and-numbers.md` notes the `0`.
+
+Found on the way: `string.sub(v, 1, dot - 1)` with `dot == 0` is
+`StrCpy … -1`, which drops the last character, where Lua's `string.sub(v, 1,
+-1)` is the whole string. A negative index known only at run time is not
+converted.
+
+### 5.18 A declaration's `dir` is resolved against the program, not the declaration
+
+Found vendoring `nxs.dll` into PimpBot (`.installua/declarations/nxs.toml`,
+`dir = "plugins/x86-unicode"`, the workspace marked by an `installua.toml` at
+the repository root, and the program at `packages/backup/backup.lua`).
+
+**Now:** two things go wrong in `addplugindir` (`src/lower/mod.rs`).
+`base.join(dir)` joins the dir onto the **program's** folder, so a workspace
+declaration comes out as `packages/backup/plugins/x86-unicode`. And `base` is
+the path as typed on the command line, relative to the shell's working
+directory, while every other emitted path (`MUI_ICON "..\..\ui\…"`) is
+relative to the source file, which is where `makensis` resolves them. So the
+line is right only when the build runs from the program's own folder. The doc
+comment on `Declaration::dir` says "relative to the project root" and
+"absolutises it", and the code does neither.
+
+**Should:** resolve `dir` against the folder holding the
+`.installua/declarations/` the declaration came from (the workspace root for a
+shared one), and emit it the way the other paths are emitted, relative to the
+source file.
+
+**Why it looks fixed:** `9500dff` added `dir`, and `e4319ee` fixed makensis
+looking up the script path again after moving into the script's folder. That
+fix was for the `.nsi` path, not `!addplugindir`. The `dir` tests in
+`tests/plugins.rs` pass an absolute base (`/project`) with the declaration
+beside the program, so neither a base typed relative to the shell nor a
+workspace declaration is exercised. Reproduced with a release build of
+`e0d9a9d`. `src/declarations.rs` has to remember which folder each
+declaration was read from.
+
+**Check:** `tests/declarations.rs`, with a workspace declaration used by a
+program two folders down, built from the workspace root and from the program's
+folder. Both must emit the same `!addplugindir` and pass Tier 3.
+
+**Workaround in PimpBot:** `dir = "../../plugins/x86-unicode"`, and the
+`build:backup` task runs from `packages/backup`.
+
+### 5.19 `installua stubs` writes a selene std that selene cannot read
+
+**Now:** `selene` stops with `failed to parse yml file … installua.yml: did
+not find expected key at line 35`. The `pairs` message in `REJECTED`
+(`src/stubs.rs`) is "a table's order is not promised …", and it is written
+between single quotes with no escaping. The `escape()` helper a few lines
+further down (`''` for `'`) is applied to the retired-instruction rows but not
+to `REJECTED`'s `message` and `replace`.
+
+**Should:** both go through `escape()`.
+
+**Check:** a `tests/stubs.rs` case that parses the generated `.yml` with a
+YAML parser, so the next apostrophe in a message fails the test and not a
+user's lint run.
+
+### 5.20 selene 0.31 cannot parse `<const>`, whatever the std says
+
+After a hand-fix for 5.19, `selene` reports a parse error at every `<const>`:
+about a hundred in PimpBot's existing files, which pass `installua check`. The
+std's `lua_versions: [lua54]` does not change it, and a two-line file with
+`local X <const> = 1` shows the same. So the lint step the docs and
+`installua init` set up does not run on real Installua source.
+
+**To find out:** whether a selene build or version exists that parses Lua 5.4
+attributes. If none does, the docs should stop presenting selene as part of
+the workflow until one does.
+
+### 5.21 A plugin that needs `/NOUNLOAD` cannot be declared
+
+`nxs` (and older plugins like it) registers no unload callback. `nxs::Show`
+starts a thread inside the DLL, so without `/NOUNLOAD` NSIS 3 frees the DLL
+under that running thread. NSIS 3.12 still honours the flag
+(`Source/script.cpp`). Installua never writes it, so the only way to call
+`Show` is a `raw` line, and its `/end`-terminated options are then unchecked.
+
+**Should:** a declaration field, `nounload = true`, that emits the flag
+right after `Plugin::Method` on every call. The flag isn't needed in general;
+it belongs to the plugin, like `terminator`. The skill's `REFERENCE.md`
+("`/NOUNLOAD` variants … are not declared") changes with it.
+
+**Workaround in PimpBot:** `nxs.toml` declares only `destroy`, which is enough
+to get the `!addplugindir`, and `Show` is `raw`.
+
+### 5.22 A value proven positive by an `if` is still "not known to be non-negative"
+
+```lua
+local seconds = tonumber(readIniStr(ini, "Settings", "Autoclose"))
+if seconds > 0 then
+	sleep(seconds * 1000)   -- error[type-mismatch]: not known to be non-negative
+end
+```
+
+The range check is not flow-sensitive, which is fine, but there is also no way
+to state the fact. `CONTEXT.md` lists `math.abs`/`max`/`min` as adapters, and
+`math` is an undefined name in 0.2.0. Either the adapters ship (and
+`math.abs(x)` counts as non-negative), or `CONTEXT.md` stops listing them.
+
+**Workaround in PimpBot:** `for _ = 1, seconds do sleep(1000) end`.
+
+### 5.23 Smaller gaps met on the way
+
+- `string.sub(s, -1)` is `not-yet-implemented`. It is already scheduled and
+  counted, but it is the usual way to write "last character", so it came up
+  in the first real program. PimpBot writes `string.sub(s, string.len(s))`.
+- `os.exit()` in `.onInit` exits with error level 2, which is what NSIS's
+  `Quit` does there, but nothing on `flow-errors-and-messages.md` says so. A
+  `/help` or `/flush` that quits needs `setErrorLevel(0)` first, and the page
+  should say that.
+
 ## Later: random programs
 
 Generate random well-typed programs from the grammar, compile them, and run

@@ -26,7 +26,7 @@ Each compiles to NSIS instructions and `StrFunc` macros — the
 | ------------------------------------------------ | ------------------------------------- |
 | `string.len(s)` → `int`                          | counts UTF-16 code units              |
 | `string.sub(s, i[, j])` → `string`               | negative indices follow Lua, not NSIS |
-| `string.find(s, needle)` → `int`                 |                                       |
+| `string.find(s, needle)` → `int`                 | `0` when absent, where Lua says `nil` |
 | `string.lower(s)` / `string.upper(s)` → `string` |                                       |
 | `string.format(fmt, value)` → `string`           | `IntFmt`, so one integer and one of `%c %d %i %u %x %X` |
 

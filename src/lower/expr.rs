@@ -2476,9 +2476,10 @@ impl BodyLowerer<'_, '_> {
                 self.requires.str_func("StrLoc");
                 // `${StrLoc}` counts from 0 and Lua counts from 1, so the `+ 1`
                 // is the conversion rather than an optimisation nobody did.
-                // `""` when the needle is absent, where Lua answers `nil` —
-                // there is no `nil`, and the difference is one row of the
-                // migration table.
+                // A miss is `0`, where Lua answers `nil`: there is no `nil`,
+                // and no match starts at 0. `${StrLoc}` writes `""` on a miss,
+                // which `IntOp` reads as 0 and the `+ 1` would turn into a hit
+                // at the very start, so a miss is set to `-1` first.
                 self.emit(
                     ir::Instruction::new(
                         "${StrLoc}",
@@ -2491,6 +2492,27 @@ impl BodyLowerer<'_, '_> {
                     )
                     .atomic(),
                 );
+                let n = self.body.construct();
+                let miss = self.fresh(format!("find_{n}_miss"));
+                let hit = self.fresh(format!("find_{n}_hit"));
+                self.terminate(
+                    Terminator::Branch {
+                        test: Test::Str {
+                            lhs: ir::Arg::slot(dest.clone()),
+                            rhs: ir::Arg::str(""),
+                            case_sensitive: false,
+                            negate: false,
+                        },
+                        then_block: miss,
+                        else_block: hit,
+                    },
+                    miss,
+                );
+                self.emit(ir::Instruction::new(
+                    "StrCpy",
+                    vec![ir::Arg::dest(dest.clone()), ir::Arg::int(-1)],
+                ));
+                self.terminate(Terminator::Jump(hit), hit);
                 self.emit(ir::Instruction::new(
                     "IntOp",
                     vec![
