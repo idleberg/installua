@@ -353,26 +353,6 @@ and a Wine run showed `Name "$t"` with the value `.onInit` stored. The
 PimpBot's Runtime can drop its `raw.tail` `Name` line and the `WM_SETTEXT` on
 the readme checkbox.
 
-### 5.25 `page.license` cannot show a file chosen at run time
-
-`page.license { file = … }` takes a build-time path, since it is `LicenseData`,
-which makensis reads while building. A program that only learns its license at
-run time has no way to show it: PimpBot's Runtime reads `license.txt` or
-`license.rtf` out of the pack it extracts. Runtime 2.4.4 used the CustomLicense
-plug-in for this.
-
-PimpBot's workaround is a stand-in `file` and a `raw` block in the page's
-`show`. The block reads the file with `CreateFile`/`ReadFile` into a
-`System::Alloc` buffer and sends it to the rich edit control (item 1000 of the
-inner dialog) with `EM_SETTEXTEX` (`1121`) and a `SETTEXTEX { ST_DEFAULT,
-CP_ACP }`. The control recognises RTF there on its own, so one call covers both
-formats.
-
-The fix: let `file` take a run-time string as well. The compiler would then
-write a stand-in `LicenseData` itself and lower the load into the page's show
-function, ahead of any user `show`. That is PimpBot's block, with its labels
-made unique per page.
-
 ## Later: random programs
 
 Generate random well-typed programs from the grammar, compile them, and run
