@@ -686,6 +686,26 @@ fn the_selene_std_names_a_replacement_for_every_rejection() {
 }
 
 #[test]
+fn every_quoted_scalar_in_the_selene_std_is_well_formed() {
+    // A bare `'` inside a single-quoted YAML scalar ends it, and selene then
+    // refuses the whole file. Nothing in `check` runs selene, so this is where
+    // the next apostrophe in a message is caught.
+    let std = stubs::selene_std();
+    for line in std.lines() {
+        let Some(start) = line.find('\'') else {
+            continue;
+        };
+        let quoted = &line[start..];
+        assert!(
+            quoted.len() >= 2
+                && quoted.ends_with('\'')
+                && !quoted[1..quoted.len() - 1].replace("''", "").contains('\''),
+            "{line}"
+        );
+    }
+}
+
+#[test]
 fn the_selene_std_and_the_stub_agree_about_what_exists() {
     let std = stubs::selene_std();
     let meta = meta();

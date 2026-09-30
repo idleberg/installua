@@ -253,20 +253,13 @@ says what `dir` is relative to.
 PimpBot can drop its workaround: `dir = "plugins/x86-unicode"`, built from
 anywhere.
 
-### 5.19 `installua stubs` writes a selene std that selene cannot read
+### 5.19 `installua stubs` writes a selene std that selene cannot read — fixed
 
-**Now:** `selene` stops with `failed to parse yml file … installua.yml: did
-not find expected key at line 35`. The `pairs` message in `REJECTED`
-(`src/stubs.rs`) is "a table's order is not promised …", and it is written
-between single quotes with no escaping. The `escape()` helper a few lines
-further down (`''` for `'`) is applied to the retired-instruction rows but not
-to `REJECTED`'s `message` and `replace`.
-
-**Should:** both go through `escape()`.
-
-**Check:** a `tests/stubs.rs` case that parses the generated `.yml` with a
-YAML parser, so the next apostrophe in a message fails the test and not a
-user's lint run.
+`REJECTED`'s `message` and `replace` now go through `escape()`, like the
+retired-instruction rows, so the apostrophe in the `pairs` message is `''`.
+`every_quoted_scalar_in_the_selene_std_is_well_formed` in `tests/stubs.rs`
+checks every single-quoted scalar in the generated `.yml`, with no YAML
+dependency and no selene. selene 0.31 reads the std again.
 
 ### 5.20 selene 0.31 cannot parse `<const>`, whatever the std says
 

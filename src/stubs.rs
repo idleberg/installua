@@ -1297,9 +1297,9 @@ pub fn selene_std() -> String {
 
     for (name, message, replace) in REJECTED {
         let _ = writeln!(out, "  {name}:\n    args:\n      - type: any");
-        let _ = writeln!(out, "    deprecated:\n      message: '{message}'");
+        let _ = writeln!(out, "    deprecated:\n      message: '{}'", escape(message));
         if !replace.is_empty() {
-            let _ = writeln!(out, "      replace:\n        - '{replace}'");
+            let _ = writeln!(out, "      replace:\n        - '{}'", escape(replace));
         }
     }
 
