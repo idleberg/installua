@@ -36,7 +36,7 @@ handle:close()
 ```
 
 Every run-time loop carries a target: `while`, the numeric `for`, `for … in
-lines(…)` and a [walker](/reference/commands/plugins-and-headers/#walkers)'s `for`. A `for … in glob(…)` does not — that
+lines(…)` and a [walker](/reference/commands/plugins-and-headers/#walkers)'s `for`. A `for … in glob(…)` or `ipairs(…)` does not — that
 loop is unrolled at build time, so it is not a loop `continue()` can see. With
 no target at all it is an error.
 

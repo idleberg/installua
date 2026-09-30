@@ -37,6 +37,15 @@ pub enum ConstValue {
     Int(i64),
     Str(String),
     Bool(bool),
+    /// `{ "a", "b" }`, walked by `ipairs`.
+    List(Vec<ConstValue>),
+    /// `{ file = "a.ttf", name = "A" }`, read field by field.
+    ///
+    /// A table is never a value in its own right: there is no `!define` or
+    /// register it could become. So only [`fold_table`] answers one, and
+    /// [`fold`], which every other caller uses, answers only what a table
+    /// holds.
+    Record(BTreeMap<String, ConstValue>),
 }
 
 impl ConstValue {
@@ -48,7 +57,12 @@ impl ConstValue {
             ConstValue::Int(_) => Ty::int(),
             ConstValue::Str(_) => Ty::Str,
             ConstValue::Bool(_) => Ty::Bool,
+            ConstValue::List(_) | ConstValue::Record(_) => Ty::Unknown,
         }
+    }
+
+    pub fn is_table(&self) -> bool {
+        matches!(self, ConstValue::List(_) | ConstValue::Record(_))
     }
 
     /// The text a folded value contributes to an argument.
@@ -58,6 +72,9 @@ impl ConstValue {
             ConstValue::Str(value) => value.clone(),
             ConstValue::Bool(true) => crate::cfg::TRUE.to_string(),
             ConstValue::Bool(false) => crate::cfg::FALSE.to_string(),
+            // Never asked for: `fold` does not answer a table, and a name
+            // bound to one is refused before its text is read.
+            ConstValue::List(_) | ConstValue::Record(_) => String::new(),
         }
     }
 }
@@ -444,6 +461,8 @@ fn coerce(text: &str, default: &ConstValue) -> Option<ConstValue> {
             _ => None,
         },
         ConstValue::Str(_) => Some(ConstValue::Str(text.to_string())),
+        // A default folds through `fold`, which never answers a table.
+        ConstValue::List(_) | ConstValue::Record(_) => None,
     }
 }
 
@@ -659,6 +678,10 @@ fn consts<'a>(
                 "a parameter's default is the value a build without a `-D` gets, so it has to be \
                  known here",
             ),
+            None if mixed(value) => (
+                format!("`{}` mixes a list and a record", name.text),
+                "a `<const>` table is `{ \"a\", \"b\" }` or `{ name = \"a\" }`, and not both",
+            ),
             None => (
                 format!("`{}` is not a build-time constant", name.text),
                 "a `<const>` folds at compile time, so its value has to be a literal or built \
@@ -667,6 +690,15 @@ fn consts<'a>(
         };
         diags.push(Diagnostic::error(Code::BadFieldValue, value.span(), what).note(note));
     }
+}
+
+/// Whether `expr` is a table with both positional and named fields.
+fn mixed(expr: &Expr) -> bool {
+    let Expr::Table { fields, .. } = expr else {
+        return false;
+    };
+    let named = |field: &TableField| matches!(field, TableField::Named { .. });
+    fields.iter().any(named) && !fields.iter().all(named)
 }
 
 /// One entry in the top level being selected.
@@ -1143,9 +1175,13 @@ fn fold_pending(
         let folded: Vec<(String, Const, Option<String>)> = pending
             .iter()
             .filter_map(|entry| {
-                let value = fold(entry.value, &|n| {
-                    resolved.consts.get(n).map(|c| c.value.clone())
-                })?;
+                let lookup = |n: &str| resolved.consts.get(n).map(|c| c.value.clone());
+                // A parameter's default is a flag's type, and a flag is text,
+                // so only a plain `<const>` may be a table.
+                let value = match entry.param {
+                    Some(_) => fold(entry.value, &lookup)?,
+                    None => fold_table(entry.value, &lookup)?,
+                };
                 Some((
                     entry.name.text.clone(),
                     Const {
@@ -1199,6 +1235,7 @@ fn article(value: &ConstValue) -> &'static str {
         // Unreachable: every text coerces to a string, so a string-defaulted
         // parameter has no ill-typed value to report.
         ConstValue::Str(_) => "a string",
+        ConstValue::List(_) | ConstValue::Record(_) => "a table",
     }
 }
 
@@ -1506,7 +1543,11 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
         Expr::Number { value, .. } => Some(ConstValue::Int(*value)),
         Expr::Str(literal) => Some(ConstValue::Str(literal.value.clone())),
         Expr::Bool { value, .. } => Some(ConstValue::Bool(*value)),
-        Expr::Name(name) => lookup(&name.text),
+        // A table itself is not a value, only what it holds: see
+        // [`ConstValue::Record`].
+        Expr::Name(_) | Expr::Field { .. } => {
+            fold_table(expr, lookup).filter(|value| !value.is_table())
+        }
 
         Expr::Unary { op, operand, .. } => match (op, fold(operand, lookup)?) {
             (UnOp::Neg, ConstValue::Int(value)) => Some(ConstValue::Int(value.wrapping_neg())),
@@ -1569,6 +1610,47 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
         }
 
         _ => None,
+    }
+}
+
+/// [`fold`], answering a table as well: for a `<const>`'s value and for what
+/// `ipairs` walks, the two places a table may be the answer.
+///
+/// A table is a list or a record, not both, and holds only what folds. A
+/// repeated name keeps the last value, as in Lua.
+pub fn fold_table(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<ConstValue> {
+    match expr {
+        Expr::Table { fields, .. } => {
+            if fields
+                .iter()
+                .all(|field| matches!(field, TableField::Positional { .. }))
+            {
+                return fields
+                    .iter()
+                    .map(|field| match field {
+                        TableField::Positional { value } => fold_table(value, lookup),
+                        TableField::Named { .. } => None,
+                    })
+                    .collect::<Option<_>>()
+                    .map(ConstValue::List);
+            }
+            fields
+                .iter()
+                .map(|field| match field {
+                    TableField::Named { name, value } => {
+                        Some((name.text.clone(), fold_table(value, lookup)?))
+                    }
+                    TableField::Positional { .. } => None,
+                })
+                .collect::<Option<_>>()
+                .map(ConstValue::Record)
+        }
+        Expr::Name(name) => lookup(&name.text),
+        Expr::Field { base, name, .. } => match fold_table(base, lookup)? {
+            ConstValue::Record(fields) => fields.get(&name.text).cloned(),
+            _ => None,
+        },
+        _ => fold(expr, lookup),
     }
 }
 

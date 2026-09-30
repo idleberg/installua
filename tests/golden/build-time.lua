@@ -2,7 +2,8 @@
 -- emitted, and the two anchors that let a script talk to `makensis` anyway.
 --
 -- `param` with each defaulted type, a top-level `if` taken on one of them, a
--- `glob` unrolled against the directory this file lives in, and `raw.head` /
+-- `glob` unrolled against the directory this file lives in, an `ipairs` over a
+-- `<const>` table unrolled the same way, and `raw.head` /
 -- `raw.tail` landing either side of the script, and the three `MAKENSIS.*`
 -- side effects written where they stand. What the `.nsi` shows is mostly which
 -- branch won; the rest is the two `MAKENSIS` answers copied into registers.
@@ -13,6 +14,12 @@
 local NAME    <const> = param("NAME", "Build Time")
 local BUILD   <const> = param("BUILD", 41)
 local SIGNED  <const> = param("SIGNED", false)
+
+-- No `!define`: a table has no text, only fields, and each folds where read.
+local DOCS <const> = {
+	{ file = "readme.txt", title = "Read me" },
+	{ file = "license.txt", title = "License" },
+}
 
 raw.head [[ !echo "building" ]]
 raw.tail [[ !finalize 'echo done' ]]
@@ -27,6 +34,9 @@ installer {
 		setOutPath(INSTDIR)
 		for path in glob("assets/*.bmp") do
 			file(path)
+		end
+		for i, doc in ipairs(DOCS) do
+			detailPrint(i .. ". " .. doc.title .. " (" .. doc.file .. ")")
 		end
 		detailPrint("build " .. BUILD + 1)
 		MAKENSIS.echo("building " .. NAME)

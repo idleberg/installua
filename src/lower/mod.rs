@@ -1281,7 +1281,11 @@ impl<'p> Lowerer<'_, 'p> {
             .const_order
             .iter()
             .filter_map(|name| {
+                // A table has no text to define: its fields fold where read.
                 let value = self.resolved.consts.get(name)?;
+                if value.value.is_table() {
+                    return None;
+                }
                 Some(ir::Define {
                     name: name.clone(),
                     value: Some(ir::Arg::str(value.value.text())),
@@ -6409,7 +6413,9 @@ impl<'p> Lowerer<'_, 'p> {
         match expr {
             Expr::Name(name) => {
                 // A `<const>` shadows a built-in here too, as in a body.
-                if let Some(value) = self.resolved.consts.get(&name.text) {
+                if let Some(value) = self.resolved.consts.get(&name.text)
+                    && !value.value.is_table()
+                {
                     return Some(ir::Arg::constant(&name.text, value.value.text()));
                 }
                 if let Some(constant) = crate::builtins::constant_named(&name.text) {
@@ -6462,6 +6468,9 @@ enum Field {
 }
 
 // -- the body lowerer ------------------------------------------------------
+
+/// [`crate::resolve::fold`] or [`crate::resolve::fold_table`].
+type Fold = fn(&Expr, &dyn Fn(&str) -> Option<ConstValue>) -> Option<ConstValue>;
 
 /// What a name in a body means. `Const` is not a register at all — a `<const>`
 /// is build-time, so a use folds rather than reads.
@@ -6819,7 +6828,7 @@ impl BodyLowerer<'_, '_> {
 
         for (name, value) in names.iter().zip(values) {
             if is_const {
-                match self.constant(value) {
+                match self.constant_table(value) {
                     Some(folded) => self.bind(&name.text, Binding::Const(folded)),
                     None => self.diags.push(
                         Diagnostic::error(
@@ -7252,6 +7261,11 @@ impl BodyLowerer<'_, '_> {
             self.todo(iterator.span(), "this iterator");
             return;
         };
+        // Checked before the one-value rule too: `ipairs` yields two.
+        if kind == "ipairs" {
+            self.ipairs_for(names, args, block, span);
+            return;
+        }
         let [name] = names else {
             self.diags.push(
                 Diagnostic::error(
@@ -7339,6 +7353,60 @@ impl BodyLowerer<'_, '_> {
                 name.text.clone(),
                 Binding::Const(ConstValue::Str(path)),
             )]);
+            self.block(block);
+            self.scopes.pop();
+        }
+    }
+
+    /// `for i, x in ipairs(LIST)` — a build-time list, unrolled as
+    /// [`Self::glob_for`] is: the body is lowered once per element, with `i`
+    /// bound to its position from 1 and `x` to the element.
+    fn ipairs_for(&mut self, names: &[Name], args: &[Expr], block: &Block, span: Span) {
+        let [list] = args else {
+            self.diags.push(
+                Diagnostic::error(Code::WrongArity, span, "`ipairs` takes one list")
+                    .note("write `for i, x in ipairs(LIST)`, with `LIST` a `<const>` table"),
+            );
+            return;
+        };
+        if names.len() > 2 {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!(
+                        "`ipairs` yields two values, and {} names are bound",
+                        names.len()
+                    ),
+                )
+                .note("the position and the element: `for i, x in ipairs(LIST)`"),
+            );
+            return;
+        }
+        let Some(ConstValue::List(items)) = self.constant_table(list) else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    list.span(),
+                    "`ipairs` needs a build-time list",
+                )
+                .note(
+                    "the loop is unrolled while the installer is being built, so what it walks \
+                     has to be known there: a `<const>` table such as `{ \"a\", \"b\" }`",
+                ),
+            );
+            return;
+        };
+
+        for (index, item) in items.into_iter().enumerate() {
+            let values = [ConstValue::Int(index as i64 + 1), item];
+            self.scopes.push(
+                names
+                    .iter()
+                    .zip(values)
+                    .map(|(name, value)| (name.text.clone(), Binding::Const(value)))
+                    .collect(),
+            );
             self.block(block);
             self.scopes.pop();
         }
@@ -7881,9 +7949,19 @@ impl BodyLowerer<'_, '_> {
     }
 
     pub(super) fn constant(&self, expr: &Expr) -> Option<ConstValue> {
+        self.fold_with(expr, crate::resolve::fold)
+    }
+
+    /// [`Self::constant`], answering a table as well: see
+    /// [`crate::resolve::fold_table`].
+    pub(super) fn constant_table(&self, expr: &Expr) -> Option<ConstValue> {
+        self.fold_with(expr, crate::resolve::fold_table)
+    }
+
+    fn fold_with(&self, expr: &Expr, fold: Fold) -> Option<ConstValue> {
         let scopes = &self.scopes;
         let resolved = self.resolved;
-        crate::resolve::fold(expr, &|name| {
+        fold(expr, &|name| {
             let local = scopes
                 .iter()
                 .rev()

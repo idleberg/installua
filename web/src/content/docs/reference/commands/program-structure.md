@@ -167,6 +167,34 @@ files: `glob("presets/*/")` gives `presets/classic`, `presets/modern` and so
 on. The paths come back sorted, relative to the source file, as you would have
 written them.
 
+## ipairs
+
+Walks a `<const>` table at compile time and unrolls it, the way `glob` does: the
+body is written out once per element, and there is no loop in the `.nsi`. `i`
+counts from 1; leave it out as `_`, or write `for i in ipairs(list)` for the
+position alone.
+
+**Usage** `for i, x in ipairs(list) do … end`
+
+```lua skip
+local FONTS <const> = {
+	{ file = "Roboto.ttf", name = "Roboto" },
+	{ file = "Inter.ttf", name = "Inter" },
+}
+
+for _, font in ipairs(FONTS) do
+	file("fonts/" .. font.file)
+	detailPrint("installing " .. font.name)
+end
+```
+
+A `<const>` table is a list, `{ "a", "b" }`, or a record, `{ name = "a" }`,
+not both, and either may hold the other. Everything in it has to be known at
+build time. It is not a value you can pass or print: you read a field,
+`font.name`, or walk a list with `ipairs`, and each field folds where it is
+read. So the table itself gets no `!define`. There is no `pairs`, because Lua
+does not promise an order for it.
+
 ## !echo / !system / !getdllversion
 
 Side effects on the **build** machine, written where the call stands and run by

@@ -1481,12 +1481,7 @@ const REJECTED: &[(&str, &str, &str)] = &[
     ),
     (
         "pairs",
-        "there is no runtime heap; iterate a directory with `glob`",
-        "",
-    ),
-    (
-        "ipairs",
-        "there is no runtime heap; iterate a directory with `glob`",
+        "a table's order is not promised; walk a `<const>` list with `ipairs`",
         "",
     ),
     ("setmetatable", "there are no metatables", ""),

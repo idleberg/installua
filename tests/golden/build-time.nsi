@@ -12,6 +12,8 @@ OutFile "build-time-setup.exe"
 Section "Core"
   SetOutPath $INSTDIR
   File "assets\check.bmp"
+  DetailPrint "1. Read me (readme.txt)"
+  DetailPrint "2. License (license.txt)"
   DetailPrint "build 42"
   !echo "building ${NAME}"
   !system "test -n $\"$HOME$\"" _MAKENSIS

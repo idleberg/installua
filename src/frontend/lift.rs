@@ -28,7 +28,7 @@ use crate::frontend::strings::{self, LiteralKind};
 /// The closed set of `for … in` iterators. Syntax is enough to check it, so it
 /// is checked here rather than waiting for resolution: `pairs` is the one a Lua
 /// programmer reaches for and the one that can never work.
-const ITERATORS: &[&str] = &["glob", "lines", "range"];
+const ITERATORS: &[&str] = &["glob", "ipairs", "lines", "range"];
 
 pub fn lift(ast: &lua::Ast, file: u32, diags: &mut Diagnostics) -> Program {
     let mut lifter = Lifter {
@@ -348,8 +348,8 @@ impl Lifter<'_> {
             Some(name) if ITERATORS.contains(&name) => {}
             Some(name) => {
                 let note = match name {
-                    "pairs" | "ipairs" => "there are no runtime tables to iterate; \
-                         `glob` walks the build machine and `lines` walks a file"
+                    "pairs" => "a table's order is not Lua's to promise, so there is \
+                         no `pairs`; `ipairs` walks a `<const>` list in order"
                         .to_string(),
                     _ => format!("the iterators are {}", iterator_list()),
                 };

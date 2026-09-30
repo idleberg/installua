@@ -29,7 +29,7 @@ follows from those four.
 | `coroutine.*`                        | rejected                    | no scheduler                                                                                                                                                   |
 | `require`, `load`, `dofile`          | rejected                    | `import` for an NSIS header, `include` for another Installua file — and both are compile-time                                                                  |
 | `pcall`, `xpcall`, `error`           | rejected                    | NSIS has no exception model. `abort` is not one — it stops the section                                                                                         |
-| `pairs`, `ipairs`, `next`, `select`  | rejected                    | iteration is a whitelist: `lines(f)`, `glob(pat)`, and numeric `for`                                                                                           |
+| `pairs`, `next`, `select`            | rejected                    | iteration is a whitelist: `lines(f)`, `glob(pat)`, `ipairs(t)`, and numeric `for`                                                                              |
 | `goto`, `::label::`                  | rejected                    | Installua owns labels; `continue()` is the thing you actually wanted                                                                                           |
 | `local x <close>`                    | rejected                    | no runtime to close over                                                                                                                                       |
 | `#s` on a string                     | rejected                    | `StrLen` counts UTF-16 code units and Lua's `#` counts UTF-8 bytes — `"café"` is 4 against 5, `"日本語"` is 3 against 9. use `string.len(s)`                   |
@@ -124,6 +124,7 @@ The rule is that a reader must never have to guess which machine a line runs on.
 | `local X <const> = …`, and any `if` over one                 | build time, folded away — `X` becomes `${X}` in the output |
 | `MAKENSIS.system(…)`, `MAKENSIS.getDllVersion(…)`, `MAKENSIS.echo(…)` | build time, as a side effect on your machine |
 | `for p in glob("assets/*.txt")`                              | build time, unrolled                                       |
+| `for i, x in ipairs(LIST)` over a `<const>` table             | build time, unrolled                                       |
 | `import "FileFunc"`, `include "strings/de.lua"`              | build time                                                 |
 
 `print` is the trap worth naming: it is `detailPrint` at install time and `MAKENSIS.echo` at
@@ -141,7 +142,7 @@ build time, and they are **two different names** on purpose.
 |                                              | `os.exit` → `Quit`                                         | `io.*` — use the `fileOpen` handle                         |
 |                                              |                                                            | `error`, `pcall`, `xpcall`                                 |
 |                                              |                                                            | `require`, `load`, `dofile`                                |
-|                                              |                                                            | `pairs`, `ipairs`, `next`, `select`                        |
+|                                              | `ipairs` → unrolled at build time, over a `<const>` table  | `pairs`, `next`, `select`                                  |
 |                                              |                                                            | `setmetatable`, `rawget`, `coroutine.*`                    |
 
 `string.format` takes **one** conversion, and one of `%c %d %i %u %x %X` — `IntFmt` is

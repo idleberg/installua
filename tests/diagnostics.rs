@@ -448,6 +448,47 @@ fn a_local_is_in_scope_from_its_declaration_down() {
     );
 }
 
+/// A `<const>` table exists only at build time: read a field or walk it with
+/// `ipairs`, and anything else is refused by name.
+#[test]
+fn a_const_table_is_read_only_at_build_time() {
+    let messages = |body: &str| {
+        let diags = compile(&format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             local DOCS <const> = {{ {{ file = \"a.txt\" }} }}\n\
+             local META <const> = {{ title = \"T\" }}\n\
+             installer {{ section(\"s\", function()\n{body}\nend) }}\n"
+        ));
+        diags.iter().map(|d| d.message.clone()).collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        messages("for i, doc in ipairs(DOCS) do detailPrint(doc.file .. META.title) end"),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        messages(
+            "detailPrint(DOCS)\n\
+             detailPrint(META.nope)\n\
+             for _, x in ipairs(META) do end\n\
+             for a, b, c in ipairs(DOCS) do end"
+        ),
+        [
+            "`DOCS` is a table, which exists only at build time",
+            "this table has no `nope`",
+            "`ipairs` needs a build-time list",
+            "`ipairs` yields two values, and 3 names are bound",
+        ]
+    );
+    assert_eq!(
+        compile("local MIXED <const> = { \"a\", b = \"c\" }")
+            .iter()
+            .map(|d| d.message.clone())
+            .collect::<Vec<_>>(),
+        ["`MIXED` mixes a list and a record"]
+    );
+}
+
 /// `multiUser {}`'s rejections, each alone: the one diagnostic and nothing
 /// after it.
 #[test]

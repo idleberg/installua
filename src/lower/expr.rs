@@ -124,11 +124,14 @@ impl BodyLowerer<'_, '_> {
                     arg: ir::Arg::slot(slot.clone()),
                     ty: *ty,
                 }),
+                // Reported by `value_into`, which is asked next.
+                Some(Binding::Const(value)) if value.is_table() => None,
                 Some(Binding::Const(value)) => Some(Typed {
                     ty: value.ty(),
                     arg: ir::Arg::str(value.text()),
                 }),
                 Some(Binding::Reported) => None,
+                None if self.table_named(&name.text) => None,
                 None => {
                     // The program's own `<const>` first: a `local RESOURCES
                     // <const>` shadows `$RESOURCES` as any `local` shadows a
@@ -234,6 +237,19 @@ impl BodyLowerer<'_, '_> {
         })
     }
 
+    /// Whether `name` is a `<const>` table, in a body's scope or at the top.
+    fn table_named(&self, name: &str) -> bool {
+        match self.lookup(name) {
+            Some(Binding::Const(value)) => value.is_table(),
+            Some(_) => false,
+            None => self
+                .resolved
+                .consts
+                .get(name)
+                .is_some_and(|constant| constant.value.is_table()),
+        }
+    }
+
     /// Lowering takes a **destination**, not just a return value.
     ///
     /// `local sum = 1 + 1` is `IntOp $0 1 + 1`, not `IntOp $R9 1 + 1` followed
@@ -301,6 +317,28 @@ impl BodyLowerer<'_, '_> {
             // other two dotted things in the surface — a header's macro and a
             // plugin's method — are only ever callees, and `lang.greeting` is
             // the `languages {}` block's, which is not built yet.
+            Expr::Field { base, name, .. }
+                if let Some(table) = self.constant_table(base)
+                    && table.is_table() =>
+            {
+                let fields = match &table {
+                    ConstValue::Record(fields) => fields
+                        .keys()
+                        .map(|field| format!("`{field}`"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    _ => "none: it is a list, walked with `ipairs`".to_string(),
+                };
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UndefinedName,
+                        name.span,
+                        format!("this table has no `{}`", name.text),
+                    )
+                    .note(format!("its fields are {fields}")),
+                );
+                None
+            }
             Expr::Field { base, name, .. } => self.field_read(base, name, dest),
 
             // `local chosen = currentInstType` — a read that is an instruction
@@ -315,6 +353,25 @@ impl BodyLowerer<'_, '_> {
                     .is_some_and(|deferred| deferred.kind.is_control()) =>
             {
                 self.control_window(expr, name.span, dest)
+            }
+
+            Expr::Name(name) if self.table_named(&name.text) => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        name.span,
+                        format!(
+                            "`{}` is a table, which exists only at build time",
+                            name.text
+                        ),
+                    )
+                    .note(format!(
+                        "read a field of it, `{0}.name`, or walk it with `for _, x in \
+                         ipairs({0})`",
+                        name.text
+                    )),
+                );
+                None
             }
 
             // A bare name that `simple` could not resolve is not a shape this
