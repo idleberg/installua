@@ -63,6 +63,12 @@ installer {
 | `MUI_PAGE_CUSTOMFUNCTION_DESTROYED`  | `destroyed = function() … end` (welcome, finish and installMode) |
 | `SubCaption` / `UninstallSubCaption` | `subCaption`                                        |
 
+Every string a page takes may also name a global, or concatenate one with
+strings: MUI2 writes each of them into an instruction, so it is expanded when
+the page is shown. `page.finish { readme = { path = "", text = "Visit " .. site } }`
+shows whatever `.onInit` put in `site`. The one exception is the Start Menu
+page's registry `root`, which is a keyword.
+
 ### MUI_PAGE_WELCOME
 
 **Usage** `page.welcome { title = …, text = …, pre = …, show = …, leave = …, destroyed = … }`

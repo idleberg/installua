@@ -20,17 +20,39 @@ attributes {
 
 | NSIS                  | Installua                                            | Holds               |
 | --------------------- | ---------------------------------------------------- | ------------------- |
-| `Name`                | `name`                                               | string              |
+| `Name`                | `name`                                               | string or global    |
 | `OutFile`             | `outFile`                                            | path — **required** |
-| `Caption`             | `caption`                                            | string              |
-| `UninstallCaption`    | `uninstallCaption`                                   | string              |
+| `Caption`             | `caption`                                            | string or global    |
+| `UninstallCaption`    | `uninstallCaption`                                   | string or global    |
 | `Icon`                | `icon`                                               | path                |
 | `UninstallIcon`       | `icon`, inside `uninstaller {}`                      | path                |
 | `WindowIcon`          | `windowIcon`                                         | boolean             |
-| `BrandingText`        | `brandingText`                                       | string              |
+| `BrandingText`        | `brandingText`                                       | string or global    |
 | `InstallDir`          | `installDir`                                         | path                |
 | `InstallDirRegKey`    | `installDirRegKey = { root = …, key = …, name = … }` | table               |
 | `AllowRootDirInstall` | `allowRootDirInstall`                                | boolean             |
+
+A field marked *or global* may also name a global, or concatenate one with
+strings. NSIS keeps these as language strings and expands them when they are
+shown, which is after `.onInit`, so the installer shows what `.onInit` stored.
+The four button and status texts below take one too. Every other field is read
+while building, and refuses a global.
+
+```lua
+title = ""
+
+attributes {
+	name = title,
+	caption = title .. " Setup",
+	outFile = "Example-setup.exe",
+}
+
+installer {
+	onInit(function()
+		title = readEnvStr("TITLE")
+	end),
+}
+```
 
 ## Build and compression
 
@@ -242,10 +264,10 @@ instead — see [Pages and MUI](/reference/modern-ui/).
 | `BGGradient`          | `bgGradient = false` or `{ top = …, bottom = …, text = … }`  |
 | `SetFont`             | `font = { face = …, size = … }`                              |
 | `MiscButtonText`      | `buttonText = { back = …, next = …, cancel = …, close = … }` |
-| `InstallButtonText`   | `installButtonText`                                          |
-| `UninstallButtonText` | `uninstallButtonText`                                        |
-| `DetailsButtonText`   | `detailsButtonText`                                          |
-| `CompletedText`       | `completedText`                                              |
+| `InstallButtonText`   | `installButtonText` — string or global                       |
+| `UninstallButtonText` | `uninstallButtonText` — string or global                     |
+| `DetailsButtonText`   | `detailsButtonText` — string or global                       |
+| `CompletedText`       | `completedText` — string or global                           |
 | `FileErrorText`       | `fileErrorText = { text = …, withoutIgnore = … }`            |
 | `SpaceTexts`          | `spaceTexts = false` or `{ required = …, available = … }`    |
 | `ShowInstDetails`     | `showInstDetails = "hide" \| "show" \| "nevershow"`          |

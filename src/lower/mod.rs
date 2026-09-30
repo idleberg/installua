@@ -2391,8 +2391,12 @@ impl<'p> Lowerer<'_, 'p> {
         value: &Expr,
     ) -> Option<ir::Arg> {
         match holds {
-            table::Setting::Str { path } => {
-                let arg = self.constant_arg(value, field)?;
+            table::Setting::Str { path, late } => {
+                let arg = if late {
+                    self.late_arg(value, field)?
+                } else {
+                    self.constant_arg(value, field)?
+                };
                 Some(if path { arg.into_path() } else { arg })
             }
             table::Setting::Bool { on, off } => match self.constant(value) {
@@ -4740,6 +4744,11 @@ impl<'p> Lowerer<'_, 'p> {
 
     /// One page setting, as the `!define`s it becomes and the `!undef`s that
     /// keep it off the next page.
+    ///
+    /// Every string here may be a global ([`Self::late_arg`]): MUI2 expands
+    /// each of them inside an instruction or a page attribute, so at run time.
+    /// The one it cannot stand for is the Start Menu page's registry `root`,
+    /// which is a keyword, and `makensis` refuses a variable there.
     fn page_field(
         &mut self,
         field: &PageField,
@@ -4771,7 +4780,7 @@ impl<'p> Lowerer<'_, 'p> {
 
         match field.holds {
             Holds::Str | Holds::Path => {
-                if let Some(arg) = self.constant_arg(value, field.installua) {
+                if let Some(arg) = self.late_arg(value, field.installua) {
                     let arg = if matches!(field.holds, Holds::Path) {
                         arg.into_path()
                     } else {
@@ -4814,7 +4823,7 @@ impl<'p> Lowerer<'_, 'p> {
                     );
                     return;
                 };
-                if let Some(arg) = self.constant_arg(value, field.installua) {
+                if let Some(arg) = self.late_arg(value, field.installua) {
                     let line = match half {
                         Half::Installer => "SubCaption",
                         Half::Uninstaller => "UninstallSubCaption",
@@ -4873,7 +4882,7 @@ impl<'p> Lowerer<'_, 'p> {
                 );
             }
             Holds::Text(text) => {
-                if let Some(arg) = self.constant_arg(value, field.installua) {
+                if let Some(arg) = self.late_arg(value, field.installua) {
                     define(defines, undefines, field.define, None, field.cleared);
                     define(defines, undefines, text, Some(arg), field.cleared);
                 }
@@ -4896,7 +4905,7 @@ impl<'p> Lowerer<'_, 'p> {
             Holds::Roomy(more, room) => {
                 let (text, roomy) = self.roomy(value, field, room);
                 if let Some(text) = text
-                    && let Some(arg) = self.constant_arg(text, field.installua)
+                    && let Some(arg) = self.late_arg(text, field.installua)
                 {
                     define(defines, undefines, field.define, Some(arg), field.cleared);
                 }
@@ -5005,7 +5014,7 @@ impl<'p> Lowerer<'_, 'p> {
                 }
                 Some(ConstValue::Bool(true)) => {}
                 _ => {
-                    if let Some(arg) = self.constant_arg(value, field.installua) {
+                    if let Some(arg) = self.late_arg(value, field.installua) {
                         define(defines, undefines, text, Some(arg), field.cleared);
                     }
                 }
@@ -6488,6 +6497,30 @@ impl<'p> Lowerer<'_, 'p> {
                 Some(ir::Arg::var(text))
             }
             other => self.constant_string(other, what).map(ir::Arg::str),
+        }
+    }
+
+    /// [`Self::constant_arg`] for a field NSIS expands when it is shown rather
+    /// than when it is built — a language string, or a MUI2 define that ends
+    /// up in an instruction — so a global is a value too, written as its
+    /// `$name`. The global's `Var` is emitted below the attributes and that is
+    /// legal: a language string is resolved when the tables are written.
+    fn late_arg(&mut self, expr: &Expr, what: &str) -> Option<ir::Arg> {
+        match expr {
+            Expr::Name(name) if self.resolved.globals.iter().any(|g| g.name == name.text) => {
+                Some(ir::Arg::var(format!("${}", name.text)))
+            }
+            Expr::Binary {
+                op: BinOp::Concat,
+                lhs,
+                rhs,
+                ..
+            } => {
+                let lhs = self.late_arg(lhs, what)?;
+                let rhs = self.late_arg(rhs, what)?;
+                Some(lhs.concat(rhs))
+            }
+            other => self.constant_arg(other, what),
         }
     }
 

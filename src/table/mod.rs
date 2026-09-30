@@ -273,7 +273,13 @@ pub enum Setting {
     /// `Name "${APP}"`: one string. `path` applies the `/`-to-`\` rewrite,
     /// which is right for a file the build machine reads and wrong for a
     /// caption.
-    Str { path: bool },
+    ///
+    /// `late` says the value may also be a global: NSIS stores the line as a
+    /// language string (`SetInnerString`) and expands it when it is shown,
+    /// which is after `.onInit`, so `Name "$title"` shows what `.onInit` put in
+    /// `title`. Every other attribute is read while building, where a variable
+    /// is only its own name.
+    Str { path: bool, late: bool },
     /// A Lua `bool`, emitted as the pair of words NSIS spells it with.
     /// `CRCCheck` also accepts `force`, and offering it would take a third
     /// state this field does not have.

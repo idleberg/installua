@@ -30,6 +30,7 @@ const GOLDENS: &[(&str, &[Code])] = &[
     ("headers", &[]),
     ("include", &[]),
     ("languages", &[]),
+    ("late-texts", &[]),
     ("library", &[]),
     ("x64", &[]),
     ("memento", &[]),

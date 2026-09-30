@@ -309,8 +309,19 @@ const fn label(field: &'static str) -> Part {
 }
 
 /// The two commonest [`Setting`]s, spelled short because the rows are a column.
-const STR: Setting = Setting::Str { path: false };
-const PATH: Setting = Setting::Str { path: true };
+const STR: Setting = Setting::Str {
+    path: false,
+    late: false,
+};
+const PATH: Setting = Setting::Str {
+    path: true,
+    late: false,
+};
+/// A [`STR`] NSIS expands at run time, so it may name a global too.
+const LATE: Setting = Setting::Str {
+    path: false,
+    late: true,
+};
 
 /// The resource language of `PEAddResource` and `PERemoveResource`: a Windows
 /// language id, or one of the words `ParseResourceLangString` reads before it
@@ -555,14 +566,14 @@ pub const ROWS: &[Row] = &[
     ),
     // `/TRIMLEFT`, `/TRIMRIGHT` and `/TRIMCENTER` are one fused flag with three
     // suffixes, which the options table cannot say and an attribute cannot hold.
-    attribute("BrandingText", "brandingText", STR),
+    attribute("BrandingText", "brandingText", LATE),
     // The fourth row in that group to take no handle, after `HideWindow`,
     // `LockWindow` and `SetAutoClose`: it raises the installer's own window and
     // `-CMDHELP` prints it with no arguments at all.
     exposed("BringToFront", "bringToFront", &[], "bringToFront()"),
     lowering("Call", "a call: `f(x)`"),
     rejected("CallInstDLL", "a plugin is called as `plugin.method(…)`"),
-    attribute("Caption", "caption", STR),
+    attribute("Caption", "caption", LATE),
     rejected(
         "ChangeUI",
         "MUI2 calls it five times to install its own dialog resources; a sixth call \
@@ -1423,7 +1434,7 @@ pub const ROWS: &[Row] = &[
         "Nop",
         "a statement that does nothing has no spelling: write nothing",
     ),
-    attribute("Name", "name", STR),
+    attribute("Name", "name", LATE),
     attribute("OutFile", "outFile", PATH),
     // These four shared one reason, and the page block splits them in two.
     //
@@ -1991,7 +2002,7 @@ pub const ROWS: &[Row] = &[
         "UninstallExeName",
         "NSIS retired it: write `writeUninstaller` from a section",
     ),
-    attribute("UninstallCaption", "uninstallCaption", STR),
+    attribute("UninstallCaption", "uninstallCaption", LATE),
     // Already done, under the name the uninstaller block gives it: `icon`
     // inside `uninstaller {}` is the same field for the other half, and it
     // lowers to `MUI_UNICON` rather than to this line, because MUI2 emits
@@ -2281,9 +2292,9 @@ pub const ROWS: &[Row] = &[
             label("close"),
         ]),
     ),
-    attribute("DetailsButtonText", "detailsButtonText", STR),
-    attribute("UninstallButtonText", "uninstallButtonText", STR),
-    attribute("InstallButtonText", "installButtonText", STR),
+    attribute("DetailsButtonText", "detailsButtonText", LATE),
+    attribute("UninstallButtonText", "uninstallButtonText", LATE),
+    attribute("InstallButtonText", "installButtonText", LATE),
     // The second alternation, and the same shape: `spaceTexts = false` hides
     // both labels on the components page, a table rewrites them. `available`
     // may be left out, which is NSIS's `[available]` and not a choice here.
@@ -2296,7 +2307,7 @@ pub const ROWS: &[Row] = &[
             least: 1,
         },
     ),
-    attribute("CompletedText", "completedText", STR),
+    attribute("CompletedText", "completedText", LATE),
     // Its old reason — "`Call`-by-address has no Lua shape" — is still true of
     // the *surface*, and the events are why it stops being a backlog entry
     // anyway: the address of a generated callback exists in exactly one place,

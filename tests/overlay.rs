@@ -213,8 +213,10 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
     match holds {
         // `Icon` and `LicenseData` open the file at compile time, so these
         // two want a real one — see tests/fixtures/README.md.
-        table::Setting::Str { path: true } if field == "icon" => "\"assets/icon.ico\"".to_string(),
-        table::Setting::Str { path: true } if field == "license" => {
+        table::Setting::Str { path: true, .. } if field == "icon" => {
+            "\"assets/icon.ico\"".to_string()
+        }
+        table::Setting::Str { path: true, .. } if field == "license" => {
             "\"assets/license.txt\"".to_string()
         }
         // Two settings take a *shaped* string — `major.minor` and
@@ -223,12 +225,14 @@ fn derived(entry: &table::Instruction, index: usize, field: &str, holds: table::
         // the compiler does not check it either: `subsystemVersion = "hello"`
         // reaches `makensis` and is rejected there. The values are here
         // rather than in the row because a row is not an example.
-        table::Setting::Str { path: false } if field == "subsystemVersion" => "\"5.1\"".to_string(),
-        table::Setting::Str { path: false } if field == "maxVersionTested" => {
+        table::Setting::Str { path: false, .. } if field == "subsystemVersion" => {
+            "\"5.1\"".to_string()
+        }
+        table::Setting::Str { path: false, .. } if field == "maxVersionTested" => {
             "\"10.0.19041.0\"".to_string()
         }
-        table::Setting::Str { path: true } => format!("\"{field}.out\""),
-        table::Setting::Str { path: false } => format!("\"{field}\""),
+        table::Setting::Str { path: true, .. } => format!("\"{field}.out\""),
+        table::Setting::Str { path: false, .. } => format!("\"{field}\""),
         table::Setting::Bool { .. } => "true".to_string(),
         table::Setting::Int => "1".to_string(),
         // The first keyword the snapshot lists — a value chosen by the table
