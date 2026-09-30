@@ -353,6 +353,70 @@ and a Wine run showed `Name "$t"` with the value `.onInit` stored. The
 PimpBot's Runtime can drop its `raw.tail` `Name` line and the `WM_SETTEXT` on
 the readme checkbox.
 
+### 5.25 A project `func` is stubbed as returning nothing
+
+```lua
+func("packValue", function(section, key) return readIniStr(ini, section, key) end)
+packType = string.lower(packValue("Installer", "PresetType"))
+```
+
+`project_meta` writes `function packValue(section, key) end`, with no
+`---@return`. LuaLS takes the empty body to return `nil`, so every use of a
+value-returning `func` is a type error: `Cannot assign nil to boolean`
+(`section.selected = avsApeOutdated(…)`), `nil to string|number`,
+`cast-local-type`. That is about 30 of the warnings on PimpBot, and none of them
+is PimpBot's. The globals have the same problem the other way round:
+`---@type string` on every one, whatever the compiler inferred.
+
+Should: a `func` that returns a value gets `---@return <type>`, from the type
+the compiler already infers for it (`any` when unknown), and its parameters get
+`---@param` the same way. A global gets its inferred type. The fix goes in
+`project_meta`/`project_names` in `src/stubs.rs`. Check: a `tests/stubs.rs`
+case, and `lua-language-server --check` on PimpBot shows no
+`assign-type-mismatch` that traces back to a `func`.
+
+### 5.26 Only `onInit` is in the LuaLS meta
+
+```lua
+installer { onGUIInit(function() end), onVerifyInstDir(function() end) }
+```
+
+`undefined-global` on both. The selene std lists all twelve callbacks
+(`src/stubs.rs`, the `onInit` … `onMouseOverSection` rows), but
+`declarations()` writes only `function onInit(body) end` into
+`installua.lua`. Should: the same twelve, each `---@param body fun()`, from one
+list that both generators read, so they cannot drift apart again. Check: a
+`tests/stubs.rs` case asserting that every callback `lower` accepts is in both
+files.
+
+### 5.27 `sendMessage` rejects an integer `wParam`/`lParam`
+
+```lua
+sendMessage(hwnd, BM_SETCHECK, 0, 0)
+```
+
+`param-type-mismatch: Cannot assign integer to "wparam"|"STR:wParam"`.
+`-CMDHELP` writes the parameter as `wparam|STR:wParam`, which the table reads
+as an enum of two words, so `alias_table` generates
+`installua.Wparamorstrwparam`. Should: `integer|string`, since both are values
+and neither is a keyword. The fix belongs in the table overlay, not in
+`stubs.rs`, so that nothing else reads it as an enum either. Check: the
+`sendMessage` stub in a `tests/stubs.rs` case, and PimpBot's four call sites
+come up clean.
+
+### 5.28 Smaller stub gaps
+
+- `installua.Control` has no `add`, which `lower/handle.rs` compiles for a
+  `dropList` or `listBox` (`list.add(text)`): `undefined-field`.
+- A plugin method with `flags` is stubbed with only its `params`, so
+  `nxs.show(title, { top = …, sub = … })` is `redundant-parameter`.
+  `foreign_method` should add an options table typed from the flags
+  (`{ top?: string, h?: integer, … }`).
+- `tonumber` comes from LuaLS's own meta, as `number?`, so
+  `math.max(tonumber(s), 0)` warns about the `nil`. Installua's `tonumber`
+  always returns an `int` (`strings-and-numbers.md`), so `installua.lua` should
+  override it with `---@return integer`.
+
 ## Later: random programs
 
 Generate random well-typed programs from the grammar, compile them, and run

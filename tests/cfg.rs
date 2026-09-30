@@ -331,6 +331,41 @@ local half = n // 2",
     );
 }
 
+/// A fold has to agree with the `IntOp` it replaces, and `IntOp` is 32 bits on
+/// every target: past the range it wraps, and `>>` zero-fills a 32-bit value,
+/// not a 64-bit one.
+#[test]
+fn folding_wraps_at_intops_width() {
+    let mut diags = Diagnostics::new();
+    let output = installua::build(
+        &program(
+            "\
+detailPrint(\"\" .. (2147483647 + 1))
+detailPrint(\"\" .. (1 << 31))
+detailPrint(\"\" .. (-8 >> 1))
+if 2147483647 + 1 < 0 then
+	detailPrint(\"wrapped\")
+end",
+        ),
+        &mut diags,
+    )
+    .expect("compiles");
+    let printed: Vec<&str> = output
+        .lines()
+        .filter(|line| line.starts_with("  DetailPrint"))
+        .collect();
+
+    assert_eq!(
+        printed,
+        vec![
+            "  DetailPrint -2147483648",
+            "  DetailPrint -2147483648",
+            "  DetailPrint 2147483644",
+            "  DetailPrint \"wrapped\"",
+        ]
+    );
+}
+
 /// `==` on strings is `StrCmpS`. Case-sensitive being the *default* is the
 /// reversal from NSIS habit that will bite hardest, and `string.lower` is the
 /// escape.

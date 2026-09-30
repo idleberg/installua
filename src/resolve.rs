@@ -1550,9 +1550,11 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
         }
 
         Expr::Unary { op, operand, .. } => match (op, fold(operand, lookup)?) {
-            (UnOp::Neg, ConstValue::Int(value)) => Some(ConstValue::Int(value.wrapping_neg())),
+            (UnOp::Neg, ConstValue::Int(value)) => {
+                Some(ConstValue::Int(int32(value.wrapping_neg())))
+            }
             (UnOp::Not, ConstValue::Bool(value)) => Some(ConstValue::Bool(!value)),
-            (UnOp::BitNot, ConstValue::Int(value)) => Some(ConstValue::Int(!value)),
+            (UnOp::BitNot, ConstValue::Int(value)) => Some(ConstValue::Int(int32(!value))),
             _ => None,
         },
 
@@ -1589,16 +1591,16 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
                 // [`integer`], which answers with the `int` an arithmetic
                 // operator produces.
                 (BinOp::Lt, ConstValue::Int(a), ConstValue::Int(b)) => {
-                    Some(ConstValue::Bool(a < b))
+                    Some(ConstValue::Bool(int32(*a) < int32(*b)))
                 }
                 (BinOp::Le, ConstValue::Int(a), ConstValue::Int(b)) => {
-                    Some(ConstValue::Bool(a <= b))
+                    Some(ConstValue::Bool(int32(*a) <= int32(*b)))
                 }
                 (BinOp::Gt, ConstValue::Int(a), ConstValue::Int(b)) => {
-                    Some(ConstValue::Bool(a > b))
+                    Some(ConstValue::Bool(int32(*a) > int32(*b)))
                 }
                 (BinOp::Ge, ConstValue::Int(a), ConstValue::Int(b)) => {
-                    Some(ConstValue::Bool(a >= b))
+                    Some(ConstValue::Bool(int32(*a) >= int32(*b)))
                 }
                 (op, ConstValue::Int(a), ConstValue::Int(b)) => {
                     integer(*op, *a, *b).map(ConstValue::Int)
@@ -1657,31 +1659,46 @@ pub fn fold_table(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> O
 /// Integer folding at Lua's semantics, not NSIS's — `//` floors and `%` takes
 /// the sign of the divisor. Folding is the one place the fixup is free, because
 /// it happens in Rust.
+///
+/// The width is NSIS's, though: `IntOp` computes in 32 bits on every target, so
+/// a fold done in Lua's 64 would put `2147483648` in the script where the
+/// installer computes `-2147483648`, and decide a branch the other way. Operands
+/// and result are both cut to 32 bits, so a literal past the range folds as the
+/// number `IntOp` reads it as.
 fn integer(op: BinOp, a: i64, b: i64) -> Option<i64> {
-    match op {
-        BinOp::Add => Some(a.wrapping_add(b)),
-        BinOp::Sub => Some(a.wrapping_sub(b)),
-        BinOp::Mul => Some(a.wrapping_mul(b)),
+    let (a, b) = (int32(a) as i32, int32(b) as i32);
+    let value = match op {
+        BinOp::Add => a.wrapping_add(b),
+        BinOp::Sub => a.wrapping_sub(b),
+        BinOp::Mul => a.wrapping_mul(b),
         // Lua floors and NSIS truncates, so folding does what Lua says and the
         // runtime lowering carries the fixup.
         BinOp::FloorDiv if b != 0 => {
             let (quotient, remainder) = (a.wrapping_div(b), a.wrapping_rem(b));
-            Some(quotient - i64::from(remainder != 0 && (remainder < 0) != (b < 0)))
+            quotient.wrapping_sub(i32::from(remainder != 0 && (remainder < 0) != (b < 0)))
         }
         // Lua's `%` takes the sign of the divisor; NSIS's takes the dividend's.
         BinOp::Mod if b != 0 => {
             let remainder = a.wrapping_rem(b);
-            Some(if remainder != 0 && (remainder < 0) != (b < 0) {
-                remainder + b
+            if remainder != 0 && (remainder < 0) != (b < 0) {
+                remainder.wrapping_add(b)
             } else {
                 remainder
-            })
+            }
         }
-        BinOp::BitAnd => Some(a & b),
-        BinOp::BitOr => Some(a | b),
-        BinOp::BitXor => Some(a ^ b),
-        BinOp::Shl => Some(a.wrapping_shl(b as u32)),
-        BinOp::Shr => Some(((a as u64).wrapping_shr(b as u32)) as i64),
-        _ => None,
-    }
+        BinOp::BitAnd => a & b,
+        BinOp::BitOr => a | b,
+        BinOp::BitXor => a ^ b,
+        // The count is masked to five bits, as the x86 the stub runs on does.
+        BinOp::Shl => a.wrapping_shl(b as u32),
+        // Lua's `>>` zero-fills, and lowers to `>>>`, which shifts it unsigned.
+        BinOp::Shr => ((a as u32).wrapping_shr(b as u32)) as i32,
+        _ => return None,
+    };
+    Some(i64::from(value))
+}
+
+/// An integer as `IntOp` holds it: the low 32 bits, sign-extended.
+fn int32(value: i64) -> i64 {
+    i64::from(value as i32)
 }
