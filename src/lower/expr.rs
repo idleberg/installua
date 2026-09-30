@@ -2338,6 +2338,13 @@ impl BodyLowerer<'_, '_> {
             lowered.push(ir::Arg::raw(terminator));
         }
 
+        // `/NOUNLOAD` goes first, before anything the plugin pops: NSIS reads
+        // it only as the line's first token. See
+        // [`crate::declarations::PluginMethod::nounload`].
+        if entry.nounload {
+            lowered.insert(0, ir::Arg::raw("/NOUNLOAD"));
+        }
+
         let results = (0..outputs.len())
             .map(|index| match dests.get(index) {
                 Some(slot) => slot.clone(),

@@ -192,7 +192,7 @@ Worth recording for whoever revisits it: the body **must** pop exactly two, and
 the plugin fires the callback once per progress tick. A body that pops one
 leaves an int on the stack on every tick of every extraction.
 
-### `/NOUNLOAD` belongs to nobody
+### `/NOUNLOAD` is not a flag
 
 It is the most common flag in the scanned scripts — **99 sites**, two and a half times
 the next one — and it is not in any `flags` list here, nor can a project put it
@@ -201,9 +201,8 @@ in one.
 It was never a plugin's option. `Source/script.cpp:5151` reads it off the front
 of *any* plugin call, before the method's own arguments, and passes it to
 `EW_REGISTERDLL` as the bit that decides whether the DLL is freed after the
-call. So it describes NSIS's loader, not the method — there is no signature for
-it to be part of, and a declaration that named it would be claiming the plugin
-parses a token the plugin never sees.
+call. So it describes NSIS's loader, not the method's arguments, and a `flags` entry
+naming it would claim the plugin parses a token the plugin never sees.
 
 It is also **deprecated**, and has been since 2.42 (December 2008): *"Deprecated
 /NOUNLOAD and SetPluginsUnload to make scripts simpler and safer"*. The plugin
@@ -212,7 +211,12 @@ still accepts the token, and warns only when it is written in the wrong place
 (`DW_PLUGIN_NOUNLOAD_PLACEMENT`) — the case where a plugin has a `/NOUNLOAD`
 parameter of its own is the one that warning exists to catch.
 
-So Installua emits none, offers no way to write it, and treats unloading as the
-compiler's business the way it treats register allocation. The one visible
-consequence is [`nsProcess._Unload`](/reference/plugins/third-party-plugins/#nsprocess), which exists to release a DLL
-that was kept loaded and therefore has nothing to do here.
+Most of those 99 sites are habit from before 2.42 and need nothing. The
+exception is an old plugin that leaves a thread or a window running inside its
+DLL and never asks to stay loaded, like `nxs`. Freeing that DLL crashes the
+installer some time later. For those, the declaration says
+[`nounload = true`](/reference/commands/plugins-and-headers/#declaring-a-third-party-plugin-or-header)
+and every call writes the token, in first place. A call site still can't write
+it. [`nsProcess._Unload`](/reference/plugins/third-party-plugins/#nsprocess)
+stays undeclared: it releases a DLL kept loaded by `/NOUNLOAD`, and nsProcess
+isn't declared with it.

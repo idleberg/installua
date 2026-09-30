@@ -488,6 +488,39 @@ on **every** call, and the call site can neither set it nor leave it off. It
 must begin with `/`, because a token that does not is one the plugin will read
 as an argument — a fixed trailing argument belongs in `params`.
 
+**`nounload = true` keeps the DLL loaded after the call.** NSIS frees a
+plugin's DLL as soon as the call returns, unless the plugin asked to stay or the
+call line starts with `/NOUNLOAD`. Current plugins ask themselves; a few older
+ones leave something running inside the DLL and never ask. `nxs::Show` starts a
+thread there, and when the DLL is freed that thread is left running code that
+no longer exists:
+
+```toml
+[[plugin]]
+name = "nxs"
+method = "show"
+nsis = "nxs::Show"
+params = []
+outputs = []
+nounload = true
+terminator = "/end"
+flags = [
+  { name = "top", nsis = "/top", ty = "string", value = "separate" },
+  { name = "sub", nsis = "/sub", ty = "string", value = "separate" },
+]
+```
+
+`show({ top = "Installing", sub = "Please wait" })` then compiles to:
+
+```nsis
+nxs::Show /NOUNLOAD /top "Installing" /sub "Please wait" /end
+```
+
+Like `terminator`, it is the method's, written on every call, and the call site
+can't change it. `/NOUNLOAD` goes first on the line, before any flag, because
+that is the only place NSIS reads it; anywhere else it is pushed as an ordinary
+argument.
+
 **`dir` is for a DLL that does not live in `NSISDIR/Plugins`** — a plugin
 vendored into your own repository. It is relative to the folder holding the
 `.installua/` the declaration sits in, so a workspace's shared declaration

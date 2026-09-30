@@ -202,6 +202,19 @@ pub struct PluginMethod {
     /// spells it `/end` and `InetBgDL` spells it `/END`, and nothing here
     /// guesses at a plugin's case.
     pub terminator: Option<String>,
+    /// Whether every call writes `/NOUNLOAD` right after `Plugin::Method`.
+    ///
+    /// NSIS frees a plugin's DLL once the call returns unless the call line
+    /// says `/NOUNLOAD`, and only as its **first** token (`script.cpp` checks
+    /// `gettoken_str(1)`; anywhere later it is pushed as an argument, with a
+    /// warning). A plugin that leaves something running inside its DLL — a
+    /// thread, a window procedure, as `nxs::Show` does — registers no unload
+    /// callback and needs the flag, or the next thing to run is freed code.
+    ///
+    /// So, like [`terminator`](Self::terminator), it is the method's spelling
+    /// and not the call site's to choose: forgetting it is a crash some time
+    /// later, never a diagnostic.
+    pub nounload: bool,
     /// Where the DLL lives, when it is not in `NSISDIR/Plugins`. Written
     /// relative to the folder holding the `.installua/` the file sits in —
     /// the workspace root for a shared one — and absolute once
@@ -527,6 +540,7 @@ impl Declarations {
             tagged,
             more,
             terminator,
+            nounload,
             dir,
             file,
             line,
@@ -563,6 +577,7 @@ impl Declarations {
                 tagged,
                 more,
                 terminator,
+                nounload,
                 dir,
             });
         } else {
@@ -704,6 +719,7 @@ mod parse {
         pub tagged: Vec<String>,
         pub more: Vec<Ty>,
         pub terminator: Option<String>,
+        pub nounload: bool,
         pub dir: Option<String>,
         pub file: String,
         /// The line the block opened on, so "already declared" points at the
@@ -726,6 +742,7 @@ mod parse {
         tagged: Option<Vec<String>>,
         more: Option<Vec<Ty>>,
         terminator: Option<String>,
+        nounload: bool,
         dir: Option<String>,
     }
 
@@ -921,6 +938,22 @@ mod parse {
                     ),
                     None => complain(line, "`terminator` wants a quoted string".to_string()),
                 },
+                // `nounload` is a plugin's alone: it is a token on a call line
+                // and a flag to NSIS's plugin loader, and a macro has neither.
+                "nounload" if !block.plugin => complain(
+                    line,
+                    "`nounload` is a plugin field: it keeps a DLL loaded after its call, and a \
+                     macro loads none"
+                        .to_string(),
+                ),
+                "nounload" => match value.trim() {
+                    "true" => block.nounload = true,
+                    "false" => block.nounload = false,
+                    other => complain(
+                        line,
+                        format!("`nounload` wants `true` or `false`, not `{other}`"),
+                    ),
+                },
                 // `dir` is a plugin's alone. A header is `!include`d and NSIS
                 // searches for one along `!addincludedir`, which is a different
                 // directive with a different position — accepting the key here
@@ -940,7 +973,7 @@ mod parse {
                     format!(
                         "`{other}` is not a declaration field; the fields are `name`, `method`, \
                          `nsis`, `params`, `outputs` and — on a `[[plugin]]` — `flags`, \
-                         `trailing`, `tagged`, `more`, `terminator` and `dir`"
+                         `trailing`, `tagged`, `more`, `terminator`, `nounload` and `dir`"
                     ),
                 ),
             }
@@ -1246,6 +1279,7 @@ mod parse {
             tagged,
             more,
             terminator: block.terminator,
+            nounload: block.nounload,
             dir: block.dir,
             file: file.to_string(),
             line: block.line,

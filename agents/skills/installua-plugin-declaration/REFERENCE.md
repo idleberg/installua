@@ -22,6 +22,7 @@ extension is `.toml`. One `[[plugin]]` block per method.
 | `tagged` | plugin | first-popped literals that mean `more` follows |
 | `more` | plugin | the values that follow when tagged |
 | `terminator` | plugin | a `/TOKEN` emitted after the arguments on every call |
+| `nounload` | plugin | `true` writes `/NOUNLOAD` first on every call |
 | `dir` | plugin | project-relative directory of a vendored DLL |
 
 Types: `string`, `path`, `int`, `uint`, `int64`, `intptr`, `bool`, `handle`,
@@ -91,8 +92,11 @@ Traps that decide whether a declaration is right:
   become the HTTP method).
 - **An input arriving by `Push` from the caller** rather than as a plugin
   argument is not declarable — skip the method and say so.
-- **`/NOUNLOAD` variants and `_Unload` methods** are not declared: Installua
-  never emits `/NOUNLOAD`.
+- **A plugin that keeps a thread or window running in its DLL** after the call
+  returns, and registers no unload callback (`nxs::Show`), needs
+  `nounload = true`. Most `/NOUNLOAD` in old scripts is habit and needs nothing;
+  look in the source for `extra->RegisterPluginCallback`. If it is there, the
+  plugin keeps itself loaded. `_Unload` methods are not declared.
 - **Different ANSI and Unicode source trees** must agree. If they do not, declare
   the Unicode one and note it.
 

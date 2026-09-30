@@ -287,21 +287,19 @@ the docs already say both linters report, unused variables, and one
 `unscoped_variables` line and needs it by hand, or `installua init --force`, since `init`
 does not overwrite one otherwise.
 
-### 5.21 A plugin that needs `/NOUNLOAD` cannot be declared
+### 5.21 A plugin that needs `/NOUNLOAD` cannot be declared — fixed
 
-`nxs` (and older plugins like it) registers no unload callback. `nxs::Show`
-starts a thread inside the DLL, so without `/NOUNLOAD` NSIS 3 frees the DLL
-under that running thread. NSIS 3.12 still honours the flag
-(`Source/script.cpp`). Installua never writes it, so the only way to call
-`Show` is a `raw` line, and its `/end`-terminated options are then unchecked.
+`nounload = true` on a `[[plugin]]` block writes `/NOUNLOAD` as the first token
+after `Plugin::Method` on every call, ahead of the flags: `script.cpp` reads it
+only there. `nxs::Show` declares as `params = []`, `outputs = []`, its options
+as `separate` string flags, `terminator = "/end"` and `nounload = true`, and
+compiles to `nxs::Show /NOUNLOAD /top "…" /sub "…" /end`.
+`nounload_is_emitted_before_the_flags` in `tests/declarations.rs` checks it. The
+field is documented in `plugins-and-headers.md`, `what-stays-out.md` and the
+skill's `REFERENCE.md`.
 
-**Should:** a declaration field, `nounload = true`, that emits the flag
-right after `Plugin::Method` on every call. The flag isn't needed in general;
-it belongs to the plugin, like `terminator`. The skill's `REFERENCE.md`
-("`/NOUNLOAD` variants … are not declared") changes with it.
-
-**Workaround in PimpBot:** `nxs.toml` declares only `destroy`, which is enough
-to get the `!addplugindir`, and `Show` is `raw`.
+PimpBot's `nxs.toml` can now declare `show` and `update` instead of the `raw`
+workaround its comment describes.
 
 ### 5.22 A value proven positive by an `if` is still "not known to be non-negative"
 

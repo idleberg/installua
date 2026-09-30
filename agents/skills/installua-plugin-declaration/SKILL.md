@@ -60,7 +60,7 @@ local result = unz.unzipToLog(zip, INSTDIR)
 ## The fields
 
 `name`, `method`, `nsis` are required; `nsis` is never derived from `method`.
-Plugin-only: `flags`, `trailing`, `tagged`, `more`, `terminator`, `dir`.
+Plugin-only: `flags`, `trailing`, `tagged`, `more`, `terminator`, `nounload`, `dir`.
 Types: `string` `path` `int` `uint` `int64` `intptr` `bool` `handle` `any`
 (`callback` for headers only). `path` is input-only.
 

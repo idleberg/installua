@@ -811,6 +811,63 @@ fn trailing_flags_follow_the_arguments() {
     );
 }
 
+/// `nounload = true` puts `/NOUNLOAD` first, ahead of the flags: NSIS reads it
+/// only as the call line's first token and pushes it as an argument anywhere
+/// else. `nxs::Show` is why it exists — it leaves a thread running in its DLL.
+#[test]
+fn nounload_is_emitted_before_the_flags() {
+    let mut declarations = Declarations::builtin();
+    let mut problems = Vec::new();
+    declarations.parse(
+        "test.toml",
+        "[[plugin]]\nname = \"Looper\"\nmethod = \"fetch\"\nnsis = \"Looper::Fetch\"\n\
+         params = [\"string\", \"path\"]\noutputs = [\"string\"]\nterminator = \"/END\"\n\
+         nounload = true\n\
+         flags = [{ name = \"silent\", nsis = \"/SILENT\" }]\n",
+        &mut problems,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+
+    let mut diags = Diagnostics::new();
+    let output = installua::build_with(
+        "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+         local looper = plugin \"Looper\"\n\
+         installer {\n\
+           section(\"Core\", function()\n\
+             local out = looper.fetch(\"http://example.com/x\", \"out/x\", { silent = true })\n\
+             detailPrint(out)\n\
+           end),\n\
+         }\n",
+        &Options {
+            declarations,
+            ..Options::default()
+        },
+        &mut diags,
+    );
+    assert!(diags.is_empty(), "{}", diags.render("<test>"));
+    let output = output.expect("compiles");
+    let lines: Vec<&str> = output.lines().map(str::trim).collect();
+    assert!(
+        lines.contains(&"Looper::Fetch /NOUNLOAD /SILENT \"http://example.com/x\" \"out\\x\" /END"),
+        "{output}"
+    );
+
+    // And it is a plugin's alone: a macro loads no DLL.
+    let mut problems = Vec::new();
+    Declarations::builtin().parse(
+        "test.toml",
+        "[[header]]\nname = \"H\"\nmethod = \"m\"\nnsis = \"M\"\n\
+         params = []\noutputs = []\nnounload = true\n",
+        &mut problems,
+    );
+    assert!(
+        problems
+            .iter()
+            .any(|problem| problem.message.contains("is a plugin field")),
+        "{problems:?}"
+    );
+}
+
 /// A terminator has to be a switch, and has to be a plugin's.
 ///
 /// Both refusals are about the same confusion: a token with no `/` is one the

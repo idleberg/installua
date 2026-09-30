@@ -432,7 +432,8 @@ terminating it. That is the difference from `killProcess` and the reason to
 prefer it.
 
 `_Unload` is deliberately absent: it exists so a script using `/NOUNLOAD` can
-release the DLL, and Installua emits no `/NOUNLOAD`.
+release the DLL, and this declaration has no `nounload`, so the DLL is already
+freed after every call.
 
 **The Unicode build ships as `nsProcessW.dll`**, and version 1.6's readme says to
 rename it to `nsProcess.dll`. Do that: an Installua installer is always Unicode,

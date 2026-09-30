@@ -2,8 +2,8 @@
 #
 # See docs/plugin-reference.md.
 #
-# Absent: `_Unload`, which exists for `/NOUNLOAD` callers; Installua emits no
-# `/NOUNLOAD`.
+# Absent: `_Unload`, which exists for `/NOUNLOAD` callers; this declaration
+# has no `nounload`.
 
 [[plugin]]
 name = "nsProcess"
