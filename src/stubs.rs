@@ -1225,7 +1225,12 @@ fn lua_name(ty: Ty) -> &'static str {
 /// contributes is an unknown global, which is the problem these stubs exist to
 /// prevent. It is stale until regenerated, which is already the workflow for
 /// the stubs beside it.
-pub fn project_meta(sources: &[(String, String)]) -> String {
+///
+/// Typed with what the compiler inferred, since an empty body with no
+/// `---@return` is one LuaLS reads as returning `nil`, and every use of the
+/// value would be a type error that is not the user's. A `func` no program
+/// calls has no observed return, and gets none: nothing uses its value either.
+pub fn project_meta(sources: &[(String, String)], declared: &declarations::Declarations) -> String {
     let mut out = String::from(
         "---@meta\n\
          \n\
@@ -1237,20 +1242,96 @@ pub fn project_meta(sources: &[(String, String)]) -> String {
     );
 
     let (funcs, globals) = project_names(sources);
+    let types = project_types(sources, declared);
 
     for (name, params, file) in funcs {
+        let signature = types.signature(&name);
+        let _ = writeln!(out, "-- {file}");
+        for (index, param) in params.iter().enumerate() {
+            let ty = signature.and_then(|signature| signature.params.get(index).copied().flatten());
+            let _ = writeln!(out, "---@param {param} {}", ty.map_or("any", lua_name));
+        }
+        for ty in signature
+            .and_then(|signature| signature.returns.as_ref())
+            .into_iter()
+            .flatten()
+        {
+            let _ = writeln!(out, "---@return {}", lua_name(*ty));
+        }
         // The user's own parameter names, because this file is read in hover
         // text and `a1, a2` is worse than nothing there.
-        let _ = writeln!(
-            out,
-            "-- {file}\nfunction {name}({}) end\n",
-            params.join(", ")
-        );
+        let _ = writeln!(out, "function {name}({}) end\n", params.join(", "));
     }
     for global in globals {
-        let _ = writeln!(out, "---@type string\n{global} = nil\n");
+        let ty = types.globals.get(&global).copied();
+        let _ = writeln!(
+            out,
+            "---@type {}\n{global} = nil\n",
+            ty.map_or("any", lua_name)
+        );
     }
     out
+}
+
+/// What every program in the project infers about its `func`s and globals,
+/// joined.
+///
+/// Every source is compiled as a root, with its `include`s followed, because
+/// the project has no one program: `lib/` is included by each package, and a
+/// parameter's type comes from the call sites, which are in the packages. A
+/// `lib/` file compiled alone does not resolve, or reaches none of its `func`s,
+/// and so contributes nothing rather than an `Unknown` that would widen the
+/// packages' answer to `any`.
+fn project_types(
+    sources: &[(String, String)],
+    declared: &declarations::Declarations,
+) -> lower::Inferred {
+    let mut options = crate::Options {
+        loader: crate::frontend::include::Loader::Memory(sources.iter().cloned().collect()),
+        declarations: declared.clone(),
+        ..crate::Options::default()
+    };
+    let mut merged = lower::Inferred::default();
+
+    for (file, source) in sources {
+        options.root = Some(file.into());
+        let mut diags = crate::diag::Diagnostics::new();
+        let Some(program) = crate::check_with(source, &options, &mut diags) else {
+            continue;
+        };
+        // What `compile_with` refuses to lower is not lowered here either.
+        let resolved = crate::resolve::resolve(&program, &options, &mut diags);
+        if diags.has_errors() {
+            continue;
+        }
+        let inferred = lower::infer(&resolved, &options);
+
+        for (name, signature) in inferred.signatures {
+            merged
+                .signatures
+                .entry(name.clone())
+                .or_insert_with(|| lower::Signature {
+                    params: vec![None; signature.params.len()],
+                    returns: None,
+                });
+            for (index, ty) in signature.params.into_iter().enumerate() {
+                if let Some(ty) = ty {
+                    merged.learn_param(&name, index, ty);
+                }
+            }
+            if let Some(types) = signature.returns {
+                merged.learn_return(&name, &types);
+            }
+        }
+        for (name, ty) in inferred.globals {
+            merged
+                .globals
+                .entry(name)
+                .and_modify(|joined| *joined = joined.join(ty))
+                .or_insert(ty);
+        }
+    }
+    merged
 }
 
 /// A `func`'s name, its parameters and the file it is in.

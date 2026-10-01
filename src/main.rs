@@ -968,7 +968,7 @@ fn stubs(root: &Path) -> Stop {
         ),
         (
             meta.join("project.lua"),
-            installua::stubs::project_meta(&sources),
+            installua::stubs::project_meta(&sources, &declarations),
         ),
         (
             root.join(".installua/installua.yml"),

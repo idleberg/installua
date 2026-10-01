@@ -785,33 +785,8 @@ pub fn lower(
     options: &crate::Options,
     diags: &mut Diagnostics,
 ) -> ir::Module {
-    // 1. Types, to a fixpoint. Rounds before the last are lowered against a
-    //    scratch collector: their diagnostics are about a type table that was
-    //    still incomplete, so reporting them would be reporting the compiler's
-    //    intermediate state to the user.
-    //
-    //    The same rounds settle which `func`s nothing reaches
-    //    ([`callgraph::unreachable`]). One left out is not lowered at all, so
-    //    its body is never type-checked and its call sites type no callee —
-    //    which is why the set rides the fixpoint rather than being cut from the
-    //    finished module.
-    let funcs: BTreeSet<&str> = resolved.functions.keys().map(String::as_str).collect();
-    let mut inferred = Inferred::seed(resolved);
-    let mut dead = BTreeSet::new();
-    let mut failed = Default::default();
-    for _ in 0..MAX_ROUNDS {
-        let mut scratch = Diagnostics::new();
-        let (module, mut round) = lower_once(resolved, options, &mut scratch, &inferred, &dead);
-        failed = std::mem::take(&mut round.failed);
-        let unreached = callgraph::unreachable(&module, &funcs);
-        if round == inferred && unreached == dead {
-            break;
-        }
-        inferred = round;
-        dead = unreached;
-    }
-    inferred.failed = failed;
-
+    // 1. Types, to a fixpoint.
+    let (inferred, dead) = fixpoint(resolved, options);
     let (mut module, _) = lower_once(resolved, options, diags, &inferred, &dead);
 
     // 2. Registers. Every body is allocated before any call site is filled in,
@@ -849,6 +824,41 @@ pub fn lower(
     plugins_dir(&mut module);
 
     module
+}
+
+/// The types [`lower`] settles on — every `func`'s signature and every
+/// global's type — without lowering for real. What `installua stubs` reads, so
+/// that the editor is told the types the compiler checks against.
+pub fn infer(resolved: &Resolved<'_>, options: &crate::Options) -> Inferred {
+    fixpoint(resolved, options).0
+}
+
+/// Rounds before the last are lowered against a scratch collector: their
+/// diagnostics are about a type table that was still incomplete, so reporting
+/// them would be reporting the compiler's intermediate state to the user.
+///
+/// The same rounds settle which `func`s nothing reaches
+/// ([`callgraph::unreachable`]). One left out is not lowered at all, so its body
+/// is never type-checked and its call sites type no callee — which is why the
+/// set rides the fixpoint rather than being cut from the finished module.
+fn fixpoint(resolved: &Resolved<'_>, options: &crate::Options) -> (Inferred, BTreeSet<String>) {
+    let funcs: BTreeSet<&str> = resolved.functions.keys().map(String::as_str).collect();
+    let mut inferred = Inferred::seed(resolved);
+    let mut dead = BTreeSet::new();
+    let mut failed = Default::default();
+    for _ in 0..MAX_ROUNDS {
+        let mut scratch = Diagnostics::new();
+        let (module, mut round) = lower_once(resolved, options, &mut scratch, &inferred, &dead);
+        failed = std::mem::take(&mut round.failed);
+        let unreached = callgraph::unreachable(&module, &funcs);
+        if round == inferred && unreached == dead {
+            break;
+        }
+        inferred = round;
+        dead = unreached;
+    }
+    inferred.failed = failed;
+    (inferred, dead)
 }
 
 /// `ReserveFile /plugin X.dll`, for every plugin an init callback can reach.

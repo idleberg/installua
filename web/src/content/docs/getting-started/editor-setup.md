@@ -21,6 +21,8 @@ Most editors have a ready-made extension that bundles it:
 
 Anything else – the [releases](https://github.com/LuaLS/lua-language-server/releases) page has binaries, and the project documents how to wire them up
 
+Your own `func`s and globals are typed too, with what the compiler inferred from the whole project: a `func` returning a string reads as returning one. Run `installua stubs` again after adding or changing one.
+
 ## selene
 
 [selene](https://kampfkarren.github.io/selene/) is a separate tool: a Lua linter. Installua uses it for the things a language server won't tell you – above all, the Lua names Installua doesn't support, which selene reports as errors that name the replacement to use instead.

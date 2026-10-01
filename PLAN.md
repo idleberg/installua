@@ -353,27 +353,26 @@ and a Wine run showed `Name "$t"` with the value `.onInit` stored. The
 PimpBot's Runtime can drop its `raw.tail` `Name` line and the `WM_SETTEXT` on
 the readme checkbox.
 
-### 5.25 A project `func` is stubbed as returning nothing
+### 5.25 A project `func` is stubbed as returning nothing — fixed
 
 ```lua
 func("packValue", function(section, key) return readIniStr(ini, section, key) end)
 packType = string.lower(packValue("Installer", "PresetType"))
 ```
 
-`project_meta` writes `function packValue(section, key) end`, with no
-`---@return`. LuaLS takes the empty body to return `nil`, so every use of a
-value-returning `func` is a type error: `Cannot assign nil to boolean`
-(`section.selected = avsApeOutdated(…)`), `nil to string|number`,
-`cast-local-type`. That is about 30 of the warnings on PimpBot, and none of them
-is PimpBot's. The globals have the same problem the other way round:
-`---@type string` on every one, whatever the compiler inferred.
+`project_meta` wrote `function packValue(section, key) end`, with no
+`---@return`, and LuaLS took the empty body to return `nil`: about 30 of the
+warnings on PimpBot, none of them PimpBot's. Every global was `---@type string`.
 
-Should: a `func` that returns a value gets `---@return <type>`, from the type
-the compiler already infers for it (`any` when unknown), and its parameters get
-`---@param` the same way. A global gets its inferred type. The fix goes in
-`project_meta`/`project_names` in `src/stubs.rs`. Check: a `tests/stubs.rs`
-case, and `lua-language-server --check` on PimpBot shows no
-`assign-type-mismatch` that traces back to a `func`.
+`lower::infer` runs the signature fixpoint on its own, and `project_types` in
+`src/stubs.rs` runs it on every source as a root, with `include` followed from
+memory, joining what each program observed. So a `func` in `lib/` is typed by
+the packages that call it. Each `func` gets `---@param` (`any` when no program
+calls it) and one `---@return` per value, and each global gets its inferred type
+(`any` for a handle). `project_meta` takes the declarations now, so a plugin's
+result is typed as well. Test: `the_project_meta_carries_the_inferred_types`.
+`lua-language-server --check` on PimpBot shows no `assign-type-mismatch` or
+`cast-local-type`.
 
 ### 5.26 Only `onInit` is in the LuaLS meta
 
@@ -416,6 +415,114 @@ come up clean.
   `math.max(tonumber(s), 0)` warns about the `nil`. Installua's `tonumber`
   always returns an `int` (`strings-and-numbers.md`), so `installua.lua` should
   override it with `---@return integer`.
+
+### 5.29 `glob` is case-sensitive on Windows
+
+```lua
+for path in glob("res/*.bmp") do file(path) end -- res\ holds A.BMP and b.bmp
+```
+
+Only `b.bmp` is embedded, by the Windows build under Wine as by the macOS one.
+Windows file names are not case-sensitive, `File res\*.bmp` takes both, and
+preset packs are full of `FOO.BMP`. Should: on Windows, `*` and `?` match
+ignoring case, like `FindFirstFile`; elsewhere as now, since that is the file
+system's rule there. The matcher is `glob`'s (`src/lower`, the walker behind
+§5.10). Check: a `tests/` case with a mixed-case fixture, gated on
+`cfg(windows)` or run under Wine like §5.23.
+
+PimpBot's pack installer globs `*.bmp` and `*.BMP` for each resource type.
+
+### 5.30 A string function on a build-time value does not fold
+
+```lua
+for path in glob("res/*") do
+	if string.lower(string.sub(path, -4)) == ".bmp" then file(path) end
+end
+```
+
+compiles to `StrCpy $0 "res/A.BMP" "" -4` / `StrCmp $0 ".bmp"` around each
+`File`: a run-time test, so every file is embedded whatever its type, and once
+per branch when the `if` sits in an `ipairs` loop. `path`, the `-4` and the
+literal are all known at build time. Should: `string.sub`, `.lower`, `.upper`,
+`.find` and `..` fold when every argument is constant, and a constant `if`
+drops its dead branch as `c and x or y` already does (§5.8). Then a `glob` can
+be filtered by extension, which is the only way to filter it now that `*.BMP`
+and `*.bmp` differ (§5.29). The fix goes where §5.8 folds. Check: a golden
+whose `.nsi` holds one `File` and no `StrCmp`.
+
+### 5.31 `build` finds `makensis` only through `$MAKENSIS` or the PATH
+
+`src/main.rs` reads `MAKENSIS`, and no page says so. A program that builds
+installers on the user's machine (PimpBot's Compiler, with a portable NSIS in
+its own folder) has to set the variable for its child, and Installua has no
+way to do that either: `SetEnvironmentVariable` is a `raw` `System::Call`.
+Should: a `--makensis <path>` flag on `build`, which wins over the variable;
+both in `cli.md`. Separately, `setEnv(name, value)` beside `getEnv`
+(`ReadEnvStr`), compiling to `System::Call 'kernel32::SetEnvironmentVariable(t, t)'`,
+since the child-process case is common. Check: a `tests/cli.rs` case with a
+fake `makensis` that records it was called; a golden for `setEnv`.
+
+### 5.32 A relative `-D` path is relative to the source, not the shell
+
+```console
+$ installua build packages/pack/install.lua -D PRESETS=fixtures/avs -o build/pack.nsi
+error[makensis]: File: "fixtures\avs\*.avs" -> no files found.
+```
+
+`assemble` runs `makensis` in the source's folder, so `fixtures/avs` means
+`packages/pack/fixtures/avs`. That is consistent with every other path in a
+program, and with `makensis -D`, which also changes into the script's folder;
+but a value typed on the command line reads as relative to where it was
+typed, and nothing says otherwise. Should: one sentence under `param` in
+`program-structure.md` and on `cli.md`. Changing the behaviour would need to
+know which parameters are paths, which `param` does not say.
+
+### 5.33 A multi-value call cannot assign to existing variables
+
+```lua
+local code = nsExec.exec("a.exe")
+local output = ""
+code, output = nsExec.execToStack("b.exe")
+```
+
+`not-yet-implemented: an assignment with a different number of targets and
+values`. `local code, output = nsExec.execToStack(…)` works, so the values are
+there; only the plain assignment is missing. Should: `a, b = f()` pops into
+the targets as the `local` form does, and `installua coverage` loses the
+entry. Check: a golden beside the one for the `local` form.
+
+PimpBot's Compiler declares a second local (`buildCode`).
+
+### 5.34 A program whose pages are all `page.custom` never sets MUI2 up
+
+```lua
+installer { page.custom { "One", controls = {} }, section("-x", function() end) }
+```
+
+`makensis -WX` fails on `MUI_LANGUAGE[EX] should be inserted after the
+MUI_[UN]PAGE_* macros`: `Page custom` is not a MUI2 macro, so `MUI_INSERT`
+never runs, and without it the header text, header image and colours a
+custom page asks for are not set up either. Should: the compiler writes
+`!insertmacro MUI_INSERT` before `MUI_LANGUAGE` when no MUI2 page did, the
+way `MUI_PAGE_INIT` would. Check: the repro as a Tier-3 `-WX` build, and a
+golden holding the line.
+
+Such a program also has sections no `instFiles` page runs, which is makensis's
+warning 8000 and fails `-WX` as well. That one is the program's to silence
+(`raw.head [[!pragma warning disable 8000]]`), but the docs for `page.custom`
+could say so.
+
+PimpBot's Compiler adds a welcome page that skips itself.
+
+### 5.35 No Windows binary for a release that has the fixes
+
+The one release is v0.1.0, without any of §5. A program that runs
+`installua build` on the user's machine (PimpBot's Compiler) ships
+`installua.exe`, and has to cross-build it from a checkout
+(`cargo build --release --target x86_64-pc-windows-gnu`, which works and ran
+under Wine with a portable NSIS 3.12). Should: each release attaches
+`installua-x86_64-pc-windows-gnu.exe` (or a zip) with its SHA-256, so it can be
+pinned the way PimpBot pins 7-Zip and curl. The release workflow is the place.
 
 ## Later: random programs
 

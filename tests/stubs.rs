@@ -634,7 +634,10 @@ fn the_project_meta_declares_what_a_project_declares() {
         state = \"fresh-install\"\n\
         attributes { outFile = \"a.exe\" }\n";
 
-    let meta = stubs::project_meta(&[("strings.lua".to_string(), source.to_string())]);
+    let meta = stubs::project_meta(
+        &[("strings.lua".to_string(), source.to_string())],
+        &declarations::Declarations::default(),
+    );
 
     assert!(meta.starts_with("---@meta\n"), "{meta}");
     assert!(meta.contains("function kib(bytes) end"), "{meta}");
@@ -642,18 +645,69 @@ fn the_project_meta_declares_what_a_project_declares() {
     assert!(meta.contains("-- strings.lua"), "{meta}");
 }
 
+/// PLAN 5.25: an empty body with no `---@return` is one LuaLS reads as
+/// returning `nil`, so every use of a `func`'s value was a type error. The types
+/// come from the package that calls the `func`, not the file declaring it.
+#[test]
+fn the_project_meta_carries_the_inferred_types() {
+    let lib = "\
+        func(\"kib\", function(bytes) return bytes // 1024 end)\n\
+        func(\"label\", function(name) return \"<\" .. name .. \">\" end)\n\
+        func(\"unused\", function(value) return value end)\n";
+    let package = "\
+        include \"lib.lua\"\n\
+        size = kib(4096)\n\
+        title = label(\"x\")\n\
+        attributes { outFile = \"a.exe\" }\n";
+
+    let meta = stubs::project_meta(
+        &[
+            ("lib.lua".to_string(), lib.to_string()),
+            ("package.lua".to_string(), package.to_string()),
+        ],
+        &declarations::Declarations::default(),
+    );
+
+    let expected = "\
+-- lib.lua
+---@param bytes integer
+---@return integer
+function kib(bytes) end
+
+-- lib.lua
+---@param name string
+---@return string
+function label(name) end
+
+-- lib.lua
+---@param value any
+function unused(value) end
+
+---@type integer
+size = nil
+
+---@type string
+title = nil
+
+";
+    assert!(meta.ends_with(expected), "{meta}");
+}
+
 #[test]
 fn a_source_that_does_not_parse_contributes_nothing_and_fails_nothing() {
     // The generator runs in an editor's workflow, where a file is half-written
     // most of the time. Refusing to produce stubs because one file is mid-edit
     // would break exactly the tool it exists to serve.
-    let meta = stubs::project_meta(&[
-        ("broken.lua".to_string(), "func(".to_string()),
-        (
-            "good.lua".to_string(),
-            "func(\"ok\", function() end)".to_string(),
-        ),
-    ]);
+    let meta = stubs::project_meta(
+        &[
+            ("broken.lua".to_string(), "func(".to_string()),
+            (
+                "good.lua".to_string(),
+                "func(\"ok\", function() end)".to_string(),
+            ),
+        ],
+        &declarations::Declarations::default(),
+    );
 
     assert!(meta.contains("function ok() end"), "{meta}");
 }
@@ -948,7 +1002,9 @@ fn a_func_below_the_root_reaches_the_project_meta() {
 
     let walked = installua::project::sources(&root);
     assert_eq!(names(&walked), ["lib/common.lua", "packages/a/install.lua"]);
-    assert!(stubs::project_meta(&walked).ends_with(expected));
+    assert!(
+        stubs::project_meta(&walked, &declarations::Declarations::default()).ends_with(expected)
+    );
 
     write(
         "installua.toml",
@@ -956,7 +1012,9 @@ fn a_func_below_the_root_reaches_the_project_meta() {
     );
     let listed = installua::project::sources(&root);
     assert_eq!(names(&listed), ["lib/common.lua", "packages/a/install.lua"]);
-    assert!(stubs::project_meta(&listed).ends_with(expected));
+    assert!(
+        stubs::project_meta(&listed, &declarations::Declarations::default()).ends_with(expected)
+    );
 
     let _ = std::fs::remove_dir_all(&root);
 }
