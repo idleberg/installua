@@ -546,11 +546,13 @@ and `a_forward_declaration_no_branch_assigns_is_still_an_error` in
 
 PimpBot's `install.lua` rewritten into this form, without the two dummy
 `else`s, builds all three pack profiles through `makensis`. LuaLS reports none
-of the eight `undefined-global`s. One warning remains, at
-`fonts.selected = fontsMissing()`: `installua stubs` gives `fontsMissing` no
-`@return`, because the build it infers from never calls it (its one call sits
-inside `if FONT_DIR ~= ""`). The `undefined-global` on `fonts` used to hide it.
-That is a `stubs` gap, not this one.
+of the eight `undefined-global`s. A ninth warning showed up behind them, at
+`fonts.selected = fontsMissing()`: `installua stubs` gave `fontsMissing` no
+`@return`. That had two causes. `install.lua` has required params, so
+`project_types` dropped it whole on `missing-param`. And its one call sits
+inside `if FONT_DIR ~= ""`, so the fixpoint pruned it. Both are fixed in
+`stubs.rs`: `missing-param` no longer drops a file, and a `func` left without a
+return gets one from an unpruned pass, if that pass types it fully.
 
 ## Later: random programs
 

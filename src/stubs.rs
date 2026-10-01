@@ -22,7 +22,7 @@
 //! instead, each naming its replacement. One generator, so the two halves
 //! cannot disagree about what is rejected.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use crate::builtins;
@@ -1340,6 +1340,7 @@ fn project_types(
         ..crate::Options::default()
     };
     let mut merged = lower::Inferred::default();
+    let mut fallback: BTreeMap<String, Vec<Ty>> = BTreeMap::new();
 
     for (file, source) in sources {
         options.root = Some(file.into());
@@ -1347,12 +1348,31 @@ fn project_types(
         let Some(program) = crate::check_with(source, &options, &mut diags) else {
             continue;
         };
-        // What `compile_with` refuses to lower is not lowered here either.
+        // What `compile_with` refuses to lower is not lowered here either —
+        // except for a missing `-D`. A package whose build passes its flags on
+        // the command line has none here, and resolve binds each to `""`,
+        // which is a value of the type a required parameter has.
         let resolved = crate::resolve::resolve(&program, &options, &mut diags);
-        if diags.has_errors() {
+        if diags.iter().any(|diag| {
+            diag.severity == crate::diag::Severity::Error
+                && diag.code != crate::diag::Code::MissingParam
+        }) {
             continue;
         }
-        let inferred = lower::infer(&resolved, &options);
+        let inferred = lower::infer(&resolved, &options, true);
+        // A `func` only a left-out build-time `if` calls is pruned above and
+        // never lowered, yet LuaLS reads that branch and the call in it. So it
+        // is lowered once more, unpruned, for its return alone — kept only
+        // when nothing better is known and only when it is fully typed: a
+        // `lib/` `func` lowered unreached has untyped parameters, and its
+        // `Unknown` would widen what the packages that call it settle on.
+        for (name, signature) in lower::infer(&resolved, &options, false).signatures {
+            if let Some(types) = signature.returns
+                && !types.contains(&Ty::Unknown)
+            {
+                fallback.entry(name).or_insert(types);
+            }
+        }
 
         for (name, signature) in inferred.signatures {
             merged
@@ -1377,6 +1397,13 @@ fn project_types(
                 .entry(name)
                 .and_modify(|joined| *joined = joined.join(ty))
                 .or_insert(ty);
+        }
+    }
+    for (name, types) in fallback {
+        if let Some(signature) = merged.signatures.get_mut(&name)
+            && signature.returns.is_none()
+        {
+            signature.returns = Some(types);
         }
     }
     merged

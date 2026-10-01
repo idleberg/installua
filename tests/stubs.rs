@@ -693,6 +693,34 @@ title = nil
     assert!(meta.ends_with(expected), "{meta}");
 }
 
+/// The editor reads both branches of a build-time `if`, so a `func` called only
+/// in the one the default build leaves out is still typed — else LuaLS reads its
+/// empty stub as returning `nil` at the call it can see. And a package whose
+/// build passes `-D FONTS=…` is read without it, rather than dropped.
+#[test]
+fn a_func_only_a_left_out_branch_calls_is_still_typed() {
+    let source = "\
+        local FONTS <const> = param(\"FONTS\")\n\
+        func(\"missing\", function() local found = false return found end)\n\
+        if FONTS ~= \"\" then\n\
+            onInit(function() if missing() then detailPrint(\"x\") end end)\n\
+        end\n\
+        attributes { outFile = \"a.exe\" }\n";
+
+    let meta = stubs::project_meta(
+        &[("install.lua".to_string(), source.to_string())],
+        &declarations::Declarations::default(),
+    );
+
+    let expected = "\
+-- install.lua
+---@return boolean
+function missing() end
+
+";
+    assert!(meta.ends_with(expected), "{meta}");
+}
+
 #[test]
 fn a_source_that_does_not_parse_contributes_nothing_and_fails_nothing() {
     // The generator runs in an editor's workflow, where a file is half-written

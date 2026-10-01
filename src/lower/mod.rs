@@ -797,7 +797,7 @@ pub fn lower(
     diags: &mut Diagnostics,
 ) -> ir::Module {
     // 1. Types, to a fixpoint.
-    let (inferred, dead) = fixpoint(resolved, options);
+    let (inferred, dead) = fixpoint(resolved, options, true);
     let (mut module, _) = lower_once(resolved, options, diags, &inferred, &dead);
 
     // 2. Registers. Every body is allocated before any call site is filled in,
@@ -840,8 +840,12 @@ pub fn lower(
 /// The types [`lower`] settles on — every `func`'s signature and every
 /// global's type — without lowering for real. What `installua stubs` reads, so
 /// that the editor is told the types the compiler checks against.
-pub fn infer(resolved: &Resolved<'_>, options: &crate::Options) -> Inferred {
-    fixpoint(resolved, options).0
+///
+/// `prune` off lowers the `func`s nothing reaches too: the editor reads every
+/// branch where a build reads one, so a `func` only a left-out build-time `if`
+/// calls is still called in the source LuaLS checks.
+pub fn infer(resolved: &Resolved<'_>, options: &crate::Options, prune: bool) -> Inferred {
+    fixpoint(resolved, options, prune).0
 }
 
 /// Rounds before the last are lowered against a scratch collector: their
@@ -852,7 +856,11 @@ pub fn infer(resolved: &Resolved<'_>, options: &crate::Options) -> Inferred {
 /// ([`callgraph::unreachable`]). One left out is not lowered at all, so its body
 /// is never type-checked and its call sites type no callee — which is why the
 /// set rides the fixpoint rather than being cut from the finished module.
-fn fixpoint(resolved: &Resolved<'_>, options: &crate::Options) -> (Inferred, BTreeSet<String>) {
+fn fixpoint(
+    resolved: &Resolved<'_>,
+    options: &crate::Options,
+    prune: bool,
+) -> (Inferred, BTreeSet<String>) {
     let funcs: BTreeSet<&str> = resolved.functions.keys().map(String::as_str).collect();
     let mut inferred = Inferred::seed(resolved);
     let mut dead = BTreeSet::new();
@@ -861,7 +869,11 @@ fn fixpoint(resolved: &Resolved<'_>, options: &crate::Options) -> (Inferred, BTr
         let mut scratch = Diagnostics::new();
         let (module, mut round) = lower_once(resolved, options, &mut scratch, &inferred, &dead);
         failed = std::mem::take(&mut round.failed);
-        let unreached = callgraph::unreachable(&module, &funcs);
+        let unreached = if prune {
+            callgraph::unreachable(&module, &funcs)
+        } else {
+            BTreeSet::new()
+        };
         if round == inferred && unreached == dead {
             break;
         }
