@@ -8653,9 +8653,9 @@ fn todo_at(diags: &mut Diagnostics, span: Span, what: &str) {
         Diagnostic::error(
             Code::NotYetImplemented,
             span,
-            format!("{what} is not in this version's exposed set"),
+            format!("{what} is not supported yet"),
         )
-        .note("it is scheduled rather than missing: `installua coverage` counts it"),
+        .note("this version cannot compile this shape; rewrite it another way"),
     );
 }
 

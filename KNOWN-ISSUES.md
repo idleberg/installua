@@ -17,8 +17,6 @@ cells, and a fix fails that test until they leave the list.
 generic message. The ones ordinary code reaches have real diagnostics now.
 What is left:
 
-- `todo_at`'s note says the shape is "scheduled" and that `installua coverage`
-  counts it. Neither is true for these sites.
 - About 15 are one typo: a positional entry where named fields are expected,
   or the other way round. One shared `bad-field-value` would cover them all.
   The sites: `expr.rs` 1154, 1514, 3213; `library.rs` 85; `handle.rs` 1514;
