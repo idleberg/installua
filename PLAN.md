@@ -68,31 +68,6 @@ matches names, so removing a name by accident fails it).
 Not a word problem, left for later: "rather than" (85 hits) is a tic, not
 jargon.
 
-## 5. Bugs
-
-Found while rewriting PimpBot's installers in Installua
-(`~/Repositories/_visbot/pimpbot-installua`). Each one has a repro to paste
-into a scratch `.lua`, what happens now against 0.2.0 (`581cf0f`), what should
-happen, where the fix goes and how to check it. They are listed worst first.
-PimpBot works around each one with a `ponytail:` comment, and those workarounds
-come out once the fix ships.
-
-The same rule as §1 applies: a fix comes with its own test. That is a
-hand-written golden when the fix changes emitted `.nsi`, a `tests/diagnostics.rs`
-case when it changes a message, and a Tier-3 `makensis -WX` build when the bug
-was that `makensis` rejected the output. `mise run check` passes at the end of
-each one.
-
-### 5.35 No Windows binary for a release that has the fixes
-
-The one release is v0.1.0, without any of §5. A program that runs
-`installua build` on the user's machine (PimpBot's Compiler) ships
-`installua.exe`, and has to cross-build it from a checkout
-(`cargo build --release --target x86_64-pc-windows-gnu`, which works and ran
-under Wine with a portable NSIS 3.12). Should: each release attaches
-`installua-x86_64-pc-windows-gnu.exe` (or a zip) with its SHA-256, so it can be
-pinned the way PimpBot pins 7-Zip and curl. The release workflow is the place.
-
 ## Later: random programs
 
 Generate random well-typed programs from the grammar, compile them, and run
