@@ -60,9 +60,10 @@ use pages::*;
 /// *group* is the name written here — which is why [`attribute_groups`] is
 /// chained on rather than the dots being merely dropped.
 ///
-/// The overlap with [`V1_INSTALLER_FIELDS`] is not one. Every name in that list
-/// is a script-wide NSIS command that `installer {}` also accepts, so they
-/// belong to both blocks.
+/// The overlap with [`V1_INSTALLER_FIELDS`], `installDir` and `icon`, is not
+/// one. Both are script-wide NSIS commands that `installer {}` also accepts, so
+/// they belong to both blocks. `caption` is not in it: the uninstaller's is
+/// `uninstallCaption`, a second attribute rather than the same field again.
 fn attribute_names() -> Vec<&'static str> {
     table::table()
         .iter()
@@ -206,7 +207,6 @@ const V1_INSTALLER_FIELDS: &[&str] = &[
     "installDir",
     "icon",
     "installTypes",
-    "caption",
     "checkBitmap",
     "installColors",
     "progressBar",
@@ -762,8 +762,9 @@ struct Declaration<'e> {
     /// The one positional entry.
     name: &'e Expr,
     /// A section's `body`, a group's `sections` — named, because NSIS does not
-    /// pass it either.
-    holds: &'e Expr,
+    /// pass it either. Absent is empty: NSIS takes a `Section` or a
+    /// `SectionGroup` with nothing in it.
+    holds: Option<&'e Expr>,
     options: Vec<(&'e Name, &'e Expr)>,
 }
 
@@ -1745,8 +1746,25 @@ impl<'p> Lowerer<'_, 'p> {
             return;
         }
 
+        // A loop or a `do` block out here has no body to run in: the top level
+        // is declarations, and a statement only runs inside a section or a
+        // `func`.
         let Stmt::Call(call) = stmt else {
-            self.todo(stmt.span(), "this declaration");
+            let what = match stmt {
+                Stmt::While { .. } => "a `while` loop",
+                Stmt::NumericFor { .. } | Stmt::GenericFor { .. } => "a `for` loop",
+                Stmt::Do { .. } => "a `do` block",
+                Stmt::Return { .. } => "a `return`",
+                _ => "this statement",
+            };
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    stmt.span(),
+                    format!("{what} is not a declaration"),
+                )
+                .note("statements run inside a body: put it in a `section` or a `func`"),
+            );
             return;
         };
         // `raw.head [[ … ]]` — the one declaration written with a dotted
@@ -1760,7 +1778,18 @@ impl<'p> Lowerer<'_, 'p> {
         }
 
         let Some((name, span)) = call.callee_name().map(|name| (name, call.span())) else {
-            self.todo(call.span(), "this call");
+            let what = match call.callee_field() {
+                Some((base, member)) => format!("`{base}.{}`", member.text),
+                None => "this call".to_string(),
+            };
+            self.diags.push(
+                Diagnostic::error(
+                    Code::UnknownField,
+                    call.span(),
+                    format!("{what} is not a declaration"),
+                )
+                .note(format!("the declarations are {}", list(V1_BLOCKS))),
+            );
             return;
         };
 
@@ -1818,12 +1847,23 @@ impl<'p> Lowerer<'_, 'p> {
             // Lowered by [`Self::languages_pass`] before this loop began, so
             // that a body written above it can still read `lang.greeting`.
             "languages" | "multiUser" | "memento" => {}
-            // `import` and `plugin` are the last two, and both are exposed as
-            // *expressions* — `local mui = import "MUI2"`. What is missing is
-            // this position, not the name, and the message says which rather
-            // than claiming a name the compiler answers to is unknown.
+            // `import` and `plugin` are the last two, and both are
+            // *expressions* — `local mui = import "MUI2"`. As a statement the
+            // value is dropped, and with it every name it brings, so the
+            // message says how to keep it rather than claiming a name the
+            // compiler answers to is unknown.
             other if V1_BLOCKS.contains(&other) => {
-                self.todo(span, &format!("`{other}` as a statement"));
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        span,
+                        format!("`{other}` has to be bound to a name"),
+                    )
+                    .note(format!(
+                        "write `local name = {other} \"…\"`; the names it brings are read \
+                         through that local"
+                    )),
+                );
             }
             other => {
                 self.diags.push(
@@ -2004,8 +2044,8 @@ impl<'p> Lowerer<'_, 'p> {
                     Some(entry) => self.setting(entry, &name.text, value),
                     // A name that belongs to the other block is a five-second
                     // fix rather than a five-second wait, so it says which
-                    // block rather than which version. Reached only by `pages`
-                    // and `text`: the other four installer fields are
+                    // block rather than which version. Reached by every
+                    // installer field but `installDir` and `icon`, which are
                     // `Attribute` rows and NSIS lets them be set script-wide.
                     None if V1_INSTALLER_FIELDS.contains(&other) => {
                         self.diags.push(
@@ -3212,8 +3252,29 @@ impl<'p> Lowerer<'_, 'p> {
                         ),
                     );
                 }
-                other if V1_INSTALLER_FIELDS.contains(&other) => {
-                    self.todo(name.span, &format!("the `{other}` field"));
+                // `caption`, mostly: a script-wide attribute that reads like a
+                // block setting. The uninstaller's is its own attribute, so it
+                // is named rather than the one written.
+                other if attribute_names().contains(&other) => {
+                    let attribute = match half {
+                        Half::Uninstaller => {
+                            let uninstall =
+                                format!("uninstall{}{}", other[..1].to_uppercase(), &other[1..]);
+                            match attribute_names().contains(&uninstall.as_str()) {
+                                true => uninstall,
+                                false => other.to_string(),
+                            }
+                        }
+                        Half::Installer => other.to_string(),
+                    };
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            name.span,
+                            format!("`{other}` is an attribute, not an `{half}` field"),
+                        )
+                        .note(format!("write `{attribute} = …` in `attributes {{}}`")),
+                    );
                 }
                 other => {
                     self.diags.push(
@@ -5420,7 +5481,7 @@ impl<'p> Lowerer<'_, 'p> {
                 self.claimed(name, half);
                 return;
             }
-            self.todo(value.span(), "this entry");
+            self.not_an_entry(value.span(), "this", half);
             return;
         };
         match name {
@@ -5457,9 +5518,32 @@ impl<'p> Lowerer<'_, 'p> {
                 // reason the callbacks are: a block's positional entries are
                 // its declarations of code, and its named fields its settings.
                 Some(hook) => self.mui_callback(value, half, hook),
-                None => self.todo(value.span(), &format!("`{other}` here")),
+                None => self.not_an_entry(value.span(), &format!("`{other}`"), half),
             },
         }
+    }
+
+    /// A positional entry in `installer {}` that is none of the things one can
+    /// be. Most often a statement written straight into the block, which reads
+    /// as Lua and has nowhere to run: the block's entries are declarations, and
+    /// code runs only inside one of them.
+    fn not_an_entry(&mut self, span: Span, what: &str, half: Half) {
+        let block = match half {
+            Half::Installer => "installer",
+            Half::Uninstaller => "uninstaller",
+        };
+        self.diags.push(
+            Diagnostic::error(
+                Code::UnknownField,
+                span,
+                format!("{what} is not an entry of `{block} {{}}`"),
+            )
+            .note(
+                "the entries are a `section`, a `group`, a `page`, a callback such as `onInit`, \
+                 or a name a `local` bound to one; code runs inside a section's or a callback's \
+                 body",
+            ),
+        );
     }
 
     /// A bare name among a block's entries: the section or group that `local
@@ -5871,28 +5955,39 @@ impl<'p> Lowerer<'_, 'p> {
         // group with nothing to configure, and a table form whose array part is
         // the name and whose hash part is `expanded` and the sections it holds.
         let (name, options, members) = match args.as_slice() {
-            [name, members @ Expr::Table { .. }] => (name, Vec::new(), members),
             [Expr::Table { fields, span }] => {
                 let declared = self.declaration(fields, *span, "group", "sections")?;
                 (declared.name, declared.options, declared.holds)
             }
+            [name] => (name, Vec::new(), None),
+            [name, members @ Expr::Table { .. }] => (name, Vec::new(), Some(members)),
             _ => {
-                self.todo(value.span(), "this `group` form");
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        value.span(),
+                        "`group` takes a name and a list of sections, or one table",
+                    )
+                    .note(
+                        "write `group(\"Name\", { … })` or `group { \"Name\", sections = { … } }`",
+                    ),
+                );
                 return None;
             }
         };
-        let Expr::Table {
-            fields: members, ..
-        } = members
-        else {
-            self.bad_value(
-                members.span(),
-                "sections",
-                "a list of sections",
-                "a group holds sections and nothing else: there is no body between \
-                 `SectionGroup` and `SectionGroupEnd`",
-            );
-            return None;
+        let members: &[TableField] = match members {
+            Some(Expr::Table { fields, .. }) => fields,
+            None => &[],
+            Some(members) => {
+                self.bad_value(
+                    members.span(),
+                    "sections",
+                    "a list of sections",
+                    "a group holds sections and nothing else: there is no body between \
+                     `SectionGroup` and `SectionGroupEnd`",
+                );
+                return None;
+            }
         };
 
         let name = self.constant_string(name, "group")?;
@@ -5936,7 +6031,14 @@ impl<'p> Lowerer<'_, 'p> {
         let mut sections = Vec::new();
         for member in members {
             let TableField::Positional { value } = member else {
-                self.todo(value.span(), "a named entry in a `group`'s sections");
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        value.span(),
+                        "a `group`'s sections are a list, not named fields",
+                    )
+                    .note("drop the `name =`; a section is named by its first argument"),
+                );
                 continue;
             };
             // A bare name: the group is listing a declaration, exactly as a
@@ -5961,21 +6063,6 @@ impl<'p> Lowerer<'_, 'p> {
             sections.extend(item);
         }
 
-        // An empty group compiles to a heading with nothing under it, which is
-        // a run of two NSIS lines that does nothing at all. Saying so is worth
-        // more than emitting it.
-        if sections.is_empty() {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::BadFieldValue,
-                    value.span(),
-                    format!("`{name}` is a `group` with no sections"),
-                )
-                .note("a heading with nothing under it is not drawn"),
-            );
-            return None;
-        }
-
         Some(ir::SectionGroup {
             name: format!("{}{name}", half.prefix()),
             expanded,
@@ -5992,18 +6079,26 @@ impl<'p> Lowerer<'_, 'p> {
     /// `description` turns `None` into a minted one rather than refusing, since
     /// the index is MUI2's business and not the author's ([`Self::describe`]).
     fn section(&mut self, value: &Expr, half: Half, index: Option<String>) -> Option<ir::Section> {
-        let Expr::Call { callee, args, .. } = value else {
-            self.todo(value.span(), "this entry");
+        // Only a group's member reaches here as anything but a `section`
+        // call: the block and the listing dispatch on the callee first.
+        let callee = match value {
+            Expr::Call { callee, args, .. } => match callee.as_ref() {
+                Expr::Name(callee) if callee.text == "section" => Some(args),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(args) = callee else {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    value.span(),
+                    "a `group` holds sections and groups, and this is neither",
+                )
+                .note("write each as `section(…)` or `group(…)`, or list a `local` bound to one"),
+            );
             return None;
         };
-        let Expr::Name(callee) = callee.as_ref() else {
-            self.todo(value.span(), "this entry");
-            return None;
-        };
-        if callee.text != "section" {
-            self.todo(value.span(), &format!("`{}`", callee.text));
-            return None;
-        }
 
         // The short-and-table pair: `section("Core", fn)` when there is nothing
         // to configure, and `section { "Core", required = true, body = fn }`
@@ -6011,31 +6106,51 @@ impl<'p> Lowerer<'_, 'p> {
         // `section(name, options, body)` was the one shape in the surface that
         // put options between two parameters, and it is gone.
         //
+        // Either form may leave the body out, which is an empty section: NSIS
+        // takes a `Section` with nothing in it, and so does `-WX`. The table
+        // is matched first because it is one argument too.
+        //
         // In the table the array part is the parameters and the hash part the
         // options, exactly as `file { "docs/", recursive = true }` mirrors
         // `File /r "docs\"`. `body` is a named key rather than a second
         // positional because NSIS does not pass it either: it is what sits
         // between `Section` and `SectionEnd`.
         let (name, options, body) = match args.as_slice() {
-            [name, body @ Expr::Function { .. }] => (name, Vec::new(), body),
             [Expr::Table { fields, span }] => {
                 let declared = self.declaration(fields, *span, "section", "body")?;
                 (declared.name, declared.options, declared.holds)
             }
+            [name] => (name, Vec::new(), None),
+            [name, body @ Expr::Function { .. }] => (name, Vec::new(), Some(body)),
             _ => {
-                self.todo(value.span(), "this `section` form");
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::BadFieldValue,
+                        value.span(),
+                        "`section` takes a name and a body, or one table",
+                    )
+                    .note(
+                        "write `section(\"Name\", function() … end)` or `section { \"Name\", \
+                         body = function() … end }`",
+                    ),
+                );
                 return None;
             }
         };
-        let Expr::Function { block, span, .. } = body else {
-            self.bad_value(
-                body.span(),
-                "body",
-                "a function",
-                "it becomes the section's body, which is what NSIS writes between `Section` \
-                 and `SectionEnd`",
-            );
-            return None;
+        let empty = Block::new();
+        let (block, span) = match body {
+            Some(Expr::Function { block, span, .. }) => (block, span),
+            None => (&empty, &value.span()),
+            Some(body) => {
+                self.bad_value(
+                    body.span(),
+                    "body",
+                    "a function",
+                    "it becomes the section's body, which is what NSIS writes between `Section` \
+                     and `SectionEnd`",
+                );
+                return None;
+            }
         };
 
         let name = self.constant_string(name, "section")?;
@@ -6203,20 +6318,6 @@ impl<'p> Lowerer<'_, 'p> {
                     format!("this `{what}` has no name"),
                 )
                 .note("the name is the first entry, written without a key"),
-            );
-            return None;
-        };
-        let Some(held) = held else {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::MissingAttribute,
-                    span,
-                    format!("this `{what}` has no `{contents}`"),
-                )
-                .note(format!(
-                    "write `{contents} = …`; the table form names everything except the `{what}`'s \
-                     own name"
-                )),
             );
             return None;
         };
@@ -6947,10 +7048,17 @@ impl BodyLowerer<'_, '_> {
         }
 
         if names.len() != values.len() {
-            self.todo(
-                span,
-                "a `local` with a different number of names and values",
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!("{} name(s) and {} value(s)", names.len(), values.len()),
+                )
+                .note("there is no `nil` to fill a missing value with, so each name needs one"),
             );
+            for name in names {
+                self.bind(&name.text, Binding::Reported);
+            }
             return;
         }
 
@@ -7028,9 +7136,13 @@ impl BodyLowerer<'_, '_> {
         }
 
         if targets.len() != values.len() {
-            self.todo(
-                span,
-                "an assignment with a different number of targets and values",
+            self.diags.push(
+                Diagnostic::error(
+                    Code::WrongArity,
+                    span,
+                    format!("{} target(s) and {} value(s)", targets.len(), values.len()),
+                )
+                .note("there is no `nil` to fill a missing value with, so each target needs one"),
             );
             return;
         }
@@ -7305,9 +7417,18 @@ impl BodyLowerer<'_, '_> {
                     return;
                 }
                 _ => {
-                    self.todo(
-                        expr.span(),
-                        "a `for` step that is not a build-time constant",
+                    // The step's sign picks the loop's test, `<=` or `>=`, and
+                    // that is decided here, once, rather than at every turn.
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::NotYetImplemented,
+                            expr.span(),
+                            "a `for` step has to be known at build time",
+                        )
+                        .note(
+                            "its sign decides whether the loop counts up or down; use a literal \
+                             or a `<const>`, or a `while` loop",
+                        ),
                     );
                     return;
                 }

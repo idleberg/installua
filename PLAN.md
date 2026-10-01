@@ -25,10 +25,17 @@ goes into Installua first, with its own golden, and the port follows.
 
 ## 2. Review the `todo` sites
 
-`src/lower` has 55 `self.todo(` calls (39 in `mod.rs`, 12 in `expr.rs`, 3 in
+`src/lower` has 39 `self.todo(` calls (25 in `mod.rs`, 10 in `expr.rs`, 3 in
 `handle.rs`, 1 in `library.rs`). Each is a shape the compiler does not
 support. For each, decide whether ordinary code reaches it: if so, it is a
 missing feature, and it gets a spelling or a real diagnostic; if not, it stays.
+
+The sites ordinary code reaches have real diagnostics now. What is left:
+
+- About 15 are one typo: a positional entry where named fields are expected,
+  or the other way round. One shared `bad-field-value` would cover them all.
+- `todo_at`'s note says the shape is "scheduled" and that `installua coverage`
+  counts it. Neither is true for these sites.
 
 ## 3. A field on a file handle names the wrong type
 

@@ -11,9 +11,10 @@ they appear.
 
 Declares a section: a name and a body. The table form takes options beside the
 name — `optional` starts it unticked, `required` makes it untickable,
-`installTypes` puts it in the presets, `description` is its hover text.
+`installTypes` puts it in the presets, `description` is its hover text. Leave
+the body out and the section is empty, as NSIS allows.
 
-**Usage** `section(name, body)` or
+**Usage** `section(name, body)`, `section(name)` or
 `section { <name>, body = …, optional = …, required = …, installTypes = { … }, size = …, description = … }`
 
 ```lua
@@ -39,9 +40,11 @@ installer {
 
 Groups sections under one collapsible heading on the components page. Ticking
 the heading ticks the children. A group can hold groups too. Takes
-`description` like a section does.
+`description` like a section does. Leave the sections out and the group is
+empty, as NSIS allows.
 
-**Usage** `group(name, { <section>, … })`
+**Usage** `group(name, { <section>, … })`, `group(name)` or
+`group { <name>, sections = { … }, expanded = …, description = … }`
 
 ```lua
 group("Extras", {

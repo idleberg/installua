@@ -108,15 +108,15 @@ fn a_dangling_per_cent_is_rejected() {
 }
 
 /// The format has to be readable to be checked, and a computed one is not.
-/// `todo` rather than an error: this is the honest edge of the check, not a
-/// mistake in the program.
+/// Since `IntFmt`'s set is checked here or nowhere, a format that cannot be
+/// read is refused under the same code as one that reads wrong.
 #[test]
-fn a_computed_format_is_not_yet_implemented() {
+fn a_computed_format_is_rejected() {
     assert_eq!(
         codes(
             "\tlocal width = \"%04d\"\n\
              \tdetailPrint(string.format(width, 42))"
         ),
-        vec![Code::NotYetImplemented]
+        vec![Code::FormatString]
     );
 }

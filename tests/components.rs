@@ -142,21 +142,21 @@ fn an_install_type_is_named_once() {
     }
 }
 
-/// A heading with nothing under it is not drawn, so the two NSIS lines it
-/// become do nothing at all — at any depth.
+/// NSIS takes a `Section` or a `SectionGroup` with nothing in it, so leaving
+/// out the body or the sections is an empty one rather than a mistake.
 #[test]
-fn a_group_holds_at_least_one_section() {
-    let raised = errors(&program("group(\"Tools\", {}),"));
-    assert_eq!(raised.len(), 1, "{raised:?}");
-    assert!(raised[0].1.contains("no sections"), "{raised:?}");
-
-    let raised = errors(&program("group(\"Tools\", { group(\"Inner\", {}) }),"));
-    assert!(
-        raised
-            .iter()
-            .any(|(_, message)| message.contains("no sections")),
-        "{raised:?}"
-    );
+fn a_section_or_group_may_be_empty() {
+    for written in [
+        "section(\"Core\"),",
+        "section { \"Core\", optional = true },",
+        "group(\"Tools\"),",
+        "group(\"Tools\", {}),",
+        "group { \"Tools\", expanded = true },",
+        "group(\"Tools\", { group(\"Inner\") }),",
+    ] {
+        let raised = errors(&program(written));
+        assert!(raised.is_empty(), "{written}: {raised:?}");
+    }
 }
 
 /// `AddSize` is a whole number of kilobytes. A section cannot give space back,
@@ -217,7 +217,8 @@ fn a_section_with_options_takes_the_table_form() {
     assert!(
         raised
             .iter()
-            .any(|(code, _)| *code == Code::NotYetImplemented),
+            .any(|(code, message)| *code == Code::BadFieldValue
+                && message.contains("a name and a body, or one table")),
         "{raised:?}"
     );
 }
@@ -226,7 +227,7 @@ fn a_section_with_options_takes_the_table_form() {
 /// the name is the array part and everything else is a switch. Each way of
 /// getting that wrong is caught where it is written.
 #[test]
-fn a_table_declaration_has_one_name_and_says_what_it_holds() {
+fn a_table_declaration_has_one_name() {
     let raised = errors(&program(
         "section { optional = true, body = function() end },",
     ));
@@ -234,14 +235,6 @@ fn a_table_declaration_has_one_name_and_says_what_it_holds() {
         raised
             .iter()
             .any(|(code, text)| *code == Code::MissingAttribute && text.contains("has no name")),
-        "{raised:?}"
-    );
-
-    let raised = errors(&program("section { \"Core\", optional = true },"));
-    assert!(
-        raised
-            .iter()
-            .any(|(code, text)| *code == Code::MissingAttribute && text.contains("has no `body`")),
         "{raised:?}"
     );
 
@@ -259,22 +252,13 @@ fn a_table_declaration_has_one_name_and_says_what_it_holds() {
 }
 
 /// A group holds sections rather than running anything, so its contents key is
-/// `sections` and the same three rules apply to it.
+/// `sections` and the same rules apply to it.
 #[test]
 fn a_group_takes_the_same_table_form() {
     let output = build(&program(
         "group { \"Tools\", expanded = true, sections = { section(\"C\", function() end) } },",
     ));
     assert!(output.contains("SectionGroup /e \"Tools\""), "{output}");
-
-    let raised = errors(&program("group { \"Tools\", expanded = true },"));
-    assert!(
-        raised
-            .iter()
-            .any(|(code, text)| *code == Code::MissingAttribute
-                && text.contains("has no `sections`")),
-        "{raised:?}"
-    );
 }
 
 /// A `local` is how a section is addressed, and the `Section` line's third word

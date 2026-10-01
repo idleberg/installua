@@ -382,6 +382,24 @@ impl BodyLowerer<'_, '_> {
                 None
             }
 
+            // `local t = {1, 2}` in a body: the literal is fine, the place is
+            // not. A register holds one string, so a table only ever lives in a
+            // `<const>`, and is spent field by field.
+            Expr::Table { span, .. } => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        *span,
+                        "a table exists only at build time, and this is a runtime value",
+                    )
+                    .note(
+                        "declare it as `local t <const> = { … }` and read its fields, or walk it \
+                         with `ipairs`",
+                    ),
+                );
+                None
+            }
+
             other => {
                 self.todo(other.span(), "this expression");
                 None
@@ -2619,9 +2637,16 @@ impl BodyLowerer<'_, '_> {
                 match format_text {
                     Some(ConstValue::Str(text)) => self.format_string(&text, format_span)?,
                     _ => {
-                        self.todo(
-                            format_span,
-                            "a `string.format` format that is not a literal",
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::FormatString,
+                                format_span,
+                                "a `string.format` format has to be known at build time",
+                            )
+                            .note(
+                                "write it as a string literal or a `<const>`, so its conversion \
+                                 can be checked",
+                            ),
                         );
                         return None;
                     }
@@ -2675,9 +2700,19 @@ impl BodyLowerer<'_, '_> {
         if let (Some(from_value), Some(to), Some(0..) | None) = (from_constant, to, to_constant)
             && from_value < 0
         {
-            self.todo(
-                to.span(),
-                "a negative `string.sub` start without a negative end",
+            self.diags.push(
+                Diagnostic::error(
+                    Code::NotYetImplemented,
+                    to.span(),
+                    "a negative `string.sub` start needs a negative end",
+                )
+                .note(format!(
+                    "count the start from the front instead: `string.sub(s, string.len(s){}, …)`",
+                    match -from_value - 1 {
+                        0 => String::new(),
+                        back => format!(" - {back}"),
+                    }
+                )),
             );
             return None;
         }

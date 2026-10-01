@@ -222,7 +222,6 @@ fn blocks() -> String {
         "\n---@class (exact) installua.Installer\n\
          ---@field installDir? string\n\
          ---@field icon? string\n\
-         ---@field caption? string\n\
          ---@field installTypes? string[]\n\
          ---@field checkBitmap? string\n\
          ---@field installColors? string\n\

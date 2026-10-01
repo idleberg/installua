@@ -122,13 +122,16 @@ const CASES: &[(Code, &str)] = &[
          if answer == \"OK\" then detailPrint(\"always\") end\n\
          end), }",
     ),
-    // `languages {}` and then `include` were this case in turn, and both are
-    // now implemented. `import` is what is left: it is exposed as an
-    // *expression* — `local mui = import "MUI2"` — so the message names the
-    // position rather than the name, which is the whole of what is missing.
+    // `languages {}`, `include` and then `import` as a statement were this
+    // case in turn, and the first two are implemented and the third an error.
+    // A `for` step whose sign is unknown until it runs is what is left.
     (
         Code::NotYetImplemented,
-        "attributes { outFile = \"a.exe\" }\nimport {}",
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         local n = 2\n\
+         for i = 1, 9, n do detailPrint(i) end\n\
+         end), }",
     ),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
     (
@@ -1109,5 +1112,60 @@ fn literal_checks_are_warnings() {
             .map(|d| d.severity)
             .expect("covered by every_case_raises_its_code");
         assert_eq!(severity, Severity::Warning, "{}", code.slug());
+    }
+}
+
+/// Shapes ordinary code reaches, each of which used to be a generic
+/// `not-yet-implemented`. Each is a mistake with a fix, so each gets the code
+/// that names the mistake.
+#[test]
+fn a_reachable_shape_names_its_mistake() {
+    let body = |line: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function()\n{line}\nend), }}"
+        )
+    };
+    let top = |line: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             installer {{ section(\"Core\", function() end), }}\n{line}"
+        )
+    };
+    let block =
+        |entries: &str| format!("attributes {{ outFile = \"a.exe\" }}\ninstaller {{ {entries} }}");
+    for (source, code) in [
+        (body("local a, b = 1"), Code::WrongArity),
+        (body("local a = 1, 2"), Code::WrongArity),
+        (body("local a, b = 1, 2\na, b = 1"), Code::WrongArity),
+        (body("local t = { 1, 2 }"), Code::TypeMismatch),
+        (
+            body("local f = \"%d\"\ndetailPrint(string.format(f, 3))"),
+            Code::FormatString,
+        ),
+        (top("while false do end"), Code::UnknownField),
+        (top("do end"), Code::UnknownField),
+        (top("import \"MUI2\""), Code::UnknownField),
+        (top("plugin \"System\""), Code::UnknownField),
+        (top("page.welcome {}"), Code::UnknownField),
+        (
+            block("section(\"s\", \"t\", function() end)"),
+            Code::BadFieldValue,
+        ),
+        (block("group(\"g\", \"h\", {})"), Code::BadFieldValue),
+        (
+            block("group(\"g\", { detailPrint(\"x\") })"),
+            Code::BadFieldValue,
+        ),
+        (block("detailPrint(\"x\")"), Code::UnknownField),
+        (block("42"), Code::UnknownField),
+        (block("caption = \"x\""), Code::UnknownField),
+    ] {
+        let diags = compile(&source);
+        assert!(
+            diags.contains(code) && !diags.contains(Code::NotYetImplemented),
+            "{source}\n{}",
+            diags.render("<test>")
+        );
     }
 }
