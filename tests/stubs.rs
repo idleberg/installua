@@ -756,6 +756,30 @@ fn the_selene_std_declares_what_a_project_and_the_language_declare() {
 }
 
 #[test]
+fn every_callback_the_compiler_has_is_in_both_stubs() {
+    // `installua.lua` used to write only `onInit`, so LuaLS called
+    // `onGUIInit(…)` an undefined global while selene, written from a separate
+    // list, knew all twelve.
+    let meta = meta();
+    let std = stubs::selene_std(&[]);
+    let words = installua::lower::callback_words();
+    assert_eq!(words.len(), 12, "{words:?}");
+
+    for word in words {
+        assert!(
+            meta.contains(&format!(
+                "---@param body fun()\nfunction {word}(body) end\n"
+            )),
+            "`{word}` is a callback and `installua.lua` does not declare it"
+        );
+        assert!(
+            std.contains(&format!("\n  {word}:\n    args:\n      - type: function\n")),
+            "`{word}` is a callback and the selene std does not declare it"
+        );
+    }
+}
+
+#[test]
 fn the_selene_std_names_a_replacement_for_every_rejection() {
     // Warnings are failures, as a lint: `deprecated = "deny"` in selene.toml
     // makes the replacement text a failure rather than advice, so a rejection

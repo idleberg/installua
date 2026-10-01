@@ -316,6 +316,17 @@ const CALLBACKS: [[&str; 7]; 2] = [
     ],
 ];
 
+/// Every word a block accepts as a callback, each once: both halves of
+/// [`CALLBACKS`] and the [`MUI_HOOKS`]. The stubs read this, so the editor
+/// knows exactly the callbacks the compiler does.
+pub fn callback_words() -> Vec<&'static str> {
+    let mut words: Vec<_> = CALLBACKS.iter().flatten().copied().collect();
+    words.extend(MUI_HOOKS.iter().map(|hook| hook.word));
+    words.sort_unstable();
+    words.dedup();
+    words
+}
+
 /// The entry that writes `name`, when it is a callback NSIS calls: `.onSelChange`
 /// is `onSelChange`, and so is `un.onSelChange`.
 pub(crate) fn callback_word(name: &str) -> Option<&str> {

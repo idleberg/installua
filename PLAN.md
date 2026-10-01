@@ -374,19 +374,20 @@ result is typed as well. Test: `the_project_meta_carries_the_inferred_types`.
 `lua-language-server --check` on PimpBot shows no `assign-type-mismatch` or
 `cast-local-type`.
 
-### 5.26 Only `onInit` is in the LuaLS meta
+### 5.26 Only `onInit` is in the LuaLS meta — fixed
 
 ```lua
 installer { onGUIInit(function() end), onVerifyInstDir(function() end) }
 ```
 
-`undefined-global` on both. The selene std lists all twelve callbacks
-(`src/stubs.rs`, the `onInit` … `onMouseOverSection` rows), but
-`declarations()` writes only `function onInit(body) end` into
-`installua.lua`. Should: the same twelve, each `---@param body fun()`, from one
-list that both generators read, so they cannot drift apart again. Check: a
-`tests/stubs.rs` case asserting that every callback `lower` accepts is in both
-files.
+`undefined-global` on both. The selene std listed all twelve callbacks by hand,
+but `declarations()` wrote only `function onInit(body) end` into
+`installua.lua`.
+
+`lower::callback_words` is both halves of `CALLBACKS` and the `MUI_HOOKS`, each
+once, and both generators loop over it: `installua.lua` writes each as
+`---@param body fun()`, the selene std as one `function` argument. Test:
+`every_callback_the_compiler_has_is_in_both_stubs`.
 
 ### 5.27 `sendMessage` rejects an integer `wParam`/`lParam`
 

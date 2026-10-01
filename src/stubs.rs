@@ -665,8 +665,6 @@ fn declarations() -> String {
          ---@param name string\n\
          ---@param body function\n\
          function func(name, body) end\n\n\
-         ---@param body fun()\n\
-         function onInit(body) end\n\n\
          -- Source layout: the file's declarations are merged into this one\n\
          -- and nothing is emitted. Its `func`s and globals come from\n\
          -- `project.lua` beside this file; its top-level `local`s are its own,\n\
@@ -750,6 +748,13 @@ fn declarations() -> String {
          local File = {}\n\n",
     );
     out.push_str(&file_methods());
+    // Every callback, both halves' spellings, from the list the compiler
+    // reads: written by hand, this had only `onInit`.
+    for word in lower::callback_words() {
+        out.push_str(&format!(
+            "---@param body fun()\nfunction {word}(body) end\n\n"
+        ));
+    }
     out
 }
 
@@ -1443,6 +1448,12 @@ pub fn selene_std(sources: &[(String, String)]) -> String {
     for (name, args) in LANGUAGE {
         out.push_str(&function(name, args));
     }
+    // Every callback, both halves' spellings: one global each to selene,
+    // which cannot see the block they are written in. From the compiler's
+    // list, as the language server's are, so the two cannot drift apart.
+    for word in lower::callback_words() {
+        out.push_str(&function(word, "      - type: function\n"));
+    }
     for control in control::CONTROLS {
         out.push_str(&function(control.installua, "      - type: table\n"));
     }
@@ -1535,20 +1546,6 @@ const LANGUAGE: &[(&str, &str)] = &[
         "      - type: any\n      - type: any\n        required: false\n",
     ),
     ("func", "      - type: string\n      - type: function\n"),
-    // Every callback, both halves' spellings: one global each to selene,
-    // which cannot see the block they are written in.
-    ("onInit", "      - type: function\n"),
-    ("onInstSuccess", "      - type: function\n"),
-    ("onInstFailed", "      - type: function\n"),
-    ("onUninstSuccess", "      - type: function\n"),
-    ("onUninstFailed", "      - type: function\n"),
-    ("onVerifyInstDir", "      - type: function\n"),
-    ("onGUIEnd", "      - type: function\n"),
-    ("onSelChange", "      - type: function\n"),
-    ("onRebootFailed", "      - type: function\n"),
-    ("onGUIInit", "      - type: function\n"),
-    ("onUserAbort", "      - type: function\n"),
-    ("onMouseOverSection", "      - type: function\n"),
     ("include", "      - type: string\n"),
     // The default is typed by the declaration and not by selene: `any` is as
     // much as a positional model can say about a value whose type is the point.
