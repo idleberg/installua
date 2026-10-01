@@ -6978,6 +6978,7 @@ impl BodyLowerer<'_, '_> {
                         base == "multiUser"
                             || self.resolved.deferred.contains_key(base)
                             || self.window_slot(base).is_some()
+                            || self.untaken(base)
                     }))
             {
                 self.field_write(base, name, value);

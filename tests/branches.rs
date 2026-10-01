@@ -396,6 +396,63 @@ mod a_list_may_name_what_was_left_out {
         );
     }
 
+    /// `local fonts` above the `if` and `fonts = section(…)` inside it: Lua's
+    /// forward declaration, and the form `lua-language-server` accepts, since a
+    /// `local` declared in the branch is out of its scope after the `end`.
+    const FORWARD: &str = "local FONTS <const> = param(\"FONTS\", false)\n\
+                           attributes { name = \"b\", outFile = \"b.exe\" }\n\
+                           local fonts\n\
+                           if FONTS then\n\
+                             fonts = section(\"Fonts\", function() end)\n\
+                           end\n\
+                           installer {\n\
+                             fonts,\n\
+                             section(\"Core\", function() end),\n\
+                             onInit(function()\n\
+                               fonts.selected = false\n\
+                               if fonts.selected then detailPrint(\"on\") end\n\
+                             end),\n\
+                           }\n";
+
+    /// The write lowers to nothing, and the read is `selected`'s empty value.
+    #[test]
+    fn a_forward_declared_section_the_build_left_out() {
+        assert_eq!(
+            build(FORWARD, &[]),
+            "Unicode true\n\n!define FONTS 0\n\nName \"b\"\nOutFile \"b.exe\"\n\n\
+             Section \"Core\"\nSectionEnd\n\n\
+             Function .onInit\n  StrCpy $0 0\n  StrCmpS $0 1 0 __GENERATED_endif_0\n  \
+             DetailPrint \"on\"\n__GENERATED_endif_0:\nFunctionEnd\n"
+        );
+    }
+
+    #[test]
+    fn the_same_section_when_the_build_keeps_it() {
+        assert_eq!(
+            build(FORWARD, &[("FONTS", "true")]),
+            "Unicode true\n\n!define FONTS 1\n\nName \"b\"\nOutFile \"b.exe\"\n\n\
+             Section \"Fonts\" SEC_fonts\nSectionEnd\n\nSection \"Core\"\nSectionEnd\n\n\
+             Function .onInit\n  SectionGetFlags ${SEC_fonts} $0\n  IntOp $1 1 ~\n  \
+             IntOp $0 $0 & $1\n  SectionSetFlags ${SEC_fonts} $0\n  \
+             SectionGetFlags ${SEC_fonts} $0\n  IntOp $0 $0 & 1\n  \
+             StrCmpS $0 1 0 __GENERATED_endif_0\n  DetailPrint \"on\"\n\
+             __GENERATED_endif_0:\nFunctionEnd\n"
+        );
+    }
+
+    /// A forward declaration nothing gives a value to, in any branch, is still
+    /// the top-level `local` with nowhere to live.
+    #[test]
+    fn a_forward_declaration_no_branch_assigns_is_still_an_error() {
+        let diags = errors(
+            "attributes { name = \"b\", outFile = \"b.exe\" }\n\
+             local fonts\n\
+             installer { section(\"Core\", function() end) }\n",
+        );
+        let messages: Vec<_> = diags.iter().map(|d| d.message.clone()).collect();
+        assert_eq!(messages, ["a `local` at the top level has nowhere to live"]);
+    }
+
     /// Declared nowhere is not left out, so a misspelling is still reported.
     #[test]
     fn a_misspelt_entry_is_still_an_error() {

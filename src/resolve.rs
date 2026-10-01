@@ -613,10 +613,12 @@ fn consts<'a>(
 
     // A forward declaration nothing gave a value to. Only a declaration can
     // take one — anything else at the top level has no install-time code to
-    // run in — so this is the same rejection `local x = …` gets.
+    // run in — so this is the same rejection `local x = …` gets. Unless the
+    // value was in a branch the build did not take: that is an optional
+    // declaration, left out as one declared inside the branch is.
     let forward = std::mem::take(&mut resolved.forward);
     for (name, span) in forward {
-        if !resolved.deferred.contains_key(&name) {
+        if !resolved.deferred.contains_key(&name) && !untaken.contains(&name) {
             diags.push(nowhere(span).note(format!(
                 "`local {name}` above and `{name} = section {{ … }}` below is a forward \
                  declaration, for a section, group, page or control"
@@ -803,10 +805,26 @@ fn select(
 
 /// Every `local` a block declares at its own level, including inside the `if`s
 /// in it: the ones a branch not taken would have declared.
+///
+/// A forward declaration counts where its value is given, not where its name
+/// is: `local fonts` above an `if` and `fonts = section { … }` inside it is the
+/// same optional section as `local fonts = section { … }` inside it, and the
+/// one of the two that `lua-language-server` accepts.
 fn locals(block: &[Stmt], into: &mut BTreeSet<String>) {
     for stmt in block {
         match stmt {
-            Stmt::Local { names, .. } => into.extend(names.iter().map(|n| n.text.clone())),
+            Stmt::Local { names, values, .. } if !values.is_empty() => {
+                into.extend(names.iter().map(|n| n.text.clone()))
+            }
+            Stmt::Assign {
+                targets, values, ..
+            } => {
+                if let ([Expr::Name(name)], [value]) = (targets.as_slice(), values.as_slice())
+                    && deferred_kind(value).is_some()
+                {
+                    into.insert(name.text.clone());
+                }
+            }
             Stmt::If {
                 then_block,
                 else_block,

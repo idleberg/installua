@@ -64,6 +64,11 @@ pub(super) enum Addressed {
     /// one handle claim rule 4 does not apply to, because MUI2 gives the
     /// uninstaller a way to reach the installer's answer.
     StartMenu(StartMenuHandle),
+    /// A declaration only a branch the build did not take would have made. The
+    /// block that would have listed it lowers the entry to nothing, so code
+    /// addressing it does the same: a write is dropped and a read is the
+    /// field's empty value, as if the section were there and switched off.
+    Untaken,
 }
 
 /// A start menu page, resolved: the id MUI2's macros take, and the `Var` the
@@ -216,6 +221,7 @@ impl BodyLowerer<'_, '_> {
                 control: None,
                 base: name.to_string(),
             })),
+            None if self.untaken(name) => Some(Addressed::Untaken),
             None => {
                 if !self.undefined_base(base)
                     && let Some(ty) = self.value(base)
@@ -225,6 +231,12 @@ impl BodyLowerer<'_, '_> {
                 None
             }
         }
+    }
+
+    /// Whether `name` is a declaration the build left out, and not a `local`
+    /// in this body that happens to share its name.
+    pub(super) fn untaken(&self, name: &str) -> bool {
+        self.lookup(name).is_none() && self.resolved.untaken.contains(name)
     }
 
     /// `s.len` on a string: a value with no field surface. Its base was lowered
@@ -348,7 +360,51 @@ impl BodyLowerer<'_, '_> {
             Addressed::Section(handle) => self.handle_read(&handle, field, dest),
             Addressed::Control(handle) => self.control_read(&handle, field, dest),
             Addressed::StartMenu(handle) => self.start_menu_read(&handle, field, dest),
+            Addressed::Untaken => self.untaken_read(field, dest),
         }
+    }
+
+    /// A field of a declaration the build left out, read as what the missing
+    /// thing would answer: not selected, not ticked, no text, no size.
+    ///
+    /// The branch that was not taken is not lowered, so which kind it declared
+    /// is not known here, and the field is taken from either surface. A name
+    /// that is wrong for the kind is reported by the build that takes the branch.
+    fn untaken_read(&mut self, field: &Name, dest: &Slot) -> Option<Ty> {
+        let (value, ty) = match (
+            handle_field(&field.text),
+            control::control_field(&field.text),
+        ) {
+            (Some(HandleField::Flag { .. }), _) | (_, Some(ControlField::Checked)) => {
+                (ir::Arg::str(crate::cfg::FALSE), Ty::Bool)
+            }
+            (Some(HandleField::Text), _) | (_, Some(ControlField::Value)) => {
+                (ir::Arg::str(""), Ty::Str)
+            }
+            (Some(HandleField::Size), _) => (
+                ir::Arg::int(0),
+                Ty::Int(Int {
+                    width: Width::W32,
+                    sign: Sign::NonNeg,
+                }),
+            ),
+            _ => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        field.span,
+                        format!("`{}` is not a field to read", field.text),
+                    )
+                    .note("the readable fields are `selected`, `bold`, `readOnly`, `expanded`, `text`, `size`, `value` and `checked`"),
+                );
+                return None;
+            }
+        };
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(dest.clone()), value],
+        ));
+        Some(ty)
     }
 
     /// `a.b = c`, likewise.
@@ -374,7 +430,7 @@ impl BodyLowerer<'_, '_> {
                      page to choose what it starts as",
                 ),
             ),
-            None => {}
+            Some(Addressed::Untaken) | None => {}
         }
     }
 

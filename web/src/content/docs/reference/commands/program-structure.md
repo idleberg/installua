@@ -355,20 +355,30 @@ gets — which is the correct answer, since in that configuration the program re
 does not have it.
 
 A block's list cannot hold an `if`, so to leave out a page or a section, declare
-it in the branch and list it as usual. When the branch is not taken, the entry is
-dropped rather than reported, and the same goes for a `group`'s sections and a
-page's `controls`. A name declared in no branch at all is still an error, so a
-misspelling is caught either way:
+the name above the `if`, give it its value in the branch, and list it as usual.
+When the branch is not taken, the entry is dropped rather than reported, and the
+same goes for a `group`'s sections and a page's `controls`. A name declared in no
+branch at all is still an error, so a misspelling is caught either way:
 
 ```lua
 local LICENSE <const> = param("LICENSE", "")
 
+local licensePage
 if LICENSE ~= "" then
-	local licensePage = page.license { file = LICENSE }
+	licensePage = page.license { file = LICENSE }
 end
 
 installer { licensePage, page.instFiles {}, section("Core", function() end) }
 ```
+
+Install-time code may still address a section or control the build left out.
+Writing one of its fields does nothing, and reading one gives the field's empty
+value: `false` for `selected` or `checked`, `""` for `text` or `value`, `0` for
+`size`. So `fonts.selected = false` in `onInit` needs no branch of its own.
+
+`local licensePage = page.license { … }` inside the branch builds the same way,
+but `lua-language-server` scopes that `local` to the branch and reports every
+use after the `end`.
 
 **Nothing of the conditional reaches the output.** It is not a directive the
 compiler emits and then orders against everything else — it is a branch the
