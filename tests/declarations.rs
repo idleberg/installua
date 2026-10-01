@@ -943,7 +943,7 @@ mod system_call {
         assert_eq!(
             call(r#""shell32::SHGetSpecialFolderPath(p 0, t .s, i " .. id .. ", i 0)""#),
             [
-                "System::Call \"shell32::SHGetSpecialFolderPath(p 0, t .s, i $0, i 0)\"",
+                "System::Call \"shell32::SHGetSpecialFolderPath(p 0, t .s, i s, i 0)\" $0",
                 "Pop $0",
                 "DetailPrint $0",
             ]
@@ -955,10 +955,39 @@ mod system_call {
         assert_eq!(
             call(r#""kernel32::GetEnvironmentVariable(t .s, i " .. id .. ")""#),
             [
-                "System::Call \"kernel32::GetEnvironmentVariable(t .s, i $0)\"",
+                "System::Call \"kernel32::GetEnvironmentVariable(t .s, i s)\" $0",
                 "Pop $0",
                 "DetailPrint $0",
             ]
+        );
+    }
+
+    /// A runtime value goes on the stack, never into the text: NSIS would
+    /// expand it before System parsed the signature, and System would read
+    /// `C:\a(b), c` as syntax. Two of them go in the order they are written,
+    /// since System pops its `s` arguments left to right.
+    #[test]
+    fn runtime_values_are_passed_on_the_stack_in_order() {
+        let output = super::build(
+            "attributes { outFile = \"a.exe\", name = \"a\" }\n\
+             local system = plugin \"System\"\n\
+             installer {\n\
+               section(\"Core\", function()\n\
+                 local path = \"C:\\\\a(b), c\"\n\
+                 local name = \"MAKENSIS\"\n\
+                 system.call(\"kernel32::SetEnvironmentVariable(t \" .. name .. \", t \" .. path .. \")\")\n\
+                 detailPrint(path)\n\
+               end),\n\
+             }\n",
+        );
+        let lines: Vec<&str> = output.lines().map(str::trim).collect();
+        let start = lines
+            .iter()
+            .position(|line| line.starts_with("System::Call"))
+            .expect("the call is emitted");
+        assert_eq!(
+            lines[start],
+            "System::Call \"kernel32::SetEnvironmentVariable(t s, t s)\" $1 $0"
         );
     }
 

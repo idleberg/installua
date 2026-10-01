@@ -96,6 +96,10 @@ the `,` or `)` after it:
 local path = system.call("shell32::SHGetSpecialFolderPath(p 0, t .s, i " .. csidl .. ", i 0)")
 ```
 
+The value is passed on the stack, so the call above becomes `i s` with the
+value after the signature. Written into the signature, NSIS would expand it
+before System read it, and System would read a path's `C:` or `,` as syntax.
+
 Anywhere else it could carry a `.s` of its own, so it is refused rather than
 guessed, and so is a signature that is a runtime string throughout.
 

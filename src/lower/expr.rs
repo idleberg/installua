@@ -2075,25 +2075,11 @@ impl BodyLowerer<'_, '_> {
     /// it (`"t ." .. x .. "s"`), and the count would be wrong without a word.
     /// `Err` is the span to blame.
     fn signature_outputs(&self, signature: &Expr) -> Result<usize, Span> {
-        fn pieces<'e>(expr: &'e Expr, into: &mut Vec<&'e Expr>) {
-            match expr {
-                Expr::Binary {
-                    op: BinOp::Concat,
-                    lhs,
-                    rhs,
-                    ..
-                } => {
-                    pieces(lhs, into);
-                    pieces(rhs, into);
-                }
-                _ => into.push(expr),
-            }
-        }
         if let Some(value) = self.constant(signature) {
             return Ok(value.text().matches(".s").count());
         }
         let mut all = Vec::new();
-        pieces(signature, &mut all);
+        concat_pieces(signature, &mut all);
 
         // The folded text between runtime pieces, with the span of the runtime
         // piece that ended each run.
@@ -2119,6 +2105,43 @@ impl BodyLowerer<'_, '_> {
             .iter()
             .map(|(text, _)| text.matches(".s").count())
             .sum())
+    }
+
+    /// A `System.call` signature, with each runtime value taken out of it and
+    /// passed on the stack instead: `t s` in the text, and the value as an
+    /// argument of its own after the signature.
+    ///
+    /// Not spliced into the text, because NSIS expands `$0` *before* System
+    /// reads the signature, so System parses the value as signature syntax: the
+    /// `C` of `C:\…` reads as `$CMDLINE`, a `(` or `,` ends the argument, and
+    /// only a number came through, since digits are System's inline-number
+    /// syntax. An `s` is popped as it stands, and System pops its `s` arguments
+    /// left to right (`ParamsIn` in `Contrib/System/Source/System.c`) while
+    /// NSIS pushes a plugin's arguments so the first is on top — so the values
+    /// go after the signature in the order they appear in it.
+    ///
+    /// [`Self::signature_outputs`] has already put each runtime piece between a
+    /// type and its `,` or `)`, which is where an `s` means a value.
+    fn signature_args(&mut self, signature: &Expr) -> Option<Vec<ir::Arg>> {
+        let mut all = Vec::new();
+        concat_pieces(signature, &mut all);
+        let mut text: Option<ir::Arg> = None;
+        let mut values = Vec::new();
+        for piece in all {
+            let arg = if self.constant(piece).is_some() {
+                self.value(piece)?.arg
+            } else {
+                values.push(self.value(piece)?.arg);
+                ir::Arg::str("s")
+            };
+            text = Some(match text {
+                Some(text) => text.concat(arg),
+                None => arg,
+            });
+        }
+        let mut args = vec![text?];
+        args.extend(values);
+        Some(args)
     }
 
     /// `nsExec.execToStack(cmd)` — the first of the three opaque callees.
@@ -2308,6 +2331,10 @@ impl BodyLowerer<'_, '_> {
             // declaration's.
             if let Some(text) = spliced(argument) {
                 lowered.push(ir::Arg::raw(text));
+                continue;
+            }
+            if entry.nsis == "System::Call" {
+                lowered.extend(self.signature_args(argument)?);
                 continue;
             }
             let value = self.value(argument)?;
@@ -4044,4 +4071,20 @@ fn file_option<'a>(args: &'a [Expr], option: &str) -> Option<&'a Expr> {
         TableField::Named { name, value } if name.text == option => Some(value),
         _ => None,
     })
+}
+
+/// The operands of a chain of `..`, left to right.
+fn concat_pieces<'e>(expr: &'e Expr, into: &mut Vec<&'e Expr>) {
+    match expr {
+        Expr::Binary {
+            op: BinOp::Concat,
+            lhs,
+            rhs,
+            ..
+        } => {
+            concat_pieces(lhs, into);
+            concat_pieces(rhs, into);
+        }
+        _ => into.push(expr),
+    }
 }
