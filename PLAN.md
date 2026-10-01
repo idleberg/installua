@@ -31,23 +31,22 @@ swapped for a synonym. Counts are for `web/src/content/docs/`.
 
 | Word | Hits | Say instead |
 | ---- | ---- | ----------- |
-| shape | ~25 | what it actually is: "form", "signature", "number of values", "kind of mistake" |
-| half, halves | ~25 | "installer and uninstaller", "the case-sensitive version", "the MUI2 part" |
-| spelling, spell | 60 | "name", "syntax", "way to write"; "the format has no spelling for it" → "a `.toml` can't describe it" |
-| lowering, lowers | 30 | "compiles to", "is turned into" |
-| corpus | 28 | say once per page what it is (the scripts surveyed), then "those scripts" |
-| the rule, half of the rule | 9 | name the rule in place: "no public script calls it" |
-| surface, census, load-bearing, honest, wearing, genuinely, quietly | ~35 | case by case, usually delete the word |
+| shape | 19 | what it actually is: "form", "signature", "number of values", "kind of mistake" |
+| spelling, spell | 14 | "name", "syntax", "way to write"; "the format has no spelling for it" → "a `.toml` can't describe it" |
+| the rule | 5 | name the rule in place: "no public script calls it" |
+| surface, census, load-bearing, honest, wearing, genuinely, quietly | 10 | case by case, usually delete the word |
+
+"corpus" and "lowers" are gone; "half" and "lowering" are down to literal uses
+and `Class::Lowering`.
 
 Keep: the tagline and page titles "Lua-shaped, not Lua" / "NSIS-shaped, not
 NSIS" (they are URLs and the project's pitch), and literal uses ("two and a half
 times", "half-converted", "which half of the registry"), and the generated
 `cli.md`.
 
-Order, most hits first: `reference/commands/plugins-and-headers.md`,
-`reference/plugins/third-party-plugins.md`, `reference/plugins/what-stays-out.md`,
-`reference/commands/not-available.md`, `reference/modern-ui.md`, then the rest.
-One file per pass, re-read after, `mise run check` at the end (`tests/docs.rs`
+Most of what is left: `reference/commands/index.md` (13),
+`concepts/lua-shaped-not-lua.md` (8), `reference/commands/program-structure.md`
+(7), `reference/commands/not-available.md` (5). One file per pass, re-read after, `mise run check` at the end (`tests/docs.rs`
 matches names, so removing a name by accident fails it).
 
 Not a word problem, left for later: "rather than" (85 hits) is a tic, not
