@@ -29,8 +29,3 @@ What is left:
   `expr.rs` 3262, 3283. Same caveat on line numbers.
 - The `Handled` arms, the operator fallback and the call fallbacks are
   unreachable and stay.
-
-## `string.gmatch` names the wrong thing
-
-`for w in string.gmatch(…)` reports "`string` is not a header" instead of
-saying `gmatch` is not an iterator.

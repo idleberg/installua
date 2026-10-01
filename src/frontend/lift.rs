@@ -845,7 +845,7 @@ impl Lifter<'_> {
     }
 }
 
-fn iterator_list() -> String {
+pub(crate) fn iterator_list() -> String {
     let bare = ITERATORS
         .iter()
         .map(|name| format!("`{name}`"))

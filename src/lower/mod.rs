@@ -7930,7 +7930,8 @@ impl BodyLowerer<'_, '_> {
     /// The declaration behind `base.method`, if it is a callback macro at all.
     ///
     /// Three ways to not be one, and each gets its own sentence: the name is
-    /// not a header, the header declares no such method, or the method takes no
+    /// not a header (or is a Lua library, whose methods are not iterators
+    /// either), the header declares no such method, or the method takes no
     /// function. The last is the one a reader hits by writing `for … in
     /// fileFunc.getSize(…)`, and "that is not a walker" is more use than
     /// "unsupported iterator".
@@ -7951,6 +7952,26 @@ impl BodyLowerer<'_, '_> {
                         format!("`{base}` is a plugin, and no plugin walks anything"),
                     )
                     .note("a plugin pushes its values and returns; only a header macro calls back"),
+                );
+                return None;
+            }
+            // `string.gmatch` and its kin: the base is a Lua library, so what
+            // went wrong is the iterator, not a missing header.
+            None if matches!(
+                base,
+                "string" | "math" | "table" | "io" | "os" | "utf8" | "coroutine"
+            ) =>
+            {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::UnsupportedIterator,
+                        span,
+                        format!("`{base}.{}` is not an iterator", method.text),
+                    )
+                    .note(format!(
+                        "the iterators are {}",
+                        crate::frontend::lift::iterator_list()
+                    )),
                 );
                 return None;
             }

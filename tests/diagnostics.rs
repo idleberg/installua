@@ -402,6 +402,23 @@ fn an_undefined_base_is_undefined() {
     }
 }
 
+/// `for … in string.gmatch(…)` names the iterator as the mistake, not `string`
+/// as a missing header.
+#[test]
+fn a_library_method_is_not_an_iterator() {
+    let diags = compile(
+        "attributes { outFile = \"a.exe\" }\n\
+         installer { section(\"Core\", function()\n\
+         for w in string.gmatch(\"a b\", \"x\") do detailPrint(w) end\n\
+         end), }",
+    );
+    assert!(
+        diags.contains(Code::UnsupportedIterator) && !diags.contains(Code::UndefinedName),
+        "{}",
+        diags.render("<test>")
+    );
+}
+
 /// A top-level `local` is in scope from its declaration down, as in Lua, so a
 /// callback that reads a control declared below it is an error — the one
 /// `lua-language-server` reports as an undefined global. Lua's forward
