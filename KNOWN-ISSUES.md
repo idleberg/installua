@@ -30,14 +30,6 @@ What is left:
 - The `Handled` arms, the operator fallback and the call fallbacks are
   unreachable and stay.
 
-## Two `not-yet-implemented` shapes
-
-Both are real errors with a workaround in the note, not features:
-
-- `string.sub(s, -k, j)` with `j >= 0` needs the string's length at run time.
-- A `for` step that is not a build-time constant: its sign picks the loop's
-  test.
-
 ## `string.gmatch` names the wrong thing
 
 `for w in string.gmatch(…)` reports "`string` is not a header" instead of

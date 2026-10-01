@@ -7393,9 +7393,11 @@ impl BodyLowerer<'_, '_> {
         self.current = end;
     }
 
-    /// `for i = a, b, step`. The step has to be a build-time constant, because
-    /// its *sign* picks the comparison and a runtime step would need both
-    /// comparisons and a branch to choose between them.
+    /// `for i = a, b, step`. The step's *sign* picks the comparison, `<=` or
+    /// `>=`. A constant step decides it here, once; any other is evaluated
+    /// once, after the bounds as in Lua, and tested at the top of every turn —
+    /// up, down, or, for a step of zero, not at all, where Lua 5.4 raises an
+    /// error and an installer has nothing to raise it to.
     fn numeric_for(
         &mut self,
         name: &Name,
@@ -7405,10 +7407,10 @@ impl BodyLowerer<'_, '_> {
         block: &Block,
         span: Span,
     ) {
-        let step_value = match step {
-            None => 1,
+        let step_constant = match step {
+            None => Some(1),
             Some(expr) => match self.constant(expr) {
-                Some(ConstValue::Int(value)) if value != 0 => value,
+                Some(ConstValue::Int(value)) if value != 0 => Some(value),
                 Some(ConstValue::Int(_)) => {
                     self.diags.push(
                         Diagnostic::error(Code::BadFieldValue, expr.span(), "a `for` step is zero")
@@ -7416,22 +7418,7 @@ impl BodyLowerer<'_, '_> {
                     );
                     return;
                 }
-                _ => {
-                    // The step's sign picks the loop's test, `<=` or `>=`, and
-                    // that is decided here, once, rather than at every turn.
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::NotYetImplemented,
-                            expr.span(),
-                            "a `for` step has to be known at build time",
-                        )
-                        .note(
-                            "its sign decides whether the loop counts up or down; use a literal \
-                             or a `<const>`, or a `while` loop",
-                        ),
-                    );
-                    return;
-                }
+                _ => None,
             },
         };
 
@@ -7477,6 +7464,29 @@ impl BodyLowerer<'_, '_> {
             return;
         }
 
+        let step_arg = match (step, step_constant) {
+            (_, Some(value)) => ir::Arg::int(value),
+            (Some(expr), None) => {
+                let slot = self.claim_local(expr.span());
+                let Some(ty) = self.value_into(expr, &slot) else {
+                    return;
+                };
+                if !ty.is_int() {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::TypeMismatch,
+                            expr.span(),
+                            format!("a `for` step is a {ty}, not an int"),
+                        )
+                        .note("`for i = 10, 1, -1` counts down by one"),
+                    );
+                    return;
+                }
+                ir::Arg::slot(slot)
+            }
+            (None, None) => unreachable!("an absent step is the constant 1"),
+        };
+
         let n = self.body.construct();
         let top = self.fresh(format!("for_{n}_top"));
         let inside = self.fresh(format!("for_{n}_body"));
@@ -7485,34 +7495,77 @@ impl BodyLowerer<'_, '_> {
 
         self.terminate(Terminator::Jump(top), top);
 
+        // The body sees the counter between the bounds, but the test also sees
+        // the one step past them, and counting down from `1` by `-2` reaches
+        // `-1`: an unsigned test would read that as huge and never stop. Only
+        // a step known to be positive keeps the counter at or above `start`.
+        let ascending = step_constant.is_some_and(|value| value > 0);
+        let (counter_ty, test_ty) = if ascending {
+            (start_ty, start_ty.join(limit_ty))
+        } else {
+            let between = start_ty.join(limit_ty);
+            (between, between.join(Ty::int()))
+        };
         self.scopes.push(vec![(
             name.text.clone(),
             Binding::Local {
                 slot: slot.clone(),
-                ty: start_ty,
+                ty: counter_ty,
             },
         )]);
 
         let counter = ir::Arg::slot(slot.clone());
-        let op = if step_value > 0 {
-            cfg::CmpOp::Le
-        } else {
-            cfg::CmpOp::Ge
+        let family = cfg::IntFamily::of(test_ty);
+        let bound = |op| cfg::Test::Int {
+            op,
+            lhs: counter.clone(),
+            rhs: limit.clone(),
+            family,
         };
-        let family = cfg::IntFamily::of(start_ty.join(limit_ty));
-        self.terminate(
-            Terminator::Branch {
-                test: cfg::Test::Int {
-                    op,
-                    lhs: counter.clone(),
-                    rhs: limit,
-                    family,
+        let sign = |op| cfg::Test::Int {
+            op,
+            lhs: step_arg.clone(),
+            rhs: ir::Arg::int(0),
+            family: cfg::IntFamily::Int,
+        };
+        let (up, down) = match step_constant {
+            Some(value) if value > 0 => (Some(self.current), None),
+            Some(_) => (None, Some(self.current)),
+            None => {
+                let up = self.fresh(format!("for_{n}_up"));
+                let not_up = self.fresh(format!("for_{n}_not_up"));
+                let down = self.fresh(format!("for_{n}_down"));
+                self.terminate(
+                    Terminator::Branch {
+                        test: sign(cfg::CmpOp::Gt),
+                        then_block: up,
+                        else_block: not_up,
+                    },
+                    not_up,
+                );
+                self.terminate(
+                    Terminator::Branch {
+                        test: sign(cfg::CmpOp::Lt),
+                        then_block: down,
+                        else_block: end,
+                    },
+                    up,
+                );
+                (Some(up), Some(down))
+            }
+        };
+        for (block_id, op) in [(up, cfg::CmpOp::Le), (down, cfg::CmpOp::Ge)] {
+            let Some(block_id) = block_id else { continue };
+            self.current = block_id;
+            self.terminate(
+                Terminator::Branch {
+                    test: bound(op),
+                    then_block: inside,
+                    else_block: end,
                 },
-                then_block: inside,
-                else_block: end,
-            },
-            inside,
-        );
+                inside,
+            );
+        }
 
         self.loops.push(LoopTargets {
             break_to: end,
@@ -7524,12 +7577,7 @@ impl BodyLowerer<'_, '_> {
 
         self.emit(ir::Instruction::new(
             "IntOp",
-            vec![
-                ir::Arg::dest(slot),
-                counter,
-                ir::Arg::raw("+"),
-                ir::Arg::int(step_value),
-            ],
+            vec![ir::Arg::dest(slot), counter, ir::Arg::raw("+"), step_arg],
         ));
         self.terminate(Terminator::Jump(top), end);
 

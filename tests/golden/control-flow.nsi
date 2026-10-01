@@ -37,13 +37,33 @@ __GENERATED_endif_5:
   DetailPrint "step $1"
   Goto __GENERATED_while_3_top
 __GENERATED_while_3_end:
-  StrCpy $0 1
+  StrCpy $1 1
 __GENERATED_for_6_top:
-  IntCmpU $0 3 0 0 __GENERATED_for_6_end
-  DetailPrint "pass $0"
-  IntOp $0 $0 + 1
+  IntCmpU $1 3 0 0 __GENERATED_for_6_end
+  DetailPrint "pass $1"
+  IntOp $1 $1 + 1
   Goto __GENERATED_for_6_top
 __GENERATED_for_6_end:
+  StrCpy $1 3
+__GENERATED_for_7_top:
+  IntCmp $1 1 0 __GENERATED_for_7_end 0
+  DetailPrint "left $1"
+  IntOp $1 $1 + -2
+  Goto __GENERATED_for_7_top
+__GENERATED_for_7_end:
+  ReadEnvStr $1 "STRIDE"
+  StrCpy $2 1
+__GENERATED_for_8_top:
+  IntCmp $1 0 __GENERATED_for_8_not_up __GENERATED_for_8_not_up 0
+  IntCmp $2 $0 __GENERATED_for_8_body __GENERATED_for_8_body __GENERATED_for_8_end
+__GENERATED_for_8_not_up:
+  IntCmp $1 0 __GENERATED_for_8_end 0 __GENERATED_for_8_end
+  IntCmp $2 $0 0 __GENERATED_for_8_end 0
+__GENERATED_for_8_body:
+  DetailPrint "at $2"
+  IntOp $2 $2 + $1
+  Goto __GENERATED_for_8_top
+__GENERATED_for_8_end:
   StrCpy $state "installed"
   Call report
 SectionEnd

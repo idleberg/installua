@@ -2674,9 +2674,10 @@ impl BodyLowerer<'_, '_> {
     /// A negative constant counts from the end, as in Lua, and so do a
     /// negative `startoffset` and `maxlen`: `i = -k` *is* offset `-k`, and `j =
     /// -k` cuts `k - 1` characters off the end, except `-1`, which cuts none
-    /// and is spelled as the empty "to the end". Two cases stay open. A negative
-    /// `i` with a positive `j` needs the length, which is not a constant. And a
-    /// negative `i` past the start is `""` in NSIS where Lua clamps it to `1`:
+    /// and is spelled as the empty "to the end". A negative `i` with a `j` not
+    /// known to be negative needs the length at run time: see `back_length`.
+    /// One case stays open: a negative `i` past the start is `""` in NSIS where
+    /// Lua clamps it to `1`:
     /// `string.sub("ab", -3)` is `"ab"` in Lua and empty here. `-1`, the one
     /// programs write, cannot run past the start of anything.
     fn string_sub(&mut self, args: &[Expr], dest: &Slot, span: Span) -> Option<Ty> {
@@ -2697,26 +2698,6 @@ impl BodyLowerer<'_, '_> {
             Some(ConstValue::Int(value)) => Some(value),
             _ => None,
         };
-        if let (Some(from_value), Some(to), Some(0..) | None) = (from_constant, to, to_constant)
-            && from_value < 0
-        {
-            self.diags.push(
-                Diagnostic::error(
-                    Code::NotYetImplemented,
-                    to.span(),
-                    "a negative `string.sub` start needs a negative end",
-                )
-                .note(format!(
-                    "count the start from the front instead: `string.sub(s, string.len(s){}, …)`",
-                    match -from_value - 1 {
-                        0 => String::new(),
-                        back => format!(" - {back}"),
-                    }
-                )),
-            );
-            return None;
-        }
-
         let subject = self.value(subject)?;
         let from_value = self.value(from)?;
         self.require_int(&from_value, span)?;
@@ -2749,6 +2730,9 @@ impl BodyLowerer<'_, '_> {
                 let to_value = self.value(to)?;
                 self.require_int(&to_value, span)?;
                 match (from_constant, to_constant) {
+                    (Some(from), _) if from < 0 && !to_constant.is_some_and(|to| to < 0) => {
+                        self.back_length(&subject.arg, to_value.arg, to_constant, span)
+                    }
                     (_, Some(-1)) => ir::Arg::str(""),
                     (_, Some(to)) if to < 0 => ir::Arg::int(to + 1),
                     (Some(from), Some(to)) => ir::Arg::int(to - from + 1),
@@ -2779,6 +2763,94 @@ impl BodyLowerer<'_, '_> {
             vec![ir::Arg::dest(dest.clone()), subject.arg, length, start],
         ));
         Some(Ty::Str)
+    }
+
+    /// `maxlen` for `string.sub(s, -k, j)` where `j` may be non-negative.
+    ///
+    /// Offset `-k` leaves the last `k` characters, and a negative `maxlen`
+    /// counts back from the end of *those*, so `j - len` cuts exactly what
+    /// lies past `j`. Lua clamps `j` to the length, so a result `>= 0` is "to
+    /// the end" — and must be spelled `""`, since `maxlen` `0` is the empty
+    /// string. A run-time `j` might be negative after all, and then it counts
+    /// from the end as the constant case does: `j + 1`.
+    fn back_length(
+        &mut self,
+        subject: &ir::Arg,
+        to: ir::Arg,
+        to_constant: Option<i64>,
+        span: Span,
+    ) -> ir::Arg {
+        let slot = self.claim_temp(span);
+        let length = ir::Arg::slot(slot.clone());
+        let n = self.body.construct();
+        let sign = |op| Test::Int {
+            op,
+            lhs: length.clone(),
+            rhs: ir::Arg::int(0),
+            family: cfg::IntFamily::Int,
+        };
+        let from_end = |this: &mut Self| {
+            this.emit(ir::Instruction::new(
+                "StrLen",
+                vec![ir::Arg::dest(slot.clone()), subject.clone()],
+            ));
+            this.emit(ir::Instruction::new(
+                "IntOp",
+                vec![
+                    ir::Arg::dest(slot.clone()),
+                    to.clone(),
+                    ir::Arg::raw("-"),
+                    length.clone(),
+                ],
+            ));
+        };
+        if to_constant.is_some() {
+            from_end(self);
+        } else {
+            let negative = self.fresh(format!("sub_{n}_negative"));
+            let positive = self.fresh(format!("sub_{n}_positive"));
+            let measured = self.fresh(format!("sub_{n}_measured"));
+            self.emit(ir::Instruction::new(
+                "StrCpy",
+                vec![ir::Arg::dest(slot.clone()), to.clone()],
+            ));
+            self.terminate(
+                Terminator::Branch {
+                    test: sign(CmpOp::Lt),
+                    then_block: negative,
+                    else_block: positive,
+                },
+                negative,
+            );
+            self.emit(ir::Instruction::new(
+                "IntOp",
+                vec![
+                    ir::Arg::dest(slot.clone()),
+                    length.clone(),
+                    ir::Arg::raw("+"),
+                    ir::Arg::int(1),
+                ],
+            ));
+            self.terminate(Terminator::Jump(measured), positive);
+            from_end(self);
+            self.terminate(Terminator::Jump(measured), measured);
+        }
+        let whole = self.fresh(format!("sub_{n}_whole"));
+        let done = self.fresh(format!("sub_{n}_done"));
+        self.terminate(
+            Terminator::Branch {
+                test: sign(CmpOp::Ge),
+                then_block: whole,
+                else_block: done,
+            },
+            whole,
+        );
+        self.emit(ir::Instruction::new(
+            "StrCpy",
+            vec![ir::Arg::dest(slot.clone()), ir::Arg::str("")],
+        ));
+        self.terminate(Terminator::Jump(done), done);
+        length
     }
 
     /// `math.abs`, `math.max` and `math.min` — the other hand-written kind.

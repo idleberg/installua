@@ -2,7 +2,8 @@
 -- Lua answers `nil`: a hit at the very start, a hit further on, and a miss.
 --
 -- `string.sub` takes Lua's positions and folds them to `StrCpy`'s length and
--- offset: a middle, the last character, a negative end, both negative, and a
+-- offset: a middle, the last character, a negative end, both negative, a
+-- negative start with a positive end, which measures the string first, and a
 -- start of `0`, which Lua reads as `1`.
 --
 -- Each subject is a plain `local`: a literal would fold at build time, and
@@ -28,6 +29,7 @@ installer {
 		detailPrint(string.sub(word, -1))
 		detailPrint(string.sub(word, 2, -2))
 		detailPrint(string.sub(word, -3, -2))
+		detailPrint(string.sub(word, -4, 7))
 		detailPrint(string.sub(word, 0, 3))
 
 		local n = tonumber(readEnvStr("DELAY"))

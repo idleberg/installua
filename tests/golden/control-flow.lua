@@ -4,6 +4,10 @@
 -- type lattice picking an instruction family, condition fusion, a `<const>`
 -- folding away, `break` and `continue()` as terminators, and a global declared
 -- by assigning to it.
+--
+-- Three numeric `for`s: counting up, counting down — whose test is signed,
+-- since the counter steps past `1` to `-1` — and a step read at run time,
+-- whose sign is tested at the top of every turn, a zero step ending the loop.
 
 attributes {
 	name = "Control Flow",
@@ -42,6 +46,15 @@ installer {
 
 		for pass = 1, 3 do
 			detailPrint("pass " .. pass)
+		end
+
+		for left = 3, 1, -2 do
+			detailPrint("left " .. left)
+		end
+
+		local stride = tonumber(readEnvStr("STRIDE"))
+		for at = 1, width, stride do
+			detailPrint("at " .. at)
 		end
 
 		state = "installed"

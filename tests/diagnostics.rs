@@ -124,13 +124,13 @@ const CASES: &[(Code, &str)] = &[
     ),
     // `languages {}`, `include` and then `import` as a statement were this
     // case in turn, and the first two are implemented and the third an error.
-    // A `for` step whose sign is unknown until it runs is what is left.
+    // So were a run-time `for` step and `string.sub(s, -k, j)`, both now
+    // lowered. A library function the table does not have is what is left.
     (
         Code::NotYetImplemented,
         "attributes { outFile = \"a.exe\" }\n\
          installer { section(\"Core\", function()\n\
-         local n = 2\n\
-         for i = 1, 9, n do detailPrint(i) end\n\
+         string.nope(\"a\")\n\
          end), }",
     ),
     (Code::UnknownField, r#"attributes { nope = 1 }"#),
