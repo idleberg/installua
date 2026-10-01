@@ -668,6 +668,50 @@ mod init {
             "`--force` left the file alone"
         );
     }
+
+    /// `stubs` over a `.luarc.json` holding `luarc`, both run from `dir`.
+    fn stubs_over(name: &str, luarc: Option<&str>) -> String {
+        let dir = scratch(name);
+        if let Some(luarc) = luarc {
+            std::fs::write(dir.join(".luarc.json"), luarc).expect("write the luarc");
+        }
+        let (passed, output) = super::monorepo::run_in(&dir, &["stubs"]);
+        assert!(passed, "a luarc is a warning, never a failure: {output}");
+        output
+    }
+
+    /// The meta's `tonumber` is written for a LuaLS with `basic` off. A luarc
+    /// from before that, or one with the line commented out, makes it
+    /// `number?` in the editor and nothing else says so.
+    #[test]
+    fn stubs_warns_over_a_luarc_the_meta_disagrees_with() {
+        let old = installua::stubs::luarc().replace("\"basic\": \"disable\",", "");
+        let output = stubs_over("luarc-old", Some(&old));
+        assert!(output.contains("lacks \"basic\":\"disable\""), "{output}");
+
+        let commented = installua::stubs::luarc()
+            .replace("\"basic\": \"disable\",", "// \"basic\": \"disable\",");
+        let output = stubs_over("luarc-commented", Some(&commented));
+        assert!(output.contains("lacks \"basic\":\"disable\""), "{output}");
+    }
+
+    /// A user's own keys are expected, so they are not what it warns about —
+    /// and neither is having no luarc, since not everyone uses LuaLS.
+    #[test]
+    fn stubs_is_quiet_over_a_luarc_it_agrees_with() {
+        let mine = installua::stubs::luarc().replace(
+            "\"diagnostics.globals\": []",
+            "/* mine */ \"diagnostics.globals\": [\"x\"],\n  \"hint.enable\": true",
+        );
+        for (name, luarc) in [
+            ("luarc-init", Some(installua::stubs::luarc())),
+            ("luarc-mine", Some(mine)),
+            ("luarc-none", None),
+        ] {
+            let output = stubs_over(name, luarc.as_deref());
+            assert!(!output.contains("lacks"), "{name}: {output}");
+        }
+    }
 }
 
 /// A relative path means "beside the source" even when `-o` writes the script

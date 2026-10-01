@@ -23,6 +23,8 @@ Anything else – the [releases](https://github.com/LuaLS/lua-language-server/re
 
 Your own `func`s and globals are typed too, with what the compiler inferred from the whole project: a `func` returning a string reads as returning one. Run `installua stubs` again after adding or changing one.
 
+The type definitions assume the `.luarc.json` that `installua init` writes, which turns off the parts of Lua's standard library Installua doesn't have. Your own settings can go in the same file. If a setting the definitions rely on is missing, `installua stubs` warns and names it, and `installua init --interactive` offers to rewrite the file.
+
 ## selene
 
 [selene](https://kampfkarren.github.io/selene/) is a separate tool: a Lua linter. Installua uses it for the things a language server won't tell you – above all, the Lua names Installua doesn't support, which selene reports as errors that name the replacement to use instead.

@@ -1751,6 +1751,75 @@ pub fn luarc() -> String {
     )
 }
 
+/// What the meta files assume of `.luarc.json`, as the text that says it.
+///
+/// Not everything [`luarc`] writes: `runtime.version` and the empty
+/// `diagnostics.globals` are defaults a user is free to change, and a second
+/// `workspace.library` path or a global of their own is expected. These are
+/// the settings without which the meta is quietly wrong — `basic` on merges
+/// LuaLS's `tonumber` into ours and it returns `number?`.
+const LUARC_NEEDS: [&str; 8] = [
+    "\"basic\":\"disable\"",
+    "\"coroutine\":\"disable\"",
+    "\"debug\":\"disable\"",
+    "\"io\":\"disable\"",
+    "\"os\":\"disable\"",
+    "\"package\":\"disable\"",
+    "\".installua/meta\"",
+    "\"lowercase-global\"",
+];
+
+/// Which of [`LUARC_NEEDS`] an existing `.luarc.json` lacks.
+///
+/// Neither file carries a version, so "stale" cannot be checked, only
+/// "disagrees with the meta". Comments are stripped first because LuaLS reads
+/// JSONC, and a line commented out is a setting that is not there; whitespace
+/// goes too, so `"basic" : "disable"` and the nested `"runtime": {"builtin":
+/// {…}}` spelling both match.
+//
+// ponytail: substring, not a parse, like [`merge`]: `"lowercase-global"` under
+// `diagnostics.globals` would pass for the disable. Upgrade path is the same
+// JSONC parser if that ever turns up.
+pub fn luarc_missing(existing: &str) -> Vec<&'static str> {
+    let mut text = String::with_capacity(existing.len());
+    let mut chars = existing.chars().peekable();
+    let mut string = false;
+    while let Some(c) = chars.next() {
+        if string {
+            text.push(c);
+            match c {
+                '\\' => text.extend(chars.next()),
+                '"' => string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match (c, chars.peek()) {
+            ('"', _) => {
+                string = true;
+                text.push(c);
+            }
+            ('/', Some('/')) => while chars.next_if(|&c| c != '\n').is_some() {},
+            ('/', Some('*')) => {
+                chars.next();
+                let mut last = ' ';
+                for c in chars.by_ref() {
+                    if last == '*' && c == '/' {
+                        break;
+                    }
+                    last = c;
+                }
+            }
+            (c, _) if c.is_whitespace() => {}
+            _ => text.push(c),
+        }
+    }
+    LUARC_NEEDS
+        .into_iter()
+        .filter(|need| !text.contains(need))
+        .collect()
+}
+
 /// `selene.toml`. `deprecated = \"deny\"` is not decoration: it is what makes
 /// the generated std's replacement text a failure rather than advice.
 pub fn selene_toml() -> String {

@@ -545,29 +545,16 @@ inside `if FONT_DIR ~= ""`, so the fixpoint pruned it. Both are fixed in
 `stubs.rs`: `missing-param` no longer drops a file, and a `func` left without a
 return gets one from an unpruned pass, if that pass types it fully.
 
-### 5.37 `stubs` does not notice a `.luarc.json` its meta files disagree with
+### 5.37 `stubs` does not notice a `.luarc.json` its meta files disagree with — fixed
 
-`init` writes `.luarc.json` and `stubs` writes `.installua/meta`, but the meta
-assumes the luarc. Its `tostring` and `tonumber` are written for a LuaLS whose
-`basic` library is disabled. Without that, LuaLS merges its own `tonumber` into
-Installua's, which then returns `number?`. Nothing fails; the editor's types
-are just quietly wrong. `stubs` never reads `.luarc.json`, so an upgrade that
-only re-runs `stubs` leaves the project half updated and says nothing.
-
-"Stale" is not checkable. Neither file carries a version, so the most anyone
-can say is that it differs from what `luarc()` writes now. Comparing against
-that whole string is too strict, because a user's own keys (a
-`diagnostics.globals` entry, a second `workspace.library` path) are expected
-and would warn forever. Should: `stubs` checks only the keys the meta depends
-on: every `runtime.builtin` disable, `.installua/meta` in `workspace.library`,
-and `lowercase-global` in `diagnostics.disable`. It warns once per missing key
-and points at `installua init --interactive`. A missing `.luarc.json` stays
-silent, since not everyone uses LuaLS. The check needs a JSONC parser, because
-LuaLS accepts comments there and `serde_json` would reject a valid file. If
-that dependency is unwanted, fall back to comparing with `luarc()` exactly. It
-is noisier, but it still warns. Check: `tests/cli.rs` cases for a luarc
-missing `basic`, one with an extra user key (no warning), and no luarc (no
-warning).
+`stubs` now reads `.luarc.json` and warns about every setting the meta depends on
+that is missing: each `runtime.builtin` disable, `.installua/meta`, and
+`lowercase-global`. It points at `installua init --interactive`. A user's own
+keys don't warn, and a missing file stays silent. No JSONC dependency:
+`luarc_missing` strips comments and whitespace and matches text, like `merge`
+already does for `tasks.json`. Check: the two `stubs_` cases in `tests/cli.rs`
+(no `basic`, `basic` commented out; `init`'s own file, extra user keys, no
+file).
 
 ## Later: random programs
 

@@ -1002,6 +1002,24 @@ fn stubs(root: &Path) -> Stop {
         log::success(format!("wrote {}", path.display()));
     }
 
+    // The meta assumes `init`'s `.luarc.json`, and an upgrade that re-runs
+    // only this would otherwise leave the two disagreeing in silence. A warning,
+    // not a failure: the meta is written either way. No file is no warning —
+    // not everyone uses lua-language-server.
+    let luarc = root.join(".luarc.json");
+    if let Ok(existing) = std::fs::read_to_string(&luarc) {
+        let missing = installua::stubs::luarc_missing(&existing);
+        for need in &missing {
+            log::warn(format!(
+                "{} lacks {need}, which the meta assumes",
+                luarc.display()
+            ));
+        }
+        if !missing.is_empty() {
+            log::log("`installua init --interactive` offers to rewrite it");
+        }
+    }
+
     Ok(())
 }
 
