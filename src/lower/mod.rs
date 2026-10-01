@@ -6986,6 +6986,47 @@ impl BodyLowerer<'_, '_> {
     }
 
     fn assign(&mut self, targets: &[Expr], values: &[Expr], span: Span) {
+        // `a, b = f()`: the `local a, b = f()` of names that already exist.
+        // Every target resolves before the call lowers, so a target that is
+        // not a register fails without leaving a call behind whose outputs
+        // nothing pops. The call reads its arguments before it pops, so `a, b =
+        // f(a)` sees the old `a`.
+        if targets.len() > 1 && values.len() == 1 && matches!(&values[0], Expr::Call { .. }) {
+            let mut names = Vec::with_capacity(targets.len());
+            for target in targets {
+                match target {
+                    Expr::Name(name) if !crate::builtins::owned(&name.text) => names.push(name),
+                    _ => {
+                        self.todo(target.span(), "this target of a multi-value assignment");
+                        return;
+                    }
+                }
+            }
+            let mut slots = Vec::with_capacity(names.len());
+            for name in &names {
+                let Some(resolved) = self.assign_slot(name) else {
+                    return;
+                };
+                self.answers.remove(&resolved.0);
+                slots.push(resolved);
+            }
+            let dests: Vec<Slot> = slots.iter().map(|(slot, _)| slot.clone()).collect();
+            let Some(types) = self.call_multi(&values[0], &dests) else {
+                for (name, (slot, _)) in names.iter().zip(&slots) {
+                    if matches!(slot, Slot::Global(_)) {
+                        self.learned.failed.globals.insert(name.text.clone());
+                    }
+                }
+                return;
+            };
+            for (((target, name), (slot, declared)), ty) in
+                targets.iter().zip(names).zip(slots).zip(types)
+            {
+                self.assigned(target, name, slot, declared, ty);
+            }
+            return;
+        }
+
         if targets.len() != values.len() {
             self.todo(
                 span,
@@ -7033,51 +7074,8 @@ impl BodyLowerer<'_, '_> {
                 continue;
             }
 
-            let (slot, declared) = match self.lookup(&name.text).cloned() {
-                Some(Binding::Local { slot, ty }) => (slot, Some(ty)),
-                Some(Binding::Reported) => continue,
-                Some(Binding::Const(_)) => {
-                    self.diags.push(
-                        Diagnostic::error(
-                            Code::TypeConflict,
-                            name.span,
-                            format!("`{}` is `<const>`", name.text),
-                        )
-                        .note("a build-time constant has no register to assign to"),
-                    );
-                    continue;
-                }
-                // `$INSTDIR` is a variable, not a constant: `.onInit` reading a
-                // prior install location and assigning it is the canonical
-                // shape, and it is the only reason a "constant" here has a
-                // `writable` column at all.
-                None => match crate::builtins::constant_named(&name.text) {
-                    Some(constant) if constant.writable => {
-                        (Slot::Global(constant.nsis.to_string()), Some(constant.ty))
-                    }
-                    Some(_) => {
-                        self.diags.push(
-                            Diagnostic::error(
-                                Code::TypeConflict,
-                                name.span,
-                                format!("`{}` cannot be assigned to", name.text),
-                            )
-                            .note(
-                                "it describes the machine the installer is running on, and NSIS \
-                                 accepts the assignment silently rather than objecting",
-                            ),
-                        );
-                        continue;
-                    }
-                    None if self.resolved.global(&name.text) => (
-                        Slot::Global(name.text.clone()),
-                        self.globals.get(&name.text).map(|(ty, _)| *ty),
-                    ),
-                    None => {
-                        self.undefined(name);
-                        continue;
-                    }
-                },
+            let Some((slot, declared)) = self.assign_slot(name) else {
+                continue;
             };
 
             // Whatever this slot used to hold, it does not hold it now. Before
@@ -7092,46 +7090,101 @@ impl BodyLowerer<'_, '_> {
                 continue;
             };
 
-            match (slot, declared) {
-                // An `Unknown` here is an earlier fixpoint round's guess, seeded
-                // without sites — not an assignment the author wrote — so it
-                // yields to the type this one settles on.
-                (Slot::Global(name), Some(previous))
-                    if previous != ty && previous != Ty::Unknown =>
-                {
-                    let sites = self
-                        .globals
-                        .get(&name)
-                        .map(|(_, spans)| spans.clone())
-                        .unwrap_or_default();
-                    let mut diagnostic = Diagnostic::error(
+            self.assigned(target, name, slot, declared, ty);
+        }
+    }
+
+    /// The register an assignment to `name` writes, and the type it already
+    /// holds, or `None` once the reason it has none is reported.
+    fn assign_slot(&mut self, name: &Name) -> Option<(Slot, Option<Ty>)> {
+        Some(match self.lookup(&name.text).cloned() {
+            Some(Binding::Local { slot, ty }) => (slot, Some(ty)),
+            Some(Binding::Reported) => return None,
+            Some(Binding::Const(_)) => {
+                self.diags.push(
+                    Diagnostic::error(
                         Code::TypeConflict,
-                        target.span(),
-                        format!("`{name}` is assigned a {ty} here and a {previous} elsewhere"),
+                        name.span,
+                        format!("`{}` is `<const>`", name.text),
                     )
-                    .note("a `Var` is one slot, so a global has one type for its lifetime");
-                    for site in sites {
-                        diagnostic = diagnostic.note_at("assigned at", site);
-                    }
-                    self.diags.push(diagnostic);
+                    .note("a build-time constant has no register to assign to"),
+                );
+                return None;
+            }
+            // `$INSTDIR` is a variable, not a constant: `.onInit` reading a
+            // prior install location and assigning it is the canonical
+            // shape, and it is the only reason a "constant" here has a
+            // `writable` column at all.
+            None => match crate::builtins::constant_named(&name.text) {
+                Some(constant) if constant.writable => {
+                    (Slot::Global(constant.nsis.to_string()), Some(constant.ty))
                 }
-                (Slot::Global(name), _) => {
-                    let entry = self.globals.entry(name).or_insert((ty, Vec::new()));
-                    entry.0 = ty;
-                    entry.1.push(target.span());
-                }
-                (_, Some(previous)) if previous != ty => {
+                Some(_) => {
                     self.diags.push(
                         Diagnostic::error(
                             Code::TypeConflict,
-                            target.span(),
-                            format!("`{}` holds a {previous} and is assigned a {ty}", name.text),
+                            name.span,
+                            format!("`{}` cannot be assigned to", name.text),
                         )
-                        .note("a register is one slot; declare a second `local` instead"),
+                        .note(
+                            "it describes the machine the installer is running on, and NSIS \
+                             accepts the assignment silently rather than objecting",
+                        ),
                     );
+                    return None;
                 }
-                _ => {}
+                None if self.resolved.global(&name.text) => (
+                    Slot::Global(name.text.clone()),
+                    self.globals.get(&name.text).map(|(ty, _)| *ty),
+                ),
+                None => {
+                    self.undefined(name);
+                    return None;
+                }
+            },
+        })
+    }
+
+    /// Checks the type `name` was just assigned against the one it held, and
+    /// records a global's.
+    fn assigned(&mut self, target: &Expr, name: &Name, slot: Slot, declared: Option<Ty>, ty: Ty) {
+        match (slot, declared) {
+            // An `Unknown` here is an earlier fixpoint round's guess, seeded
+            // without sites — not an assignment the author wrote — so it
+            // yields to the type this one settles on.
+            (Slot::Global(name), Some(previous)) if previous != ty && previous != Ty::Unknown => {
+                let sites = self
+                    .globals
+                    .get(&name)
+                    .map(|(_, spans)| spans.clone())
+                    .unwrap_or_default();
+                let mut diagnostic = Diagnostic::error(
+                    Code::TypeConflict,
+                    target.span(),
+                    format!("`{name}` is assigned a {ty} here and a {previous} elsewhere"),
+                )
+                .note("a `Var` is one slot, so a global has one type for its lifetime");
+                for site in sites {
+                    diagnostic = diagnostic.note_at("assigned at", site);
+                }
+                self.diags.push(diagnostic);
             }
+            (Slot::Global(name), _) => {
+                let entry = self.globals.entry(name).or_insert((ty, Vec::new()));
+                entry.0 = ty;
+                entry.1.push(target.span());
+            }
+            (_, Some(previous)) if previous != ty => {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeConflict,
+                        target.span(),
+                        format!("`{}` holds a {previous} and is assigned a {ty}", name.text),
+                    )
+                    .note("a register is one slot; declare a second `local` instead"),
+                );
+            }
+            _ => {}
         }
     }
 

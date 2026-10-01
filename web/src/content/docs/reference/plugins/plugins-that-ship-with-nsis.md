@@ -16,7 +16,9 @@ rather than from its readme.
 
 The exit code comes off first, then the captured output. That is `Pop` order,
 and it is the order nothing in the source states — it is the reason
-`local rc, out = nsExec.execToStack(…)` is legal at all.
+`local rc, out = nsExec.execToStack(…)` is legal at all. Names that already
+exist take the same two values without the `local`: `rc, out =
+nsExec.execToStack(…)`.
 
 All three of its flags are declared on every method, in a table written last:
 

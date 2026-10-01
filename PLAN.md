@@ -477,7 +477,7 @@ typed, and nothing said otherwise. Now `program-structure.md` says so under
 behaviour stays as it is: changing it would need to know which parameters are
 paths, and `param` does not say.
 
-### 5.33 A multi-value call cannot assign to existing variables
+### 5.33 A multi-value call cannot assign to existing variables — fixed
 
 ```lua
 local code = nsExec.exec("a.exe")
@@ -486,12 +486,12 @@ code, output = nsExec.execToStack("b.exe")
 ```
 
 `not-yet-implemented: an assignment with a different number of targets and
-values`. `local code, output = nsExec.execToStack(…)` works, so the values are
-there; only the plain assignment is missing. Should: `a, b = f()` pops into
-the targets as the `local` form does, and `installua coverage` loses the
-entry. Check: a golden beside the one for the `local` form.
-
-PimpBot's Compiler declares a second local (`buildCode`).
+values`. Now `a, b = f()` goes through `call_multi` as `local a, b = f()`
+does, popping into the registers or `Var`s the names already hold. Every
+target resolves before the call lowers, so a target that cannot be assigned
+leaves no call behind with nothing to pop its outputs. Check: the
+`multi-assign` golden, including a call that reads a target it writes and a
+global target.
 
 ### 5.34 A program whose pages are all `page.custom` never sets MUI2 up — fixed
 
