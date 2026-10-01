@@ -404,7 +404,7 @@ fn the_builtins_reach_the_stub_by_the_same_road() {
         "{meta}"
     );
     assert!(
-        meta.contains("function installua_Plugin_nsExec.execToStack(a1) end"),
+        meta.contains("function installua_Plugin_nsExec.execToStack(a1, options) end"),
         "{meta}"
     );
     assert!(

@@ -406,18 +406,25 @@ table's `unknown` positions `integer|string`, as `coerce` takes them. Test:
 `send_message_takes_a_number_or_a_string`. PimpBot no longer calls
 `sendMessage`, so LuaLS was run on the example above instead: clean.
 
-### 5.28 Smaller stub gaps
+### 5.28 Smaller stub gaps — fixed
 
-- `installua.Control` has no `add`, which `lower/handle.rs` compiles for a
-  `dropList` or `listBox` (`list.add(text)`): `undefined-field`.
-- A plugin method with `flags` is stubbed with only its `params`, so
-  `nxs.show(title, { top = …, sub = … })` is `redundant-parameter`.
-  `foreign_method` should add an options table typed from the flags
-  (`{ top?: string, h?: integer, … }`).
-- `tonumber` comes from LuaLS's own meta, as `number?`, so
-  `math.max(tonumber(s), 0)` warns about the `nil`. Installua's `tonumber`
-  always returns an `int` (`strings-and-numbers.md`), so `installua.lua` should
-  override it with `---@return integer`.
+- `dropList` and `listBox` return `installua.List`, a `Control` with
+  `add fun(text: string)`; every other control still returns `Control`, so
+  `label.add` stays `undefined-field`.
+- `foreign_method` takes the method's flags and writes a trailing
+  `options? { name?: type, … }`, every key optional as at the call site.
+  Macros pass none.
+- A meta-file `tonumber` does not override LuaLS's: the two definitions merge
+  and the call stays `number?`. So `.luarc.json` disables `basic` as it does
+  `os`, and the meta declares the three names kept from it — `tostring`,
+  `tonumber` (`---@return integer`) and `ipairs`. The rest of `basic`
+  (`pairs`, `error`, `type`, …) is now an unknown global, as the docs say it
+  is. An existing project picks this up with `installua init --force`.
+
+Tests: `a_list_control_is_offered_add`, `a_method_with_flags_takes_an_options_table`
+and `tonumber_is_an_integer` in `tests/stubs.rs`. LuaLS on a scratch project:
+`list.add`, `inetc.get(…, { silent = true })` and `math.max(tonumber(s), 0)` are
+clean, `label.add` and `pairs` are flagged.
 
 ### 5.29 `glob` is case-sensitive on Windows
 

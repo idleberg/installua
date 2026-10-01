@@ -737,6 +737,21 @@ fn declarations() -> String {
          ---@return integer release\n\
          ---@return integer build\n\
          function MAKENSIS.getDllVersion(path) end\n\n\
+         -- The three names Installua keeps from Lua's basic library, which\n\
+         -- `.luarc.json` disables. Not an override of LuaLS's own: a second\n\
+         -- definition merges with the first, and its `tonumber` returns\n\
+         -- `number?`. Installua's never fails, since text that is not a number\n\
+         -- reads 0, as `IntOp` reads it.\n\
+         ---@param value any\n\
+         ---@return string\n\
+         function tostring(value) end\n\n\
+         ---@param text any\n\
+         ---@return integer\n\
+         function tonumber(text) end\n\n\
+         ---@generic V\n\
+         ---@param list V[]\n\
+         ---@return fun(): integer, V\n\
+         function ipairs(list) end\n\n\
          ---@param options string|table\n\
          ---@return string\n\
          function messageBox(options) end\n\n\
@@ -799,6 +814,7 @@ fn foreign(declared: &declarations::Declarations) -> String {
             out.push_str(&foreign_method(
                 &format!("{}.{}", local(&class), entry.installua),
                 &entry.params,
+                &entry.flags,
                 &outputs,
                 &entry.nsis,
             ));
@@ -815,6 +831,7 @@ fn foreign(declared: &declarations::Declarations) -> String {
             out.push_str(&foreign_method(
                 &format!("{}.{}", local(&class), entry.installua),
                 &entry.params,
+                &[],
                 &entry.outputs,
                 &format!("${{{}}}", entry.nsis),
             ));
@@ -844,9 +861,13 @@ fn foreign(declared: &declarations::Declarations) -> String {
 /// One declared method, as a `function` on its class. The NSIS line it becomes
 /// is the comment, because that is the one thing a reader cannot infer from the
 /// Lua spelling and the one thing they will search the NSIS docs for.
+///
+/// Flags are the trailing options table a call writes last, every key optional
+/// because a call that names none is the plain call (see [`declarations::Flag`]).
 fn foreign_method(
     spelling: &str,
     params: &[declarations::Param],
+    flags: &[declarations::Flag],
     outputs: &[Ty],
     nsis: &str,
 ) -> String {
@@ -854,11 +875,19 @@ fn foreign_method(
         return walker_method(spelling, params, nsis);
     }
     let mut out = format!("-- `{nsis}`\n");
-    let names: Vec<String> = (1..=params.len())
+    let mut names: Vec<String> = (1..=params.len())
         .map(|index| format!("a{index}"))
         .collect();
     for (name, param) in names.iter().zip(params) {
         let _ = writeln!(out, "---@param {name} {}", lua_name(param.ty));
+    }
+    if !flags.is_empty() {
+        let fields: Vec<String> = flags
+            .iter()
+            .map(|flag| format!("{}?: {}", flag.name, lua_name(flag.ty)))
+            .collect();
+        let _ = writeln!(out, "---@param options? {{ {} }}", fields.join(", "));
+        names.push("options".to_string());
     }
     for output in outputs {
         let _ = writeln!(out, "---@return {}", lua_name(*output));
@@ -985,13 +1014,22 @@ fn controls() -> String {
          ---@field colors installua.Colors Write-only.\n\
          ---@field font installua.Font Write-only.\n\
          ---@field image string Write-only; a `bitmap`'s picture.\n\
-         local Control = {}\n\n",
+         local Control = {}\n\n\
+         -- A `dropList` or a `listBox`: the two controls that are a list.\n\
+         ---@class (exact) installua.List : installua.Control\n\
+         ---@field add fun(text: string) Appends a row at install time.\n\
+         local List = {}\n\n",
     );
     for control in control::CONTROLS {
+        let class = if control.takes_items() {
+            "List"
+        } else {
+            "Control"
+        };
         let _ = writeln!(
             out,
             "---@param options installua.ControlOptions\n\
-             ---@return installua.Control\n\
+             ---@return installua.{class}\n\
              function {}(options) end\n",
             control.installua
         );
@@ -1659,13 +1697,16 @@ fn escape(text: &str) -> String {
 /// `runtime.builtin: disable` on the libraries Installua rejects wholesale
 /// turns `require` and `coroutine.wrap` back into unknown globals for free,
 /// rather than needing a rejection list — and `lowercase-global` is off because
-/// the API *is* lowercase globals.
+/// the API *is* lowercase globals. `basic` is all but rejected: of its names
+/// Installua keeps `tostring`, `tonumber` and `ipairs`, which the meta declares,
+/// and LuaLS's `tonumber` could not be overridden there while `basic` was on.
 pub fn luarc() -> String {
     String::from(
         "{\n  \
          \"$schema\": \"https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json\",\n  \
          \"runtime.version\": \"Lua 5.4\",\n  \
          \"runtime.builtin\": {\n    \
+         \"basic\": \"disable\",\n    \
          \"coroutine\": \"disable\",\n    \
          \"debug\": \"disable\",\n    \
          \"io\": \"disable\",\n    \

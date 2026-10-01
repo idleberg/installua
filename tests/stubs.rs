@@ -1055,3 +1055,37 @@ fn send_message_takes_a_number_or_a_string() {
     }
     assert!(!meta.contains("Wparamorstrwparam"));
 }
+
+#[test]
+fn a_list_control_is_offered_add() {
+    // `list.add(text)` compiles for the two controls with an `ADDSTRING`
+    // message, and is `undefined-field` on every other.
+    let meta = meta();
+    assert!(meta.contains("---@field add fun(text: string)"));
+    for control in ["dropList", "listBox"] {
+        let stub = format!("---@return installua.List\nfunction {control}(options) end\n");
+        assert!(meta.contains(&stub), "`{control}` is not a list");
+    }
+    assert!(meta.contains("---@return installua.Control\nfunction label(options) end\n"));
+}
+
+#[test]
+fn a_method_with_flags_takes_an_options_table() {
+    let meta = meta();
+    assert!(meta.contains(
+        "---@param options? { proxy?: string, username?: string, password?: string, \
+         noproxy?: boolean, nocancel?: boolean, connecttimeout?: integer, "
+    ));
+    assert!(meta.contains("function installua_Plugin_Inetc.get(a1, a2, options) end\n"));
+}
+
+#[test]
+fn tonumber_is_an_integer() {
+    // LuaLS's own returns `number?` and a second definition only merges with
+    // it, so `basic` is disabled and the three names kept from it declared.
+    let meta = meta();
+    assert!(meta.contains("---@return integer\nfunction tonumber(text) end\n"));
+    assert!(meta.contains("function tostring(value) end\n"));
+    assert!(meta.contains("function ipairs(list) end\n"));
+    assert!(stubs::luarc().contains("\"basic\": \"disable\""));
+}
