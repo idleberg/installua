@@ -426,21 +426,18 @@ and `tonumber_is_an_integer` in `tests/stubs.rs`. LuaLS on a scratch project:
 `list.add`, `inetc.get(…, { silent = true })` and `math.max(tonumber(s), 0)` are
 clean, `label.add` and `pairs` are flagged.
 
-### 5.29 `glob` is case-sensitive on Windows
+### 5.29 `glob` is case-sensitive on Windows — fixed
 
-```lua
-for path in glob("res/*.bmp") do file(path) end -- res\ holds A.BMP and b.bmp
-```
+`matches_pattern`, `glob`'s matcher in `src/lower`, folds case when Installua is
+built for Windows, as `FindFirstFile` does, so `res/*.bmp` takes `A.BMP` too.
+Elsewhere it keeps case, the file system's rule there. A segment with no
+wildcard is joined rather than matched and so was never affected.
+`a_wildcard_ignores_case_on_windows` and `a_wildcard_keeps_case_elsewhere` in
+`tests/glob.rs` check both; the first was run under Wine, cross-compiled for
+`x86_64-pc-windows-gnu`.
 
-Only `b.bmp` is embedded, by the Windows build under Wine as by the macOS one.
-Windows file names are not case-sensitive, `File res\*.bmp` takes both, and
-preset packs are full of `FOO.BMP`. Should: on Windows, `*` and `?` match
-ignoring case, like `FindFirstFile`; elsewhere as now, since that is the file
-system's rule there. The matcher is `glob`'s (`src/lower`, the walker behind
-§5.10). Check: a `tests/` case with a mixed-case fixture, gated on
-`cfg(windows)` or run under Wine like §5.23.
-
-PimpBot's pack installer globs `*.bmp` and `*.BMP` for each resource type.
+PimpBot's pack installer still needs its second `*.BMP` glob when built on
+macOS or Linux.
 
 ### 5.30 A string function on a build-time value does not fold
 
@@ -533,6 +530,48 @@ The one release is v0.1.0, without any of §5. A program that runs
 under Wine with a portable NSIS 3.12). Should: each release attaches
 `installua-x86_64-pc-windows-gnu.exe` (or a zip) with its SHA-256, so it can be
 pinned the way PimpBot pins 7-Zip and curl. The release workflow is the place.
+
+### 5.36 An optional section or page has no form that lua-language-server accepts
+
+§5.13 left this half open. Its `c and a or b` answer covers values only. A
+section or page that a build parameter switches on still has to be declared
+inside the `if`, as §5.7 shows:
+
+```lua
+local FONTS <const> = param("FONTS", "")
+if FONTS ~= "" then
+	local fonts = section { "Fonts", body = function() … end }
+end
+installer { page.instFiles {}, fonts }
+```
+
+Installua accepts it. LuaLS scopes it as Lua does, so `fonts` in the list and
+every `fonts.selected` after the `end` are `undefined-global`, and the
+declaration is an `unused-local`. Two more gaps keep any version of this
+from being clean:
+
+- **Forward declaration.** The Lua-correct form is `local fonts` above the
+  `if` and `fonts = section { … }` inside it (§5.16). It builds only when the
+  branch is taken. Otherwise it fails with `not-yet-implemented: a local at
+  the top level has nowhere to live`, because a forward-declared name left
+  unassigned is not counted as untaken the way a branch's `local` is.
+- **Install-time use.** `fonts.selected = false` in `onInit` is
+  `undefined-name` when the branch was not taken. The list drops the entry
+  (§5.7), but code cannot address it. So a program also declares a dummy
+  `local fonts = section { "", body = function() end }` in an `else`.
+
+Should: a forward-declared section, group, page or control that no taken
+branch assigns joins `Resolved::untaken`. A list entry naming it lowers to
+nothing, as now. A field write on it (`.selected`, `.text`, …) lowers to
+nothing as well, and a read of a field gives the field's empty value. The
+dummy `else` is then unnecessary, and the form LuaLS accepts is the one to
+document. Check: `tests/branches.rs` cases for the forward form, with the
+branch taken and not taken, plus `lua-language-server --check` on the repro
+reporting no problems.
+
+PimpBot's `packages/pack/install.lua` has four of these (`fonts`, `settings`,
+`licensePage`, `finishPage`), all flagged in the editor. `fonts` and
+`settings` also carry the dummy `else`.
 
 ## Later: random programs
 

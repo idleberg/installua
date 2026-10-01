@@ -118,3 +118,18 @@ fn an_absolute_pattern_starts_at_the_root() {
         [format!("{root}/assets/a.txt")]
     );
 }
+
+/// Windows file names ignore case, so `File res\*.BMP` takes `a.bmp` and a
+/// glob that did not would embed less than the NSIS line it stands for.
+#[cfg(windows)]
+#[test]
+fn a_wildcard_ignores_case_on_windows() {
+    assert_eq!(paths("case", "assets/*.TXT"), ["assets/a.txt"]);
+}
+
+/// Elsewhere case is the file system's rule, and the glob keeps it.
+#[cfg(not(windows))]
+#[test]
+fn a_wildcard_keeps_case_elsewhere() {
+    assert_eq!(paths("case", "assets/*.TXT"), Vec::<String>::new());
+}

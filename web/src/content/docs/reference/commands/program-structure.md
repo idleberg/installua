@@ -167,6 +167,10 @@ files: `glob("presets/*/")` gives `presets/classic`, `presets/modern` and so
 on. The paths come back sorted, relative to the source file, as you would have
 written them.
 
+Case follows the build machine. On Windows, `*.bmp` also finds `LOGO.BMP`, as
+`File *.bmp` would. On macOS and Linux it doesn't: write `*.BMP` as a second
+`glob` if a folder holds both.
+
 ## ipairs
 
 Walks a `<const>` table at compile time and unrolls it, the way `glob` does: the

@@ -8339,9 +8339,19 @@ fn glob_walk(
 }
 
 /// `*` matches any run, `?` matches one character, everything else is literal.
+///
+/// On Windows the comparison ignores case, as `FindFirstFile` and so `File
+/// res\*.bmp` do: a pack holding `A.BMP` and `b.bmp` means both. Elsewhere the
+/// file system's own rule is case, so the match keeps it.
 fn matches_pattern(name: &str, pattern: &str) -> bool {
-    let (name, pattern): (Vec<char>, Vec<char>) =
-        (name.chars().collect(), pattern.chars().collect());
+    let fold = |text: &str| -> Vec<char> {
+        if cfg!(windows) {
+            text.chars().flat_map(char::to_lowercase).collect()
+        } else {
+            text.chars().collect()
+        }
+    };
+    let (name, pattern) = (fold(name), fold(pattern));
     // The textbook two-pointer walk with one backtrack point, which is linear
     // and needs no allocation — a recursive matcher on a pathological pattern
     // is exponential, and a glob is user input.
