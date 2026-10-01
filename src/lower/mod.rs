@@ -1801,7 +1801,7 @@ impl<'p> Lowerer<'_, 'p> {
                 if self.duplicate(&mut Field::Attributes, span) {
                     return;
                 }
-                self.attributes(fields, span);
+                self.attributes(fields);
             }
             "installer" => {
                 let Some(fields) = self.block_fields(call) else {
@@ -1978,13 +1978,22 @@ impl<'p> Lowerer<'_, 'p> {
     /// Both `attributes { … }` and `attributes({ … })` are the same call in Lua,
     /// so both arrive here as one table argument.
     fn block_fields<'e>(&mut self, call: &'e Expr) -> Option<&'e [TableField]> {
-        let Expr::Call { args, .. } = call else {
+        let Expr::Call { callee, args, .. } = call else {
             return None;
         };
         match args.as_slice() {
             [Expr::Table { fields, .. }] => Some(fields.as_slice()),
             _ => {
-                self.todo(call.span(), "this block in this form");
+                let block = match callee.as_ref() {
+                    Expr::Name(name) => name.text.as_str(),
+                    _ => "this block",
+                };
+                self.bad_value(
+                    call.span(),
+                    block,
+                    "a table",
+                    &format!("write `{block} {{ … }}`"),
+                );
                 None
             }
         }
@@ -2014,7 +2023,7 @@ impl<'p> Lowerer<'_, 'p> {
 
     // -- attributes -------------------------------------------------------
 
-    fn attributes(&mut self, fields: &[TableField], span: Span) {
+    fn attributes(&mut self, fields: &[TableField]) {
         // A Lua table has no order, so the order is the compiler's — see
         // [`ORDERED`] for which fields need one and how that was measured.
         let mut fields: Vec<&TableField> = fields.iter().collect();
@@ -2029,7 +2038,12 @@ impl<'p> Lowerer<'_, 'p> {
 
         for field in fields {
             let TableField::Named { name, value } = field else {
-                self.todo(span, "a positional entry in `attributes {}`");
+                self.bad_value(
+                    field.span(),
+                    "attributes",
+                    "named fields",
+                    "write `attributes { name = \"…\" }`",
+                );
                 continue;
             };
 
@@ -2838,7 +2852,13 @@ impl<'p> Lowerer<'_, 'p> {
         let mut written: Vec<(&str, &Expr)> = Vec::new();
         for given in fields {
             let TableField::Named { name, value: part } = given else {
-                self.todo(value.span(), &format!("a positional entry in `{field}`"));
+                let names: Vec<&str> = parts.iter().map(|part| part.field).collect();
+                self.bad_value(
+                    given.span(),
+                    field,
+                    "named fields",
+                    &format!("its fields are {}", list(&names)),
+                );
                 continue;
             };
             if !parts.iter().any(|known| known.field == name.text) {
@@ -2974,7 +2994,12 @@ impl<'p> Lowerer<'_, 'p> {
 
         for field in fields {
             let TableField::Named { name, value } = field else {
-                self.todo(value.span(), &format!("a positional entry in `{group}`"));
+                self.bad_value(
+                    field.span(),
+                    group,
+                    "named fields",
+                    &format!("write `{group} = {{ name = … }}`"),
+                );
                 continue;
             };
             let path = format!("{group}.{}", name.text);
@@ -3021,7 +3046,12 @@ impl<'p> Lowerer<'_, 'p> {
 
         for field in fields {
             let TableField::Named { name, value } = field else {
-                self.todo(value.span(), "a positional entry in `versionInfo`");
+                self.bad_value(
+                    field.span(),
+                    "versionInfo",
+                    "named fields",
+                    "write `versionInfo = { product = \"1.0.0.0\" }`",
+                );
                 continue;
             };
             match name.text.as_str() {
@@ -3074,7 +3104,12 @@ impl<'p> Lowerer<'_, 'p> {
                     let mut keys: Vec<(String, ir::Arg)> = Vec::new();
                     for field in fields {
                         let TableField::Named { name, value } = field else {
-                            self.todo(value.span(), "a positional entry in `keys`");
+                            self.bad_value(
+                                field.span(),
+                                "keys",
+                                "named fields",
+                                "write `keys = { ProductName = \"…\" }`",
+                            );
                             continue;
                         };
                         if let Some(arg) = self.constant_arg(value, &name.text) {
@@ -3822,7 +3857,12 @@ impl<'p> Lowerer<'_, 'p> {
         let mut names: Vec<String> = Vec::new();
         for field in fields {
             let TableField::Positional { value } = field else {
-                self.todo(value.span(), "a named entry in `installTypes`");
+                self.bad_value(
+                    field.span(),
+                    "installTypes",
+                    "a list of names",
+                    "write `installTypes = { \"Full\", \"Minimal\" }`",
+                );
                 continue;
             };
             let Some(name) = self.constant_string(value, "installTypes") else {
@@ -3955,7 +3995,12 @@ impl<'p> Lowerer<'_, 'p> {
                 // they insert and captioned by MUI2's own language file.
                 TableField::Positional { value } if page.custom => positional.push(value),
                 TableField::Positional { value } => {
-                    self.todo(value.span(), "a positional entry in a page");
+                    self.bad_value(
+                        value.span(),
+                        "page",
+                        "named fields",
+                        "only `page.custom` takes a positional entry",
+                    );
                 }
             }
         }
@@ -6358,9 +6403,11 @@ impl<'p> Lowerer<'_, 'p> {
         let mut chosen: Vec<usize> = Vec::new();
         for field in fields {
             let TableField::Positional { value } = field else {
-                self.todo(
-                    value.span(),
-                    "a named entry in a `section`'s `installTypes`",
+                self.bad_value(
+                    field.span(),
+                    "installTypes",
+                    "a list of names",
+                    "write `installTypes = { \"Full\" }`, naming types the block declares",
                 );
                 continue;
             };

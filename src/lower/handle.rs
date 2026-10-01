@@ -1511,7 +1511,12 @@ impl BodyLowerer<'_, '_> {
         let mut mask = 0i64;
         for field in fields {
             let TableField::Positional { value } = field else {
-                self.todo(value.span(), "a named entry in `installTypes`");
+                self.bad_value(
+                    field.span(),
+                    "installTypes",
+                    "a list of names",
+                    "write `installTypes = { \"Full\" }`, naming types the block declares",
+                );
                 continue;
             };
             if let Some(position) = self.inst_type_position(value, "installTypes") {

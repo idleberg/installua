@@ -1169,7 +1169,12 @@ impl BodyLowerer<'_, '_> {
 
         for field in entries.into_iter().flatten() {
             let TableField::Named { name: key, value } = field else {
-                self.todo(span, "a positional entry in an options table");
+                self.bad_value(
+                    field.span(),
+                    name,
+                    "named options",
+                    &format!("its options are {}", options(builtin)),
+                );
                 return None;
             };
             let position = surface.iter().position(|param| {
@@ -1523,13 +1528,18 @@ impl BodyLowerer<'_, '_> {
         method: &str,
         declared: &[declarations::Flag],
         options: Option<&Vec<TableField>>,
-        span: Span,
     ) -> Option<Vec<ir::Arg>> {
         // One slot per declared flag, filled by name and then read in order.
         let mut given: Vec<Option<&Expr>> = vec![None; declared.len()];
         for field in options.into_iter().flatten() {
             let TableField::Named { name: key, value } = field else {
-                self.todo(span, "a positional entry in a plugin's options table");
+                let names: Vec<&str> = declared.iter().map(|flag| flag.name.as_str()).collect();
+                self.bad_value(
+                    field.span(),
+                    &format!("{plugin}::{method}"),
+                    "named options",
+                    &format!("its options are {}", super::list(&names)),
+                );
                 return None;
             };
             let Some(index) = declared.iter().position(|flag| flag.name == key.text) else {
@@ -2242,7 +2252,7 @@ impl BodyLowerer<'_, '_> {
             return None;
         }
 
-        let leading = self.plugin_flags(plugin, method, &entry.flags, options, span)?;
+        let leading = self.plugin_flags(plugin, method, &entry.flags, options)?;
 
         // `System::Call`'s output count is in its signature: every `.s` pushes
         // one value. That is as far as the signature is read — narrowing the
@@ -3317,7 +3327,12 @@ impl BodyLowerer<'_, '_> {
         let (mut silent, mut default) = (None, None);
         for field in fields {
             let TableField::Named { name, value } = field else {
-                self.todo(span, "a positional entry in `messageBox`");
+                self.bad_value(
+                    field.span(),
+                    "messageBox",
+                    "named fields",
+                    "write `messageBox { text = \"…\", buttons = \"YESNO\" }`, or pass the text alone",
+                );
                 continue;
             };
             match name.text.as_str() {

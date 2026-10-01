@@ -82,7 +82,12 @@ impl BodyLowerer<'_, '_> {
         let mut switches = Vec::new();
         for field in fields {
             let TableField::Named { name: key, value } = field else {
-                self.todo(span, &format!("a positional entry in `{name}`'s options"));
+                self.bad_value(
+                    field.span(),
+                    name,
+                    "named options",
+                    "write `{ type = \"DLL\", shared = true }`",
+                );
                 return None;
             };
             let flag = |this: &mut Self| match this.constant(value) {

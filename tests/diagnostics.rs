@@ -1186,3 +1186,55 @@ fn a_reachable_shape_names_its_mistake() {
         );
     }
 }
+
+/// The one typo a table invites: a positional entry where named fields are
+/// expected, or a named one in a list. Each site used to be a generic
+/// `not-yet-implemented`; each is one `bad-field-value` now.
+#[test]
+fn a_table_of_the_wrong_kind_says_which_kind() {
+    let attributes = |fields: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\", {fields} }}\n\
+             installer {{ section(\"Core\", function() end), }}"
+        )
+    };
+    let body = |line: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\" }}\n\
+             local nsExec = plugin \"nsExec\"\n\
+             installer {{ section(\"Core\", function()\n{line}\nend), }}"
+        )
+    };
+    let block =
+        |entries: &str| format!("attributes {{ outFile = \"a.exe\" }}\ninstaller {{ {entries} }}");
+    for source in [
+        "attributes \"x\"".to_string(),
+        attributes("\"x\""),
+        attributes("installDirRegKey = { HKCR, key = \"k\", name = \"n\" }"),
+        attributes("manifest = { \"x\" }"),
+        attributes("versionInfo = { \"1.0.0.0\" }"),
+        attributes("versionInfo = { product = \"1.0.0.0\", keys = { \"x\" } }"),
+        body("file(\"a.txt\", { true })"),
+        body("nsExec.execToLog(\"x\", { 5000 })"),
+        body("messageBox { \"hi\" }"),
+        body("installLib(\"a.dll\", INSTDIR .. \"/a.dll\", { true })"),
+        block("installTypes = { full = \"Full\" }, section(\"Core\", function() end)"),
+        block(
+            "installTypes = { \"Full\" },\n\
+             section { \"Core\", installTypes = { full = \"Full\" }, body = function() end }",
+        ),
+        block("page.welcome { \"x\" }, section(\"Core\", function() end)"),
+        "attributes { outFile = \"a.exe\" }\n\
+         local docs = section(\"Docs\", function() end)\n\
+         installer { installTypes = { \"Full\" }, docs,\n\
+         section(\"Core\", function() docs.installTypes = { full = \"Full\" } end) }"
+            .to_string(),
+    ] {
+        let diags = compile(&source);
+        assert!(
+            diags.contains(Code::BadFieldValue) && !diags.contains(Code::NotYetImplemented),
+            "{source}\n{}",
+            diags.render("<test>")
+        );
+    }
+}

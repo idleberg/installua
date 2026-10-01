@@ -12,18 +12,12 @@ cells, and a fix fails that test until they leave the list.
 
 ## Generic `todo` diagnostics
 
-`src/lower` has 39 `self.todo(` calls (25 in `mod.rs`, 10 in `expr.rs`, 3 in
-`handle.rs`, 1 in `library.rs`). Each reports `not-yet-implemented` with a
-generic message. The ones ordinary code reaches have real diagnostics now.
-What is left:
+`src/lower` has 25 `self.todo(` calls (16 in `mod.rs`, 7 in `expr.rs`, 2 in
+`handle.rs`). Each reports `not-yet-implemented` with a generic message. The
+ones ordinary code reaches have real diagnostics now. What is left:
 
-- About 15 are one typo: a positional entry where named fields are expected,
-  or the other way round. One shared `bad-field-value` would cover them all.
-  The sites: `expr.rs` 1154, 1514, 3213; `library.rs` 85; `handle.rs` 1514;
-  `mod.rs` 1947 (`attributes "x"`), 1992, 2801, 2937, 2984, 3037, 3764, 3897,
-  6260. Line numbers are from before the fix above and have moved.
-- Not probed yet, only read: `mod.rs` 2217, 2533, 3358, 3883, 4449, 4487,
-  4491, 5376, 5755, 7000, 7065, 7431, 7443, 7469; `handle.rs` 246, 533;
-  `expr.rs` 3262, 3283. Same caveat on line numbers.
+- Not probed yet, only read: `mod.rs` 2265, 2587, 3454, 3984, 4555, 4593,
+  4597, 5482, 5884, 7155, 7224, 7647, 7659, 7685; `handle.rs` 246, 533;
+  `expr.rs` 3384, 3405.
 - The `Handled` arms, the operator fallback and the call fallbacks are
   unreachable and stay.
