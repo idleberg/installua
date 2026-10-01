@@ -1042,3 +1042,16 @@ fn a_func_below_the_root_reaches_the_project_meta() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn send_message_takes_a_number_or_a_string() {
+    // `-CMDHELP` prints `wparam|STR:wParam`, which reads as an enum of the two
+    // words: the overlay's `spelled` is what says it is a value's spelling, so
+    // `sendMessage(hwnd, BM_SETCHECK, 0, 0)` is not a type error in the editor.
+    let meta = meta();
+    for param in ["wparam_or_STR_wParam", "lparam_or_STR_lParam"] {
+        let line = format!("---@param {param} integer|string\n");
+        assert!(meta.contains(&line), "no `{}`", line.trim_end());
+    }
+    assert!(!meta.contains("Wparamorstrwparam"));
+}

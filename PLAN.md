@@ -389,7 +389,7 @@ once, and both generators loop over it: `installua.lua` writes each as
 `---@param body fun()`, the selene std as one `function` argument. Test:
 `every_callback_the_compiler_has_is_in_both_stubs`.
 
-### 5.27 `sendMessage` rejects an integer `wParam`/`lParam`
+### 5.27 `sendMessage` rejects an integer `wParam`/`lParam` — fixed
 
 ```lua
 sendMessage(hwnd, BM_SETCHECK, 0, 0)
@@ -397,12 +397,14 @@ sendMessage(hwnd, BM_SETCHECK, 0, 0)
 
 `param-type-mismatch: Cannot assign integer to "wparam"|"STR:wParam"`.
 `-CMDHELP` writes the parameter as `wparam|STR:wParam`, which the table reads
-as an enum of two words, so `alias_table` generates
-`installua.Wparamorstrwparam`. Should: `integer|string`, since both are values
-and neither is a keyword. The fix belongs in the table overlay, not in
-`stubs.rs`, so that nothing else reads it as an enum either. Check: the
-`sendMessage` stub in a `tests/stubs.rs` case, and PimpBot's four call sites
-come up clean.
+as an enum of two words, so `alias_table` generated
+`installua.Wparamorstrwparam`.
+
+The overlay marks both positions `spelled`, and the join drops a spelled
+position's members, so nothing reads them as an enum. The stub types the
+table's `unknown` positions `integer|string`, as `coerce` takes them. Test:
+`send_message_takes_a_number_or_a_string`. PimpBot no longer calls
+`sendMessage`, so LuaLS was run on the example above instead: clean.
 
 ### 5.28 Smaller stub gaps
 

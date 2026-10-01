@@ -54,6 +54,9 @@ pub struct Ann {
     pub required: bool,
     /// Open although `-CMDHELP` lists members. See [`open`].
     pub open: bool,
+    /// The members `-CMDHELP` lists are a spelling, not an enum. See
+    /// [`spelled`].
+    pub spelling: bool,
 }
 
 pub struct Row {
@@ -104,6 +107,7 @@ const fn ann(ty: Ty, kind: Kind) -> Ann {
         field: None,
         required: false,
         open: false,
+        spelling: false,
     }
 }
 
@@ -126,6 +130,17 @@ const fn open(ty: Ty, kind: Kind) -> Ann {
     Ann {
         open: true,
         ..ann(ty, kind)
+    }
+}
+
+/// A position whose `-CMDHELP` members are how NSIS spells a value rather than
+/// a set of them: `SendMessage`'s `wparam|STR:wParam` is a number or `STR:`
+/// and a string. The join drops them, so nothing reads the two words as an
+/// enum — not the alias a stub would make of them, not the member check.
+const fn spelled(ann: Ann) -> Ann {
+    Ann {
+        spelling: true,
+        ..ann
     }
 }
 
@@ -1696,7 +1711,7 @@ pub const ROWS: &[Row] = &[
     // `wParam` and `lParam` are the table's only `unknown` positions: a message
     // takes a number or a string, and the compiler writes `STR:` before a
     // string. The members `-CMDHELP` prints for them are that spelling, not an
-    // enum.
+    // enum, hence `spelled`.
     flagged(
         exposed(
             "SendMessage",
@@ -1704,8 +1719,8 @@ pub const ROWS: &[Row] = &[
             &[
                 ann(Ty::Handle, Kind::Value),
                 ann(Ty::int(), Kind::Value),
-                required(Ty::Unknown, Kind::Value),
-                required(Ty::Unknown, Kind::Value),
+                spelled(required(Ty::Unknown, Kind::Value)),
+                spelled(required(Ty::Unknown, Kind::Value)),
                 ann(Ty::int(), Kind::Value),
             ],
             "local cancel = getDlgItem(HWNDPARENT, 2)\nsendMessage(cancel, WM_SETTEXT, 0, \"Stop\")\nlocal count = sendMessage(cancel, WM_GETTEXTLENGTH, 0, 0, { timeout = 500 })\ndetailPrint(\"length \" .. count)",

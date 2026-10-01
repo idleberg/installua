@@ -1203,7 +1203,12 @@ fn union(name: &str, index: usize) -> String {
 }
 
 fn lua_type(param: &Param) -> String {
-    if param.members().is_empty() {
+    // `sendMessage`'s `wParam` and `lParam`, the table's only `unknown`
+    // positions: a number or a string, as `lower::expr`'s `coerce` takes them.
+    // Not `any`, which [`lua_name`] gives a plugin's `callback` as well.
+    if param.ty == Ty::Unknown {
+        "integer|string".to_string()
+    } else if param.members().is_empty() {
         lua_name(param.ty).to_string()
     } else {
         alias_of(param.shape.name)

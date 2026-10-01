@@ -810,7 +810,12 @@ fn join() -> Vec<Instruction> {
                         // weakest possible reading of it.
                         None => (Ty::Unknown, Kind::Value),
                     };
-                    let kind = if !shape.members.is_empty() && kind == Kind::Value {
+                    let members = if annotation.is_some_and(|a| a.spelling) {
+                        &[]
+                    } else {
+                        shape.members
+                    };
+                    let kind = if !members.is_empty() && kind == Kind::Value {
                         Kind::Enum
                     } else {
                         kind
@@ -819,6 +824,7 @@ fn join() -> Vec<Instruction> {
                         shape: Shape {
                             req: shape.req || annotation.is_some_and(|a| a.required),
                             open: shape.open || annotation.is_some_and(|a| a.open),
+                            members,
                             ..*shape
                         },
                         ty,
