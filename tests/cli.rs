@@ -694,3 +694,41 @@ fn build_resolves_paths_beside_the_source_under_o() {
     let (passed, output) = monorepo::run_in(&dir, &["build", "src/install.lua", "-o", "out/a.nsi"]);
     assert!(passed, "{output}");
 }
+
+/// `--makensis` names the assembler, and wins over `$MAKENSIS`: the variable
+/// here names nothing, so a build that read it would fail to start. The fake
+/// records its arguments, which is all the case asks — that it was the one run.
+#[cfg(unix)]
+#[test]
+fn build_runs_the_makensis_it_is_given() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join("installua-build-makensis");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create the scratch directory");
+    let fake = dir.join("fake-makensis");
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/called\"\n",
+    )
+    .expect("write the fake");
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755))
+        .expect("make the fake executable");
+    std::fs::write(dir.join("install.lua"), CLEAN).expect("write the program");
+
+    let output = Command::new(PathBuf::from(env!("CARGO_BIN_EXE_installua")))
+        .args(["build", "install.lua", "--makensis"])
+        .arg(&fake)
+        .env("MAKENSIS", dir.join("missing"))
+        .current_dir(&dir)
+        .output()
+        .expect("run installua");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let called = std::fs::read_to_string(dir.join("called")).expect("the fake was not run");
+    assert!(called.contains("install.nsi"), "{called}");
+}

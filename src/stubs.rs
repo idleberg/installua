@@ -755,6 +755,10 @@ fn declarations() -> String {
          ---@param options string|table\n\
          ---@return string\n\
          function messageBox(options) end\n\n\
+         -- `SetEnvironmentVariable`, for this process and what it starts.\n\
+         ---@param name string\n\
+         ---@param value string\n\
+         function setEnv(name, value) end\n\n\
          ---@param path string\n\
          ---@param mode installua.OpenMode\n\
          ---@return installua.File\n\

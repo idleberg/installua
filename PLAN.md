@@ -451,17 +451,15 @@ in `tests/params.rs` covers the edges. The `strings` golden now reads its
 subjects from plain `local`s, since literals would fold away the adapters it
 tests.
 
-### 5.31 `build` finds `makensis` only through `$MAKENSIS` or the PATH
+### 5.31 `build` finds `makensis` only through `$MAKENSIS` or the PATH — done
 
-`src/main.rs` reads `MAKENSIS`, and no page says so. A program that builds
-installers on the user's machine (PimpBot's Compiler, with a portable NSIS in
-its own folder) has to set the variable for its child, and Installua has no
-way to do that either: `SetEnvironmentVariable` is a `raw` `System::Call`.
-Should: a `--makensis <path>` flag on `build`, which wins over the variable;
-both in `cli.md`. Separately, `setEnv(name, value)` beside `getEnv`
-(`ReadEnvStr`), compiling to `System::Call 'kernel32::SetEnvironmentVariable(t, t)'`,
-since the child-process case is common. Check: a `tests/cli.rs` case with a
-fake `makensis` that records it was called; a golden for `setEnv`.
+`build --makensis <path>` names the assembler and wins over `$MAKENSIS`, which
+wins over the PATH; `cli.md` says so from the flag's help. `setEnv(name,
+value)` sits beside `readEnvStr` in strings-and-numbers.md and lowers to
+`Push value`, `Push name`, `System::Call "kernel32::SetEnvironmentVariable(t s,
+t s)"`, so a runtime value never lands inside the signature. Checked by
+`tests/cli.rs` (a fake `makensis`, with `$MAKENSIS` naming nothing) and the
+`environment` golden.
 
 ### 5.32 A relative `-D` path is relative to the source, not the shell — documented
 

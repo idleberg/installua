@@ -77,6 +77,10 @@ enum Command {
         /// point.
         #[arg(long, hide = true)]
         stdout: bool,
+
+        /// The makensis to run. Without it, `$MAKENSIS`, then the PATH
+        #[arg(long, value_name = "PATH")]
+        makensis: Option<PathBuf>,
     },
 
     /// `-CMDHELP` bucket counts
@@ -185,8 +189,12 @@ fn main() -> ExitCode {
             project,
             define,
         } => check(&files, &project, &define),
-        Command::Emit { args, stdout } => build(&args, stdout, false),
-        Command::Build { args, stdout } => build(&args, stdout, true),
+        Command::Emit { args, stdout } => build(&args, stdout, None),
+        Command::Build {
+            args,
+            stdout,
+            makensis,
+        } => build(&args, stdout, Some(makensis)),
         Command::Coverage => coverage(),
         Command::Init {
             dir,
@@ -409,11 +417,13 @@ fn check(files: &[PathBuf], projects: &[String], define: &[String]) -> ExitCode 
     }
 }
 
-fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
+/// `assemble` is `None` for `emit`, and for `build` the `--makensis` it was
+/// given, if any.
+fn build(args: &BuildArgs, stdout: bool, assemble: Option<Option<PathBuf>>) -> ExitCode {
     // Before the compile, not after it: the invocation is wrong whatever the
     // program says, and reporting a program's diagnostics first would bury the
     // one message that is actually actionable.
-    if stdout && assemble {
+    if stdout && assemble.is_some() {
         return usage_error("`--stdout` has no script for `makensis` to read; use `emit`");
     }
 
@@ -467,13 +477,19 @@ fn build(args: &BuildArgs, stdout: bool, assemble: bool) -> ExitCode {
         log::error(format!("cannot write {}: {error}", output.display()));
         return ExitCode::from(2);
     }
-    if !assemble {
+    let Some(makensis) = assemble else {
         return ExitCode::SUCCESS;
-    }
+    };
 
     // The invocation is ours because the map cannot travel with the artifact:
     // NSIS can read its own line number and cannot be told a different one.
-    let makensis = std::env::var("MAKENSIS").unwrap_or_else(|_| "makensis".to_string());
+    // The flag wins over the variable because it is the more local of the two:
+    // a program that runs `build` for its user sets the flag for one child and
+    // leaves the environment alone.
+    let makensis = match makensis {
+        Some(path) => path.display().to_string(),
+        None => std::env::var("MAKENSIS").unwrap_or_else(|_| "makensis".to_string()),
+    };
     let source_name = input.display().to_string();
     let base = options.base.clone().unwrap_or_default();
     match installua::assemble::assemble(

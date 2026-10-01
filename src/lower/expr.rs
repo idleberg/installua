@@ -666,6 +666,7 @@ impl BodyLowerer<'_, '_> {
         // syntax.
         match name.as_str() {
             "writeReg" => return self.write_reg(args, dest, span),
+            "setEnv" => return self.set_env(args, dest, span),
             "messageBox" => return self.message_box(args, dest, span),
             "file" if !self.one_out_name(args) => return None,
             "file"
@@ -2427,6 +2428,44 @@ impl BodyLowerer<'_, '_> {
             nsis,
             vec![root.arg, key.arg.into_path(), name.arg, value.arg],
         ));
+        None
+    }
+
+    /// `setEnv(name, value)` — `SetEnvironmentVariable`, the write
+    /// `readEnvStr` has no instruction for. It sets the installer's own
+    /// environment, so it reaches what the installer starts afterwards
+    /// (`exec`, `nsExec`) and nothing else: not the shell, not the machine.
+    ///
+    /// Both values go on the stack and `t s` pops them, rather than being
+    /// written into the signature, where a `"` or a `)` in a runtime value
+    /// would end the argument early.
+    fn set_env(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
+        if dest.is_some() {
+            self.diags.push(Diagnostic::error(
+                Code::TypeMismatch,
+                span,
+                "`setEnv` produces no value",
+            ));
+            return None;
+        }
+        let [name, value] = args else {
+            return self.wrong_arity("setEnv", 2, args.len(), span);
+        };
+        let name = self.value(name)?;
+        let value = self.value(value)?;
+        let lines = vec![
+            ir::Instruction::new("Push", vec![value.arg]).at(span),
+            ir::Instruction::new("Push", vec![name.arg]).at(span),
+            ir::Instruction::new(
+                "System::Call",
+                vec![ir::Arg::str("kernel32::SetEnvironmentVariable(t s, t s)")],
+            )
+            .at(span),
+        ];
+        let site = self.body.opaque_site(lines, false, span);
+        let current = self.current;
+        self.body.push_step(current, ir::Step::Saves(site));
+        self.body.push_step(current, ir::Step::Call(site));
         None
     }
 

@@ -82,6 +82,16 @@ messageBox(tostring(count))
 | `ReadEnvStr`       | `readEnvStr(name)` → `string`         |
 | `ExpandEnvStrings` | `expandEnvStrings(string)` → `string` |
 
+NSIS has no instruction that writes a variable. `setEnv(name, value)` is
+`SetEnvironmentVariable` through the `System` plugin. It changes the
+installer's own environment, so a program the installer starts afterwards
+inherits it, and nothing outside the installer sees it:
+
+```lua
+setEnv("NSISDIR", EXEDIR .. "/nsis")
+exec('"' .. EXEDIR .. '/nsis/makensis.exe" build.nsi')
+```
+
 ## ReadMemory
 
 **Usage** `readMemory(address, size)` → `string`

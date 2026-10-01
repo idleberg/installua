@@ -55,6 +55,7 @@ installua build [OPTIONS] [FILE.LUA]
 | `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
 | `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
 | `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. A relative path in its value is relative to the program, not the shell. Repeatable. |
+| `--makensis <PATH>` | The makensis to run. Without it, `$MAKENSIS`, then the PATH. |
 
 ## installua coverage
 
