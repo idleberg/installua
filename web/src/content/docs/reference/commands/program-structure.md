@@ -272,6 +272,12 @@ than passed only on the command line:
   `local` is what the program reads. They are usually spelled the same and do
   not have to be.
 
+A relative path in a value is relative to the program, not to the folder the
+command was typed in: `-D PRESETS=fixtures/avs` given to
+`packages/pack/install.lua` means `packages/pack/fixtures/avs`, as every other
+path in the program does. A parameter's type does not say it is a path, so the
+compiler cannot tell which values to rebase.
+
 ### A parameter with no default is required
 
 Leave the default out and the invocation has to supply the value. A build

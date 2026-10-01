@@ -49,7 +49,8 @@ enum Command {
         #[arg(short = 'p', long, value_name = "NAME", conflicts_with = "files")]
         project: Vec<String>,
 
-        /// Set a build parameter, as `build` would
+        /// Set a build parameter, as `build` would. A relative path in its value
+        /// is relative to the program, not the shell
         #[arg(short = 'D', long = "param", value_name = "NAME=VALUE")]
         define: Vec<String>,
     },
@@ -131,7 +132,8 @@ struct BuildArgs {
     #[arg(short = 'f', long)]
     force: bool,
 
-    /// Set a build parameter declared with `param(…)`
+    /// Set a build parameter declared with `param(…)`. A relative path in its
+    /// value is relative to the program, not the shell
     ///
     /// Repeatable. A name the program does not declare is an error, not a
     /// shrug — see the `unknown-param` diagnostic.

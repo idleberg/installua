@@ -21,7 +21,7 @@ installua check [OPTIONS] [FILE.LUA]...
 | --- | --- |
 | `<FILE.LUA>` | The programs to check. Without any, every project installua.toml lists. Repeatable. |
 | `-p, --project <NAME>` | Check this project from installua.toml instead. Repeatable. |
-| `-D, --param <NAME=VALUE>` | Set a build parameter, as `build` would. Repeatable. |
+| `-D, --param <NAME=VALUE>` | Set a build parameter, as `build` would. A relative path in its value is relative to the program, not the shell. Repeatable. |
 
 ## installua emit
 
@@ -37,7 +37,7 @@ installua emit [OPTIONS] [FILE.LUA]
 | `-p, --project <NAME>` | Compile this project from installua.toml instead. |
 | `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
 | `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
-| `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. Repeatable. |
+| `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. A relative path in its value is relative to the program, not the shell. Repeatable. |
 | `--stdout` | Write to stdout. |
 
 ## installua build
@@ -54,7 +54,7 @@ installua build [OPTIONS] [FILE.LUA]
 | `-p, --project <NAME>` | Compile this project from installua.toml instead. |
 | `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
 | `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
-| `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. Repeatable. |
+| `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. A relative path in its value is relative to the program, not the shell. Repeatable. |
 
 ## installua coverage
 

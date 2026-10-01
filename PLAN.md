@@ -463,7 +463,7 @@ both in `cli.md`. Separately, `setEnv(name, value)` beside `getEnv`
 since the child-process case is common. Check: a `tests/cli.rs` case with a
 fake `makensis` that records it was called; a golden for `setEnv`.
 
-### 5.32 A relative `-D` path is relative to the source, not the shell
+### 5.32 A relative `-D` path is relative to the source, not the shell — documented
 
 ```console
 $ installua build packages/pack/install.lua -D PRESETS=fixtures/avs -o build/pack.nsi
@@ -474,9 +474,10 @@ error[makensis]: File: "fixtures\avs\*.avs" -> no files found.
 `packages/pack/fixtures/avs`. That is consistent with every other path in a
 program, and with `makensis -D`, which also changes into the script's folder;
 but a value typed on the command line reads as relative to where it was
-typed, and nothing says otherwise. Should: one sentence under `param` in
-`program-structure.md` and on `cli.md`. Changing the behaviour would need to
-know which parameters are paths, which `param` does not say.
+typed, and nothing said otherwise. Now `program-structure.md` says so under
+`param`, and so does the `-D` help, from which `cli.md` is generated. The
+behaviour stays as it is: changing it would need to know which parameters are
+paths, and `param` does not say.
 
 ### 5.33 A multi-value call cannot assign to existing variables
 
@@ -545,6 +546,30 @@ of the eight `undefined-global`s. A ninth warning showed up behind them, at
 inside `if FONT_DIR ~= ""`, so the fixpoint pruned it. Both are fixed in
 `stubs.rs`: `missing-param` no longer drops a file, and a `func` left without a
 return gets one from an unpruned pass, if that pass types it fully.
+
+### 5.37 `stubs` does not notice a `.luarc.json` its meta files disagree with
+
+`init` writes `.luarc.json` and `stubs` writes `.installua/meta`, but the meta
+assumes the luarc. Its `tostring` and `tonumber` are written for a LuaLS whose
+`basic` library is disabled. Without that, LuaLS merges its own `tonumber` into
+Installua's, which then returns `number?`. Nothing fails; the editor's types
+are just quietly wrong. `stubs` never reads `.luarc.json`, so an upgrade that
+only re-runs `stubs` leaves the project half updated and says nothing.
+
+"Stale" is not checkable. Neither file carries a version, so the most anyone
+can say is that it differs from what `luarc()` writes now. Comparing against
+that whole string is too strict, because a user's own keys (a
+`diagnostics.globals` entry, a second `workspace.library` path) are expected
+and would warn forever. Should: `stubs` checks only the keys the meta depends
+on: every `runtime.builtin` disable, `.installua/meta` in `workspace.library`,
+and `lowercase-global` in `diagnostics.disable`. It warns once per missing key
+and points at `installua init --interactive`. A missing `.luarc.json` stays
+silent, since not everyone uses LuaLS. The check needs a JSONC parser, because
+LuaLS accepts comments there and `serde_json` would reject a valid file. If
+that dependency is unwanted, fall back to comparing with `luarc()` exactly. It
+is noisier, but it still warns. Check: `tests/cli.rs` cases for a luarc
+missing `basic`, one with an extra user key (no warning), and no luarc (no
+warning).
 
 ## Later: random programs
 
