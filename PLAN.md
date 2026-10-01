@@ -439,23 +439,17 @@ wildcard is joined rather than matched and so was never affected.
 PimpBot's pack installer still needs its second `*.BMP` glob when built on
 macOS or Linux.
 
-### 5.30 A string function on a build-time value does not fold
+### 5.30 A string function on a build-time value does not fold — fixed
 
-```lua
-for path in glob("res/*") do
-	if string.lower(string.sub(path, -4)) == ".bmp" then file(path) end
-end
-```
-
-compiles to `StrCpy $0 "res/A.BMP" "" -4` / `StrCmp $0 ".bmp"` around each
-`File`: a run-time test, so every file is embedded whatever its type, and once
-per branch when the `if` sits in an `ipairs` loop. `path`, the `-4` and the
-literal are all known at build time. Should: `string.sub`, `.lower`, `.upper`,
-`.find` and `..` fold when every argument is constant, and a constant `if`
-drops its dead branch as `c and x or y` already does (§5.8). Then a `glob` can
-be filtered by extension, which is the only way to filter it now that `*.BMP`
-and `*.bmp` differ (§5.29). The fix goes where §5.8 folds. Check: a golden
-whose `.nsi` holds one `File` and no `StrCmp`.
+`fold` in `src/resolve.rs` now folds `string.sub`, `.lower`, `.upper` and
+`.find` when every argument does, at Lua's semantics (`string.sub("ab", -3)` is
+`"ab"`, where the run-time `StrCpy` answers `""`). A body's `if` already dropped
+a dead branch once its condition folded, so a `glob` filtered by extension now
+emits one `File` per match and no `StrCmp`. The `build-time` golden filters
+`assets/*` that way and drops `assets/notes.txt`; `a_string_call_over_constants_folds`
+in `tests/params.rs` covers the edges. The `strings` golden now reads its
+subjects from plain `local`s, since literals would fold away the adapters it
+tests.
 
 ### 5.31 `build` finds `makensis` only through `$MAKENSIS` or the PATH
 

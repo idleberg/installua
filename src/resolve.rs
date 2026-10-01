@@ -1629,8 +1629,66 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
             }
         }
 
+        // A `string.*` call folds when every argument does, so a `glob` can be
+        // filtered by extension: the `if` around each `file` then drops at
+        // build time instead of testing a path the build already knew.
+        Expr::Call { callee, args, .. } => {
+            let Expr::Field { base, name, .. } = callee.as_ref() else {
+                return None;
+            };
+            if base.name() != Some("string") {
+                return None;
+            }
+            let args: Vec<_> = args
+                .iter()
+                .map(|arg| fold(arg, lookup))
+                .collect::<Option<_>>()?;
+            string_call(&name.text, &args)
+        }
+
         _ => None,
     }
+}
+
+/// The folded `string.*` calls, at Lua's semantics where the runtime adapter
+/// has a known gap: a negative start past the beginning clamps to `1` here,
+/// as in Lua, where `StrCpy` would answer `""`.
+///
+/// Positions count characters, as NSIS's Unicode strings do, rather than
+/// Lua's bytes; the two agree on every ASCII path. `lower` and `upper` are
+/// ASCII-only, as Lua's are in the C locale. `find` is a plain search, as the
+/// runtime `${StrLoc}` is, and a miss is `0`, as there.
+fn string_call(name: &str, args: &[ConstValue]) -> Option<ConstValue> {
+    use ConstValue::{Int, Str};
+    match (name, args) {
+        ("lower", [Str(s)]) => Some(Str(s.to_ascii_lowercase())),
+        ("upper", [Str(s)]) => Some(Str(s.to_ascii_uppercase())),
+        ("find", [Str(s), Str(needle)]) => Some(Int(s
+            .find(needle.as_str())
+            .map_or(0, |byte| s[..byte].chars().count() as i64 + 1))),
+        ("sub", [Str(s), Int(from)]) => Some(Str(sub(s, *from, -1))),
+        ("sub", [Str(s), Int(from), Int(to)]) => Some(Str(sub(s, *from, *to))),
+        _ => None,
+    }
+}
+
+/// Lua's `string.sub`: negative positions count from the end, and both ends
+/// clamp into the string.
+fn sub(s: &str, from: i64, to: i64) -> String {
+    let len = s.chars().count() as i64;
+    let from = if from < 0 {
+        (len + from + 1).max(1)
+    } else {
+        from.max(1)
+    };
+    let to = if to < 0 { len + to + 1 } else { to.min(len) };
+    if from > to {
+        return String::new();
+    }
+    s.chars()
+        .skip((from - 1) as usize)
+        .take((to - from + 1) as usize)
+        .collect()
 }
 
 /// [`fold`], answering a table as well: for a `<const>`'s value and for what

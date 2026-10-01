@@ -170,6 +170,38 @@ fn and_or_picks_a_value_at_build_time() {
     assert_eq!(build(PICKING, &[("ON", "false")]), expected(0, "no", ""));
 }
 
+/// A `string.*` call over constants folds at Lua's semantics, including the
+/// clamp the run-time `StrCpy` lacks: `string.sub("ab", -3)` is `"ab"`.
+#[test]
+fn a_string_call_over_constants_folds() {
+    const FOLDING: &str = "attributes { outFile = \"b.exe\" }\n\
+                           installer { section(\"x\", function()\n\
+                           local PATH <const> = \"res/Logo.BMP\"\n\
+                           detailPrint(string.lower(string.sub(PATH, -4)))\n\
+                           detailPrint(string.upper(string.sub(PATH, 2, 3)))\n\
+                           detailPrint(string.sub(\"ab\", -3) .. string.sub(\"ab\", 3))\n\
+                           detailPrint(tostring(string.find(PATH, \"/\")))\n\
+                           detailPrint(tostring(string.find(PATH, \"x\")))\n\
+                           if string.lower(PATH) == \"res/logo.bmp\" then detailPrint(\"kept\") end\n\
+                           if string.find(PATH, \".txt\") > 0 then detailPrint(\"dropped\") end\n\
+                           end) }\n";
+    assert_eq!(
+        build(FOLDING, &[]),
+        "Unicode true\n\
+         \n\
+         OutFile \"b.exe\"\n\
+         \n\
+         Section \"x\"\n  \
+         DetailPrint \".bmp\"\n  \
+         DetailPrint \"ES\"\n  \
+         DetailPrint \"ab\"\n  \
+         DetailPrint 4\n  \
+         DetailPrint 0\n  \
+         DetailPrint \"kept\"\n\
+         SectionEnd\n"
+    );
+}
+
 /// The `-D` name and the local are two different things, and are not required
 /// to agree: the string is an interface to whatever runs the build, and the
 /// local is the program's own name for the value.

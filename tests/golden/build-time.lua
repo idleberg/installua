@@ -2,7 +2,9 @@
 -- emitted, and the two anchors that let a script talk to `makensis` anyway.
 --
 -- `param` with each defaulted type, a top-level `if` taken on one of them, a
--- `glob` unrolled against the directory this file lives in, an `ipairs` over a
+-- `glob` unrolled against the directory this file lives in and filtered by
+-- extension, the `string.*` test folding so only the bitmap's `if` survives
+-- (`assets/notes.txt` is the file it drops), an `ipairs` over a
 -- `<const>` table unrolled the same way, and `raw.head` /
 -- `raw.tail` landing either side of the script, and the three `MAKENSIS.*`
 -- side effects written where they stand. What the `.nsi` shows is mostly which
@@ -32,8 +34,10 @@ attributes {
 installer {
 	section("Core", function()
 		setOutPath(INSTDIR)
-		for path in glob("assets/*.bmp") do
-			file(path)
+		for path in glob("assets/*") do
+			if string.lower(string.sub(path, -4)) == ".bmp" then
+				file(path)
+			end
 		end
 		for i, doc in ipairs(DOCS) do
 			detailPrint(i .. ". " .. doc.title .. " (" .. doc.file .. ")")

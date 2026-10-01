@@ -5,6 +5,9 @@
 -- offset: a middle, the last character, a negative end, both negative, and a
 -- start of `0`, which Lua reads as `1`.
 --
+-- Each subject is a plain `local`: a literal would fold at build time, and
+-- this golden is about the run-time adapters.
+--
 -- `math.abs` and `math.max(n, 0)` are non-negative, which is what lets them
 -- into `sleep`; `math.min` is only when every argument is.
 
@@ -15,15 +18,17 @@ attributes {
 
 installer {
 	section("Core", function()
-		detailPrint(tostring(string.find("ftp://host", "ftp")))
-		detailPrint(tostring(string.find("ftp://host", "://")))
-		detailPrint(tostring(string.find("ftp.example.com", "://")))
+		local url, host = "ftp://host", "ftp.example.com"
+		detailPrint(tostring(string.find(url, "ftp")))
+		detailPrint(tostring(string.find(url, "://")))
+		detailPrint(tostring(string.find(host, "://")))
 
-		detailPrint(string.sub("installua", 2, 4))
-		detailPrint(string.sub("installua", -1))
-		detailPrint(string.sub("installua", 2, -2))
-		detailPrint(string.sub("installua", -3, -2))
-		detailPrint(string.sub("installua", 0, 3))
+		local word = "installua"
+		detailPrint(string.sub(word, 2, 4))
+		detailPrint(string.sub(word, -1))
+		detailPrint(string.sub(word, 2, -2))
+		detailPrint(string.sub(word, -3, -2))
+		detailPrint(string.sub(word, 0, 3))
 
 		local n = tonumber(readEnvStr("DELAY"))
 		sleep(math.abs(n))

@@ -126,7 +126,20 @@ The rule is that a reader must never have to guess which machine a line runs on.
 | `MAKENSIS.system(…)`, `MAKENSIS.getDllVersion(…)`, `MAKENSIS.echo(…)` | build time, as a side effect on your machine |
 | `for p in glob("assets/*.txt")`                              | build time, unrolled                                       |
 | `for i, x in ipairs(LIST)` over a `<const>` table             | build time, unrolled                                       |
+| `string.sub`/`.lower`/`.upper`/`.find` and `..`, every argument a constant or a `glob` path | build time, folded — and an `if` over one keeps or drops its body |
 | `import "FileFunc"`, `include "strings/de.lua"`              | build time                                                 |
+
+So a `glob` can be filtered by extension, which matters because `*.BMP` and `*.bmp` are
+different patterns on macOS and Linux:
+
+```lua skip
+for path in glob("res/*") do
+	if string.lower(string.sub(path, -4)) == ".bmp" then file(path) end
+end
+```
+
+Each path is known while the script compiles, so the `.nsi` holds one `File` per bitmap and no
+test at all.
 
 `print` is the trap worth naming: it is `detailPrint` at install time and `MAKENSIS.echo` at
 build time, and they are **two different names** on purpose.
