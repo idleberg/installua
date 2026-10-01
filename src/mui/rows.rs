@@ -147,7 +147,7 @@ pub const ROWS: &[Row] = &[
     ),
     rejected(
         "MUI_DISABLE_INSERT_LANGUAGE_AFTER_PAGES_WARNING",
-        "it silences a warning about include order, and the compiler writes `MUI_LANGUAGE` after the pages by construction",
+        "it silences a warning about include order, and the compiler writes `MUI_LANGUAGE` after the pages by construction — and this define itself when no MUI2 page is there to quiet it",
     ),
     internal("MUI_FINISHPAGE"),
     // MUI2's own guard define and a macro of the same name — the `!ifndef`

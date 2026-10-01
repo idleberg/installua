@@ -11,6 +11,16 @@ it sits.
 
 **Usage** `page.custom { <headerText>, controls = { … }, pre = …, show = …, leave = … }`
 
+A program whose pages are all custom gets a MUI2 header all the same: the
+compiler defines `MUI_DISABLE_INSERT_LANGUAGE_AFTER_PAGES_WARNING` for it, the
+switch MUI2 offers for that case. Such a program has no `page.instFiles`, so
+no section ever runs, and `makensis` warns about that (warning 8000). Silencing
+it is the program's call, not the compiler's:
+
+```lua
+raw.head [[!pragma warning disable 8000]]
+```
+
 ## The control types
 
 `label` · `text` · `password` · `number` · `button` · `checkbox` ·

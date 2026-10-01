@@ -494,24 +494,22 @@ entry. Check: a golden beside the one for the `local` form.
 
 PimpBot's Compiler declares a second local (`buildCode`).
 
-### 5.34 A program whose pages are all `page.custom` never sets MUI2 up
+### 5.34 A program whose pages are all `page.custom` never sets MUI2 up — fixed
 
 ```lua
 installer { page.custom { "One", controls = {} }, section("-x", function() end) }
 ```
 
-`makensis -WX` fails on `MUI_LANGUAGE[EX] should be inserted after the
-MUI_[UN]PAGE_* macros`: `Page custom` is not a MUI2 macro, so `MUI_INSERT`
-never runs, and without it the header text, header image and colours a
-custom page asks for are not set up either. Should: the compiler writes
-`!insertmacro MUI_INSERT` before `MUI_LANGUAGE` when no MUI2 page did, the
-way `MUI_PAGE_INIT` would. Check: the repro as a Tier-3 `-WX` build, and a
-golden holding the line.
+`makensis -WX` failed on `MUI_LANGUAGE[EX] should be inserted after the
+MUI_[UN]PAGE_* macros`. The guess above it was wrong: `MUI_LANGUAGE` runs
+`MUI_INSERT` itself, so the header was always set up. The warning reads
+`MUI_PAGE_UNINSTALLER_PREFIX`, which only a MUI2 page macro defines. Now the
+compiler writes `!define MUI_DISABLE_INSERT_LANGUAGE_AFTER_PAGES_WARNING`, the
+switch MUI2 offers for this case, whenever MUI2 is in and no MUI2 page is. The
+`custom-pages` golden builds under `-WX`.
 
-Such a program also has sections no `instFiles` page runs, which is makensis's
-warning 8000 and fails `-WX` as well. That one is the program's to silence
-(`raw.head [[!pragma warning disable 8000]]`), but the docs for `page.custom`
-could say so.
+Warning 8000 (no `instFiles` page) stays the program's to silence, and the
+`page.custom` docs now say how.
 
 PimpBot's Compiler adds a welcome page that skips itself.
 

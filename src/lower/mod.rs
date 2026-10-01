@@ -1626,6 +1626,22 @@ impl<'p> Lowerer<'_, 'p> {
                     vec![ir::Arg::raw("MUI_LANGUAGE"), ir::Arg::str("English")],
                 ));
             }
+            // `MUI_LANGUAGE` `!warning`s unless a MUI2 page macro ran above it,
+            // which a program whose pages are all `Page custom` — or which has
+            // none — never has. The language line is below every page by
+            // construction, so the warning can only be wrong here, and this is
+            // the define MUI2 offers for it. `MUI_INSERT`, which sets up the
+            // header and colours a custom page asks for, runs from inside
+            // `MUI_LANGUAGE` either way.
+            let mui_page = (self.module.pages.iter())
+                .chain(&self.module.unpages)
+                .any(|page| page.insert.name == "!insertmacro");
+            if !mui_page {
+                self.module.mui_defines.push(ir::Define {
+                    name: "MUI_DISABLE_INSERT_LANGUAGE_AFTER_PAGES_WARNING".to_string(),
+                    value: None,
+                });
+            }
         }
         if let Some(multi_user) = &self.multi_user {
             if self.uninstaller_span.is_none() {
