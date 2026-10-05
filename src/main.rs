@@ -25,11 +25,7 @@ mod log;
     version,
     // No command is not an error worth a bare message: the list of commands is
     // the answer to what someone typing `installua` wanted to know.
-    arg_required_else_help = true,
-    after_help = "\
-`emit` is for wiring Installua into an existing build; `build` owns the \
-`makensis` invocation, which is what lets it rewrite `makensis`'s diagnostics \
-back onto the Lua source."
+    arg_required_else_help = true
 )]
 struct Cli {
     #[command(subcommand)]
@@ -38,7 +34,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Everything `build` would say, writing nothing
+    /// Check programs for errors without writing any files
     Check {
         /// The programs to check. Without any, every project installua.toml
         /// lists
@@ -55,7 +51,7 @@ enum Command {
         define: Vec<String>,
     },
 
-    /// Compile to .nsi and stop
+    /// Compile programs to NSIS scripts
     Emit {
         #[command(flatten)]
         args: BuildArgs,
@@ -65,7 +61,7 @@ enum Command {
         stdout: bool,
     },
 
-    /// Compile, then run `makensis -WX`
+    /// Build installers from programs, using makensis
     Build {
         #[command(flatten)]
         args: BuildArgs,
@@ -86,7 +82,7 @@ enum Command {
     /// `-CMDHELP` bucket counts
     Coverage,
 
-    /// .luarc.json, selene.toml
+    /// Set up a project for the Lua language server and selene
     Init {
         /// Where to write them
         #[arg(value_name = "DIR", default_value = ".")]
@@ -101,7 +97,7 @@ enum Command {
         force: bool,
     },
 
-    /// .installua/meta/*.lua and the selene std
+    /// Generate type definitions for the Lua language server and selene
     Stubs {
         /// The project to read
         #[arg(value_name = "DIR", default_value = ".")]

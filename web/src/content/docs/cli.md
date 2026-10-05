@@ -11,7 +11,7 @@ A Lua-shaped language that compiles to NSIS.
 
 ## installua check
 
-Everything `build` would say, writing nothing.
+Check programs for errors without writing any files.
 
 ```sh
 installua check [OPTIONS] [FILE.LUA]...
@@ -25,7 +25,7 @@ installua check [OPTIONS] [FILE.LUA]...
 
 ## installua emit
 
-Compile to .nsi and stop.
+Compile programs to NSIS scripts.
 
 ```sh
 installua emit [OPTIONS] [FILE.LUA]
@@ -42,7 +42,7 @@ installua emit [OPTIONS] [FILE.LUA]
 
 ## installua build
 
-Compile, then run `makensis -WX`.
+Build installers from programs, using makensis.
 
 ```sh
 installua build [OPTIONS] [FILE.LUA]
@@ -67,7 +67,7 @@ installua coverage
 
 ## installua init
 
-.luarc.json, selene.toml.
+Set up a project for the Lua language server and selene.
 
 ```sh
 installua init [OPTIONS] [DIR]
@@ -81,7 +81,7 @@ installua init [OPTIONS] [DIR]
 
 ## installua stubs
 
-.installua/meta/*.lua and the selene std.
+Generate type definitions for the Lua language server and selene.
 
 ```sh
 installua stubs [DIR]
