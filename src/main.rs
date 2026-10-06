@@ -36,17 +36,16 @@ struct Cli {
 enum Command {
     /// Check programs for errors without writing any files
     Check {
-        /// The programs to check. Without any, every project installua.toml
-        /// lists
+        /// Programs to check [default: every project in installua.toml]
         #[arg(value_name = "FILE.LUA")]
         files: Vec<PathBuf>,
 
-        /// Check this project from installua.toml instead
+        /// Check a project from installua.toml
         #[arg(short = 'p', long, value_name = "NAME", conflicts_with = "files")]
         project: Vec<String>,
 
-        /// Set a build parameter, as `build` would. A relative path in its value
-        /// is relative to the program, not the shell
+        /// Set a parameter declared with `param(…)`; relative paths resolve
+        /// from the program
         #[arg(short = 'D', long = "param", value_name = "NAME=VALUE")]
         define: Vec<String>,
     },
@@ -56,7 +55,7 @@ enum Command {
         #[command(flatten)]
         args: BuildArgs,
 
-        /// Write to stdout
+        /// Write the NSIS script to stdout
         #[arg(long)]
         stdout: bool,
     },
@@ -74,7 +73,7 @@ enum Command {
         #[arg(long, hide = true)]
         stdout: bool,
 
-        /// The makensis to run. Without it, `$MAKENSIS`, then the PATH
+        /// Path to makensis [default: $MAKENSIS, then PATH]
         #[arg(long, value_name = "PATH")]
         makensis: Option<PathBuf>,
     },
@@ -84,22 +83,22 @@ enum Command {
 
     /// Set up a project for the Lua language server and selene
     Init {
-        /// Where to write them
+        /// Project directory
         #[arg(value_name = "DIR", default_value = ".")]
         dir: PathBuf,
 
-        /// Also offer the stubs, the editor's tasks and the .gitignore entries
+        /// Also offer type definitions, editor tasks and .gitignore entries
         #[arg(short = 'i', long)]
         interactive: bool,
 
-        /// Overwrite what is already there, without asking
+        /// Overwrite existing files without asking
         #[arg(short = 'f', long)]
         force: bool,
     },
 
     /// Generate type definitions for the Lua language server and selene
     Stubs {
-        /// The project to read
+        /// Project directory
         #[arg(value_name = "DIR", default_value = ".")]
         dir: PathBuf,
     },
@@ -116,27 +115,27 @@ enum Command {
 /// each declares its own and the difference is visible where it is decided.
 #[derive(Args)]
 struct BuildArgs {
-    /// The program to compile. Without one, the project installua.toml lists
+    /// Program to compile [default: the project in installua.toml]
     #[arg(value_name = "FILE.LUA")]
     input: Option<PathBuf>,
 
-    /// Compile this project from installua.toml instead
+    /// Compile a project from installua.toml
     #[arg(short = 'p', long, value_name = "NAME", conflicts_with = "input")]
     project: Option<String>,
 
-    /// Write here instead of alongside the input
+    /// Write the NSIS script here [default: next to the program]
     #[arg(short, long, value_name = "FILE.NSI")]
     output: Option<PathBuf>,
 
-    /// Overwrite a .nsi installua did not write, without asking
+    /// Overwrite an NSIS script installua did not write, without asking
     #[arg(short = 'f', long)]
     force: bool,
 
-    /// Set a build parameter declared with `param(…)`. A relative path in its
-    /// value is relative to the program, not the shell
-    ///
-    /// Repeatable. A name the program does not declare is an error, not a
-    /// shrug — see the `unknown-param` diagnostic.
+    /// Set a parameter declared with `param(…)`; relative paths resolve from
+    /// the program
+    //
+    // Repeatable. A name the program does not declare is an error, not a shrug
+    // — see the `unknown-param` diagnostic.
     //
     // The long name is `--param`, not `--define` or `--declare`: the source
     // declares a parameter and the invocation sets one, and a flag named for

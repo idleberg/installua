@@ -19,9 +19,9 @@ installua check [OPTIONS] [FILE.LUA]...
 
 | | |
 | --- | --- |
-| `<FILE.LUA>` | The programs to check. Without any, every project installua.toml lists. Repeatable. |
-| `-p, --project <NAME>` | Check this project from installua.toml instead. Repeatable. |
-| `-D, --param <NAME=VALUE>` | Set a build parameter, as `build` would. A relative path in its value is relative to the program, not the shell. Repeatable. |
+| `<FILE.LUA>` | Programs to check [default: every project in installua.toml]. Repeatable. |
+| `-p, --project <NAME>` | Check a project from installua.toml. Repeatable. |
+| `-D, --param <NAME=VALUE>` | Set a parameter declared with `param(…)`; relative paths resolve from the program. Repeatable. |
 
 ## installua emit
 
@@ -33,12 +33,12 @@ installua emit [OPTIONS] [FILE.LUA]
 
 | | |
 | --- | --- |
-| `<FILE.LUA>` | The program to compile. Without one, the project installua.toml lists. |
-| `-p, --project <NAME>` | Compile this project from installua.toml instead. |
-| `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
-| `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
-| `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. A relative path in its value is relative to the program, not the shell. Repeatable. |
-| `--stdout` | Write to stdout. |
+| `<FILE.LUA>` | Program to compile [default: the project in installua.toml]. |
+| `-p, --project <NAME>` | Compile a project from installua.toml. |
+| `-o, --output <FILE.NSI>` | Write the NSIS script here [default: next to the program]. |
+| `-f, --force` | Overwrite an NSIS script installua did not write, without asking. |
+| `-D, --param <NAME=VALUE>` | Set a parameter declared with `param(…)`; relative paths resolve from the program. Repeatable. |
+| `--stdout` | Write the NSIS script to stdout. |
 
 ## installua build
 
@@ -50,12 +50,12 @@ installua build [OPTIONS] [FILE.LUA]
 
 | | |
 | --- | --- |
-| `<FILE.LUA>` | The program to compile. Without one, the project installua.toml lists. |
-| `-p, --project <NAME>` | Compile this project from installua.toml instead. |
-| `-o, --output <FILE.NSI>` | Write here instead of alongside the input. |
-| `-f, --force` | Overwrite a .nsi installua did not write, without asking. |
-| `-D, --param <NAME=VALUE>` | Set a build parameter declared with `param(…)`. A relative path in its value is relative to the program, not the shell. Repeatable. |
-| `--makensis <PATH>` | The makensis to run. Without it, `$MAKENSIS`, then the PATH. |
+| `<FILE.LUA>` | Program to compile [default: the project in installua.toml]. |
+| `-p, --project <NAME>` | Compile a project from installua.toml. |
+| `-o, --output <FILE.NSI>` | Write the NSIS script here [default: next to the program]. |
+| `-f, --force` | Overwrite an NSIS script installua did not write, without asking. |
+| `-D, --param <NAME=VALUE>` | Set a parameter declared with `param(…)`; relative paths resolve from the program. Repeatable. |
+| `--makensis <PATH>` | Path to makensis [default: $MAKENSIS, then PATH]. |
 
 ## installua coverage
 
@@ -75,9 +75,9 @@ installua init [OPTIONS] [DIR]
 
 | | |
 | --- | --- |
-| `<DIR>` | Where to write them. Defaults to the <abbr title="current working directory">CWD</abbr>. |
-| `-i, --interactive` | Also offer the stubs, the editor's tasks and the .gitignore entries. |
-| `-f, --force` | Overwrite what is already there, without asking. |
+| `<DIR>` | Project directory. Defaults to the <abbr title="current working directory">CWD</abbr>. |
+| `-i, --interactive` | Also offer type definitions, editor tasks and .gitignore entries. |
+| `-f, --force` | Overwrite existing files without asking. |
 
 ## installua stubs
 
@@ -89,7 +89,7 @@ installua stubs [DIR]
 
 | | |
 | --- | --- |
-| `<DIR>` | The project to read. Defaults to the <abbr title="current working directory">CWD</abbr>. |
+| `<DIR>` | Project directory. Defaults to the <abbr title="current working directory">CWD</abbr>. |
 
 ## Exit codes
 
