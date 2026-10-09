@@ -759,6 +759,41 @@ fn version_info_names_the_keys_makensis_wants() {
 }
 
 #[test]
+fn version_info_wants_product_before_anything_else() {
+    let source = |info: &str| {
+        format!(
+            "attributes {{ outFile = \"a.exe\", versionInfo = {{ {info} }} }}\n\
+             installer {{ section(\"Core\", function() end) }}"
+        )
+    };
+    let keys = "FileVersion = \"1.0\", FileDescription = \"A\", LegalCopyright = \"B\"";
+    for info in [
+        format!("keys = {{ {keys} }}"),
+        "file = \"1.0.0.0\"".to_string(),
+    ] {
+        let diags = compile(&source(&info));
+        let found: Vec<(Code, String)> =
+            diags.iter().map(|d| (d.code, d.message.clone())).collect();
+        assert_eq!(
+            found,
+            [(
+                Code::MissingAttribute,
+                "`versionInfo` has no `product`".to_string()
+            )],
+            "{info}",
+        );
+    }
+    // Nothing else is set, so `makensis` emits no version information at all.
+    assert!(compile(&source("keys = {}")).is_empty());
+    assert!(
+        compile(&source(&format!(
+            "product = \"1.0.0.0\", keys = {{ {keys} }}"
+        )))
+        .is_empty()
+    );
+}
+
+#[test]
 fn x64_says_what_is_wrong() {
     for (call, code) in [
         ("if runningX64(1) then end", Code::WrongArity),

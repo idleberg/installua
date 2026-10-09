@@ -3044,6 +3044,28 @@ impl<'p> Lowerer<'_, 'p> {
             _ => 2,
         });
 
+        // `makensis` requires `VIProductVersion` as soon as any other version
+        // function is used, and that error names no line either — so it is
+        // caught here, where the table has a span.
+        let named = |want: &str| {
+            fields.iter().find_map(|field| match field {
+                TableField::Named { name, value } if name.text == want => Some(value),
+                _ => None,
+            })
+        };
+        let keys_written =
+            matches!(named("keys"), Some(Expr::Table { fields, .. }) if !fields.is_empty());
+        if named("product").is_none() && (keys_written || named("file").is_some()) {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::MissingAttribute,
+                    value.span(),
+                    "`versionInfo` has no `product`",
+                )
+                .note("`makensis` requires `VIProductVersion` once any other version key is set"),
+            );
+        }
+
         for field in fields {
             let TableField::Named { name, value } = field else {
                 self.bad_value(
