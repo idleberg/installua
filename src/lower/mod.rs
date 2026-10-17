@@ -4315,7 +4315,7 @@ impl<'p> Lowerer<'_, 'p> {
     /// Every field a page was given, checked against the ones it has.
     fn page_fields_known(&mut self, named: &[(&Name, &Expr)], page: &Page) {
         let mut fields: Vec<&str> = page.fields().map(|field| field.installua).collect();
-        fields.extend(extra_field(page));
+        fields.extend(extra_fields(page));
         for (name, _) in named {
             if !fields.contains(&name.text.as_str()) {
                 self.diags.push(
@@ -4399,6 +4399,37 @@ impl<'p> Lowerer<'_, 'p> {
             None
         };
 
+        // `dialog = false` is a page some plugin draws — `StartMenu::Select`,
+        // `InstallOptions::dialog` — which creates and shows its own dialog
+        // from inside `show`. An nsDialogs one around that would be a second,
+        // empty page after the plugin's. Opted out of rather than inferred
+        // from an empty `controls`, because an nsDialogs page with only a
+        // header is a page too.
+        let dialog = match written("dialog") {
+            None | Some(Expr::Bool { value: true, .. }) => true,
+            Some(Expr::Bool { value: false, .. }) => false,
+            Some(other) => {
+                self.bad_value(
+                    other.span(),
+                    "dialog",
+                    "`true` or `false`",
+                    "`false` leaves the page to whatever `show` calls",
+                );
+                return;
+            }
+        };
+        if !dialog && let Some(value) = written("controls") {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    value.span(),
+                    "a page with `dialog = false` has no nsDialogs dialog to put controls on",
+                )
+                .note("the plugin that `show` calls draws the page"),
+            );
+            return;
+        }
+
         // Built before the body is, because a control is checked with the
         // `Lowerer` in hand — constants, diagnostics, the claim map — and what
         // comes back is instructions the creator threads together.
@@ -4420,6 +4451,13 @@ impl<'p> Lowerer<'_, 'p> {
             }
             if let Some(header) = header {
                 lowerer.emit(ir::Instruction::new("!insertmacro", header));
+            }
+
+            if !dialog {
+                if let Some((block, _)) = show {
+                    lowerer.block(block);
+                }
+                return;
             }
 
             // 1018 is the id of the inner control MUI2 draws its pages into. It

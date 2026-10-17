@@ -9,7 +9,24 @@ is a `Page custom`, and both functions behind it are the compiler's to write
 bound to is how a running program addresses it, and decides nothing about where
 it sits.
 
-**Usage** `page.custom { <headerText>, controls = { … }, pre = …, show = …, leave = … }`
+**Usage** `page.custom { <headerText>, controls = { … }, dialog = false, pre = …, show = …, leave = … }`
+
+`dialog = false` is a page some plugin draws, such as `StartMenu::Select` or
+`InstallOptions::dialog`. Without it, `show` runs inside an nsDialogs dialog the
+compiler creates and shows, and the plugin's page would be followed by that
+empty one. With it, the page's function is `pre`, the header and `show`, and
+nothing else, so it takes no `controls`.
+
+```lua
+local startMenu = plugin "StartMenu"
+
+page.custom { "Start Menu Folder",
+	dialog = false,
+	show = function()
+		local outcome, folder = startMenu.select("Example")
+	end,
+}
+```
 
 A program whose pages are all custom gets a MUI2 header all the same: the
 compiler defines `MUI_DISABLE_INSERT_LANGUAGE_AFTER_PAGES_WARNING` for it, the

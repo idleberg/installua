@@ -11,7 +11,18 @@ attributes { outFile = "custom-pages.exe" }
 
 raw.head [[!pragma warning disable 8000]]
 
+-- `dialog = false` is a page a plugin draws: its creator is `show` alone, with
+-- no `nsDialogs::Create` or `nsDialogs::Show` around the plugin's own dialog.
+
+local startMenu = plugin "StartMenu"
+
 installer {
 	page.custom { "One", controls = {} },
+	page.custom { "Two",
+		dialog = false,
+		show = function()
+			startMenu.select("Example")
+		end,
+	},
 	section("-x", function() end),
 }

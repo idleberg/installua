@@ -178,18 +178,19 @@ pub(super) struct PageField {
     pub(super) cleared: bool,
 }
 
-/// The one field a page has that is not a [`PageField`], because it is not a
-/// `!define` at all.
+/// The fields a page has that are not [`PageField`]s, because they are not
+/// `!define`s at all.
 ///
-/// Two of the nine have one. `license`'s `file` is an argument of the
+/// Two of the nine have them. `license`'s `file` is an argument of the
 /// `!insertmacro` rather than a setting read from inside it, and `custom`'s
-/// `controls` is what the compiler draws — no define exists for either, so
-/// there is nothing for the table to hold and they are named here instead.
-pub(super) fn extra_field(page: &Page) -> Option<&'static str> {
+/// `controls` and `dialog` decide what the compiler draws — no define exists
+/// for any of them, so there is nothing for the table to hold and they are
+/// named here instead.
+pub(super) fn extra_fields(page: &Page) -> &'static [&'static str] {
     match page.installua {
-        "license" => Some("file"),
-        "custom" => Some("controls"),
-        _ => None,
+        "license" => &["file"],
+        "custom" => &["controls", "dialog"],
+        _ => &[],
     }
 }
 
