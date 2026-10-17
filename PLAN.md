@@ -10,10 +10,10 @@ Bugs go in `KNOWN-ISSUES.md`.
 because Installua only writes MUI2 pages. A line the original writes inside a
 macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
 
-Ported: `bigtest`, `example1`, `example2`, `Memento`, `MultiUser`,
+Ported: `bigtest`, `example1`, `example2`, `LogicLib`, `Memento`, `MultiUser`,
 `one-section`, `primes`, `silent` and the five `Modern UI/` examples.
 
-Next, from `$NSISDIR/Examples`: `LogicLib`, `languages`, `Library`, `StrFunc`,
+Next, from `$NSISDIR/Examples`: `languages`, `Library`, `StrFunc`,
 `unicode`, `VersionInfo`, the `FileFunc`/`TextFunc`/`WordFunc` ones,
 and the `nsDialogs/`, `StartMenu/` and `System/` directories.
 
