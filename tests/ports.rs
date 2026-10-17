@@ -27,6 +27,7 @@ const PORTS: &[&str] = &[
     "bigtest",
     "example1",
     "example2",
+    "LogicLib",
     "Modern UI/Basic",
     "Modern UI/HeaderBitmap",
     "Modern UI/MultiLanguage",
@@ -66,6 +67,17 @@ const HIDDEN: &[(&str, &str)] = &[
     // nothing; the port puts back the default.
     ("bigtest", "SetOverwrite: try"),
     ("bigtest", "SetOverwrite: on"),
+    // Inside LogicLib's macros: `${IfCmd}`, `${Cmd}`, `${SectionIsSelected}`.
+    ("LogicLib", "MessageBox: 4: \"Please click Yes\""),
+    ("LogicLib", "MessageBox: 260: \"Please click No\""),
+    ("LogicLib", "SectionGetFlags: "),
+    // `${__FILE__}`, which names the original.
+    ("LogicLib", "DetailPrint: \"Source file "),
+    // The `StrFunc` functions `string.lower` and `string.find` are made of.
+    ("LogicLib", "Exch("),
+    ("LogicLib", "File: \"System.dll\""),
+    ("LogicLib", "Plugin command: "),
+    ("LogicLib", "StrLen "),
     // The original builds its application into a `!tempfile` with `!makensis`,
     // and the port installs a stand-in.
     ("MultiUser", "File: "),
@@ -147,13 +159,20 @@ fn ports_do_what_the_originals_do() {
         ));
         std::fs::create_dir_all(&directory).expect("temp directory");
         // The original installs itself, so it is also the file the port's `file()` reads.
-        std::fs::copy(examples.join(format!("{name}.nsi")), directory.join(&file))
-            .expect("copy the original");
         // What MultiUser.nsi builds its pretend application from, and what
         // bigtest.nsi installs.
         for other in ["AppGen.nsi", "silent.nsi", "LogicLib.nsi"] {
             std::fs::copy(examples.join(other), directory.join(other)).expect(other);
         }
+        // LogicLib.nsi turns its own trace off with `!verbose 2`.
+        let original = std::fs::read_to_string(examples.join(format!("{name}.nsi")))
+            .expect("read the original");
+        let traced: String = original
+            .lines()
+            .filter(|line| !line.starts_with("!verbose"))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        std::fs::write(directory.join(&file), traced).expect("write the original");
         std::fs::write(directory.join("port.nsi"), port(name)).expect("write the port");
 
         let hidden: Vec<&str> = HIDDEN
