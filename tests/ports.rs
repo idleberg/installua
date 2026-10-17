@@ -38,6 +38,9 @@ const PORTS: &[&str] = &[
     "one-section",
     "primes",
     "silent",
+    "StartMenu/Example",
+    "unicode",
+    "VersionInfo",
 ];
 
 /// Lines one side writes inside a macro, where `-V4` prints nothing, and the
@@ -78,6 +81,15 @@ const HIDDEN: &[(&str, &str)] = &[
     ("LogicLib", "File: \"System.dll\""),
     ("LogicLib", "Plugin command: "),
     ("LogicLib", "StrLen "),
+    // MUI2 writes it in `MUI_INTERFACE`.
+    ("StartMenu/Example", "XPStyle: on"),
+    ("unicode", "XPStyle: on"),
+    // The second line of `DirText`'s first argument, which MUI2 writes inside
+    // its macro and the original in the open.
+    ("StartMenu/Example", "For this it needs NSIS's path."),
+    // English, loaded only for `${LANG_ENGLISH}`; with no language file at
+    // all it is the one NSIS builds in.
+    ("VersionInfo", "LoadLanguageFile: "),
     // The original builds its application into a `!tempfile` with `!makensis`,
     // and the port installs a stand-in.
     ("MultiUser", "File: "),
@@ -92,6 +104,16 @@ const SPELLED: &[(&str, &str)] = &[
     ("DwordTest_0123=0123", "DwordTest_0123=83"),
     ("$InstDir", "$INSTDIR"),
     ("$SMPrograms", "$SMPROGRAMS"),
+    ("$PluginsDir", "$PLUGINSDIR"),
+    ("FileWriteWord: 0xD83C", "FileWriteWord: 55356"),
+    ("FileWriteWord: 0xDF0D", "FileWriteWord: 57101"),
+    ("SetShellVarContext: All", "SetShellVarContext: all"),
+    // The readme: "the order of the switches doesn't matter". The compiler
+    // writes them in the declaration's order.
+    (
+        "Select /checknoshortcuts Don't create a start menu folder /autoadd /lastused $R0 ",
+        "Select /autoadd /lastused $R0 /checknoshortcuts Don't create a start menu folder ",
+    ),
 ];
 
 /// Trace lines that differ by design rather than by mistake.

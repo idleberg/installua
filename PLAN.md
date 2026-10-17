@@ -11,11 +11,12 @@ because Installua only writes MUI2 pages. A line the original writes inside a
 macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
 
 Ported: `bigtest`, `example1`, `example2`, `LogicLib`, `Memento`, `MultiUser`,
-`one-section`, `primes`, `silent` and the five `Modern UI/` examples.
+`one-section`, `primes`, `silent`, `StartMenu/Example`, `unicode`,
+`VersionInfo` and the five `Modern UI/` examples.
 
 Next, from `$NSISDIR/Examples`: `languages`, `Library`, `StrFunc`,
-`unicode`, `VersionInfo`, the `FileFunc`/`TextFunc`/`WordFunc` ones,
-and the `nsDialogs/`, `StartMenu/` and `System/` directories.
+the `FileFunc`/`TextFunc`/`WordFunc` ones, and the `nsDialogs/` and
+`System/` directories.
 
 Not portable: `rtest` tests `GetLabelAddress` and `Call` through an address,
 both rejected.
