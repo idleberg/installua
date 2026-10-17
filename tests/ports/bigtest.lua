@@ -86,8 +86,7 @@ installer {
 		writeReg(HKLM, uninstallKey, "UninstallString", '"' .. INSTDIR .. '/bt-uninst.exe"')
 
 		setOutPath(INSTDIR)
-		-- The original's `File /a`: makensis warns that it does nothing off Windows.
-		file("silent.nsi")
+		file("silent.nsi", { keepAttributes = true })
 		createDirectory(INSTDIR .. "/MyProjectFamily/MyProject")
 		writeUninstaller(INSTDIR .. "/bt-uninst.exe")
 	end),

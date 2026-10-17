@@ -26,11 +26,3 @@ ones ordinary code reaches have real diagnostics now. What is left:
 
 Lua's `>>` is emitted as NSIS's `>>>`, and the docs send the arithmetic shift to
 `raw`. bigtest's "Integer" section needs `IntOp $n 0xffffffff >> 31`.
-
-## `keepAttributes` cannot build off Windows
-
-`file(…, { keepAttributes = true })` is `File /a`. makensis on any other
-platform warns 5050, "File /a is disabled for non Win32 platforms", and
-`installua build` runs `-WX`, so the build fails. The compiler could drop the
-flag with its own warning when the host is not Windows, or the docs could say
-so. The bigtest port leaves the flag out.

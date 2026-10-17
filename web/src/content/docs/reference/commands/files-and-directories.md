@@ -20,6 +20,10 @@ otherwise.
 **Options** `recursive`, `exclude = { … }`, `keepAttributes`, `nonFatal`,
 `allowSkip`, `overwrite`, `outName`
 
+`keepAttributes` is `File /a`, which only keeps anything when makensis runs on
+Windows. Elsewhere makensis drops it, and the compiler silences the warning it
+gives for that, so a build off Windows still passes `-WX`.
+
 ```lua
 setOutPath(INSTDIR)
 file("assets/icon.ico", { exclude = { "*.tmp", "*.log" } })

@@ -25,5 +25,7 @@ installer {
 		file("LICENSE.txt", { outName = "COPYING" })
 		-- The flag and the name are one token, quoted as one.
 		file("LICENSE.txt", { outName = INSTDIR .. "/docs/read me.txt" })
+		-- `/a` warns 5050 off Windows, which `-WX` would make fatal.
+		file("LICENSE.txt", { keepAttributes = true })
 	end),
 }

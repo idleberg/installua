@@ -921,8 +921,25 @@ impl BodyLowerer<'_, '_> {
                     None
                 }
                 (None, None) => {
+                    // `File /a` warns 5050 when makensis runs off Windows, where
+                    // it keeps no attributes, and `-WX` makes that fatal. Silenced
+                    // here rather than dropped on a non-Windows host: the output
+                    // is a function of the source, never of the machine.
+                    let keep = builtin.nsis == "File"
+                        && builtin
+                            .options
+                            .iter()
+                            .zip(&lowered.flags)
+                            .any(|(flag, writes)| flag.opt.nsis == "/a" && !writes.is_empty());
                     let all = place(builtin, lowered, Vec::new());
+                    if keep {
+                        self.emit(pragma("push"));
+                        self.emit(pragma("disable 5050"));
+                    }
                     self.emit(ir::Instruction::new(builtin.nsis, all));
+                    if keep {
+                        self.emit(pragma("pop"));
+                    }
                     if matches!(builtin.nsis, "Abort" | "Quit") {
                         let after = self.fresh("after_halt");
                         self.terminate(Terminator::Halt, after);
@@ -4057,6 +4074,11 @@ fn methods() -> String {
         .map(|name| format!("`{name}`"))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// `!pragma warning <rest>`.
+fn pragma(rest: &str) -> ir::Instruction {
+    ir::Instruction::new("!pragma", vec![ir::Arg::raw("warning"), ir::Arg::raw(rest)])
 }
 
 /// The emitted argument list, in **NSIS** order.
