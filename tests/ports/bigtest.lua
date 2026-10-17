@@ -151,9 +151,11 @@ installer {
 
 		group("Group2", {
 			section("Integer", function()
-				-- The `IntOp`s are `raw` because the compiler folds the constant
-				-- ones, and this section tests NSIS's arithmetic at run time.
-				-- `1 // 0` needs none: division by zero is never folded.
+				-- These are `raw` because `n = 1 << 31` would compile to
+				-- `StrCpy $n -2147483648`: an expression whose operands are all
+				-- constants is computed by the compiler, and this section tests
+				-- NSIS's arithmetic at run time. `1 // 0` needs none: division
+				-- by zero is never computed ahead.
 				-- NSIS's arithmetic `>>` also has no spelling (see KNOWN-ISSUES.md).
 				raw [[
 					IntOp $n 0xffffffff >> 31
