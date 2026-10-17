@@ -257,7 +257,7 @@ impl BodyLowerer<'_, '_> {
     /// fixpoint has not settled, and a later round checks it again.
     pub(super) fn window_slot(&self, name: &str) -> Option<Slot> {
         match self.lookup(name) {
-            Some(Binding::Local { slot, ty }) => {
+            Some(Binding::Local { slot, ty, .. }) => {
                 matches!(ty, Ty::Handle | Ty::Unknown).then(|| slot.clone())
             }
             Some(_) => None,

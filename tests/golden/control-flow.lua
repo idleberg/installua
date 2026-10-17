@@ -8,6 +8,10 @@
 -- Three numeric `for`s: counting up, counting down — whose test is signed,
 -- since the counter steps past `1` to `-1` — and a step read at run time,
 -- whose sign is tested at the top of every turn, a zero step ending the loop.
+--
+-- And a `while` that counts down: `remaining` starts non-negative and the
+-- subtraction widens it, so its test is signed too, though the test is lowered
+-- above the subtraction.
 
 attributes {
 	name = "Control Flow",
@@ -55,6 +59,11 @@ installer {
 		local stride = tonumber(readEnvStr("STRIDE"))
 		for at = 1, width, stride do
 			detailPrint("at " .. at)
+		end
+
+		local remaining = 3
+		while remaining > 0 do
+			remaining = remaining - 1
 		end
 
 		state = "installed"

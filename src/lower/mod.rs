@@ -788,8 +788,14 @@ const V1_BLOCKS: &[&str] = &[
 /// its return, the caller reads it — and the cap exists because a lattice with
 /// `Unknown` at the top is not strictly monotone: a disagreement can flip a
 /// slot back. A program that has not settled by then compiles against the last
-/// round, which is sound: an unsettled type is `Unknown`, and `Unknown` is
-/// refused at every point where guessing would matter.
+/// round, which is sound for a signature: an unsettled type is `Unknown`, and
+/// `Unknown` is refused at every point where guessing would matter.
+///
+/// A local is the exception, because its widening only ever narrows the guess
+/// and never reaches `Unknown`: each `x1 = x2` copy across a loop's back-edge
+/// costs a round, so a long enough chain is still `nonneg` when the rounds run
+/// out. [`fixpoint`] widens every recorded local's sign rather than trust it,
+/// and [`lower`] reports what is left, which is only a width.
 const MAX_ROUNDS: usize = 8;
 
 pub fn lower(
@@ -799,7 +805,8 @@ pub fn lower(
 ) -> ir::Module {
     // 1. Types, to a fixpoint.
     let (inferred, dead) = fixpoint(resolved, options, true);
-    let (mut module, _) = lower_once(resolved, options, diags, &inferred, &dead);
+    let (mut module, learned) = lower_once(resolved, options, diags, &inferred, &dead);
+    unsettled(&inferred, &learned, diags);
 
     // 2. Registers. Every body is allocated before any call site is filled in,
     //    because a clobber set is a fact about *physical* registers and there
@@ -866,6 +873,7 @@ fn fixpoint(
     let mut inferred = Inferred::seed(resolved);
     let mut dead = BTreeSet::new();
     let mut failed = Default::default();
+    let mut settled = false;
     for _ in 0..MAX_ROUNDS {
         let mut scratch = Diagnostics::new();
         let (module, mut round) = lower_once(resolved, options, &mut scratch, &inferred, &dead);
@@ -876,13 +884,41 @@ fn fixpoint(
             BTreeSet::new()
         };
         if round == inferred && unreached == dead {
+            settled = true;
             break;
         }
         inferred = round;
         dead = unreached;
     }
+    if !settled {
+        for ty in inferred.locals.values_mut() {
+            *ty = ty.join(Ty::int());
+        }
+    }
     inferred.failed = failed;
     (inferred, dead)
+}
+
+/// A local the final round widened past what its reads were lowered against,
+/// which only an unsettled fixpoint leaves behind (see [`MAX_ROUNDS`]). Its
+/// compares may be the wrong family, so it is an error rather than a guess.
+fn unsettled(inferred: &Inferred, learned: &Inferred, diags: &mut Diagnostics) {
+    for (decl, ty) in &learned.locals {
+        let known = inferred.locals.get(decl).copied();
+        if known.is_none_or(|known| known.join(*ty) != known) {
+            diags.push(
+                Diagnostic::error(
+                    Code::TypeConflict,
+                    *decl,
+                    "this variable's type did not settle",
+                )
+                .note(format!(
+                    "it widens to {ty:#} through a chain of assignments longer than the \
+                     compiler follows; a second `local` for one of them breaks the chain"
+                )),
+            );
+        }
+    }
 }
 
 /// `ReserveFile /plugin X.dll`, for every plugin an init callback can reach.
@@ -6774,9 +6810,12 @@ type Fold = fn(&Expr, &dyn Fn(&str) -> Option<ConstValue>) -> Option<ConstValue>
 /// is build-time, so a use folds rather than reads.
 #[derive(Clone, Debug)]
 enum Binding {
+    /// `decl` is where the name was declared: the key its widened type is
+    /// carried under between rounds, in [`Inferred::locals`].
     Local {
         slot: Slot,
         ty: Ty,
+        decl: Span,
     },
     Const(ConstValue),
     /// A name whose value failed, with the error already reported. Bound
@@ -6906,10 +6945,7 @@ impl BodyLowerer<'_, '_> {
             let binding = if failed {
                 Binding::Reported
             } else {
-                Binding::Local {
-                    slot,
-                    ty: signature.param(index),
-                }
+                self.register(param, slot, signature.param(index))
             };
             self.bind(&param.text, binding);
         }
@@ -6921,6 +6957,35 @@ impl BodyLowerer<'_, '_> {
         if let Some(scope) = self.scopes.last_mut() {
             scope.push((name.to_string(), binding));
         }
+    }
+
+    /// A register binding for `name`, holding `ty` joined with what an earlier
+    /// round saw assigned to it. The join is what a read *above* a widening
+    /// assignment needs — the top of a loop whose body counts down — since in
+    /// source order that read is lowered before the assignment is seen.
+    fn register(&self, name: &Name, slot: Slot, ty: Ty) -> Binding {
+        // A conflict here is a type that changed between rounds, not two
+        // assignments; the newer round's wins.
+        let ty = self
+            .known
+            .locals
+            .get(&name.span)
+            .and_then(|widened| ty.try_join(*widened))
+            .unwrap_or(ty);
+        Binding::Local {
+            slot,
+            ty,
+            decl: name.span,
+        }
+    }
+
+    fn lookup_mut(&mut self, name: &str) -> Option<&mut Binding> {
+        self.scopes
+            .iter_mut()
+            .rev()
+            .flat_map(|scope| scope.iter_mut().rev())
+            .find(|(bound, _)| bound == name)
+            .map(|(_, binding)| binding)
     }
 
     fn lookup(&self, name: &str) -> Option<&Binding> {
@@ -7111,7 +7176,7 @@ impl BodyLowerer<'_, '_> {
                 return;
             };
             for ((name, slot), ty) in names.iter().zip(slots).zip(types) {
-                self.bind(&name.text, Binding::Local { slot, ty });
+                self.bind(&name.text, self.register(name, slot, ty));
             }
             return;
         }
@@ -7158,7 +7223,7 @@ impl BodyLowerer<'_, '_> {
                 self.bind(&name.text, Binding::Reported);
                 continue;
             };
-            self.bind(&name.text, Binding::Local { slot, ty });
+            self.bind(&name.text, self.register(name, slot, ty));
         }
     }
 
@@ -7279,7 +7344,7 @@ impl BodyLowerer<'_, '_> {
     /// holds, or `None` once the reason it has none is reported.
     fn assign_slot(&mut self, name: &Name) -> Option<(Slot, Option<Ty>)> {
         Some(match self.lookup(&name.text).cloned() {
-            Some(Binding::Local { slot, ty }) => (slot, Some(ty)),
+            Some(Binding::Local { slot, ty, .. }) => (slot, Some(ty)),
             Some(Binding::Reported) => return None,
             Some(Binding::Const(_)) => {
                 self.diags.push(
@@ -7327,13 +7392,20 @@ impl BodyLowerer<'_, '_> {
     }
 
     /// Checks the type `name` was just assigned against the one it held, and
-    /// records a global's.
+    /// widens the one it holds to both.
+    ///
+    /// Two ints are one type for this: `x = x - 5` after `local x = 0` widens
+    /// `x` to an int of unknown sign rather than conflicting. The widening is
+    /// not cosmetic — sign picks `IntCmpU` over `IntCmp` — so it is recorded
+    /// for the next round as well as here, and every read sees it.
     fn assigned(&mut self, target: &Expr, name: &Name, slot: Slot, declared: Option<Ty>, ty: Ty) {
         match (slot, declared) {
             // An `Unknown` here is an earlier fixpoint round's guess, seeded
             // without sites — not an assignment the author wrote — so it
             // yields to the type this one settles on.
-            (Slot::Global(name), Some(previous)) if previous != ty && previous != Ty::Unknown => {
+            (Slot::Global(name), Some(previous))
+                if previous != Ty::Unknown && previous.try_join(ty).is_none() =>
+            {
                 let sites = self
                     .globals
                     .get(&name)
@@ -7342,7 +7414,7 @@ impl BodyLowerer<'_, '_> {
                 let mut diagnostic = Diagnostic::error(
                     Code::TypeConflict,
                     target.span(),
-                    format!("`{name}` is assigned a {ty} here and a {previous} elsewhere"),
+                    format!("`{name}` is assigned {ty:#} here and {previous:#} elsewhere"),
                 )
                 .note("a `Var` is one slot, so a global has one type for its lifetime");
                 for site in sites {
@@ -7352,18 +7424,29 @@ impl BodyLowerer<'_, '_> {
             }
             (Slot::Global(name), _) => {
                 let entry = self.globals.entry(name).or_insert((ty, Vec::new()));
-                entry.0 = ty;
+                entry.0 = entry.0.try_join(ty).unwrap_or(ty);
                 entry.1.push(target.span());
             }
-            (_, Some(previous)) if previous != ty => {
+            (_, Some(previous)) if previous.try_join(ty).is_none() => {
                 self.diags.push(
                     Diagnostic::error(
                         Code::TypeConflict,
                         target.span(),
-                        format!("`{}` holds a {previous} and is assigned a {ty}", name.text),
+                        format!("`{}` holds {previous:#} and is assigned {ty:#}", name.text),
                     )
                     .note("a register is one slot; declare a second `local` instead"),
                 );
+            }
+            // Recorded even when nothing widened, because this round's binding
+            // may hold the widening only because the last round recorded it.
+            (_, Some(previous)) => {
+                let widened = previous.join(ty);
+                if let Some(Binding::Local { ty, decl, .. }) = self.lookup_mut(&name.text) {
+                    *ty = widened;
+                    let decl = *decl;
+                    let learned = self.learned.locals.entry(decl).or_insert(widened);
+                    *learned = learned.join(widened);
+                }
             }
             _ => {}
         }
@@ -7577,10 +7660,7 @@ impl BodyLowerer<'_, '_> {
         };
         self.scopes.push(vec![(
             name.text.clone(),
-            Binding::Local {
-                slot: slot.clone(),
-                ty: counter_ty,
-            },
+            self.register(name, slot.clone(), counter_ty),
         )]);
 
         let counter = ir::Arg::slot(slot.clone());
@@ -7903,7 +7983,7 @@ impl BodyLowerer<'_, '_> {
 
         self.scopes.push(vec![(
             name.text.clone(),
-            Binding::Local { slot, ty: Ty::Str },
+            self.register(name, slot, Ty::Str),
         )]);
         self.loops.push(LoopTargets {
             break_to: end,
@@ -8205,13 +8285,14 @@ impl BodyLowerer<'_, '_> {
                 ));
                 scope.push((
                     name.text.clone(),
-                    Binding::Local {
+                    lowerer.register(
+                        name,
                         slot,
-                        ty: match protocol.types[index] {
+                        match protocol.types[index] {
                             callback::Kind::Text => Ty::Str,
                             callback::Kind::Count => Ty::nonneg(),
                         },
-                    },
+                    ),
                 ));
             }
 

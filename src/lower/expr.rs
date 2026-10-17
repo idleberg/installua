@@ -120,7 +120,7 @@ impl BodyLowerer<'_, '_> {
 
         match expr {
             Expr::Name(name) => match self.lookup(&name.text) {
-                Some(Binding::Local { slot, ty }) => Some(Typed {
+                Some(Binding::Local { slot, ty, .. }) => Some(Typed {
                     arg: ir::Arg::slot(slot.clone()),
                     ty: *ty,
                 }),

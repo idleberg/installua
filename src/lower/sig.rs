@@ -17,6 +17,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::diag::Span;
 use crate::resolve::Resolved;
 use crate::types::Ty;
 
@@ -66,6 +67,10 @@ pub struct Inferred {
     /// global still sees the right type — the one thing Phase 2 left
     /// order-dependent.
     pub globals: BTreeMap<String, Ty>,
+    /// A register binding's type widened by an assignment, keyed by where it
+    /// was declared. A read lowered above the assignment — the top of a loop
+    /// whose body counts down — sees it from the next round on.
+    pub locals: BTreeMap<Span, Ty>,
     /// Kept out of the rounds: [`crate::lower::lower`] strips it from each one
     /// and hands only the settled round's to the round that reports.
     pub failed: Failed,

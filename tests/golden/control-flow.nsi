@@ -64,6 +64,12 @@ __GENERATED_for_8_body:
   IntOp $2 $2 + $1
   Goto __GENERATED_for_8_top
 __GENERATED_for_8_end:
+  StrCpy $0 3
+__GENERATED_while_9_top:
+  IntCmp $0 0 __GENERATED_while_9_end __GENERATED_while_9_end 0
+  IntOp $0 $0 - 1
+  Goto __GENERATED_while_9_top
+__GENERATED_while_9_end:
   StrCpy $state "installed"
   Call report
 SectionEnd

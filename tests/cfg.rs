@@ -429,6 +429,73 @@ fn a_global_has_one_type() {
     assert!(diags.contains(Code::TypeConflict));
 }
 
+/// Two ints are one type, whatever their sign: a global assigned `0` and then
+/// `1 << 31` holds an int of unknown sign, and its compare is signed.
+#[test]
+fn a_global_widens_to_both_its_ints() {
+    let body = body(&program(
+        "n = 0\nn = 1 << 31\nif n > 0 then detailPrint(\"x\") end",
+    ));
+    assert_eq!(
+        shape(&body),
+        vec![
+            "StrCpy",
+            "StrCpy",
+            "IntCmp",
+            "DetailPrint",
+            "__GENERATED_endif_0:",
+        ]
+    );
+}
+
+/// The same for a `local`, and the test at the top of the loop is lowered
+/// before the `i - 1` that widens `i`: only the fixpoint lets it see the
+/// widening, and an unsigned test would read `-1` as huge.
+#[test]
+fn a_countdown_compares_signed() {
+    let body = body(&program("local i = 10\nwhile i > 0 do\ni = i - 1\nend"));
+    assert_eq!(
+        shape(&body),
+        vec![
+            "StrCpy",
+            "__GENERATED_while_0_top:",
+            "IntCmp",
+            "IntOp",
+            "Goto",
+            "__GENERATED_while_0_end:",
+        ]
+    );
+}
+
+/// Each copy across the back-edge costs the fixpoint a round, so twelve run
+/// past `MAX_ROUNDS` with `x1` still guessed `nonneg`. Out of rounds, every
+/// widened local loses its sign, and the test is signed anyway.
+#[test]
+fn an_unsettled_countdown_still_compares_signed() {
+    let declare: String = (1..=12).map(|i| format!("local x{i} = 0\n")).collect();
+    let copy: String = (1..12).map(|i| format!("x{i} = x{}\n", i + 1)).collect();
+    let body = body(&program(&format!(
+        "{declare}while x1 > 0 do\n{copy}x12 = x12 - 1\nend"
+    )));
+    let tests: Vec<String> = shape(&body)
+        .into_iter()
+        .filter(|name| name.starts_with("IntCmp"))
+        .collect();
+    assert_eq!(tests, vec!["IntCmp"]);
+}
+
+/// An int and a string still conflict, and the message has its articles.
+#[test]
+fn an_int_and_a_string_conflict() {
+    let diags = errors(&program("local x = 0\nx = \"a\""));
+    assert!(diags.contains(Code::TypeConflict));
+    assert!(
+        diags
+            .render("<test>")
+            .contains("holds an int and is assigned a string")
+    );
+}
+
 /// A comparison whose operands disagree is a hard error naming both, rather
 /// than a `StrCmp` that makes `"10" < "9"` true and `10 < 9` false with NSIS
 /// objecting to neither.

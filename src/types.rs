@@ -49,10 +49,9 @@ pub enum Ty {
     Str,
     Bool,
     Handle,
-    /// The lattice's top. Nothing in this phase produces one — the only source
-    /// is a call whose return type needs the interprocedural fixpoint, which is
-    /// Phase 3's — but comparisons already refuse it rather than guessing,
-    /// which is the rule the lattice exists to state.
+    /// The lattice's top: two observations that disagree, or a call whose
+    /// return type the fixpoint has not settled. Comparisons refuse it rather
+    /// than guessing, which is the rule the lattice exists to state.
     Unknown,
 }
 
@@ -94,6 +93,16 @@ impl Ty {
                 sign: a.sign.join(b.sign),
             }),
             _ => Ty::Unknown,
+        }
+    }
+
+    /// The join, or `None` where it is a conflict: two known types that
+    /// disagree, or a known one meeting `Unknown`. A slot already holding
+    /// `Unknown` stays `Unknown` without a second report.
+    pub fn try_join(self, other: Ty) -> Option<Ty> {
+        match self.join(other) {
+            Ty::Unknown if self != other => None,
+            joined => Some(joined),
         }
     }
 }

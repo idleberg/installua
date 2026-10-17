@@ -151,9 +151,10 @@ installer {
 
 		group("Group2", {
 			section("Integer", function()
-				-- The `IntOp`s are `raw`: Lua's `>>` is NSIS's `>>>`, with no
-				-- spelling for NSIS's arithmetic `>>`, and a global assigned `0`
-				-- cannot be assigned an int of unknown sign (see KNOWN-ISSUES.md).
+				-- The `IntOp`s are `raw` because the compiler folds the constant
+				-- ones, and this section tests NSIS's arithmetic at run time.
+				-- `1 // 0` needs none: division by zero is never folded.
+				-- NSIS's arithmetic `>>` also has no spelling (see KNOWN-ISSUES.md).
 				raw [[
 					IntOp $n 0xffffffff >> 31
 				]]
@@ -179,9 +180,7 @@ installer {
 					messageBox { text = "ASSERT: IntCmpU " .. n .. " 0xC0000000 (bigtest.nsi:166)", icon = "STOP" }
 				end
 				clearErrors()
-				raw [[
-					IntOp $n 1 / 0
-				]]
+				n = 1 // 0
 				-- Division by zero must set the error flag.
 				if not errors() then
 					messageBox { text = "ASSERT: IfErrors  (bigtest.nsi:169)", icon = "STOP" }

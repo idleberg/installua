@@ -22,21 +22,6 @@ ones ordinary code reaches have real diagnostics now. What is left:
 - The `Handled` arms, the operator fallback and the call fallbacks are
   unreachable and stay.
 
-## Two ints that differ in sign are a type conflict
-
-`local x = 0` followed by `x = x - 5` is rejected: "`x` holds a int and is
-assigned a int". A global gets the same, "is assigned a int here and a int
-elsewhere". `assigned` in `src/lower/mod.rs` compares whole `Ty`s, so the
-sign attribute counts. A literal is `nonneg`, while a subtraction or
-`1 << 31` has unknown sign. So any counter that counts down fails. The
-message also says "a int" because it writes `a {ty}` and not `{ty:#}`.
-
-For a global, the fix is to store the join and let the fixpoint carry it
-through `Inferred.globals`. For a local, the binding keeps the type of its
-`local`, so a read above a widening assignment, such as a loop body, needs that
-join too, kept per declaration across rounds. The bigtest port works around it
-with `raw` `IntOp`s on a global that Lua only ever assigns `0`.
-
 ## NSIS's arithmetic `>>` has no spelling
 
 Lua's `>>` is emitted as NSIS's `>>>`, and the docs send the arithmetic shift to

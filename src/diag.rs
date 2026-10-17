@@ -12,7 +12,8 @@ use std::fmt;
 ///
 /// `full-moon` reports `line`/`character` 1-based, which is also what
 /// `makensis` and every editor protocol want, so no conversion happens here.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// `Ord` only so a declaration's span can key a map; the order means nothing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
     /// Which source this span is measured in — an index into [`Files`], where
     /// `0` is always the file the build was started from.
