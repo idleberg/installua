@@ -15,7 +15,6 @@ OutFile "${APP}-setup.exe"
 InstallDir "$PROGRAMFILES64\${APP}"
 
 ${Using:StrFunc} StrCase
-${Using:StrFunc} StrLoc
 
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -69,12 +68,21 @@ SectionEnd
 
 Function majorOf
   Pop $0
-  ${StrLoc} $1 $0 "." ">"
-  StrCmp $1 "" 0 __GENERATED_find_0_hit
-  StrCpy $1 -1
-__GENERATED_find_0_hit:
+  StrCpy $1 0
+__GENERATED_find_0:
+  StrCpy $2 $0 1 $1
+  StrCmpS $2 "." 0 __GENERATED_find_0_end
   IntOp $1 $1 + 1
+  Goto __GENERATED_find_0_done
+__GENERATED_find_0_end:
+  StrCmp $2 "" 0 __GENERATED_find_0_step
+  StrCpy $1 0
+__GENERATED_find_0_done:
   IntOp $1 $1 - 1
   StrCpy $0 $0 $1 0
   Push $0
+  Return
+__GENERATED_find_0_step:
+  IntOp $1 $1 + 1
+  Goto __GENERATED_find_0
 FunctionEnd

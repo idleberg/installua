@@ -101,7 +101,7 @@ pub const ROWS: &[(&str, Class)] = &[
     ),
     (
         "StrFunc",
-        Class::Lowering("`string.lower`, `string.upper` and `string.find`"),
+        Class::Lowering("`string.lower` and `string.upper`"),
     ),
     ("TextFunc", Class::Exposed("`import \"TextFunc\"`")),
     (

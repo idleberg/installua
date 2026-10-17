@@ -73,6 +73,23 @@ impl Ty {
         })
     }
 
+    /// A literal's type. Its sign is known, and so is its width: NSIS's 32-bit
+    /// `IntCmp` reads `0x100000000` as 0, so a value outside what 32 bits can
+    /// spell, either way round, is compared with `Int64Cmp`.
+    pub fn literal(value: i64) -> Ty {
+        let width = if (i64::from(i32::MIN)..=i64::from(u32::MAX)).contains(&value) {
+            Width::W32
+        } else {
+            Width::W64
+        };
+        let sign = if value >= 0 {
+            Sign::NonNeg
+        } else {
+            Sign::Unknown
+        };
+        Ty::Int(Int { width, sign })
+    }
+
     pub fn as_int(self) -> Option<Int> {
         match self {
             Ty::Int(int) => Some(int),
@@ -82,6 +99,12 @@ impl Ty {
 
     pub fn is_int(self) -> bool {
         matches!(self, Ty::Int(_))
+    }
+
+    /// A 64-bit int: one NSIS can compare, through `System::Int64Op`, and
+    /// cannot compute with, since `IntOp` is 32-bit.
+    pub fn is_int64(self) -> bool {
+        self.as_int().is_some_and(|int| int.width == Width::W64)
     }
 
     /// The lattice join, used where two paths reach one slot.

@@ -5,7 +5,9 @@ description: "`string.*`, arithmetic, comparison."
 
 Arithmetic and comparison are Lua operators, compiled to `IntOp` and the
 `*Cmp` family; width and sign are attributes of the type, so there is no
-`Int64Cmp` to write. There are no floats.
+`Int64Cmp` to write. A literal past 32 bits is a 64-bit int, which compares
+through `System::Int64Op`, as LogicLib's `L<` does, because makensis refuses
+`Int64Cmp` for a 32-bit target. It cannot be computed with. There are no floats.
 
 | NSIS                                                       | Installua                                                           |
 | ---------------------------------------------------------- | ------------------------------------------------------------------- |
@@ -26,7 +28,7 @@ Each compiles to NSIS instructions and `StrFunc` macros — the
 | ------------------------------------------------ | ------------------------------------- |
 | `string.len(s)` → `int`                          | counts UTF-16 code units              |
 | `string.sub(s, i[, j])` → `string`               | negative indices follow Lua, not NSIS, except that one reaching before the start gives `""` |
-| `string.find(s, needle)` → `int`                 | `0` when absent, where Lua says `nil` |
+| `string.find(s, needle)` → `int`                 | `0` when absent, where Lua says `nil`; case-sensitive, as Lua's is |
 | `string.lower(s)` / `string.upper(s)` → `string` |                                       |
 | `string.format(fmt, value)` → `string`           | `IntFmt`, so one integer and one of `%c %d %i %u %x %X` |
 

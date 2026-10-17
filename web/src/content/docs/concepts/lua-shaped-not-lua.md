@@ -151,7 +151,7 @@ build time, and they are **two different names** on purpose.
 | `tostring`, `tonumber` (casts; emit no code) | `string.len` → `StrLen`                                    | `string.rep`, `.reverse`, `.byte`, `.char`                 |
 |                                              | `string.sub` → `StrCpy`, 1-based → 0-based                 | `string.match`/`.gmatch`/`.gsub`                           |
 |                                              | `string.upper`/`.lower` → `${StrCase}`                     | `math.floor` and the rest of `math.*`, `table.*`, `type`, `assert` |
-|                                              | `string.find` **plain**, two arguments → `${StrLoc}`       | `os.getenv` — use `readEnvStr`                             |
+|                                              | `string.find` **plain**, two arguments, case-sensitive     | `os.getenv` — use `readEnvStr`                             |
 |                                              | `string.format` — `%d %i %u %x %X %c` only                 | `os.remove`, `os.rename` — use `delete`, `rename`          |
 |                                              | `math.abs`/`.max`/`.min` → compare and branch              | `io.*` — use the `fileOpen` handle                         |
 |                                              | `os.exit` → `Quit`                                         | `error`, `pcall`, `xpcall`                                 |

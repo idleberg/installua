@@ -1356,7 +1356,7 @@ struct Lowerer<'a, 'p> {
 pub struct Requirements {
     /// Headers to `!include`, by name and without the extension.
     pub headers: BTreeSet<String>,
-    /// `StrFunc` functions to declare, by macro name: `StrCase`, `StrLoc`.
+    /// `StrFunc` functions to declare, by macro name: `StrCase`.
     pub str_func: BTreeSet<String>,
     /// Functions a body asked the compiler to write: the callback behind a
     /// `for … in fileFunc.locate(…)`.
@@ -7658,6 +7658,17 @@ impl BodyLowerer<'_, '_> {
             let between = start_ty.join(limit_ty);
             (between, between.join(Ty::int()))
         };
+        if test_ty.is_int64() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    span,
+                    "a `for` over a 64-bit int has no lowering",
+                )
+                .note("the counter steps with `IntOp`, which computes in 32 bits"),
+            );
+            return;
+        }
         self.scopes.push(vec![(
             name.text.clone(),
             self.register(name, slot.clone(), counter_ty),

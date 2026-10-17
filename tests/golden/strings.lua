@@ -1,5 +1,6 @@
 -- `string.find` counts from 1 as Lua does, and answers `0` for a miss where
--- Lua answers `nil`: a hit at the very start, a hit further on, and a miss.
+-- Lua answers `nil`: a hit at the very start, a hit further on, a miss, and
+-- a miss on case alone, since Lua's `find` does not ignore it.
 --
 -- `string.sub` takes Lua's positions and folds them to `StrCpy`'s length and
 -- offset: a middle, the last character, a negative end, both negative, a
@@ -23,6 +24,7 @@ installer {
 		detailPrint(tostring(string.find(url, "ftp")))
 		detailPrint(tostring(string.find(url, "://")))
 		detailPrint(tostring(string.find(host, "://")))
+		detailPrint(tostring(string.find(url, "FTP")))
 
 		local word = "installua"
 		detailPrint(string.sub(word, 2, 4))

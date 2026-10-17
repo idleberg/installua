@@ -484,6 +484,32 @@ fn an_unsettled_countdown_still_compares_signed() {
     assert_eq!(tests, vec!["IntCmp"]);
 }
 
+/// A literal past 32 bits compares through `System::Int64Op`: `IntCmpU` would
+/// read both as 0, and makensis refuses `Int64Cmp` for a 32-bit target.
+/// Arithmetic on one has no lowering, so it is an error rather than a
+/// truncation.
+#[test]
+fn a_64_bit_literal_compares_64_bit() {
+    let body = body(&program(
+        "local a, b = 0x100000000, 0x200000000\nif a < b then detailPrint(\"x\") end",
+    ));
+    assert_eq!(
+        shape(&body),
+        vec![
+            "StrCpy",
+            "StrCpy",
+            "System::Int64Op",
+            "Pop",
+            "IntCmp",
+            "DetailPrint",
+            "__GENERATED_endif_0:",
+        ]
+    );
+
+    let diags = errors(&program("local a = 0x100000000\na = a + 1"));
+    assert!(diags.contains(Code::TypeMismatch));
+}
+
 /// An int and a string still conflict, and the message has its articles.
 #[test]
 fn an_int_and_a_string_conflict() {

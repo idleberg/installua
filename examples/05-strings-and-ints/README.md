@@ -36,28 +36,16 @@ below.
 for its *value* costs `${StrCase} $1 "$0" "U"`. Same function, two lowerings, chosen by
 whether the result is compared or used — which is the peephole that was promised.
 
-**Two `${Using:StrFunc}` lines, collected and emitted once.** `StrCase` and `StrLoc` are
-reached from two different places (a section and a `func`); the pass emits one line each,
-sorted, at top level. Verified load-bearing: removing either aborts the build with
-`You forgot ${Using:StrFunc} …`, which is `!error`, not a warning.
+**`${Using:StrFunc}` lines, collected and emitted once.** `StrCase` is reached from two
+different places (a section and a `func`); the pass emits one line, at top level. Verified
+load-bearing: removing it aborts the build with `You forgot ${Using:StrFunc} …`, which is
+`!error`, not a warning.
 
-**`string.find` and `string.sub`'s off-by-ones cancel, and folding them is required.**
-`string.find` is 1-based and `${StrLoc}` is 0-based, so `dot = StrLoc + 1`.
-`string.sub(v, 1, dot - 1)` wants `maxlen = dot - 1 = StrLoc`. The `+1` and the `-1` cancel
-exactly, and the emitted code is one `StrCpy`:
-
-```nsis
-  ${StrLoc} $1 "$0" "." ">"
-  StrCpy $2 $0 $1 0
-```
-
-An adapter that materialised the 1-based value first would emit `IntOp $1 $1 + 1` and
-`IntOp $1 $1 - 1` around it. So the adapters must produce foldable IR rather than finished
-instructions — otherwise the most idiomatic string expression in the language carries two
-dead instructions.
-
-The compiler does not fold them yet, and a miss now adds a `StrCmp` too: `${StrLoc}` writes
-`""`, which `string.find` turns into `0` by way of `-1` before the `+1`.
+**`string.find` is a loop, not `${StrLoc}`.** `${StrLoc}` compares with `StrCmp`, which
+ignores case, and Lua's `find` does not. So the compiler walks the subject with `StrCpy`
+and `StrCmpS`, and the hit is the offset `+ 1`. `string.sub(v, 1, dot - 1)` then wants
+`maxlen = dot - 1`, the offset again: the `+1` and the `-1` would cancel, but the compiler
+does not fold them yet.
 
 ## The type lattice lands on `unknown` zero times
 
@@ -96,7 +84,7 @@ string replace and `http://` in a `File` position would be silently mangled.
 ## Exposed commands used
 
 `setOutPath` · `readRegStr` · `detailPrint` · `abort` · `string.len` (`StrLen`) ·
-`string.lower`/`upper` (`${StrCase}`, or nothing) · `string.find` (`${StrLoc}`) ·
+`string.lower`/`upper` (`${StrCase}`, or nothing) · `string.find` (`StrCpy`/`StrCmpS` loop) ·
 `string.sub` (`StrCpy`) · `string.format` (`IntFmt`) · `//` · `%` · `-` · `>` · `==`
 
 Headers: `FileFunc.driveSpace` · `WordFunc.versionCompare` · `StrFunc` (init lines only)

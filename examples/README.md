@@ -108,7 +108,7 @@ that is pure where `errors()` is not.
 **Headers reached — 5**
 
 `MUI2` · `FileFunc` (`getSize`, `driveSpace`) · `WordFunc` (`versionCompare`) ·
-`StrFunc` (`StrCase`, `StrLoc`) · `TextFunc` (`TrimNewLines`, emitted not written)
+`StrFunc` (`StrCase`) · `TextFunc` (`TrimNewLines`, emitted not written)
 
 **Plugins reached — 3**
 

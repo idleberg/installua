@@ -647,6 +647,17 @@ impl BodyLowerer<'_, '_> {
     }
 
     pub(super) fn require_int(&mut self, value: &Typed, span: Span) -> Option<()> {
+        if value.ty.is_int64() {
+            self.diags.push(
+                Diagnostic::error(
+                    Code::TypeMismatch,
+                    span,
+                    "arithmetic on a 64-bit int has no lowering",
+                )
+                .note("`IntOp` computes in 32 bits; a 64-bit value can only be compared"),
+            );
+            return None;
+        }
         if value.ty.is_int() {
             return Some(());
         }
@@ -2576,56 +2587,107 @@ impl BodyLowerer<'_, '_> {
                     return self.wrong_arity(name, 2, args.len(), span);
                 };
                 let subject = self.value(subject)?;
+                let known = match self.constant(needle) {
+                    Some(ConstValue::Str(needle)) => Some(needle.chars().count() as i64),
+                    _ => None,
+                };
                 let needle = self.value(needle)?;
-                self.requires.str_func("StrLoc");
-                // `${StrLoc}` counts from 0 and Lua counts from 1, so the `+ 1`
-                // is the conversion rather than an optimisation nobody did.
-                // A miss is `0`, where Lua answers `nil`: there is no `nil`,
-                // and no match starts at 0. `${StrLoc}` writes `""` on a miss,
-                // which `IntOp` reads as 0 and the `+ 1` would turn into a hit
-                // at the very start, so a miss is set to `-1` first.
-                self.emit(
-                    ir::Instruction::new(
-                        "${StrLoc}",
-                        vec![
-                            ir::Arg::dest(dest.clone()),
-                            subject.arg,
-                            needle.arg,
-                            ir::Arg::str(">"),
-                        ],
-                    )
-                    .atomic(),
-                );
+                // A loop rather than `${StrLoc}`: StrFunc compares with
+                // `StrCmp`, which ignores case, and Lua's `find` does not —
+                // nor does the fold, so the two would disagree on `"ABC"`.
+                // `dest` is written only at the end, because it may be the
+                // subject or the needle: `x = string.find(x, y)`.
+                let at = self.claim_temp(span);
+                let part = self.claim_temp(span);
+                let at_arg = ir::Arg::slot(at.clone());
+                let len = match known {
+                    Some(count) => ir::Arg::int(count),
+                    None => {
+                        let len = self.claim_temp(span);
+                        self.emit(ir::Instruction::new(
+                            "StrLen",
+                            vec![ir::Arg::dest(len.clone()), needle.arg.clone()],
+                        ));
+                        ir::Arg::slot(len)
+                    }
+                };
+                self.emit(ir::Instruction::new(
+                    "StrCpy",
+                    vec![ir::Arg::dest(at.clone()), ir::Arg::int(0)],
+                ));
                 let n = self.body.construct();
+                let head = self.fresh(format!("find_{n}"));
+                let end = self.fresh(format!("find_{n}_end"));
+                let step = self.fresh(format!("find_{n}_step"));
                 let miss = self.fresh(format!("find_{n}_miss"));
                 let hit = self.fresh(format!("find_{n}_hit"));
+                let done = self.fresh(format!("find_{n}_done"));
+                self.terminate(Terminator::Jump(head), head);
+                self.emit(ir::Instruction::new(
+                    "StrCpy",
+                    vec![
+                        ir::Arg::dest(part.clone()),
+                        subject.arg,
+                        len,
+                        at_arg.clone(),
+                    ],
+                ));
                 self.terminate(
                     Terminator::Branch {
                         test: Test::Str {
-                            lhs: ir::Arg::slot(dest.clone()),
+                            lhs: ir::Arg::slot(part.clone()),
+                            rhs: needle.arg,
+                            case_sensitive: true,
+                            negate: false,
+                        },
+                        then_block: hit,
+                        else_block: end,
+                    },
+                    end,
+                );
+                // Past the end `StrCpy` answers `""`. An empty needle has
+                // already matched at the start, as in Lua.
+                self.terminate(
+                    Terminator::Branch {
+                        test: Test::Str {
+                            lhs: ir::Arg::slot(part),
                             rhs: ir::Arg::str(""),
                             case_sensitive: false,
                             negate: false,
                         },
                         then_block: miss,
-                        else_block: hit,
+                        else_block: step,
                     },
-                    miss,
+                    step,
                 );
-                self.emit(ir::Instruction::new(
-                    "StrCpy",
-                    vec![ir::Arg::dest(dest.clone()), ir::Arg::int(-1)],
-                ));
-                self.terminate(Terminator::Jump(hit), hit);
                 self.emit(ir::Instruction::new(
                     "IntOp",
                     vec![
-                        ir::Arg::dest(dest.clone()),
-                        ir::Arg::slot(dest.clone()),
+                        ir::Arg::dest(at.clone()),
+                        at_arg.clone(),
                         ir::Arg::raw("+"),
                         ir::Arg::int(1),
                     ],
                 ));
+                self.terminate(Terminator::Jump(head), miss);
+                // A miss is `0`, where Lua answers `nil`: there is no `nil`,
+                // and no match starts at 0.
+                self.emit(ir::Instruction::new(
+                    "StrCpy",
+                    vec![ir::Arg::dest(dest.clone()), ir::Arg::int(0)],
+                ));
+                self.terminate(Terminator::Jump(done), hit);
+                // Lua counts from 1.
+                self.emit(ir::Instruction::new(
+                    "IntOp",
+                    vec![
+                        ir::Arg::dest(dest.clone()),
+                        at_arg,
+                        ir::Arg::raw("+"),
+                        ir::Arg::int(1),
+                    ],
+                ));
+                self.terminate(Terminator::Jump(done), done);
                 Some(Ty::nonneg())
             }
 
@@ -3653,6 +3715,59 @@ impl BodyLowerer<'_, '_> {
         );
     }
 
+    /// An int comparison as a branch test, `ty` being both operands joined.
+    ///
+    /// The unsigned member is used only when *both* operands are known
+    /// non-negative, which the join computes. Guessing the other way makes
+    /// `-1 < 0` false.
+    ///
+    /// A 64-bit one is `System::Int64Op`, as LogicLib's `L<` is: `Int64Cmp`
+    /// is refused by makensis for a 32-bit target, which is the default. It
+    /// compares signed, and that is exact, since no literal reaches 2^63.
+    pub(super) fn int_test(
+        &mut self,
+        op: CmpOp,
+        lhs: ir::Arg,
+        rhs: ir::Arg,
+        ty: Ty,
+        span: Span,
+    ) -> Test {
+        if !ty.is_int64() {
+            return Test::Int {
+                op,
+                lhs,
+                rhs,
+                family: cfg::IntFamily::of(ty),
+            };
+        }
+        // `Int64Op` has `<`, `>` and `=`; the other three are their negations.
+        let (operator, holds) = match op {
+            CmpOp::Eq => ("=", true),
+            CmpOp::Ne => ("=", false),
+            CmpOp::Lt => ("<", true),
+            CmpOp::Ge => ("<", false),
+            CmpOp::Gt => (">", true),
+            CmpOp::Le => (">", false),
+        };
+        // Emitted bare, not as an opaque site: `Int64Op` reads its arguments
+        // and pushes one value, and touches no register to need saving.
+        let result = self.claim_temp(span);
+        self.emit(ir::Instruction::new(
+            "System::Int64Op",
+            vec![lhs, ir::Arg::raw(operator), rhs],
+        ));
+        self.emit(ir::Instruction::new(
+            "Pop",
+            vec![ir::Arg::dest(result.clone())],
+        ));
+        Test::Int {
+            op: if holds { CmpOp::Ne } else { CmpOp::Eq },
+            lhs: ir::Arg::slot(result),
+            rhs: ir::Arg::int(0),
+            family: cfg::IntFamily::Int,
+        }
+    }
+
     /// A comparison. The type lattice, not the operator, decides which
     /// instruction this becomes — which is why the lattice is not deferrable
     /// past the first `if`.
@@ -3694,15 +3809,9 @@ impl BodyLowerer<'_, '_> {
         };
 
         let test = match (lhs.ty, rhs.ty) {
-            (a, b) if a.is_int() && b.is_int() => Test::Int {
-                op: cmp,
-                lhs: lhs.arg,
-                rhs: rhs.arg,
-                // The unsigned member is used only when *both* operands are
-                // known non-negative, which the join computes. Guessing the
-                // other way makes `-1 < 0` false.
-                family: cfg::IntFamily::of(a.join(b)),
-            },
+            (a, b) if a.is_int() && b.is_int() => {
+                self.int_test(cmp, lhs.arg, rhs.arg, a.join(b), span)
+            }
 
             (a, b) if a == b && a != Ty::Unknown => {
                 if !matches!(cmp, CmpOp::Eq | CmpOp::Ne) {

@@ -53,8 +53,7 @@ impl ConstValue {
         match self {
             // A literal's sign is known, and that is the cheapest place the
             // lattice ever learns it.
-            ConstValue::Int(value) if *value >= 0 => Ty::nonneg(),
-            ConstValue::Int(_) => Ty::int(),
+            ConstValue::Int(value) => Ty::literal(*value),
             ConstValue::Str(_) => Ty::Str,
             ConstValue::Bool(_) => Ty::Bool,
             ConstValue::List(_) | ConstValue::Record(_) => Ty::Unknown,
@@ -1656,8 +1655,8 @@ pub fn fold(expr: &Expr, lookup: &dyn Fn(&str) -> Option<ConstValue>) -> Option<
 ///
 /// Positions count characters, as NSIS's Unicode strings do, rather than
 /// Lua's bytes; the two agree on every ASCII path. `lower` and `upper` are
-/// ASCII-only, as Lua's are in the C locale. `find` is a plain search, as the
-/// runtime `${StrLoc}` is, and a miss is `0`, as there.
+/// ASCII-only, as Lua's are in the C locale. `find` is a plain, case-sensitive
+/// search, as the runtime loop is, and a miss is `0`, as there.
 fn string_call(name: &str, args: &[ConstValue]) -> Option<ConstValue> {
     use ConstValue::{Int, Str};
     match (name, args) {
