@@ -135,10 +135,12 @@ jobs:
         working-directory: setup
         run: |
           INSTALLUA="$GITHUB_WORKSPACE/target/${{ matrix.target }}/release/installua.exe"
+          VERSION="${{ steps.version.outputs.VERSION }}"
           "$INSTALLUA" init
           "$INSTALLUA" stubs
           "$INSTALLUA" build install.lua \
-            -D VERSION=${{ steps.version.outputs.VERSION }} \
+            -D VERSION="$VERSION" \
+            -D PRODUCT_VERSION="${VERSION%%-*}.0" \
             -D BINARY=../target/${{ matrix.target }}/release/installua.exe
           mv installua-*.exe "$GITHUB_WORKSPACE/"
 

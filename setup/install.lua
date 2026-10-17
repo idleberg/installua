@@ -2,6 +2,8 @@ local EnVar = plugin "EnVar"
 
 local APP <const> = "installua"
 local VERSION <const> = param("VERSION", "dev")
+-- VIProductVersion takes four numbers, so it cannot be VERSION ("dev", "0.3.0-beta.1").
+local PRODUCT_VERSION <const> = param("PRODUCT_VERSION", "0.0.0.0")
 local BINARY <const> = param("BINARY", "../target/release/installua.exe")
 
 -- Per-user install, so the Add/Remove Programs entry belongs under HKCU. HKLM
@@ -14,6 +16,7 @@ attributes {
   compressor = "lzma",
   requestExecutionLevel = "user",
   versionInfo = {
+    product = PRODUCT_VERSION,
     keys = {
       ProductName = APP,
       ProductVersion = VERSION,
