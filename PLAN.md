@@ -10,12 +10,12 @@ Bugs go in `KNOWN-ISSUES.md`.
 because Installua only writes MUI2 pages. A line the original writes inside a
 macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
 
-Ported: `example1`, `example2`, `Memento`, `MultiUser`, `one-section`,
-`primes`, `silent` and the five `Modern UI/` examples.
+Ported: `bigtest`, `example1`, `example2`, `Memento`, `MultiUser`,
+`one-section`, `primes`, `silent` and the five `Modern UI/` examples.
 
-Next, from `$NSISDIR/Examples`: `bigtest`, `LogicLib`, `languages`, `Library`,
-`StrFunc`, `unicode`, `VersionInfo`, the `FileFunc`/`TextFunc`/`WordFunc`
-ones, and the `nsDialogs/`, `StartMenu/` and `System/` directories.
+Next, from `$NSISDIR/Examples`: `LogicLib`, `languages`, `Library`, `StrFunc`,
+`unicode`, `VersionInfo`, the `FileFunc`/`TextFunc`/`WordFunc` ones,
+and the `nsDialogs/`, `StartMenu/` and `System/` directories.
 
 Not portable: `rtest` tests `GetLabelAddress` and `Call` through an address,
 both rejected.

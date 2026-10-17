@@ -24,6 +24,7 @@ use installua::diag::Diagnostics;
 /// Paths under `$NSISDIR/Examples`; the port is the same path in `tests/ports/`,
 /// lower-cased and with `-` for a space.
 const PORTS: &[&str] = &[
+    "bigtest",
     "example1",
     "example2",
     "Modern UI/Basic",
@@ -49,15 +50,34 @@ const HIDDEN: &[(&str, &str)] = &[
     ),
     // MUI2 writes it in `MUI_INTERFACE`, and refuses a second one.
     ("Memento", "XPStyle: on"),
+    // MUI2 writes these from its own defines, inside its macros.
+    ("bigtest", "CheckBitmap: "),
+    ("bigtest", "InstallColors: "),
+    ("bigtest", "LicenseData: "),
+    ("bigtest", "LicenseText: "),
+    ("bigtest", "UninstallIcon: "),
+    ("bigtest", "UninstallText: "),
+    ("bigtest", "XPStyle: on"),
+    // `File /a`, which the port leaves out, warns off Windows.
+    ("bigtest", "warning 5050: "),
+    // Has no spelling.
+    ("bigtest", "Nop"),
+    // The original leaves `try` in force after its last `File`, where it does
+    // nothing; the port puts back the default.
+    ("bigtest", "SetOverwrite: try"),
+    ("bigtest", "SetOverwrite: on"),
     // The original builds its application into a `!tempfile` with `!makensis`,
     // and the port installs a stand-in.
     ("MultiUser", "File: "),
 ];
 
 /// Names NSIS reads in any case, which an original does not always write the
-/// way the compiler does.
+/// way the compiler does, and numbers the compiler writes in decimal.
 const SPELLED: &[(&str, &str)] = &[
     ("ShCtx", "SHCTX"),
+    ("=0xdeadbeef", "=3735928559"),
+    // Octal, to NSIS.
+    ("DwordTest_0123=0123", "DwordTest_0123=83"),
     ("$InstDir", "$INSTDIR"),
     ("$SMPrograms", "$SMPROGRAMS"),
 ];
@@ -80,10 +100,15 @@ const DROPPED: &[&str] = &[
     "IntOp: ",
     "IntCmp",
     "IfSilent",
+    "IfErrors",
+    "IfFileExists",
     "Goto: ",
     "Call ",
     "Return",
-    "Function",
+    "Function: ",
+    // How a `func` takes its arguments.
+    "Push: ",
+    "Pop: ",
     // Written around the one `File` it is for, and put back after it.
     "AllowSkipFiles: ",
     // Globals, renamed below like registers: the compiler names its own.
@@ -124,9 +149,11 @@ fn ports_do_what_the_originals_do() {
         // The original installs itself, so it is also the file the port's `file()` reads.
         std::fs::copy(examples.join(format!("{name}.nsi")), directory.join(&file))
             .expect("copy the original");
-        // What MultiUser.nsi builds its pretend application from.
-        std::fs::copy(examples.join("AppGen.nsi"), directory.join("AppGen.nsi"))
-            .expect("copy AppGen.nsi");
+        // What MultiUser.nsi builds its pretend application from, and what
+        // bigtest.nsi installs.
+        for other in ["AppGen.nsi", "silent.nsi", "LogicLib.nsi"] {
+            std::fs::copy(examples.join(other), directory.join(other)).expect(other);
+        }
         std::fs::write(directory.join("port.nsi"), port(name)).expect("write the port");
 
         let hidden: Vec<&str> = HIDDEN
@@ -221,8 +248,28 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
 }
 
 /// `$0`–`$9`, `$R0`–`$R9` and the globals `vars` declares renamed `r0`, `r1`,
-/// … in order of first use.
+/// … in order of first use, counted afresh in each section and function: which
+/// register a body reuses for an unrelated value is the compiler's choice.
+/// `FunctionEnd` is kept this far only to mark where a function stops.
 fn registers(trace: &str, vars: &[&str]) -> String {
+    let mut bodies = vec![String::new()];
+    for line in trace.lines() {
+        if line.starts_with("Section: ") {
+            bodies.push(String::new());
+        }
+        if line != "FunctionEnd" {
+            let body = bodies.last_mut().expect("one body");
+            body.push_str(line);
+            body.push('\n');
+        } else {
+            bodies.push(String::new());
+        }
+    }
+    let renamed: String = bodies.iter().map(|body| first_use(body, vars)).collect();
+    renamed.trim_end().to_string()
+}
+
+fn first_use(trace: &str, vars: &[&str]) -> String {
     let mut seen: Vec<&str> = Vec::new();
     let mut out = String::new();
     let mut rest = trace;
