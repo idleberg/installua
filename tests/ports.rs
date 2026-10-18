@@ -27,6 +27,7 @@ const PORTS: &[&str] = &[
     "bigtest",
     "example1",
     "example2",
+    "languages",
     "LogicLib",
     "Modern UI/Basic",
     "Modern UI/HeaderBitmap",
@@ -90,6 +91,14 @@ const HIDDEN: &[(&str, &str)] = &[
     // English, loaded only for `${LANG_ENGLISH}`; with no language file at
     // all it is the one NSIS builds in.
     ("VersionInfo", "LoadLanguageFile: "),
+    // MUI2 writes these from its own defines, inside its macros: the license
+    // page, `MUI_LANGUAGE` and `MUI_LANGDLL_DISPLAY`.
+    ("languages", "LicenseData: "),
+    ("languages", "LoadLanguageFile: "),
+    ("languages", "XPStyle: on"),
+    ("languages", "File: \"LangDLL.dll\""),
+    ("languages", "Plugin command: LangDialog "),
+    ("languages", "Abort: "),
     // The original builds its application into a `!tempfile` with `!makensis`,
     // and the port installs a stand-in.
     ("MultiUser", "File: "),
@@ -108,6 +117,16 @@ const SPELLED: &[(&str, &str)] = &[
     ("FileWriteWord: 0xD83C", "FileWriteWord: 55356"),
     ("FileWriteWord: 0xDF0D", "FileWriteWord: 57101"),
     ("SetShellVarContext: All", "SetShellVarContext: all"),
+    // The port sets the components page's text through MUI2, as a language
+    // string of its own, and the compiler names the license's.
+    (
+        "LangString: \"^ComponentsText\"",
+        "LangString: \"ComponentsText\"",
+    ),
+    (
+        "LicenseLangString: \"myLicenseData\"",
+        "LicenseLangString: \"licenseData\"",
+    ),
     // The readme: "the order of the switches doesn't matter". The compiler
     // writes them in the declaration's order.
     (
@@ -181,9 +200,22 @@ fn ports_do_what_the_originals_do() {
         ));
         std::fs::create_dir_all(&directory).expect("temp directory");
         // The original installs itself, so it is also the file the port's `file()` reads.
-        // What MultiUser.nsi builds its pretend application from, and what
-        // bigtest.nsi installs.
-        for other in ["AppGen.nsi", "silent.nsi", "LogicLib.nsi"] {
+        // What MultiUser.nsi builds its pretend application from, what
+        // bigtest.nsi installs, and the license per language in languages.nsi.
+        for other in [
+            "AppGen.nsi",
+            "silent.nsi",
+            "LogicLib.nsi",
+            "bigtest.nsi",
+            "WordFuncTest.nsi",
+            "waplugin.nsi",
+            "example1.nsi",
+            "example2.nsi",
+            "gfx.nsi",
+            "makensis.nsi",
+            "one-section.nsi",
+            "primes.nsi",
+        ] {
             std::fs::copy(examples.join(other), directory.join(other)).expect(other);
         }
         // LogicLib.nsi turns its own trace off with `!verbose 2`.

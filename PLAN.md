@@ -10,13 +10,18 @@ Bugs go in `KNOWN-ISSUES.md`.
 because Installua only writes MUI2 pages. A line the original writes inside a
 macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
 
-Ported: `bigtest`, `example1`, `example2`, `LogicLib`, `Memento`, `MultiUser`,
-`one-section`, `primes`, `silent`, `StartMenu/Example`, `unicode`,
+Ported: `bigtest`, `example1`, `example2`, `languages`, `LogicLib`, `Memento`,
+`MultiUser`, `one-section`, `primes`, `silent`, `StartMenu/Example`, `unicode`,
 `VersionInfo` and the five `Modern UI/` examples.
 
-Next, from `$NSISDIR/Examples`: `languages`, `Library`, `StrFunc`,
-the `FileFunc`/`TextFunc`/`WordFunc` ones, and the `nsDialogs/` and
-`System/` directories.
+Next, from `$NSISDIR/Examples`: `Library`, `StrFunc`, the
+`FileFunc`/`TextFunc`/`WordFunc` ones, and the `nsDialogs/` directory.
+
+Waiting: `System` names registers in nearly every `System::Call` (`r1`,
+`.r2`, `tr7`), which Installua has no syntax for, so its trace can't match.
+It also needs `StrAlloc`, `Free`, `Int64Op`, `Store` and `Get` declared,
+64-bit arithmetic (not just comparison) and a callback for the splash
+window procedure.
 
 Not portable: `rtest` tests `GetLabelAddress` and `Call` through an address,
 both rejected.
