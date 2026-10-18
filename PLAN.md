@@ -11,8 +11,8 @@ because Installua only writes MUI2 pages. A line the original writes inside a
 macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
 
 Ported: `bigtest`, `example1`, `example2`, `languages`, `Library`, `LogicLib`,
-`Memento`, `MultiUser`, `nsDialogs/InstallOptions`, `one-section`, `primes`,
-`silent`, `StartMenu/Example`, `unicode`, `VersionInfo` and the five
+`Memento`, `MultiUser`, `nsDialogs/InstallOptions`, `nsDialogs/timer`,
+`one-section`, `primes`, `silent`, `StartMenu/Example`, `unicode`, `VersionInfo` and the five
 `Modern UI/` examples.
 
 Next, from `$NSISDIR/Examples`: `StrFunc`, the `FileFunc`/`TextFunc`/`WordFunc`

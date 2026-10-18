@@ -38,6 +38,7 @@ const PORTS: &[&str] = &[
     "Memento",
     "MultiUser",
     "nsDialogs/InstallOptions",
+    "nsDialogs/timer",
     "one-section",
     "primes",
     "silent",
@@ -112,9 +113,31 @@ const HIDDEN: &[(&str, &str)] = &[
     // The compiler writes it in every body that names `PLUGINSDIR`, and the
     // original only where it unpacks `io.ini`.
     ("nsDialogs/InstallOptions", "InitPluginsDir"),
+    // MUI2 writes it in `MUI_INTERFACE`.
+    ("nsDialogs/timer", "XPStyle: on"),
+    // Packed at the first plugin call in the file, which is in a different
+    // function on each side.
+    ("nsDialogs/timer", "File: \"nsDialogs.dll\""),
+    // The compiler checks what `nsDialogs::Create` pushed, and the original
+    // does not.
+    ("nsDialogs/timer", "Abort: "),
+    // Sent between two `CreateControl`s in the original, and from `show`, after
+    // every control is drawn, in the port.
+    ("nsDialogs/timer", "SendMessage:(r1,1033,0,255)"),
+    ("nsDialogs/timer", "SendMessage:(r1,1040,2,0)"),
     // The original builds its application into a `!tempfile` with `!makensis`,
     // and the port installs a stand-in.
     ("MultiUser", "File: "),
+];
+
+/// The original's functions that a port reaches by address, and the names the
+/// compiler gives them: `GetFunctionAddress` prints the name.
+const FUNCTIONS: &[(&str, &str, &str)] = &[
+    ("nsDialogs/timer", "OnTimer", "mui.timer.timer1"),
+    ("nsDialogs/timer", "OnTimer2", "mui.timer.timer2"),
+    ("nsDialogs/timer", "OnTimer3", "mui.timer.timer3"),
+    ("nsDialogs/timer", "OnClick", "mui.control.click"),
+    ("nsDialogs/timer", "OnClick2", "mui.control.click.2"),
 ];
 
 /// Names NSIS reads in any case, which an original does not always write the
@@ -261,8 +284,13 @@ fn ports_do_what_the_originals_do() {
                 .filter(|line| !hidden.iter().any(|h| line.starts_with(h)));
             lines.collect::<Vec<_>>().join("\n")
         };
-        let original = shown(trace(&directory, &file, &[]));
-        let ported = shown(trace(&directory, "port.nsi", &["-WX"]));
+        let functions: Vec<(&str, &str)> = FUNCTIONS
+            .iter()
+            .filter(|(port, _, _)| port == name)
+            .map(|(_, from, to)| (*from, *to))
+            .collect();
+        let original = shown(trace(&directory, &file, &[], &functions));
+        let ported = shown(trace(&directory, "port.nsi", &["-WX"], &[]));
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(ported, original, "{name}");
     }
@@ -276,7 +304,8 @@ fn ports_do_what_the_originals_do() {
 /// their order does nothing and Installua writes `Unicode` first. A
 /// `LangString` is a declaration wherever it is written, so it joins them. A message
 /// box's `(on IDNO goto label)` is cut, because the label is the compiler's.
-fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
+/// `functions` renames what a `GetFunctionAddress` names.
+fn trace(directory: &Path, script: &str, flags: &[&str], functions: &[(&str, &str)]) -> String {
     let output = Command::new("makensis")
         .args(flags)
         .arg("-V4")
@@ -289,6 +318,7 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
         output.status.success(),
         "makensis rejected {script}:\n{log}"
     );
+    let log: String = addresses(log.lines().map(|line| spelled(line, functions)));
     let vars: Vec<&str> = log
         .lines()
         .filter_map(|line| line.strip_prefix("Var: \""))
@@ -314,7 +344,7 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
         let effects = lines
             .iter()
             .filter(|line| !DROPPED.iter().any(|p| line.starts_with(p)));
-        effects.copied().collect::<Vec<_>>()
+        first_use(&effects.copied().collect::<Vec<_>>().join("\n"), &vars)
     });
     let mut lines: Vec<String> = rest
         .into_iter()
@@ -350,6 +380,76 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
         .collect::<Vec<_>>();
     lines.dedup();
     registers(&lines.join("\n"), &vars)
+}
+
+/// Numbers written the way the compiler writes them: a `CreateControl`'s two
+/// style words folded from the `|`-chains `nsDialogs.nsh` writes, and a
+/// `SendMessage`'s hexadecimal in decimal. And the function a
+/// `GetFunctionAddress` names, by the compiler's name for it.
+fn spelled(line: &str, functions: &[(&str, &str)]) -> String {
+    let number = |word: &str| -> Option<u64> {
+        word.split('|')
+            .map(|part| match part.strip_prefix("0x") {
+                Some(hex) => u64::from_str_radix(hex, 16).ok(),
+                None => part.parse().ok(),
+            })
+            .try_fold(0, |all, part| Some(all | part?))
+    };
+    if let Some(rest) = line.strip_prefix("Plugin command: CreateControl ") {
+        let mut words: Vec<String> = rest.splitn(4, ' ').map(str::to_string).collect();
+        for word in words.iter_mut().skip(1).take(2) {
+            if let Some(n) = number(word) {
+                *word = format!("0x{n:08X}");
+            }
+        }
+        return format!("Plugin command: CreateControl {}", words.join(" "));
+    }
+    if line.starts_with("SendMessage:") {
+        let mut out = String::new();
+        for (i, part) in line.split(',').enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let (body, close) = part.split_at(part.trim_end_matches(')').len());
+            match number(body).filter(|_| body.starts_with("0x")) {
+                Some(n) => out.push_str(&format!("{n}{close}")),
+                None => out.push_str(part),
+            }
+        }
+        return out;
+    }
+    if let Some(rest) = line.strip_prefix("GetFunctionAddress: ")
+        && let Some((register, name)) = rest.split_once(' ')
+        && let Some((_, to)) = functions.iter().find(|(from, _)| *from == name)
+    {
+        return format!("GetFunctionAddress: {register} {to}");
+    }
+    line.to_string()
+}
+
+/// The register a `GetFunctionAddress` writes, as `@` there and in the plugin
+/// call that takes it: a temporary, which the compiler is free to put anywhere.
+fn addresses(lines: impl Iterator<Item = String>) -> String {
+    let mut pending: Option<String> = None;
+    let mut out = String::new();
+    for line in lines {
+        let line = if let Some(rest) = line.strip_prefix("GetFunctionAddress: ")
+            && let Some((register, name)) = rest.split_once(' ')
+        {
+            pending = Some(register.to_string());
+            format!("GetFunctionAddress: @ {name}")
+        } else if line.starts_with("Plugin command: ")
+            && let Some(register) = pending.take()
+        {
+            let words = line.split(' ').map(|w| if w == register { "@" } else { w });
+            words.collect::<Vec<_>>().join(" ")
+        } else {
+            line
+        };
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out
 }
 
 /// `$0`–`$9`, `$R0`–`$R9` and the globals `vars` declares renamed `r0`, `r1`,

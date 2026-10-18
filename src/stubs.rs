@@ -373,6 +373,7 @@ const PAGES: &str = "\
 ---@class (exact) installua.Page.Custom : installua.Page.Headed\n\
 ---@field [1]? string\n\
 ---@field controls? table\n\
+---@field timers? installua.Timer[] Started when the page is drawn.\n\
 \n\
 -- `MultiUser.nsh`'s page, and installer-only: it needs a `multiUser {}` block.\n\
 ---@class (exact) installua.Page.InstallMode : installua.Page.Headed\n\
@@ -1027,7 +1028,19 @@ fn controls() -> String {
          -- A `dropList` or a `listBox`: the two controls that are a list.\n\
          ---@class (exact) installua.List : installua.Control\n\
          ---@field add fun(text: string) Appends a row at install time.\n\
-         local List = {}\n\n",
+         local List = {}\n\n\
+         -- A timer a page's `timers` starts. nsDialogs knows it by its callback's\n\
+         -- address, which is the compiler's.\n\
+         ---@class (exact) installua.TimerOptions\n\
+         ---@field interval integer Milliseconds between ticks.\n\
+         ---@field onTimer fun() Called on every tick.\n\
+         local TimerOptions = {}\n\n\
+         ---@class (exact) installua.Timer\n\
+         ---@field running boolean Write-only: `false` stops it, `true` starts it again.\n\
+         local Timer = {}\n\n\
+         ---@param options installua.TimerOptions\n\
+         ---@return installua.Timer\n\
+         function timer(options) end\n\n",
     );
     for control in control::CONTROLS {
         let class = if control.takes_items() {
@@ -1536,6 +1549,7 @@ pub fn selene_std(sources: &[(String, String)]) -> String {
     for control in control::CONTROLS {
         out.push_str(&function(control.installua, "      - type: table\n"));
     }
+    out.push_str(&function("timer", "      - type: table\n"));
     // `page.directory {}` is a call on a dotted name, and selene resolves the
     // *root* — so without a `page.…` entry for each one, `page` is an undefined
     // variable in every program that draws a page, which is all of them. From

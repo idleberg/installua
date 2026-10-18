@@ -448,6 +448,21 @@ fn control_var(local: &str, half: Half) -> String {
     }
 }
 
+/// The function a claimed timer ticks, which is also how nsDialogs knows it:
+/// `CreateTimer` and `KillTimer` both take its address, so starting and
+/// stopping it from two places only needs both to say the same name.
+fn timer_function(local: &str, half: Half) -> String {
+    format!("{}mui.timer.{local}", half.prefix())
+}
+
+/// A timer's `interval`, folded: the same number wherever the timer is started.
+fn timer_interval(value: Option<ConstValue>) -> Option<ir::Arg> {
+    match value? {
+        ConstValue::Int(ms) if ms > 0 => Some(ir::Arg::int(ms)),
+        _ => None,
+    }
+}
+
 /// The `Var` MUI2 leaves the chosen Start Menu folder in.
 ///
 /// A `Var` because `MUI_PAGE_STARTMENU` takes one — the page stores into it —
@@ -468,8 +483,9 @@ fn earned_name(local: &str, kind: DeferredKind, half: Half) -> (String, &'static
     match kind {
         DeferredKind::Control(_) => (control_var(local, half), "global"),
         DeferredKind::StartMenu => (start_menu_var(local), "global"),
-        // Nothing earned, so nothing to collide.
-        DeferredKind::Page => (String::new(), "page"),
+        // Nothing earned, so nothing to collide. A timer's callback is named
+        // from the local too, but with a `.` no Lua name can hold.
+        DeferredKind::Page | DeferredKind::Timer => (String::new(), "page"),
         _ => (index_name(local, half), "`<const>`"),
     }
 }
@@ -487,13 +503,16 @@ enum Site {
     Block,
     /// `page.custom { controls = { … } }`.
     Controls,
+    /// `page.custom { timers = { … } }`.
+    Timers,
 }
 
 impl Site {
     fn accepts(self, kind: DeferredKind) -> bool {
         match self {
-            Site::Block => !kind.is_control(),
+            Site::Block => !kind.is_control() && kind != DeferredKind::Timer,
             Site::Controls => kind.is_control(),
+            Site::Timers => kind == DeferredKind::Timer,
         }
     }
 
@@ -502,6 +521,7 @@ impl Site {
         match self {
             Site::Block => "a section or a group",
             Site::Controls => "a control",
+            Site::Timers => "a timer",
         }
     }
 
@@ -512,6 +532,9 @@ impl Site {
             }
             Site::Controls => {
                 "a bare name here lists a declaration: bind one with `local x = text { … }`"
+            }
+            Site::Timers => {
+                "a bare name here lists a declaration: bind one with `local x = timer { … }`"
             }
         }
     }
@@ -735,16 +758,21 @@ fn group_members(value: &Expr) -> Option<&[TableField]> {
 /// }`. Both readers above want the same three unwraps, and both are claim
 /// passes, so a shape that does not match is `None` rather than a diagnostic.
 fn table_arg<'e>(value: &'e Expr, key: &str) -> Option<&'e [TableField]> {
+    match call_option(value, key)? {
+        Expr::Table { fields, .. } => Some(fields),
+        _ => None,
+    }
+}
+
+/// Whatever is under `key` in a call's single table argument.
+fn call_option<'e>(value: &'e Expr, key: &str) -> Option<&'e Expr> {
     let Expr::Call { args, .. } = value else {
         return None;
     };
     let [Expr::Table { fields, .. }] = args.as_slice() else {
         return None;
     };
-    match named(fields, key)? {
-        Expr::Table { fields, .. } => Some(fields),
-        _ => None,
-    }
+    named(fields, key)
 }
 
 /// One named member of a table, by the name a user writes.
@@ -1475,6 +1503,11 @@ impl<'p> Lowerer<'_, 'p> {
                     "page",
                     format!("write `{local},` among the `controls` of a `page.custom {{}}`"),
                     "the list's order is the tab order; the declaration's is nothing",
+                ),
+                DeferredKind::Timer => (
+                    "page",
+                    format!("write `{local},` among the `timers` of a `page.custom {{}}`"),
+                    "a timer starts when its page is drawn, and the declaration starts nothing",
                 ),
                 DeferredKind::StartMenu => (
                     "block",
@@ -4430,12 +4463,13 @@ impl<'p> Lowerer<'_, 'p> {
                 return;
             }
         };
-        if !dialog && let Some(value) = written("controls") {
+        if !dialog && let Some(value) = written("controls").or(written("timers")) {
             self.diags.push(
                 Diagnostic::error(
                     Code::BadFieldValue,
                     value.span(),
-                    "a page with `dialog = false` has no nsDialogs dialog to put controls on",
+                    "a page with `dialog = false` has no nsDialogs dialog to put controls or \
+                     timers on",
                 )
                 .note("the plugin that `show` calls draws the page"),
             );
@@ -4447,6 +4481,10 @@ impl<'p> Lowerer<'_, 'p> {
         // comes back is instructions the creator threads together.
         let controls = match written("controls") {
             Some(value) => self.controls(value, half),
+            None => Vec::new(),
+        };
+        let timers = match written("timers") {
+            Some(value) => self.timers(value, half),
             None => Vec::new(),
         };
 
@@ -4557,6 +4595,11 @@ impl<'p> Lowerer<'_, 'p> {
 
             if let Some((block, _)) = show {
                 lowerer.block(block);
+            }
+            // Last, as `timer.nsi` writes them: a timer ticks from the message
+            // loop `Show` runs, so nothing before it can tell where they start.
+            for (function, interval) in &timers {
+                lowerer.start_timer(function, interval.clone(), span);
             }
             lowerer.generated_plugin_call("nsDialogs::Show", Vec::new(), Vec::new(), span);
             lowerer.terminate(Terminator::Return, failed);
@@ -4682,6 +4725,152 @@ impl<'p> Lowerer<'_, 'p> {
             created.extend(self.control(value, control, None, half, None));
         }
         created
+    }
+
+    /// `timers = { tick, timer { … } }` — what the page starts, as each
+    /// callback's name and its interval.
+    ///
+    /// The same two kinds of entry as `controls`, and the same claim rules: a
+    /// bare name is a declaration this page claims, and a timer written inline
+    /// is one nothing can stop.
+    fn timers(&mut self, value: &Expr, half: Half) -> Vec<(String, ir::Arg)> {
+        let Expr::Table { fields, .. } = value else {
+            self.bad_value(
+                value.span(),
+                "timers",
+                "a list of timers",
+                "a page starts what this list holds",
+            );
+            return Vec::new();
+        };
+        let mut started = Vec::new();
+        for field in fields {
+            let TableField::Positional { value } = field else {
+                self.bad_value(
+                    field.span(),
+                    "timers",
+                    "a list of timers",
+                    "what a timer is called is the `local` it was bound to",
+                );
+                continue;
+            };
+            if let Expr::Name(name) = value {
+                if let Some((declared, DeferredKind::Timer, _)) = self.listed(name) {
+                    started.extend(self.timer(declared, half, Some(&name.text)));
+                }
+                continue;
+            }
+            if value.callee_name() != Some("timer") {
+                self.bad_value(
+                    value.span(),
+                    "timers",
+                    "timers",
+                    "write `timer { interval = 1000, onTimer = function() … end }`, or the \
+                     `local` one is bound to",
+                );
+                continue;
+            }
+            started.extend(self.timer(value, half, None));
+        }
+        started
+    }
+
+    /// One `timer { interval = …, onTimer = function() … end }`, as the function
+    /// nsDialogs calls and the interval it calls it at.
+    ///
+    /// `onTimer` is an option for the reason `onClick` is: the address of a
+    /// function is a build-time fact (ruling 8). Unlike a control's callback it
+    /// pops nothing, because nsDialogs pushes nothing before a tick.
+    fn timer(
+        &mut self,
+        value: &Expr,
+        half: Half,
+        local: Option<&str>,
+    ) -> Option<(String, ir::Arg)> {
+        let Expr::Call { args, span, .. } = value else {
+            return None;
+        };
+        let [Expr::Table { fields, .. }] = args.as_slice() else {
+            self.bad_value(
+                *span,
+                "timer",
+                "one table",
+                "write `timer { interval = 1000, onTimer = function() … end }`",
+            );
+            return None;
+        };
+        let (mut interval, mut tick) = (None, None);
+        for field in fields {
+            match field {
+                TableField::Named { name, value } if name.text == "interval" => {
+                    interval = timer_interval(self.constant(value));
+                    if interval.is_none() {
+                        self.bad_value(
+                            value.span(),
+                            "interval",
+                            "a whole number of milliseconds known at build time",
+                            "a `running = true` elsewhere restarts the timer at this interval, so \
+                             it is the declaration's",
+                        );
+                        return None;
+                    }
+                }
+                TableField::Named { name, value } if name.text == "onTimer" => {
+                    tick = self.callback_body(value, "onTimer");
+                }
+                TableField::Named { name, .. } => self.diags.push(
+                    Diagnostic::error(
+                        Code::UnknownField,
+                        name.span,
+                        format!("`{}` is not a `timer` option", name.text),
+                    )
+                    .note("the options are `interval` and `onTimer`"),
+                ),
+                TableField::Positional { value } => self.bad_value(
+                    value.span(),
+                    "timer",
+                    "named options",
+                    "write `interval = 1000` and `onTimer = function() … end`",
+                ),
+            }
+        }
+        for (missing, option) in [
+            (interval.is_none(), "interval"),
+            (tick.is_none(), "onTimer"),
+        ] {
+            if missing {
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::MissingAttribute,
+                        *span,
+                        format!("this `timer` has no `{option}`"),
+                    )
+                    .note("a timer is how often, in milliseconds, and what runs then"),
+                );
+                return None;
+            }
+        }
+        let (block, span) = tick?;
+        let name = match local {
+            Some(local) => timer_function(local, half),
+            None => {
+                let stem = timer_function("", half);
+                let stem = stem.trim_end_matches('.');
+                let mut name = stem.to_string();
+                let mut nth = 2;
+                while self.module.functions.iter().any(|f| f.name == name) {
+                    name = format!("{stem}.{nth}");
+                    nth += 1;
+                }
+                name
+            }
+        };
+        let body = self.body(block, &[], span, None, Some(half), table::Place::Anywhere);
+        self.module.functions.push(ir::Function {
+            name: name.clone(),
+            body,
+        });
+        Some((name, interval?))
     }
 
     /// One control declaration, checked and turned into the plugin call that
@@ -5752,7 +5941,8 @@ impl<'p> Lowerer<'_, 'p> {
             // Unreachable: a control's claim comes from a `controls` list, and
             // a bare control name among a block's entries never earns one
             // ([`Site::accepts`]), so [`Self::listed`] has already said `None`.
-            DeferredKind::Control(_) => {}
+            // A timer's likewise, from a `timers` list.
+            DeferredKind::Control(_) | DeferredKind::Timer => {}
         }
     }
 
@@ -5860,12 +6050,19 @@ impl<'p> Lowerer<'_, 'p> {
                         site.lists()
                     ),
                 )
-                .note(match site {
-                    Site::Block => {
+                .note(match (site, deferred.0) {
+                    (_, DeferredKind::Timer) => {
+                        "a timer is listed by the `timers` of a `page.custom {}`, because \
+                         nsDialogs ticks it on that page's dialog"
+                    }
+                    (Site::Block, _) => {
                         "a control is listed by the `controls` of a `page.custom {}`, because a \
                          window needs the dialog it sits in"
                     }
-                    Site::Controls => {
+                    (Site::Timers, _) => {
+                        "a timers list holds what `timer { … }` declares, and nothing it draws"
+                    }
+                    (Site::Controls, _) => {
                         "a section is listed by `installer {}` or `uninstaller {}`: it is what \
                          gets installed, not what is drawn"
                     }
@@ -5885,8 +6082,12 @@ impl<'p> Lowerer<'_, 'p> {
                     "`{}` is listed in both `{}` and `{half}`",
                     name.text, previous.half
                 )
-            } else if site == Site::Controls && previous.site == Site::Controls {
-                format!("`{}` is listed twice among `controls`", name.text)
+            } else if site != Site::Block && previous.site == site {
+                let list = match site {
+                    Site::Timers => "timers",
+                    _ => "controls",
+                };
+                format!("`{}` is listed twice among `{list}`", name.text)
             } else {
                 format!("`{}` is listed twice in `{half} {{}}`", name.text)
             };
@@ -5980,12 +6181,17 @@ impl<'p> Lowerer<'_, 'p> {
     /// errors belong to [`Self::custom_page`], which reports them once where the
     /// page is lowered.
     fn claim_controls(&mut self, page: &Expr, half: Half) {
-        for control in page_controls(page).unwrap_or_default() {
-            if let TableField::Positional {
-                value: Expr::Name(name),
-            } = control
-            {
-                self.claim(name, half, Site::Controls);
+        for (list, site) in [
+            (page_controls(page), Site::Controls),
+            (table_arg(page, "timers"), Site::Timers),
+        ] {
+            for entry in list.unwrap_or_default() {
+                if let TableField::Positional {
+                    value: Expr::Name(name),
+                } = entry
+                {
+                    self.claim(name, half, site);
+                }
             }
         }
     }

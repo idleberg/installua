@@ -179,9 +179,10 @@ impl Control {
 
 /// The kinds, by the name a program writes.
 ///
-/// Fifteen, and each arrived with whatever made it mean something: `bitmap` with
-/// `image`, which is the field that gives it a picture, and `link` with the
-/// events, because a link that opens nothing is a blue label.
+/// Sixteen, and each arrived with whatever made it mean something: `bitmap` with
+/// `image`, which is the field that gives it a picture, `link` with the events,
+/// because a link that opens nothing is a blue label, and `progressBar` with
+/// the timers that move one.
 pub const CONTROLS: &[Control] = &[
     Control {
         installua: "label",
@@ -325,6 +326,17 @@ pub const CONTROLS: &[Control] = &[
     // control is made. What it does *not* do is open anything — a link is an
     // owner-drawn button that looks like one — so the click is where the URL
     // lives.
+    // `msctls_progress32` is a common control, registered by MUI2's own dialog
+    // long before a page draws one. Its position is a number and not its text,
+    // so it has no `value`: `sendMessage` with the `PBM_*` messages moves it.
+    Control {
+        installua: "progressBar",
+        class: "msctls_progress32",
+        style: DEFAULT_STYLES,
+        exstyle: WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE,
+        text: None,
+        add_item: None,
+    },
     Control {
         installua: "link",
         class: "LINK",

@@ -132,6 +132,20 @@ impl BodyLowerer<'_, '_> {
                 }),
                 Some(Binding::Reported) => None,
                 None if self.table_named(&name.text) => None,
+                // A control this half drew, read where it already is: its
+                // `Var`. Any other control is `control_window`'s to report.
+                None if let Some(deferred) = self.resolved.deferred.get(&name.text)
+                    && deferred.kind.is_control()
+                    && let Some(claim) = self.claims.get(&name.text)
+                    && self.half == Some(claim.half) =>
+                {
+                    Some(Typed {
+                        arg: ir::Arg::slot(Slot::Global(super::control_var(
+                            &name.text, claim.half,
+                        ))),
+                        ty: Ty::Handle,
+                    })
+                }
                 None => {
                     // The program's own `<const>` first: a `local RESOURCES
                     // <const>` shadows `$RESOURCES` as any `local` shadows a

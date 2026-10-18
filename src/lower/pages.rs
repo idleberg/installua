@@ -183,13 +183,13 @@ pub(super) struct PageField {
 ///
 /// Two of the nine have them. `license`'s `file` is an argument of the
 /// `!insertmacro` rather than a setting read from inside it, and `custom`'s
-/// `controls` and `dialog` decide what the compiler draws — no define exists
-/// for any of them, so there is nothing for the table to hold and they are
-/// named here instead.
+/// `controls`, `dialog` and `timers` decide what the compiler draws — no define
+/// exists for any of them, so there is nothing for the table to hold and they
+/// are named here instead.
 pub(super) fn extra_fields(page: &Page) -> &'static [&'static str] {
     match page.installua {
         "license" => &["file"],
-        "custom" => &["controls", "dialog"],
+        "custom" => &["controls", "dialog", "timers"],
         _ => &[],
     }
 }

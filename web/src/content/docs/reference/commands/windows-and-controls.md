@@ -9,13 +9,13 @@ is a `Page custom`, and both functions behind it are the compiler's to write
 bound to is how a running program addresses it, and decides nothing about where
 it sits.
 
-**Usage** `page.custom { <headerText>, controls = { … }, dialog = false, pre = …, show = …, leave = … }`
+**Usage** `page.custom { <headerText>, controls = { … }, timers = { … }, dialog = false, pre = …, show = …, leave = … }`
 
 `dialog = false` is a page some plugin draws, such as `StartMenu::Select` or
 `InstallOptions::dialog`. Without it, `show` runs inside an nsDialogs dialog the
 compiler creates and shows, and the plugin's page would be followed by that
 empty one. With it, the page's function is `pre`, the header and `show`, and
-nothing else, so it takes no `controls`.
+nothing else, so it takes no `controls` and no `timers`.
 
 ```lua
 local startMenu = plugin "StartMenu"
@@ -42,7 +42,7 @@ raw.head [[!pragma warning disable 8000]]
 
 `label` · `text` · `password` · `number` · `button` · `checkbox` ·
 `radioButton` · `groupBox` · `hLine` · `dropList` · `listBox` · `fileRequest` ·
-`dirRequest` · `bitmap` · `link`
+`dirRequest` · `bitmap` · `link` · `progressBar`
 
 **Usage** `<type> { <text>, x = …, y = …, width = …, height = …, items = { … }, image = …, url = …, onClick = …, onChange = … }`
 → a control handle
@@ -69,6 +69,45 @@ installer {
 }
 ```
 
+A `progressBar` has no `value`: its position is a number, moved with
+`sendMessage` and the `PBM_*` messages, such as
+`sendMessage(bar, PBM_DELTAPOS, 10, 0)`.
+
+## Timers
+
+**Usage** `timer { interval = …, onTimer = function() … end }` → a timer handle
+
+A timer runs `onTimer` every `interval` milliseconds while its page is shown,
+through `nsDialogs::CreateTimer`. A page's `timers` lists the timers it starts,
+and starts them just before `nsDialogs::Show`. `interval` is a whole number known
+at build time.
+
+The handle has one field, `running`, which is write-only and takes `true` or
+`false`. `tick.running = false` stops the timer (`nsDialogs::KillTimer`), and
+`tick.running = true` starts it again at its `interval`. A timer can stop itself
+from its own `onTimer`, but a `local` is not in scope inside its own
+initializer, so declare it first:
+
+```lua
+local bar = progressBar { y = 10, height = 12 }
+
+local tick
+tick = timer {
+	interval = 200,
+	onTimer = function()
+		if sendMessage(bar, PBM_GETPOS, 0, 0) >= 100 then
+			tick.running = false
+		else
+			sendMessage(bar, PBM_DELTAPOS, 2, 0)
+		end
+	end,
+}
+
+installer {
+	page.custom { controls = { bar }, timers = { tick } },
+}
+```
+
 ## A control's fields
 
 | NSIS                 | Installua                                                 | Direction      |
@@ -80,7 +119,7 @@ installer {
 | `SetCtlColors`       | `handle.colors = { text = …, background = … }`            | write only     |
 | `CreateFont`         | `handle.font = { face = …, size = …, bold = … }`          | write only     |
 | `LoadAndSetImage`    | `handle.image = "check.bmp"`                              | write only     |
-| `GetFunctionAddress` | `onClick` / `onChange` on the declaration                 | —              |
+| `GetFunctionAddress` | `onClick` / `onChange` on the declaration, and `onTimer`  | —              |
 
 Five of the seven are write-only because Windows offers no instruction that
 reports them: NSIS can set a control's colours and cannot ask what they are.

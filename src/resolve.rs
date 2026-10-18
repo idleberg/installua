@@ -145,6 +145,10 @@ pub enum DeferredKind {
     /// than looked up again: the name is what decided this is a declaration at
     /// all, so the row it matched is already in hand.
     Control(&'static Control),
+    /// `local tick = timer { interval = 1000, onTimer = function() … end }`,
+    /// listed by a page's `timers`. It holds no `Var`: nsDialogs knows a timer
+    /// by its callback's address, and the callback is the compiler's to name.
+    Timer,
 }
 
 impl DeferredKind {
@@ -155,6 +159,7 @@ impl DeferredKind {
             DeferredKind::StartMenu => "start menu page",
             DeferredKind::Page => "page",
             DeferredKind::Control(control) => control.installua,
+            DeferredKind::Timer => "timer",
         }
     }
 
@@ -1275,6 +1280,7 @@ fn deferred_kind(value: &Expr) -> Option<DeferredKind> {
     match callee {
         "section" => Some(DeferredKind::Section),
         "group" => Some(DeferredKind::Group),
+        "timer" => Some(DeferredKind::Timer),
         _ => control::control(callee).map(DeferredKind::Control),
     }
 }

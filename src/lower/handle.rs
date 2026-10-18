@@ -32,8 +32,8 @@ use crate::types::{Int, Sign, Ty, Width};
 use super::control::{self, ControlField};
 use super::fields::Fields;
 use super::{
-    Binding, BodyLowerer, HANDLE_FIELDS, Half, HandleField, Where, control_var, handle_field,
-    index_name, list, start_menu_var,
+    Binding, BodyLowerer, HANDLE_FIELDS, Half, HandleField, Where, call_option, control_var,
+    handle_field, index_name, list, start_menu_var, timer_function, timer_interval,
 };
 
 /// A handle, resolved: the define it is addressed through and which of the two
@@ -64,6 +64,12 @@ pub(super) enum Addressed {
     /// one handle claim rule 4 does not apply to, because MUI2 gives the
     /// uninstaller a way to reach the installer's answer.
     StartMenu(StartMenuHandle),
+    /// `local tick = timer { … }`: the function nsDialogs knows it by, and the
+    /// interval a `running = true` starts it at again.
+    Timer {
+        function: String,
+        interval: Option<ir::Arg>,
+    },
     /// A declaration only a branch the build did not take would have made. The
     /// block that would have listed it lowers the entry to nothing, so code
     /// addressing it does the same: a write is dropped and a read is the
@@ -151,6 +157,33 @@ impl BodyLowerer<'_, '_> {
                     id: name.to_string(),
                     var: Slot::Global(start_menu_var(name)),
                 }));
+            }
+            if kind == DeferredKind::Timer {
+                if let Some(half) = self.half
+                    && claim.half != half
+                {
+                    self.diags.push(
+                        Diagnostic::error(
+                            Code::UnknownField,
+                            span,
+                            format!("`{name}` is a `timer` of the `{}`", claim.half),
+                        )
+                        .note(format!(
+                            "this code runs in the `{half}`, which has no `{name}`"
+                        )),
+                    );
+                    return None;
+                }
+                let interval = self
+                    .resolved
+                    .deferred
+                    .get(name)
+                    .and_then(|deferred| call_option(deferred.value, "interval"))
+                    .and_then(|value| timer_interval(self.constant(value)));
+                return Some(Addressed::Timer {
+                    function: timer_function(name, claim.half),
+                    interval,
+                });
             }
             if kind == DeferredKind::Page {
                 self.diags.push(
@@ -360,6 +393,10 @@ impl BodyLowerer<'_, '_> {
             Addressed::Section(handle) => self.handle_read(&handle, field, dest),
             Addressed::Control(handle) => self.control_read(&handle, field, dest),
             Addressed::StartMenu(handle) => self.start_menu_read(&handle, field, dest),
+            Addressed::Timer { .. } => {
+                self.timer_field(field);
+                None
+            }
             Addressed::Untaken => self.untaken_read(field, dest),
         }
     }
@@ -415,6 +452,9 @@ impl BodyLowerer<'_, '_> {
         match self.addressed(base, base.span()) {
             Some(Addressed::Section(handle)) => self.handle_write(&handle, field, value),
             Some(Addressed::Control(handle)) => self.control_write(&handle, field, value),
+            Some(Addressed::Timer { function, interval }) => {
+                self.timer_write(&function, interval, field, value)
+            }
             // Read-only, and not for want of a `StrCpy`: the page reads the
             // variable when it opens and writes it when it leaves, so a value
             // put there by install-time code is either overwritten or too late.
@@ -1218,6 +1258,82 @@ impl BodyLowerer<'_, '_> {
                 ir::Arg::str("STR:").concat(text),
             ],
         ));
+    }
+
+    /// `tick.running = false` — `nsDialogs::KillTimer`, and `true` is
+    /// `CreateTimer` again at the declared interval.
+    ///
+    /// A literal, because the two values are two different plugin calls rather
+    /// than one instruction taking a `bool`: a computed one would be a branch
+    /// the program can write itself.
+    fn timer_write(
+        &mut self,
+        function: &str,
+        interval: Option<ir::Arg>,
+        field: &Name,
+        value: &Expr,
+    ) {
+        if field.text != "running" {
+            return self.timer_field(field);
+        }
+        match (self.constant(value), interval) {
+            (Some(ConstValue::Bool(true)), Some(interval)) => {
+                self.start_timer(function, interval, field.span);
+            }
+            // The declaration's own error says why there is no interval.
+            (Some(ConstValue::Bool(true)), None) => {}
+            (Some(ConstValue::Bool(false)), _) => {
+                let address = self.timer_address(function, field.span);
+                self.generated_plugin_call(
+                    "nsDialogs::KillTimer",
+                    vec![address],
+                    Vec::new(),
+                    field.span,
+                );
+            }
+            _ => self.diags.push(
+                Diagnostic::error(
+                    Code::BadFieldValue,
+                    value.span(),
+                    "`running` is written `true` or `false`",
+                )
+                .note("the two are `CreateTimer` and `KillTimer`, two calls and not one value"),
+            ),
+        }
+    }
+
+    /// Anything but a write to `running`, which is a timer's one field.
+    fn timer_field(&mut self, field: &Name) {
+        let message = match field.text.as_str() {
+            "running" => "`running` is written, never read".to_string(),
+            other => format!("`{other}` is not a field of a timer"),
+        };
+        self.diags.push(
+            Diagnostic::error(Code::UnknownField, field.span, message)
+                .note("a timer has one field, `running`, and nsDialogs cannot say whether it is"),
+        );
+    }
+
+    /// `nsDialogs::CreateTimer`, which starts a timer or restarts a running one.
+    pub(super) fn start_timer(&mut self, function: &str, interval: ir::Arg, span: Span) {
+        let address = self.timer_address(function, span);
+        self.generated_plugin_call(
+            "nsDialogs::CreateTimer",
+            vec![address, interval],
+            Vec::new(),
+            span,
+        );
+    }
+
+    /// The address both timer calls take, which is the only name nsDialogs has
+    /// for a timer.
+    fn timer_address(&mut self, function: &str, span: Span) -> ir::Arg {
+        let address = self.body.vreg(span);
+        self.emit(ir::Instruction::new(
+            "GetFunctionAddress",
+            vec![ir::Arg::dest(address.clone()), ir::Arg::raw(function)],
+        ));
+        ir::Arg::slot(address)
     }
 
     /// `agree.checked = true` — a write, which is one instruction each.
