@@ -37,6 +37,7 @@ const PORTS: &[&str] = &[
     "Modern UI/WelcomeFinish",
     "Memento",
     "MultiUser",
+    "nsDialogs/InstallOptions",
     "one-section",
     "primes",
     "silent",
@@ -102,6 +103,15 @@ const HIDDEN: &[(&str, &str)] = &[
     ("languages", "Abort: "),
     // MUI2 writes it in `MUI_INTERFACE`.
     ("Library", "XPStyle: on"),
+    ("nsDialogs/InstallOptions", "XPStyle: on"),
+    // `${If} ${Cmd} `MessageBox …``.
+    (
+        "nsDialogs/InstallOptions",
+        "MessageBox: 292: \"Test the right-to-left version?\"",
+    ),
+    // The compiler writes it in every body that names `PLUGINSDIR`, and the
+    // original only where it unpacks `io.ini`.
+    ("nsDialogs/InstallOptions", "InitPluginsDir"),
     // The original builds its application into a `!tempfile` with `!makensis`,
     // and the port installs a stand-in.
     ("MultiUser", "File: "),
@@ -196,12 +206,20 @@ fn ports_do_what_the_originals_do() {
     };
     for name in PORTS {
         let file = format!("{}.nsi", name.rsplit('/').next().unwrap_or(name));
-        let directory = std::env::temp_dir().join(format!(
+        let root = std::env::temp_dir().join(format!(
             "installua-port-{}-{}",
             name.replace(['/', ' '], "-"),
             std::process::id()
         ));
+        // One level down, for nsDialogs/InstallOptions.nsi's `..\InstallOptions\test.ini`.
+        let directory = root.join("script");
         std::fs::create_dir_all(&directory).expect("temp directory");
+        std::fs::create_dir_all(root.join("InstallOptions")).expect("temp directory");
+        std::fs::copy(
+            examples.join("InstallOptions/test.ini"),
+            root.join("InstallOptions/test.ini"),
+        )
+        .expect("test.ini");
         // The original installs itself, so it is also the file the port's `file()` reads.
         // What MultiUser.nsi builds its pretend application from, what
         // bigtest.nsi installs, and the license per language in languages.nsi.
@@ -245,14 +263,15 @@ fn ports_do_what_the_originals_do() {
         };
         let original = shown(trace(&directory, &file, &[]));
         let ported = shown(trace(&directory, "port.nsi", &["-WX"]));
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = std::fs::remove_dir_all(&root);
         assert_eq!(ported, original, "{name}");
     }
 }
 
 /// The effect lines of one `makensis -V4` run, with an uninstaller section's
 /// `un.` or `-` prefix taken off: `Section "Uninstall"` is the same section. Functions
-/// are moved after the sections, where Installua writes them. The
+/// are moved after the sections, where Installua writes them, and sorted,
+/// because their order does nothing and a `raw.tail` puts a macro's last. The
 /// attributes above the first section are sorted and deduplicated, because
 /// their order does nothing and Installua writes `Unicode` first. A
 /// `LangString` is a declaration wherever it is written, so it joins them. A message
@@ -287,9 +306,19 @@ fn trace(directory: &Path, script: &str, flags: &[&str]) -> String {
             in_function &= !line.starts_with("FunctionEnd");
             inside
         });
+    // By what they do, not their name: the compiler names its own.
+    let mut functions: Vec<&[&str]> = functions
+        .split_inclusive(|line| line.starts_with("FunctionEnd"))
+        .collect();
+    functions.sort_by_key(|lines| {
+        let effects = lines
+            .iter()
+            .filter(|line| !DROPPED.iter().any(|p| line.starts_with(p)));
+        effects.copied().collect::<Vec<_>>()
+    });
     let mut lines: Vec<String> = rest
         .into_iter()
-        .chain(functions)
+        .chain(functions.concat())
         .filter(|line| !line.trim().is_empty() && !DROPPED.iter().any(|p| line.starts_with(p)))
         .map(|line| {
             let line = line.replacen("Section: \"un.", "Section: \"", 1).replacen(
@@ -337,7 +366,8 @@ fn registers(trace: &str, vars: &[&str]) -> String {
             let body = bodies.last_mut().expect("one body");
             body.push_str(line);
             body.push('\n');
-        } else {
+        }
+        if line == "FunctionEnd" || line == "SectionEnd" {
             bodies.push(String::new());
         }
     }

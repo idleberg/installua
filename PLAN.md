@@ -11,11 +11,12 @@ because Installua only writes MUI2 pages. A line the original writes inside a
 macro is invisible to `-V4`, so `HIDDEN` lists the port's copy.
 
 Ported: `bigtest`, `example1`, `example2`, `languages`, `Library`, `LogicLib`,
-`Memento`, `MultiUser`, `one-section`, `primes`, `silent`, `StartMenu/Example`,
-`unicode`, `VersionInfo` and the five `Modern UI/` examples.
+`Memento`, `MultiUser`, `nsDialogs/InstallOptions`, `one-section`, `primes`,
+`silent`, `StartMenu/Example`, `unicode`, `VersionInfo` and the five
+`Modern UI/` examples.
 
 Next, from `$NSISDIR/Examples`: `StrFunc`, the `FileFunc`/`TextFunc`/`WordFunc`
-ones, and the `nsDialogs/` directory.
+ones, and the rest of `nsDialogs/`.
 
 Waiting: `System` names registers in nearly every `System::Call` (`r1`,
 `.r2`, `tr7`), which Installua has no syntax for, so its trace can't match.
