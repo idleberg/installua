@@ -11,7 +11,7 @@ NSIS-specific.
 **Overlay**:
 The single data table describing every NSIS command — its Installua name, census class,
 parameter list and options. Half generated from `makensis -CMDHELP`, half hand-written,
-joined at build time. Read by the emitter, the stub generator and the census.
+joined at build time.
 _Avoid_: instruction table, command table
 
 **Census**:

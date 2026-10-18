@@ -34,6 +34,11 @@ source ─frontend─▶ AST ─resolve─▶ symbols ─lower─▶ CFG ─allo
 - A `local` is not order-free: it is in scope from its declaration down, as in
   Lua, because that is what `lua-language-server` checks.
 
+**Codemap**: `ARCHITECTURE.md` says which file owns a concern. Read it before
+searching.
+
+**Glossary**: `GLOSSARY.md` is the compiler's vocabulary. Name things in its terms.
+
 ## Conventions
 
 **The comments are the design document.** There is no separate plan file: the
@@ -69,21 +74,9 @@ its title is `title:` and never an `# H1`.
 
 - a MUI2 name — page, page setting, block-level setting →
   `web/src/content/docs/reference/modern-ui.md`
-- anything else → `web/src/content/docs/reference/commands.md`
+- anything else → the matching page in `web/src/content/docs/reference/commands/`
 
-Both are hand-written and both claim exhaustive coverage (276 NSIS commands, 255
-MUI2 names). `installua coverage` cannot check that claim — it counts the tables,
-so `todo 0` reads the same whether the prose is current or was deleted this
-morning. `tests/docs.rs` is what checks it, three gates over every writable row:
-its Installua spelling is on some page, its **NSIS** name is, and every writable
-MUI2 name is. So a new construct without its entry fails the build.
-
-Two things those gates still do not cover. They match a name anywhere in the
-site, not under the right heading — teaching them the shape of both documents would be
-a second copy of the docs kept in Rust. And a **declared plugin method** is not
-required to appear at all: a census entry is a promise the language makes and
-there are 531 of them, while a declaration is one row in a `.toml`, and its
-absence from the prose means *not yet* rather than *rotted*.
+`tests/docs.rs` fails the build without it; its header says what it can't check.
 
 **Tests are tiered.** Tier 2 compares emitted `.nsi` by exact equality
 (`assert!(out.contains(…))` is banned). Tier 3 hands it to real `makensis -WX`
@@ -106,40 +99,8 @@ Check these before relying on memory for a command's signature or semantics:
    docs are silent. `Source/script.cpp` has the command token table.
 
 <!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
+## Code graph
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
-
-### When to use graph tools FIRST
-
-- **Exploring code**: `semantic_search_nodes_tool` or `query_graph_tool` instead of Grep
-- **Understanding impact**: `get_impact_radius_tool` instead of manually tracing imports
-- **Code review**: `detect_changes_tool` + `get_review_context_tool` instead of reading entire files
-- **Finding relationships**: `query_graph_tool` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview_tool` + `list_communities_tool`
-
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
-
-### Key Tools
-
-| Tool | Use when |
-| ------ | ---------- |
-| `detect_changes_tool` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context_tool` | Need source snippets for review — token-efficient |
-| `get_impact_radius_tool` | Understanding blast radius of a change |
-| `get_affected_flows_tool` | Finding which execution paths are impacted |
-| `query_graph_tool` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes_tool` | Finding functions/classes by name or keyword |
-| `get_architecture_overview_tool` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes_tool` for code review.
-3. Use `get_affected_flows_tool` to understand impact.
-4. Use `query_graph_tool` pattern="tests_for" to check coverage.
+**code-review-graph** MCP: where a symbol is defined, its callers, tests and
+blast radius (`query_graph_tool`, `get_impact_radius_tool`,
+`detect_changes_tool`). Prefer it to Grep for those; it updates via hooks.

@@ -30,6 +30,10 @@
 //! NSIS one proves the reader holding a `.nsi` can find it. A row renamed into
 //! the surface and documented only there passes the first and fails the second.
 //!
+//! A name counts wherever it appears in the site, not only under the right
+//! heading: teaching the gates each page's shape would be a second copy of the
+//! docs kept in Rust.
+//!
 //! Still **not** checked, and for the reason it always was: that every declared
 //! plugin method appears in the docs. A census entry is a promise the language
 //! makes and there are 531 of them; a declaration is one row in a `.toml`, and
@@ -908,4 +912,70 @@ fn the_example_check_sees_what_it_was_written_for() {
         let mut diags = installua::diag::Diagnostics::new();
         installua::build_with(source, &options, &mut diags).is_none() || diags.has_errors()
     }));
+}
+
+/// Every repo path that `ARCHITECTURE.md` or `AGENTS.md` names in backticks
+/// still exists, so the codemap fails loudly instead of rotting quietly.
+///
+/// A token counts as a path when it contains `/` or ends in `.rs`, `.md` or
+/// `.toml`, and has no pattern (`*`, `{`) or variable (`$`) in it. A path whose
+/// first segment isn't in the repo, such as `Source/script.cpp` in the NSIS
+/// sources, is left alone. A bare file name resolves either at the root or in
+/// a directory named in the nearest heading above it, so `lift.rs` under
+/// `` ### `src/frontend/` `` is `src/frontend/lift.rs`.
+#[test]
+fn every_path_the_agent_docs_name_exists() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut missing = Vec::new();
+    for doc in ["ARCHITECTURE.md", "AGENTS.md"] {
+        let text = fs::read_to_string(root.join(doc)).expect("readable");
+        let mut fenced = false;
+        let mut dirs: Vec<PathBuf> = vec![root.to_path_buf()];
+        for (number, line) in text.lines().enumerate() {
+            if line.starts_with("```") {
+                fenced = !fenced;
+                continue;
+            }
+            if fenced {
+                continue;
+            }
+            let spans = line.split('`').skip(1).step_by(2);
+            if line.starts_with('#') {
+                dirs = vec![root.to_path_buf()];
+                for span in spans.clone() {
+                    let path = root.join(span);
+                    dirs.push(if path.is_dir() {
+                        path
+                    } else {
+                        path.parent().unwrap().to_path_buf()
+                    });
+                }
+            }
+            for span in spans {
+                // `.toml` alone is an extension, not a file.
+                let pathlike = span.contains('/')
+                    || !span.starts_with('.')
+                        && [".rs", ".md", ".toml"]
+                            .iter()
+                            .any(|ext| span.ends_with(ext));
+                if !pathlike || span.contains(['*', '{', '$', ' ']) {
+                    continue;
+                }
+                let found = if span.contains('/') {
+                    let first = span.split('/').next().unwrap();
+                    !root.join(first).exists() || root.join(span).exists()
+                } else {
+                    dirs.iter().any(|dir| dir.join(span).exists())
+                };
+                if !found {
+                    missing.push(format!("{doc}:{}: `{span}`", number + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "named but missing:\n{}",
+        missing.join("\n")
+    );
 }
