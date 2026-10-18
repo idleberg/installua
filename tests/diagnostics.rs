@@ -1212,6 +1212,48 @@ fn a_reachable_shape_names_its_mistake() {
         (block("detailPrint(\"x\")"), Code::UnknownField),
         (block("42"), Code::UnknownField),
         (block("caption = \"x\""), Code::UnknownField),
+        (block("onInit(42)"), Code::BadFieldValue),
+        (block("onGUIInit()"), Code::BadFieldValue),
+        (block("page.directory { pre = 42 }"), Code::BadFieldValue),
+        (block("page.directory(\"x\")"), Code::BadFieldValue),
+        (
+            block("page.custom { controls = { 42 } }"),
+            Code::BadFieldValue,
+        ),
+        (
+            block("page.custom { controls = { label(\"x\") } }"),
+            Code::BadFieldValue,
+        ),
+        (
+            "attributes { outFile = \"a.exe\" }\n\
+             local menu = page.startMenu { defaultFolder = \"x\" }\n\
+             installer { menu, section(\"Core\", function()\nmenu.write(42)\nend), }"
+                .to_string(),
+            Code::BadFieldValue,
+        ),
+        (
+            body("local t = \"\"\nlocal a = \"\"\na, t.x = getFileTime(\"a\")"),
+            Code::TypeMismatch,
+        ),
+        (
+            body("local s = \"x\"\nlocal a = s.upper()"),
+            Code::TypeMismatch,
+        ),
+        (
+            body("local s = \"x\"\nlocal a, b = s.upper()"),
+            Code::TypeMismatch,
+        ),
+        (body("local s = \"x\"\nlocal a = s()"), Code::TypeMismatch),
+        (
+            body("local f = fileOpen(\"a\", \"r\")\nf.close()"),
+            Code::TypeMismatch,
+        ),
+        (body("local a, b = nope()"), Code::UndefinedName),
+        // Dropped without a word before: the callee has no dotted name.
+        (
+            body("local a = getFileTime(\"a\")(\"b\")"),
+            Code::TypeMismatch,
+        ),
     ] {
         let diags = compile(&source);
         assert!(

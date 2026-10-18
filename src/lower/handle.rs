@@ -530,7 +530,12 @@ impl BodyLowerer<'_, '_> {
             },
         ] = args
         else {
-            self.todo(span, "this `write` form");
+            self.bad_value(
+                span,
+                "write",
+                "one function",
+                &format!("write `{base}.write(function() … end)`"),
+            );
             return;
         };
         if !params.is_empty() {

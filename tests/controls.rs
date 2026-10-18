@@ -442,13 +442,15 @@ fn a_field_is_written_onto_a_call() {
     assert_eq!(lines, ["GetDlgItem $0 $HWNDPARENT 2", "EnableWindow $0 0"]);
 }
 
-/// `focus()` is `${NSD_SetFocus}`, on a drawn control and a found window alike.
+/// `focus()` is `${NSD_SetFocus}`, on a drawn control and a found window alike,
+/// and on a window no `local` holds.
 #[test]
 fn focus_is_set_focus() {
     let output = build(&page(
         "local serial = text { \"\", y = 0, height = 12 }",
         "serial,",
-        "serial.focus()\nlocal next = getDlgItem(HWNDPARENT, 1)\nnext.focus()",
+        "serial.focus()\nlocal next = getDlgItem(HWNDPARENT, 1)\nnext.focus()\n\
+         getDlgItem(HWNDPARENT, 2).focus()",
     ));
     let calls: Vec<&str> = output
         .lines()
@@ -459,6 +461,7 @@ fn focus_is_set_focus() {
         calls,
         [
             "System::Call \"user32::SetFocus(p$__GENERATED_ctl_serial)\"",
+            "System::Call \"user32::SetFocus(p$0)\"",
             "System::Call \"user32::SetFocus(p$0)\"",
         ]
     );

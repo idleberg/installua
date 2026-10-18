@@ -12,15 +12,18 @@ cells, and a fix fails that test until they leave the list.
 
 ## Generic `todo` diagnostics
 
-`src/lower` has 25 `self.todo(` calls (16 in `mod.rs`, 7 in `expr.rs`, 2 in
-`handle.rs`). Each reports `not-yet-implemented` with a generic message. The
-ones ordinary code reaches have real diagnostics now. What is left:
+`src/lower` has 16 `self.todo(` calls (9 in `mod.rs`, 6 in `expr.rs`, 1 in
+`handle.rs`). Each reports `not-yet-implemented` with a generic message. Every
+one ordinary code reaches has a real diagnostic now, except `string.rep(…)` and
+other library functions the table lacks, where "not supported yet" is true.
 
-- Not probed yet, only read: `mod.rs` 2265, 2587, 3454, 3984, 4555, 4593,
-  4597, 5482, 5884, 7155, 7224, 7647, 7659, 7685; `handle.rs` 246, 533;
-  `expr.rs` 3384, 3405.
-- The `Handled` arms, the operator fallback and the call fallbacks are
-  unreachable and stay.
+The rest stay, because the compiler can't reach them or has caught the mistake
+before them. They are the `Handled` and table-shape arms, the operator,
+expression and call fallbacks, the non-call `control`, `group` and `for`
+iterator arms, and an assignment target that is not a name, field or index.
+
+Not probed: `no_fields` on a handle or an unknown type (`handle.rs`), when
+the base is neither a call nor a name.
 
 ## NSIS's arithmetic `>>` has no spelling
 

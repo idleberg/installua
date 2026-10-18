@@ -674,9 +674,90 @@ impl BodyLowerer<'_, '_> {
 
     // -- calls ------------------------------------------------------------
 
+    /// A callee that names nothing callable, said once for the single-value
+    /// call and the several-value one so the two cannot disagree.
+    ///
+    /// The last two arms lower what was written only to learn its type:
+    /// `s.upper()` on a string and `f()()` are mistakes with a fix, and the
+    /// program is in error either way.
+    fn no_callee(&mut self, callee: &Expr, span: Span) {
+        match callee {
+            Expr::Name(_) if self.undefined_base(callee) => {}
+            Expr::Field { base, .. } if self.undefined_base(base) => {}
+            // `core.nope()`. The base is addressed first, so a page or the
+            // other half's declaration says what it says for a field.
+            Expr::Field {
+                base, name: method, ..
+            } if base
+                .name()
+                .is_some_and(|base| self.resolved.deferred.contains_key(base)) =>
+            {
+                if self.addressed(base, span).is_some() {
+                    self.diags.push(Diagnostic::error(
+                        Code::UnknownField,
+                        method.span,
+                        format!(
+                            "`{}` is not a method of `{}`",
+                            method.text,
+                            base.name().unwrap_or_default()
+                        ),
+                    ));
+                }
+            }
+            // `string.rep(…)`: a library or namespace the table has no such
+            // function in, where `not supported yet` is the truth.
+            Expr::Field { base: named, .. }
+                if named.name().is_some_and(|base| {
+                    self.lookup(base).is_none() && !self.resolved.global(base)
+                }) =>
+            {
+                self.todo(callee.span(), "this call");
+            }
+            Expr::Field { base, name, .. } => {
+                let Some(value) = self.value(base) else {
+                    return;
+                };
+                let diagnostic = if value.ty == Ty::Handle {
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        name.span,
+                        "a handle's methods are called with `:`",
+                    )
+                    .note(format!("write `f:{}(…)`", name.text))
+                } else {
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        base.span(),
+                        format!("{:#} has no methods", value.ty),
+                    )
+                    .note("`.` calls into a namespace, as in `string.upper(s)`")
+                };
+                self.diags.push(diagnostic);
+            }
+            other => {
+                let Some(value) = self.value(other) else {
+                    return;
+                };
+                self.diags.push(
+                    Diagnostic::error(
+                        Code::TypeMismatch,
+                        other.span(),
+                        format!("{:#} cannot be called", value.ty),
+                    )
+                    .note("a call names a `func`, an instruction or a method"),
+                );
+            }
+        }
+    }
+
     pub(super) fn call(&mut self, call: &Expr, dest: Option<&Slot>) -> Option<Ty> {
         let (name, args, span) = match call {
-            Expr::Call { callee, args, span } => (callee_path(callee)?, args, *span),
+            // No dotted name, as in `getDlgItem(…).focus()`: the empty name
+            // matches nothing below but the window methods, and reaches
+            // [`Self::no_callee`] otherwise.
+            Expr::Call { callee, args, span } => {
+                (callee_path(callee).unwrap_or_default(), args, *span)
+            }
             Expr::MethodCall {
                 receiver,
                 method,
@@ -794,20 +875,27 @@ impl BodyLowerer<'_, '_> {
 
         // `sources.add("C:/")` — a row added at run time, where `items` is the
         // rows known at build time. `serial.focus()` is `${NSD_SetFocus}`, and
-        // is every window's, so a `getDlgItem` local has it too.
+        // is every window's, so a `getDlgItem` local has it too, and so does
+        // `getDlgItem(…).focus()` with no local at all.
         if let Expr::Call { callee, .. } = call
             && let Expr::Field {
                 base, name: field, ..
             } = callee.as_ref()
-            && let Some(name) = base.name()
-            && let control = self
-                .resolved
-                .deferred
-                .get(name)
-                .is_some_and(|deferred| deferred.kind.is_control())
+            && let control = base.name().is_some_and(|name| {
+                self.resolved
+                    .deferred
+                    .get(name)
+                    .is_some_and(|deferred| deferred.kind.is_control())
+            })
             && match field.text.as_str() {
                 "add" => control,
-                "focus" => control || self.window_slot(name).is_some(),
+                "focus" => {
+                    control
+                        || matches!(**base, Expr::Call { .. })
+                        || base
+                            .name()
+                            .is_some_and(|name| self.window_slot(name).is_some())
+                }
                 _ => false,
             }
         {
@@ -838,33 +926,8 @@ impl BodyLowerer<'_, '_> {
         }
 
         let Some(builtin) = builtins::lookup(&name) else {
-            match call {
-                Expr::Call { callee, .. } => match callee.as_ref() {
-                    Expr::Name(name) => self.undefined(name),
-                    Expr::Field { base, .. } if self.undefined_base(base) => {}
-                    // `core.nope()`. The base is addressed first, so a page or
-                    // the other half's declaration says what it says for a field.
-                    Expr::Field {
-                        base, name: method, ..
-                    } if base
-                        .name()
-                        .is_some_and(|base| self.resolved.deferred.contains_key(base)) =>
-                    {
-                        if self.addressed(base, span).is_some() {
-                            self.diags.push(Diagnostic::error(
-                                Code::UnknownField,
-                                method.span,
-                                format!(
-                                    "`{}` is not a method of `{}`",
-                                    method.text,
-                                    base.name().unwrap_or_default()
-                                ),
-                            ));
-                        }
-                    }
-                    other => self.todo(other.span(), "this call"),
-                },
-                _ => unreachable!(),
+            if let Expr::Call { callee, .. } = call {
+                self.no_callee(callee, span);
             }
             return None;
         };
@@ -3463,7 +3526,10 @@ impl BodyLowerer<'_, '_> {
             self.todo(call.span(), "this call");
             return None;
         };
-        let name = callee_path(callee)?;
+        let Some(name) = callee_path(callee) else {
+            self.no_callee(callee, *span);
+            return None;
+        };
         if let Some(method) = name.strip_prefix("MAKENSIS.") {
             return self.makensis_call(method, args, dests, *span);
         }
@@ -3480,9 +3546,7 @@ impl BodyLowerer<'_, '_> {
             if let Some(builtin) = builtins::lookup(&name) {
                 return self.builtin_multi(builtin, args, dests, *span);
             }
-            if !matches!(callee.as_ref(), Expr::Field { base, .. } if self.undefined_base(base)) {
-                self.todo(*span, "binding several values from this call");
-            }
+            self.no_callee(callee, *span);
             return None;
         }
         self.call_function(&name, args, dests, *span)

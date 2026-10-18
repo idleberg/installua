@@ -3509,7 +3509,13 @@ impl<'p> Lowerer<'_, 'p> {
             return;
         };
         let [written] = args.as_slice() else {
-            self.todo(*span, &format!("this `{}` form", hook.word));
+            let word = hook.word;
+            self.bad_value(
+                *span,
+                word,
+                "one function",
+                &format!("write `{word}(function() … end)`"),
+            );
             return;
         };
         let Some((block, at)) = self.callback_body(written, hook.word) else {
@@ -4039,7 +4045,13 @@ impl<'p> Lowerer<'_, 'p> {
             [] => &[],
             [Expr::Table { fields, .. }] => fields,
             _ => {
-                self.todo(call.span(), "this page in this form");
+                let page = &which.text;
+                self.bad_value(
+                    call.span(),
+                    &format!("page.{page}"),
+                    "one table of settings",
+                    &format!("write `page.{page} {{ … }}`, or `page.{page} {{}}` for none"),
+                );
                 return;
             }
         };
@@ -4648,7 +4660,12 @@ impl<'p> Lowerer<'_, 'p> {
             }
 
             let Some(callee) = value.callee_name() else {
-                self.todo(value.span(), "this control");
+                self.bad_value(
+                    value.span(),
+                    "controls",
+                    "controls",
+                    "write a control such as `label { \"Text\", y = 0, height = 12 }`, or the `local` one is bound to",
+                );
                 continue;
             };
             let Some(control) = control::control(callee) else {
@@ -4690,7 +4707,12 @@ impl<'p> Lowerer<'_, 'p> {
             return None;
         };
         let [Expr::Table { fields, span }] = args.as_slice() else {
-            self.todo(value.span(), &format!("this `{what}` form"));
+            self.bad_value(
+                value.span(),
+                what,
+                "one table",
+                &format!("write `{what} {{ \"Text\", y = 0, height = 12 }}`"),
+            );
             return None;
         };
         let span = *span;
@@ -5575,7 +5597,12 @@ impl<'p> Lowerer<'_, 'p> {
             span,
         } = value
         else {
-            self.todo(value.span(), &format!("this `{which}` form"));
+            self.bad_value(
+                value.span(),
+                which,
+                "a function",
+                &format!("write `{which} = function() … end`"),
+            );
             return None;
         };
         if !params.is_empty() {
@@ -5977,7 +6004,12 @@ impl<'p> Lowerer<'_, 'p> {
             },
         ] = args.as_slice()
         else {
-            self.todo(value.span(), &format!("this `{which}` form"));
+            self.bad_value(
+                value.span(),
+                which,
+                "one function",
+                &format!("write `{which}(function() … end)`"),
+            );
             return;
         };
         if !params.is_empty() {
@@ -7277,7 +7309,14 @@ impl BodyLowerer<'_, '_> {
                 match target {
                     Expr::Name(name) if !crate::builtins::owned(&name.text) => names.push(name),
                     _ => {
-                        self.todo(target.span(), "this target of a multi-value assignment");
+                        self.diags.push(
+                            Diagnostic::error(
+                                Code::TypeMismatch,
+                                target.span(),
+                                "only a name can take one of several values from a call",
+                            )
+                            .note("bind the call to `local`s, then assign from those"),
+                        );
                         return;
                     }
                 }
