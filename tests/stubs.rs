@@ -768,6 +768,7 @@ fn the_selene_std_declares_what_a_project_and_the_language_declare() {
         "math.abs",
         "math.max",
         "math.min",
+        "bit32.arshift",
         "ipairs",
         "continue",
     ] {

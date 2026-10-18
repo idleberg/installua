@@ -24,8 +24,3 @@ iterator arms, and an assignment target that is not a name, field or index.
 
 Not probed: `no_fields` on a handle or an unknown type (`handle.rs`), when
 the base is neither a call nor a name.
-
-## NSIS's arithmetic `>>` has no spelling
-
-Lua's `>>` is emitted as NSIS's `>>>`, and the docs send the arithmetic shift to
-`raw`. bigtest's "Integer" section needs `IntOp $n 0xffffffff >> 31`.

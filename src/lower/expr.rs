@@ -824,6 +824,7 @@ impl BodyLowerer<'_, '_> {
             "math.abs" | "math.max" | "math.min" => {
                 return self.math_adapter(&name, args, dest, span);
             }
+            "bit32.arshift" => return self.arshift(args, dest, span),
             "tostring" | "tonumber" if self.is_cast(&name) => {
                 return self.cast(&name, args, dest, span);
             }
@@ -3149,6 +3150,36 @@ impl BodyLowerer<'_, '_> {
             vec![ir::Arg::dest(dest.clone()), best_arg],
         ));
         Some(ty)
+    }
+
+    /// `bit32.arshift(x, n)` — NSIS's arithmetic `>>`, which needs a name of
+    /// its own because Lua's `>>` is the logical one and already means `>>>`.
+    /// Lua 5.2's `bit32` is 32-bit and sign-filling, as `IntOp` is, so
+    /// `bit32.arshift(0xffffffff, 31)` is all ones in both.
+    fn arshift(&mut self, args: &[Expr], dest: Option<&Slot>, span: Span) -> Option<Ty> {
+        let [x, n] = args else {
+            return self.wrong_arity("bit32.arshift", 2, args.len(), span);
+        };
+        let x = self.value(x)?;
+        let n = self.value(n)?;
+        self.require_int(&x, span)?;
+        self.require_int(&n, span)?;
+        let dest = match dest {
+            Some(dest) => dest.clone(),
+            None => self.claim_temp(span),
+        };
+        self.emit(ir::Instruction::new(
+            "IntOp",
+            vec![ir::Arg::dest(dest), x.arg, ir::Arg::raw(">>"), n.arg],
+        ));
+        // The sign is kept, never made: a non-negative `x` stays one.
+        Some(
+            if x.ty.as_int().is_some_and(|int| int.sign == Sign::NonNeg) {
+                Ty::nonneg()
+            } else {
+                Ty::int()
+            },
+        )
     }
 
     /// `tostring` and `tonumber` — not shadowed by a `func`, a `local` or a

@@ -154,11 +154,8 @@ installer {
 				-- `StrCpy $n -2147483648`: an expression whose operands are all
 				-- constants is computed by the compiler, and this section tests
 				-- NSIS's arithmetic at run time. `1 // 0` needs none: division
-				-- by zero is never computed ahead.
-				-- NSIS's arithmetic `>>` also has no spelling (see KNOWN-ISSUES.md).
-				raw [[
-					IntOp $n 0xffffffff >> 31
-				]]
+				-- by zero is never computed ahead, and neither is `bit32.arshift`.
+				n = bit32.arshift(0xffffffff, 31)
 				if n ~= -1 then
 					messageBox { text = "ASSERT: IntCmpU " .. n .. " -1 (bigtest.nsi:160)", icon = "STOP" }
 				end

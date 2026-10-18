@@ -747,6 +747,12 @@ fn declarations() -> String {
          ---@param text any\n\
          ---@return integer\n\
          function tonumber(text) end\n\n\
+         -- Lua 5.2's arithmetic shift, NSIS's `>>`; the 5.4 runtime has no `bit32`.\n\
+         bit32 = {}\n\n\
+         ---@param x integer\n\
+         ---@param n integer\n\
+         ---@return integer\n\
+         function bit32.arshift(x, n) end\n\n\
          ---@generic V\n\
          ---@param list V[]\n\
          ---@return fun(): integer, V\n\
@@ -1668,6 +1674,10 @@ const LANGUAGE: &[(&str, &str)] = &[
     (
         "math.min",
         "      - type: number\n      - type: number\n      - type: \"...\"\n        required: false\n",
+    ),
+    (
+        "bit32.arshift",
+        "      - type: number\n      - type: number\n",
     ),
     ("ipairs", "      - type: table\n"),
     ("continue", ""),

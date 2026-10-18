@@ -11,7 +11,8 @@
 -- this golden is about the run-time adapters.
 --
 -- `math.abs` and `math.max(n, 0)` are non-negative, which is what lets them
--- into `sleep`; `math.min` is only when every argument is.
+-- into `sleep`; `math.min` is only when every argument is. `bit32.arshift`
+-- is NSIS's sign-filling `>>`, since Lua's `>>` is its `>>>`.
 
 attributes {
 	name = "Strings",
@@ -37,6 +38,7 @@ installer {
 		local n = tonumber(readEnvStr("DELAY"))
 		sleep(math.abs(n))
 		sleep(math.max(n, 0))
+		detailPrint(tostring(bit32.arshift(n, 4)))
 		detailPrint(tostring(math.min(n, 5, 3)))
 	end),
 }

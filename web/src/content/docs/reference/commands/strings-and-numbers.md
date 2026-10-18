@@ -59,6 +59,13 @@ func("pause", function(ini)
 end)
 ```
 
+## Arithmetic shift
+
+Lua's `>>` fills with zeros, so it compiles to NSIS's `>>>`. NSIS's `>>` copies
+the sign bit instead, and Installua writes it as Lua 5.2 did:
+`bit32.arshift(x, n)` → `IntOp $d x >> n`. So `bit32.arshift(-8, 1)` is `-4`,
+where `-8 >> 1` is `2147483644`.
+
 ## Casts
 
 Every NSIS value is already a string, so `tostring` and `tonumber` emit no code.

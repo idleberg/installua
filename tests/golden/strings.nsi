@@ -79,6 +79,8 @@ __GENERATED_abs_5_done:
   StrCpy $1 0
 __GENERATED_max_6_next:
   Sleep $1
+  IntOp $1 $0 >> 4
+  DetailPrint $1
   IntCmp 5 $0 __GENERATED_min_7_next 0 __GENERATED_min_7_next
   StrCpy $0 5
 __GENERATED_min_7_next:
