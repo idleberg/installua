@@ -143,17 +143,17 @@ impl Module {
 
     /// Every body in the module, for a caller that wants to assert an IR
     /// property rather than read emitted text (tier 0).
-    pub fn bodies(&self) -> impl Iterator<Item = (&str, &cfg::Body)> {
+    pub fn bodies(&self) -> impl Iterator<Item = (String, &cfg::Body)> {
         let functions = self
             .functions
             .iter()
-            .map(|f| (f.name.as_str(), &f.body))
+            .map(|f| (f.name.clone(), &f.body))
             .collect::<Vec<_>>();
         let mut all = functions;
         let mut items: Vec<&SectionItem> = self.sections.iter().rev().collect();
         while let Some(item) = items.pop() {
             match item {
-                SectionItem::Section(section) => all.push((section.name.as_str(), &section.body)),
+                SectionItem::Section(section) => all.push((section.title(), &section.body)),
                 SectionItem::Group(group) => items.extend(group.sections.iter().rev()),
             }
         }
@@ -171,9 +171,7 @@ impl Module {
         let mut items: Vec<&mut SectionItem> = self.sections.iter_mut().rev().collect();
         while let Some(item) = items.pop() {
             match item {
-                SectionItem::Section(section) => {
-                    all.push((section.name.clone(), &mut section.body))
-                }
+                SectionItem::Section(section) => all.push((section.title(), &mut section.body)),
                 SectionItem::Group(group) => items.extend(group.sections.iter_mut().rev()),
             }
         }
@@ -258,7 +256,9 @@ pub struct SectionGroup {
 
 #[derive(Clone, Debug)]
 pub struct Section {
-    pub name: String,
+    /// An argument rather than a string, because a translated name is
+    /// `$(Sec1Name)`: NSIS picks the text when the components page draws it.
+    pub name: Arg,
     /// `Section /o` — unselected by default.
     pub optional: bool,
     /// The one-based positions of [`Module::inst_types`] this section belongs
@@ -292,6 +292,25 @@ pub struct Section {
     /// state under this id. [`Self::index_name`] is always `Some` beside it.
     pub remember: Option<String>,
     pub body: cfg::Body,
+}
+
+impl Section {
+    /// The name as a body is known by in [`Module::bodies`]: its text, and
+    /// `$(Sec1Name)` spelled as NSIS would read it.
+    pub fn title(&self) -> String {
+        match &self.name {
+            Arg::Data { pieces, .. } => pieces
+                .iter()
+                .map(|piece| match piece {
+                    Piece::Text(text) | Piece::Var(text) => text.as_str(),
+                    Piece::Const { value, .. } => value.as_str(),
+                    Piece::Slot(_) => "",
+                })
+                .collect(),
+            Arg::Raw(text) => text.clone(),
+            Arg::Dest(_) => String::new(),
+        }
+    }
 }
 
 /// A laid-out body: what [`crate::layout`] produces from a CFG, and the only

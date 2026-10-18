@@ -119,7 +119,7 @@ pub fn unreachable(module: &ir::Module, funcs: &BTreeSet<&str>) -> BTreeSet<Stri
     let mut queue: Vec<&crate::cfg::Body> = module
         .bodies()
         .enumerate()
-        .filter(|(index, (name, _))| *index >= functions || !funcs.contains(name))
+        .filter(|(index, (name, _))| *index >= functions || !funcs.contains(name.as_str()))
         .map(|(_, (_, body))| body)
         .collect();
     let mut reached: BTreeSet<String> = named(&module.head).into_iter().collect();

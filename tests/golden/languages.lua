@@ -14,16 +14,19 @@ languages {
 
   locales = {
     English = {
+      docs = "Documentation",
       greeting = "Installing Polyglot",
       farewell = "Removing Polyglot",
       folder = "Files go to",
     },
     German = {
+      docs = "Dokumentation",
       greeting = "Polyglot wird installiert",
       farewell = "Polyglot wird entfernt",
       folder = "Dateien landen in",
     },
     PortugueseBR = {
+      docs = "Documentacao",
       greeting = "Instalando o Polyglot",
       farewell = "Removendo o Polyglot",
       folder = "Os arquivos vao para",
@@ -41,6 +44,12 @@ installer {
     detailPrint(lang.folder .. ": " .. INSTDIR)
     setOutPath(INSTDIR)
     writeUninstaller(INSTDIR .. "/uninstall.exe")
+  end),
+
+  -- A section's name can be a language string: NSIS picks the text when the
+  -- components page draws it, and the `!` still draws it in bold.
+  section("!" .. lang.docs, function()
+    detailPrint(lang.folder)
   end),
 }
 

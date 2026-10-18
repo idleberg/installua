@@ -33,8 +33,9 @@ installer {
 ```
 
 A read also works where the value has to be known while building, such as a
-section's `description` or a page's text: it is `$(name)`, and NSIS picks the
-locale when the installer runs.
+section's name or `description`, or a page's text: it is `$(name)`, and NSIS
+picks the locale when the installer runs. So `section("!" .. lang.docs, …)` is
+`Section "!$(docs)"`, a bold section named in the running language.
 
 ## Built-in language strings
 

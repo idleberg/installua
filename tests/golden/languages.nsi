@@ -23,6 +23,9 @@ InstallDir "$PROGRAMFILES\Polyglot"
 !insertmacro MUI_LANGUAGE "German"
 !insertmacro MUI_LANGUAGE "PortugueseBR"
 !insertmacro MUI_RESERVEFILE_LANGDLL
+LangString docs ${LANG_ENGLISH} "Documentation"
+LangString docs ${LANG_GERMAN} "Dokumentation"
+LangString docs ${LANG_PORTUGUESEBR} "Documentacao"
 LangString farewell ${LANG_ENGLISH} "Removing Polyglot"
 LangString farewell ${LANG_GERMAN} "Polyglot wird entfernt"
 LangString farewell ${LANG_PORTUGUESEBR} "Removendo o Polyglot"
@@ -39,6 +42,10 @@ Section "Core"
   DetailPrint "$(folder): $INSTDIR"
   SetOutPath $INSTDIR
   WriteUninstaller "$INSTDIR\uninstall.exe"
+SectionEnd
+
+Section "!$(docs)"
+  DetailPrint $(folder)
 SectionEnd
 
 Section "un.Uninstall"

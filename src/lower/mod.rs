@@ -6294,7 +6294,7 @@ impl<'p> Lowerer<'_, 'p> {
             }
         };
 
-        let name = self.constant_string(name, "section")?;
+        let name = self.constant_arg(name, "section")?;
         let mut optional = false;
         let mut required = false;
         let mut optional_span = None;
@@ -6369,7 +6369,7 @@ impl<'p> Lowerer<'_, 'p> {
                 Diagnostic::error(
                     Code::BadFieldValue,
                     here,
-                    format!("`{name}` is both `optional` and `required`"),
+                    "this section is both `optional` and `required`",
                 )
                 .note("`optional` starts the box unticked; `required` removes the box"),
             );
@@ -6379,7 +6379,7 @@ impl<'p> Lowerer<'_, 'p> {
             // `un.` is how NSIS marks a section as the uninstaller's, and it is
             // emitted rather than written — the whole of the uninstaller block
             // at the surface is that this prefix has no spelling.
-            name: format!("{}{name}", half.prefix()),
+            name: ir::Arg::str(half.prefix()).concat(name),
             optional,
             inst_types,
             required,

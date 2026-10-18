@@ -270,7 +270,7 @@ fn section_item(out: &mut Out, item: &ir::SectionItem, depth: usize) {
 fn section_block(out: &mut Out, section: &ir::Section, depth: usize) {
     let indent = INDENT.repeat(depth);
     let flag = if section.optional { " /o" } else { "" };
-    let name = argument(&ir::Arg::str(section.name.clone()));
+    let name = argument(&section.name);
     let index = index_word(section.index_name.as_deref());
     match (&section.remember, &section.index_name) {
         // `MementoSectionEx` in every case, rather than picking between it and
