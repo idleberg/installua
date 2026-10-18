@@ -150,7 +150,7 @@ impl BodyLowerer<'_, '_> {
 /// `$\"` but not `$$`, so the emitter's doubling would hand a shell
 /// `$$HOME`. And no path rewrite: `makensis` opens the file itself, and off
 /// Windows a `\` is not a separator.
-fn directive_text(arg: &ir::Arg) -> Option<String> {
+pub(super) fn directive_text(arg: &ir::Arg) -> Option<String> {
     let ir::Arg::Data { pieces, .. } = arg else {
         return None;
     };

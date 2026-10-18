@@ -45,7 +45,8 @@ Copies in a DLL, type library or COM server through the stock `Library.nsh`,
 the whole job and not only the copy. An older version on the target is kept.
 A file that is in use is replaced on reboot. The library is registered, and
 its shared-DLL count is kept up to date. The source path is read while
-`makensis` builds, so it has to be known at build time.
+`makensis` builds, so it has to be known at build time: a literal, a
+`<const>` or a path under `NSISDIR`.
 
 **Usage** `installLib(localFile, destination[, { … }])` ·
 `uninstallLib(file[, { … }])` → nothing

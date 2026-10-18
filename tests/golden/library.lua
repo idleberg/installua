@@ -23,6 +23,8 @@ installer {
 		-- temporary directory taken from the destination.
 		installLib("shared.dll", INSTDIR .. "/shared.dll")
 		installLib("shared.dll", INSTDIR .. "/shared.dll", { tempDir = TEMP, x64 = true })
+		-- `NSISDIR` is a define, so it is known while `makensis` builds.
+		installLib(NSISDIR .. "/Plugins/x86-unicode/LangDLL.dll", INSTDIR .. "/lang.dll")
 		writeUninstaller(INSTDIR .. "/uninstall.exe")
 	end),
 }

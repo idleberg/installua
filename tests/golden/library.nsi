@@ -17,6 +17,7 @@ Section "Core"
   !define LIBRARY_X64
   !insertmacro InstallLib DLL NOTSHARED NOREBOOT_NOTPROTECTED "shared.dll" "$INSTDIR\shared.dll" $TEMP
   !undef LIBRARY_X64
+  !insertmacro InstallLib DLL NOTSHARED NOREBOOT_NOTPROTECTED "${NSISDIR}\Plugins\x86-unicode\LangDLL.dll" "$INSTDIR\lang.dll" $INSTDIR
   WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
 

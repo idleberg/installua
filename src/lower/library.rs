@@ -23,6 +23,7 @@ use crate::ir;
 use crate::resolve::ConstValue;
 use crate::types::Ty;
 
+use super::makensis::directive_text;
 use super::{BodyLowerer, list};
 
 const TYPES: &[&str] = &["DLL", "REGDLL", "TLB", "REGDLLTLB", "REGEXE"];
@@ -150,18 +151,18 @@ impl BodyLowerer<'_, '_> {
             if protected { "" } else { "NOT" }
         );
         let arguments = if install {
-            let local = match self.constant(&files[0]) {
-                Some(ConstValue::Str(path)) => ir::Arg::path(path),
-                _ => {
-                    self.bad_value(
-                        files[0].span(),
-                        "installLib",
-                        "a path known at build time",
-                        "`makensis` reads the file's version while it builds",
-                    );
-                    return None;
-                }
-            };
+            // A literal, a `<const>` or `NSISDIR`: what a directive can read.
+            let local = self.value(&files[0])?.arg;
+            if directive_text(&local).is_none() {
+                self.bad_value(
+                    files[0].span(),
+                    "installLib",
+                    "a path known at build time",
+                    "`makensis` reads the file's version while it builds",
+                );
+                return None;
+            }
+            let local = local.into_path();
             let destination = self.value(&files[1])?.arg.into_path();
             let Some(temp) = temp.or_else(|| parent(&destination)) else {
                 self.bad_value(

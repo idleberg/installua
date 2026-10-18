@@ -28,6 +28,7 @@ const PORTS: &[&str] = &[
     "example1",
     "example2",
     "languages",
+    "Library",
     "LogicLib",
     "Modern UI/Basic",
     "Modern UI/HeaderBitmap",
@@ -99,6 +100,8 @@ const HIDDEN: &[(&str, &str)] = &[
     ("languages", "File: \"LangDLL.dll\""),
     ("languages", "Plugin command: LangDialog "),
     ("languages", "Abort: "),
+    // MUI2 writes it in `MUI_INTERFACE`.
+    ("Library", "XPStyle: on"),
     // The original builds its application into a `!tempfile` with `!makensis`,
     // and the port installs a stand-in.
     ("MultiUser", "File: "),
